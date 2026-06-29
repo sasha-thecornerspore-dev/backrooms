@@ -40,7 +40,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "cornerspore",
+      "owner": "sasha-thecornerspore-dev",
       "repo": "backrooms"
     }
   }
