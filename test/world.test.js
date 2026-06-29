@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateChunk, CHUNK_SIZE } from '../src/renderer/world.js'
+import { generateChunk, CHUNK_SIZE, createChunkCache } from '../src/renderer/world.js'
 
 describe('generateChunk', () => {
   it('returns a Uint8Array of the correct size', () => {
@@ -64,5 +64,34 @@ describe('generateChunk', () => {
     for (const v of chunk) {
       expect(v === 0 || v === 1).toBe(true)
     }
+  })
+})
+
+describe('createChunkCache', () => {
+  it('getChunk returns same array for same coordinates (cache hit)', () => {
+    const cache = createChunkCache(3)
+    const a = cache.getChunk(2, 2)
+    const b = cache.getChunk(2, 2)
+    expect(a).toBe(b) // reference equality — not regenerated
+  })
+
+  it('isWall returns boolean for any world coordinate', () => {
+    const cache = createChunkCache(3)
+    expect(typeof cache.isWall(0.5, 0.5)).toBe('boolean')
+    expect(typeof cache.isWall(-5.3, 100.9)).toBe('boolean')
+  })
+
+  it('evicted chunk regenerates with a different layout on revisit', () => {
+    // Use evictRadius=0 so anything beyond chunk 0,0 is evicted immediately
+    const cache = createChunkCache(0)
+    const first = new Uint8Array(cache.getChunk(5, 5)) // copy before eviction
+    // Force eviction by querying distant chunks — need >49 to trigger size-based evict
+    // 7x7 grid = 49 more chunks; the 50th triggers eviction, removing 5,5 (far from each new chunk)
+    for (let y = -3; y <= 3; y++)
+      for (let x = -3; x <= 3; x++)
+        cache.getChunk(x * 10, y * 10) // load far-away chunks to overflow cache
+    // Now revisit 5,5 — should be regenerated from a different epoch
+    const second = cache.getChunk(5, 5)
+    expect(first).not.toEqual(second)
   })
 })

@@ -137,3 +137,48 @@ export function generateChunk(cx, cy, epoch) {
 
   return cell
 }
+
+export function createChunkCache(evictRadius) {
+  const chunks = new Map()  // "cx,cy" → Uint8Array
+  const epochs = new Map()  // "cx,cy" → eviction count
+
+  function key(cx, cy) { return `${cx},${cy}` }
+
+  function evict(pcx, pcy) {
+    if (chunks.size <= 49) return
+    for (const [k] of chunks) {
+      const [ex, ey] = k.split(',').map(Number)
+      if (Math.max(Math.abs(ex - pcx), Math.abs(ey - pcy)) > evictRadius) {
+        epochs.set(k, (epochs.get(k) ?? 0) + 1)
+        chunks.delete(k)
+      }
+    }
+  }
+
+  function getChunk(cx, cy) {
+    const k = key(cx, cy)
+    if (!chunks.has(k)) {
+      chunks.set(k, generateChunk(cx, cy, epochs.get(k) ?? 0))
+      const pcx = cx, pcy = cy
+      evict(pcx, pcy)
+    }
+    return chunks.get(k)
+  }
+
+  function isWall(wx, wy) {
+    const ix = Math.floor(wx), iy = Math.floor(wy)
+    const cx = Math.floor(ix / CHUNK_SIZE)
+    const cy = Math.floor(iy / CHUNK_SIZE)
+    const lx = ((ix % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE
+    const ly = ((iy % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE
+    return getChunk(cx, cy)[ly * CHUNK_SIZE + lx] === 1
+  }
+
+  function preload(pcx, pcy) {
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++)
+        getChunk(pcx + dx, pcy + dy)
+  }
+
+  return { getChunk, isWall, preload }
+}
