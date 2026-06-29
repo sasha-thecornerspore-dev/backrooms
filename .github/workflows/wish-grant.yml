@@ -1,0 +1,91 @@
+name: Grant Wish
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  grant:
+    if: github.event.label.name == 'granted'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract wish text from issue body
+        id: wish
+        run: |
+          # The issue body is the interpreted wish (may have been edited before labeling)
+          WISH="${{ github.event.issue.body }}"
+          echo "text=${WISH}" >> $GITHUB_OUTPUT
+
+      - name: Call Claude API to modify world.json
+        id: claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          WORLD=$(cat src/renderer/world.json)
+          WISH="${{ steps.wish.outputs.text }}"
+
+          PAYLOAD=$(jq -n \
+            --arg model "claude-sonnet-4-6" \
+            --arg system "You are the living atmosphere of the Backrooms. You receive a wish from a wanderer and modify a world config JSON to reflect it. You must return ONLY valid JSON matching the input schema exactly — no prose, no markdown, no code fences. Be subtle. The Backrooms never changes obviously — it drifts. Small shifts in palette, fog, flicker, audio frequency, or message pool are more unsettling than large ones." \
+            --arg world "$WORLD" \
+            --arg wish "$WISH" \
+            '{
+              model: $model,
+              max_tokens: 1024,
+              system: $system,
+              messages: [{
+                role: "user",
+                content: ("Current world.json:\n" + $world + "\n\nWish: " + $wish + "\n\nReturn the modified world.json.")
+              }]
+            }')
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "$PAYLOAD")
+
+          NEW_WORLD=$(echo "$RESPONSE" | jq -r '.content[0].text')
+
+          # Validate it's parseable JSON before writing
+          echo "$NEW_WORLD" | jq . > /dev/null
+          echo "$NEW_WORLD" > src/renderer/world.json
+
+      - name: Create branch and PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUM="${{ github.event.issue.number }}"
+          SLUG=$(echo "${{ github.event.issue.title }}" | tr '[:upper:]' '[:lower:]' | sed 's/\[wish\] //g' | tr -cs 'a-z0-9' '-' | cut -c1-40 | sed 's/-$//')
+          BRANCH="wish/${ISSUE_NUM}-${SLUG}"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add src/renderer/world.json
+          git commit -m "spirits: grant wish #${ISSUE_NUM}"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "spirits: grant wish #${ISSUE_NUM}" \
+            --body "Closes #${ISSUE_NUM}
+
+Wish: ${{ github.event.issue.body }}
+
+Review \`src/renderer/world.json\` diff before merging. Edit the file in this PR if the drift needs adjustment."
+
+      - name: Comment on issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} \
+            --body "the spirits have considered your request. a PR has been opened for review."
