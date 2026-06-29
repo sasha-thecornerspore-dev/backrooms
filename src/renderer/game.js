@@ -56,6 +56,27 @@ export async function initGame(canvas) {
     if (!cache.isWall(player.x, ny)) player.y = ny
   }
 
+  // HUD
+  const hudEl = document.getElementById('hud')
+  function updateHud() {
+    if (!hudEl) return
+    const pcx = Math.floor(player.x / CHUNK_SIZE)
+    const pcy = Math.floor(player.y / CHUNK_SIZE)
+    hudEl.textContent = `level 0 — zone ${pcx},${pcy}`
+  }
+
+  // Messages
+  const msgEl  = document.getElementById('msg')
+  let msgTimer = 0
+  let msgNext  = config.messageInterval[0] + Math.random() * (config.messageInterval[1] - config.messageInterval[0])
+
+  function showMessage(text) {
+    if (!msgEl) return
+    msgEl.textContent = text
+    msgEl.style.color = 'rgba(200,185,90,0.75)'
+    setTimeout(() => { msgEl.style.color = 'rgba(200,185,90,0)' }, 4000)
+  }
+
   let last = 0
   function loop(ts) {
     const dt = Math.min((ts - last) / 1000, 0.05)
@@ -89,6 +110,15 @@ export async function initGame(canvas) {
     player.moving = moved
     if (moved) player.bob += 0.12
     player.bobOffset = moved ? Math.sin(player.bob) * 4 : 0
+
+    msgTimer += dt
+    if (msgTimer >= msgNext) {
+      msgTimer = 0
+      msgNext  = config.messageInterval[0] + Math.random() * (config.messageInterval[1] - config.messageInterval[0])
+      const pick = config.messages[Math.floor(Math.random() * config.messages.length)]
+      showMessage(pick)
+    }
+    updateHud()
 
     // Pre-load chunks around current position
     const pcx = Math.floor(player.x / CHUNK_SIZE)

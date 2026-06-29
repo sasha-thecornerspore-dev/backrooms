@@ -4,16 +4,72 @@
   <meta charset="UTF-8">
   <title>The Backrooms</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
     canvas { display: block; }
+
+    #start {
+      position: fixed; inset: 0;
+      background: #c9ba72;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 24px; z-index: 100;
+    }
+    #start h1 {
+      font-size: clamp(28px, 5vw, 60px);
+      color: #2a1e00; letter-spacing: 10px;
+      text-shadow: 3px 3px 0 #a09040;
+    }
+    #start p {
+      color: #4a3800; max-width: 380px; text-align: center;
+      line-height: 1.9; font-size: 13px; opacity: 0.85;
+    }
+    #start button {
+      background: #2a1e00; color: #c9ba72;
+      border: 2px solid #5a4810;
+      padding: 14px 44px; font: 15px 'Courier New', monospace;
+      letter-spacing: 6px; cursor: pointer;
+    }
+    #start button:hover { background: #5a4810; }
+
+    #hud {
+      position: fixed; top: 12px; left: 14px;
+      color: rgba(200,185,110,0.4); font-size: 11px;
+      line-height: 1.7; pointer-events: none; white-space: pre;
+    }
+    #msg {
+      position: fixed; top: 38%; left: 50%; transform: translateX(-50%);
+      color: rgba(200,185,90,0); font-size: 13px;
+      text-align: center; pointer-events: none;
+      line-height: 1.9; letter-spacing: 2px; white-space: pre;
+      text-shadow: 0 0 12px rgba(180,160,60,0.6);
+      transition: color 1.5s;
+    }
+    #hint {
+      position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+      color: rgba(180,165,90,0.3); font-size: 10px;
+      letter-spacing: 3px; pointer-events: none;
+    }
   </style>
 </head>
 <body>
   <canvas id="c"></canvas>
+  <div id="start">
+    <h1>THE BACKROOMS</h1>
+    <p>you have no-clipped out of reality.<br><br>
+       there is only the hum of fluorescent lights<br>and the smell of damp carpet.<br><br>
+       there is no exit. there never was.</p>
+    <button id="enter-btn">enter ▶</button>
+  </div>
+  <div id="hud"></div>
+  <div id="msg"></div>
+  <div id="hint">wasd · move &nbsp;&nbsp; arrows · look &nbsp;&nbsp; click · mouse look &nbsp;&nbsp; e · speak</div>
+
   <script type="module">
     import { initGame } from './game.js'
-    initGame(document.getElementById('c'))
+    document.getElementById('enter-btn').addEventListener('click', async () => {
+      document.getElementById('start').style.display = 'none'
+      await initGame(document.getElementById('c'))
+    })
   </script>
 </body>
 </html>
