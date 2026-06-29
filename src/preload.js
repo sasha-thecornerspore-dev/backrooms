@@ -1,1 +1,5 @@
-// contextBridge populated in Task 11
+import { contextBridge, ipcRenderer } from 'electron'
+
+contextBridge.exposeInMainWorld('backrooms', {
+  submitWish: (text) => ipcRenderer.invoke('submit-wish', text),
+})
