@@ -1,0 +1,7 @@
+node_modules/
+dist/
+dist-desktop/
+out/
+src/build-config.json
+*.pfx
+*.p12
