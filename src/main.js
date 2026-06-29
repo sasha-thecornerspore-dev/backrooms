@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url'
 import path from 'path'
 import { readFileSync } from 'fs'
 import https from 'https'
+import { autoUpdater } from 'electron-updater'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -63,5 +64,11 @@ ipcMain.handle('submit-wish', async (_event, text) => {
   })
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createWindow()
+  // Check for updates silently on launch (only runs in production builds)
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify()
+  }
+})
 app.on('window-all-closed', () => app.quit())
