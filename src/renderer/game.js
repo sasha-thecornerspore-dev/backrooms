@@ -1,4 +1,11 @@
 import { loadConfig, CHUNK_SIZE, createChunkCache } from './world.js'
+
+// Presence: 1 in 12 chunks has a spirit at its midpoint
+function chunkHasPresence(cx, cy) {
+  let h = (Math.imul(cx, 374761393) + Math.imul(cy, 668265263)) | 0
+  h = Math.imul(h ^ (h >>> 13), 1274126177)
+  return ((h ^ (h >>> 16)) & 0xFF) % 12 === 0
+}
 import { createRenderer } from './renderer.js'
 import { initAudio, setFlicker } from './audio.js'
 
@@ -41,6 +48,42 @@ export async function initGame(canvas) {
   })
   document.addEventListener('mousemove', e => {
     if (locked) player.angle += e.movementX * 0.002
+  })
+
+  // Wish dialog
+  let dialogOpen = false
+  const dialogEl = document.getElementById('wish-dialog')
+  const wishText = document.getElementById('wish-text')
+  const wishResp = document.getElementById('wish-response')
+
+  function openDialog() {
+    if (dialogOpen) return
+    dialogOpen = true
+    document.exitPointerLock()
+    if (dialogEl) { dialogEl.style.display = 'flex'; wishText.value = ''; wishResp.textContent = ''; wishText.focus() }
+  }
+
+  function closeDialog() {
+    dialogOpen = false
+    if (dialogEl) dialogEl.style.display = 'none'
+  }
+
+  document.getElementById('wish-cancel')?.addEventListener('click', closeDialog)
+
+  document.getElementById('wish-submit')?.addEventListener('click', async () => {
+    const text = wishText?.value.trim()
+    if (!text) return
+    if (wishResp) wishResp.textContent = 'your request has been received. whether it is heard is another matter.'
+    wishText.disabled = true
+    document.getElementById('wish-submit').disabled = true
+    try {
+      if (window.backrooms?.submitWish) await window.backrooms.submitWish(text)
+    } catch (e) { /* silent */ }
+    setTimeout(() => {
+      wishText.disabled = false
+      document.getElementById('wish-submit').disabled = false
+      closeDialog()
+    }, 3000)
   })
 
   // Resize
@@ -122,6 +165,27 @@ export async function initGame(canvas) {
       showMessage(pick)
     }
     updateHud()
+
+    // Presence proximity check
+    const pcxP = Math.floor(player.x / CHUNK_SIZE)
+    const pcyP = Math.floor(player.y / CHUNK_SIZE)
+    let nearPresence = false
+    for (let dy = -1; dy <= 1 && !nearPresence; dy++) {
+      for (let dx = -1; dx <= 1 && !nearPresence; dx++) {
+        const cx = pcxP + dx, cy = pcyP + dy
+        if (!chunkHasPresence(cx, cy)) continue
+        const px2 = cx * CHUNK_SIZE + CHUNK_SIZE / 2
+        const py2 = cy * CHUNK_SIZE + CHUNK_SIZE / 2
+        const dist2 = (player.x - px2) ** 2 + (player.y - py2) ** 2
+        if (dist2 < 4) nearPresence = true
+      }
+    }
+    const hintEl = document.getElementById('presence-hint')
+    if (hintEl) hintEl.style.opacity = nearPresence ? '1' : '0'
+
+    // E-key / ESC dialog control
+    if (K['KeyE'] && nearPresence && !dialogOpen) { K['KeyE'] = false; openDialog() }
+    if (K['Escape'] && dialogOpen) { K['Escape'] = false; closeDialog() }
 
     // Pre-load chunks around current position
     const pcx = Math.floor(player.x / CHUNK_SIZE)
