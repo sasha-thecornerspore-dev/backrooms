@@ -69,21 +69,21 @@ describe('generateChunk', () => {
 
 describe('createChunkCache', () => {
   it('getChunk returns same array for same coordinates (cache hit)', () => {
-    const cache = createChunkCache(3)
+    const cache = createChunkCache({ chunkEvictRadius: 3, wallDensity: 0.30 })
     const a = cache.getChunk(2, 2)
     const b = cache.getChunk(2, 2)
     expect(a).toBe(b) // reference equality — not regenerated
   })
 
   it('isWall returns boolean for any world coordinate', () => {
-    const cache = createChunkCache(3)
+    const cache = createChunkCache({ chunkEvictRadius: 3, wallDensity: 0.30 })
     expect(typeof cache.isWall(0.5, 0.5)).toBe('boolean')
     expect(typeof cache.isWall(-5.3, 100.9)).toBe('boolean')
   })
 
   it('evicted chunk regenerates with a different layout on revisit', () => {
     // Use evictRadius=0 so anything beyond chunk 0,0 is evicted immediately
-    const cache = createChunkCache(0)
+    const cache = createChunkCache({ chunkEvictRadius: 0, wallDensity: 0.30 })
     const first = new Uint8Array(cache.getChunk(5, 5)) // copy before eviction
     // Force eviction by querying distant chunks — need >49 to trigger size-based evict
     // 7x7 grid = 49 more chunks; the 50th triggers eviction, removing 5,5 (far from each new chunk)

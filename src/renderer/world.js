@@ -48,13 +48,13 @@ function hash2(a, b) {
   return h ^ (h >>> 16)
 }
 
-export function generateChunk(cx, cy, epoch) {
+export function generateChunk(cx, cy, epoch, density = 0.30) {
   const seed = hash2(hash2(cx, cy), Math.imul(epoch, 2654435761) | 0)
   const rnd  = mulberry32(seed)
   const cell = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE)
 
   // Random fill
-  for (let i = 0; i < cell.length; i++) cell[i] = rnd() > 0.70 ? 1 : 0
+  for (let i = 0; i < cell.length; i++) cell[i] = rnd() > (1 - density) ? 1 : 0
 
   // Cellular automata smoothing — 3 passes, Moore neighbourhood, threshold 5
   for (let pass = 0; pass < 3; pass++) {
@@ -138,7 +138,15 @@ export function generateChunk(cx, cy, epoch) {
   return cell
 }
 
-export function createChunkCache(evictRadius) {
+export function createChunkCache(config) {
+  // Accept either a config object or a bare evictRadius number (legacy/test usage)
+  const evictRadius   = (typeof config === 'object' && config !== null)
+    ? (config.chunkEvictRadius ?? 3)
+    : (config ?? 3)
+  const wallDensity   = (typeof config === 'object' && config !== null)
+    ? (config.wallDensity ?? 0.30)
+    : 0.30
+
   const chunks = new Map()  // "cx,cy" → Uint8Array
   const epochs = new Map()  // "cx,cy" → eviction count
 
@@ -155,29 +163,28 @@ export function createChunkCache(evictRadius) {
     }
   }
 
-  function getChunk(cx, cy) {
+  function getChunk(cx, cy, playerCx = cx, playerCy = cy) {
     const k = key(cx, cy)
     if (!chunks.has(k)) {
-      chunks.set(k, generateChunk(cx, cy, epochs.get(k) ?? 0))
-      const pcx = cx, pcy = cy
-      evict(pcx, pcy)
+      chunks.set(k, generateChunk(cx, cy, epochs.get(k) ?? 0, wallDensity))
+      evict(playerCx, playerCy)
     }
     return chunks.get(k)
   }
 
-  function isWall(wx, wy) {
+  function isWall(wx, wy, playerCx, playerCy) {
     const ix = Math.floor(wx), iy = Math.floor(wy)
     const cx = Math.floor(ix / CHUNK_SIZE)
     const cy = Math.floor(iy / CHUNK_SIZE)
     const lx = ((ix % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE
     const ly = ((iy % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE
-    return getChunk(cx, cy)[ly * CHUNK_SIZE + lx] === 1
+    return getChunk(cx, cy, playerCx ?? cx, playerCy ?? cy)[ly * CHUNK_SIZE + lx] === 1
   }
 
   function preload(pcx, pcy) {
     for (let dy = -1; dy <= 1; dy++)
       for (let dx = -1; dx <= 1; dx++)
-        getChunk(pcx + dx, pcy + dy)
+        getChunk(pcx + dx, pcy + dy, pcx, pcy)
   }
 
   return { getChunk, isWall, preload }

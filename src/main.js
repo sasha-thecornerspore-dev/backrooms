@@ -36,7 +36,7 @@ ipcMain.handle('submit-wish', async (_event, text) => {
   const appVersion = app.getVersion()
   const body = JSON.stringify({
     title: `[WISH] ${text.slice(0, 120)}`,
-    body:  `submitted from backrooms v${appVersion}`,
+    body:  `${text}\n\n---\nsubmitted from backrooms v${appVersion}`,
     labels: ['wish', 'pending'],
   })
 

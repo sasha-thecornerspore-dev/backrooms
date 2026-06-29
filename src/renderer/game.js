@@ -11,7 +11,7 @@ import { initAudio, setFlicker } from './audio.js'
 
 export async function initGame(canvas) {
   const config = await loadConfig()
-  const cache  = createChunkCache(config.chunkEvictRadius)
+  const cache  = createChunkCache(config)
   const gfx    = createRenderer(canvas, config)
 
   // Pre-load chunks around spawn
@@ -97,8 +97,10 @@ export async function initGame(canvas) {
   const SPEED = 0.05
 
   function tryMove(nx, ny) {
-    if (!cache.isWall(nx, player.y)) player.x = nx
-    if (!cache.isWall(player.x, ny)) player.y = ny
+    const pcx = Math.floor(player.x / CHUNK_SIZE)
+    const pcy = Math.floor(player.y / CHUNK_SIZE)
+    if (!cache.isWall(nx, player.y, pcx, pcy)) player.x = nx
+    if (!cache.isWall(player.x, ny, pcx, pcy)) player.y = ny
   }
 
   // HUD
@@ -192,7 +194,9 @@ export async function initGame(canvas) {
     const pcy = Math.floor(player.y / CHUNK_SIZE)
     cache.preload(pcx, pcy)
 
-    gfx.render(player, (wx, wy) => cache.isWall(wx, wy), flicker)
+    const pcx = Math.floor(player.x / CHUNK_SIZE)
+    const pcy = Math.floor(player.y / CHUNK_SIZE)
+    gfx.render(player, (wx, wy) => cache.isWall(wx, wy, pcx, pcy), flicker)
 
     requestAnimationFrame(loop)
   }

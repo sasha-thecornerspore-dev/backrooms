@@ -18,18 +18,20 @@ jobs:
 
       - name: Extract wish text from issue body
         id: wish
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           # The issue body is the interpreted wish (may have been edited before labeling)
-          WISH="${{ github.event.issue.body }}"
-          echo "text=${WISH}" >> $GITHUB_OUTPUT
+          echo "text=${ISSUE_BODY}" >> $GITHUB_OUTPUT
 
       - name: Call Claude API to modify world.json
         id: claude
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
           WORLD=$(cat src/renderer/world.json)
-          WISH="${{ steps.wish.outputs.text }}"
+          WISH="$ISSUE_BODY"
 
           PAYLOAD=$(jq -n \
             --arg model "claude-sonnet-4-6" \
@@ -61,9 +63,11 @@ jobs:
       - name: Create branch and PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
         run: |
-          ISSUE_NUM="${{ github.event.issue.number }}"
-          SLUG=$(echo "${{ github.event.issue.title }}" | tr '[:upper:]' '[:lower:]' | sed 's/\[wish\] //g' | tr -cs 'a-z0-9' '-' | cut -c1-40 | sed 's/-$//')
+          SLUG=$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/\[wish\] //g' | tr -cs 'a-z0-9' '-' | cut -c1-40 | sed 's/-$//')
           BRANCH="wish/${ISSUE_NUM}-${SLUG}"
 
           git config user.name  "github-actions[bot]"
@@ -79,13 +83,14 @@ jobs:
             --title "spirits: grant wish #${ISSUE_NUM}" \
             --body "Closes #${ISSUE_NUM}
 
-Wish: ${{ github.event.issue.body }}
+Wish: ${ISSUE_BODY}
 
 Review \`src/renderer/world.json\` diff before merging. Edit the file in this PR if the drift needs adjustment."
 
       - name: Comment on issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
         run: |
-          gh issue comment ${{ github.event.issue.number }} \
+          gh issue comment "$ISSUE_NUM" \
             --body "the spirits have considered your request. a PR has been opened for review."
