@@ -40,7 +40,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "GITHUB_OWNER",
+      "owner": "cornerspore",
       "repo": "backrooms"
     }
   }
