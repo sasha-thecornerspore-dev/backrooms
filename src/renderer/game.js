@@ -1,5 +1,6 @@
 import { loadConfig, CHUNK_SIZE, createChunkCache } from './world.js'
 import { createRenderer } from './renderer.js'
+import { initAudio, setFlicker } from './audio.js'
 
 export async function initGame(canvas) {
   const config = await loadConfig()
@@ -9,6 +10,7 @@ export async function initGame(canvas) {
   // Pre-load chunks around spawn
   const spawnCX = 0, spawnCY = 0
   cache.preload(spawnCX, spawnCY)
+  initAudio(config)
 
   // Player state — spawns at chunk midpoint
   const HALF = CHUNK_SIZE / 2
@@ -94,6 +96,7 @@ export async function initGame(canvas) {
       }
     }
     flicker += (flickTgt - flicker) * Math.min(1, dt * config.flicker.recoverySpeed)
+    setFlicker(flicker)
 
     // ── Movement ──
     const sp = SPEED * dt * 60
