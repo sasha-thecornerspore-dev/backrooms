@@ -1,5 +1,7 @@
 import { loadConfig, CHUNK_SIZE, createChunkCache } from './world.js'
 import { createEntitySystem } from './entities.js'
+import { createRenderer } from './renderer.js'
+import { initAudio, setFlicker } from './audio.js'
 
 // Presence: 1 in 12 chunks has a spirit at its midpoint
 function chunkHasPresence(cx, cy) {
@@ -7,8 +9,6 @@ function chunkHasPresence(cx, cy) {
   h = Math.imul(h ^ (h >>> 13), 1274126177)
   return ((h ^ (h >>> 16)) & 0xFF) % 12 === 0
 }
-import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker } from './audio.js'
 
 export async function initGame(canvas) {
   const config = await loadConfig()
@@ -196,7 +196,7 @@ export async function initGame(canvas) {
     const pcy = Math.floor(player.y / CHUNK_SIZE)
     cache.preload(pcx, pcy)
 
-    // Update and render entities
+    // Entities update before render so positions are current this frame
     entitySys.update(dt, player, pcx, pcy)
     gfx.render(player, (wx, wy) => cache.isWall(wx, wy, pcx, pcy), flicker, entitySys.getEntities())
 
