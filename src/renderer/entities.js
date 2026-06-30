@@ -64,9 +64,56 @@ export function createEntitySystem(config, isWallFn) {
     }
   }
 
+  function stepEntity(e, dt, player, isWallFn, playerCx, playerCy) {
+    const dx = player.x - e.x
+    const dy = player.y - e.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
+
+    // state transitions
+    if (e.type === 'wanderer') {
+      e.state = dist < 6 ? 'flee' : 'idle'
+    } else {
+      e.state = dist < 24 ? 'chase' : 'idle'
+    }
+
+    // pick speed and direction
+    let speed
+    if (e.type === 'stalker' && e.state === 'chase') {
+      speed = 1.2
+      e.dir = Math.atan2(dy, dx)
+    } else if (e.type === 'wanderer' && e.state === 'flee') {
+      speed = 1.0
+      e.dir = Math.atan2(-dy, -dx)
+      e.dirTimer = 0.5  // re-aim flee direction frequently
+    } else {
+      speed = e.type === 'stalker' ? 0.4 : 0.8
+      e.dirTimer -= dt
+      if (e.dirTimer <= 0) {
+        // simple LCG off current position for variety
+        e.dir = ((e.dir + 1.3 + (e.x * 7 + e.y * 13) % 2.0)) % (Math.PI * 2)
+        e.dirTimer = 3 + ((Math.abs(e.x * 17 + e.y * 31) % 4))
+      }
+    }
+
+    // try to move; redirect on wall hit
+    const nx = e.x + Math.cos(e.dir) * speed * dt
+    const ny = e.y + Math.sin(e.dir) * speed * dt
+    if (!isWallFn(Math.floor(nx), Math.floor(e.y), playerCx, playerCy)) {
+      e.x = nx
+    } else {
+      e.dir += Math.PI * 0.5  // turn 90° on wall hit
+    }
+    if (!isWallFn(Math.floor(e.x), Math.floor(ny), playerCx, playerCy)) {
+      e.y = ny
+    } else {
+      e.dir -= Math.PI * 0.5
+    }
+  }
+
   function update(dt, player, playerCx, playerCy) {
     evict(playerCx, playerCy)
     trySpawnAround(playerCx, playerCy)
+    for (const e of entities) stepEntity(e, dt, player, isWallFn, playerCx, playerCy)
   }
 
   function getEntities() { return entities }

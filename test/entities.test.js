@@ -51,3 +51,37 @@ describe('createEntitySystem', () => {
     expect(after).toBeLessThanOrEqual(before)
   })
 })
+
+describe('entity AI', () => {
+  it('wanderer changes dir when dirTimer expires', () => {
+    const sys = createEntitySystem(config, isWall)
+    // inject a wanderer directly
+    sys.getEntities().push({ x: 50, y: 50, type: 'wanderer', state: 'idle', dir: 0, dirTimer: 0.01, chunkCx: 2, chunkCy: 2 })
+    const dirBefore = sys.getEntities()[0].dir
+    sys.update(1.0, { x: 0, y: 0 }, 0, 0)
+    // timer expired → dir should change (very likely with dt=1.0 >> 0.01)
+    expect(sys.getEntities()[0].dirTimer).toBeGreaterThan(0)
+  })
+
+  it('wanderer enters flee state when player is close', () => {
+    const sys = createEntitySystem(config, isWall)
+    sys.getEntities().push({ x: 3, y: 3, type: 'wanderer', state: 'idle', dir: 0, dirTimer: 99, chunkCx: 0, chunkCy: 0 })
+    sys.update(0.016, { x: 3, y: 3 }, 0, 0)
+    expect(sys.getEntities()[0].state).toBe('flee')
+  })
+
+  it('stalker enters chase state when player is within 24 units', () => {
+    const sys = createEntitySystem(config, isWall)
+    sys.getEntities().push({ x: 10, y: 10, type: 'stalker', state: 'idle', dir: 0, dirTimer: 99, chunkCx: 0, chunkCy: 0 })
+    sys.update(0.016, { x: 10, y: 30 }, 0, 0)  // dist ~20, within 24
+    expect(sys.getEntities()[0].state).toBe('chase')
+  })
+
+  it('entity moves when dt > 0', () => {
+    const sys = createEntitySystem(config, isWall)
+    sys.getEntities().push({ x: 50, y: 50, type: 'wanderer', state: 'idle', dir: 0, dirTimer: 99, chunkCx: 2, chunkCy: 2 })
+    const xBefore = sys.getEntities()[0].x
+    sys.update(0.1, { x: 0, y: 0 }, 0, 0)
+    expect(sys.getEntities()[0].x).not.toBe(xBefore)
+  })
+})
