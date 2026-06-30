@@ -14,12 +14,13 @@
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 24px; z-index: 100;
     }
-    #start h1 {
+    #start h1, .title {
       font-size: clamp(28px, 5vw, 60px);
       color: #2a1e00; letter-spacing: 10px;
       text-shadow: 3px 3px 0 #a09040;
+      font-family: 'Courier New', monospace;
     }
-    #start p {
+    #start p, .sub {
       color: #4a3800; max-width: 380px; text-align: center;
       line-height: 1.9; font-size: 13px; opacity: 0.85;
     }
@@ -30,6 +31,16 @@
       letter-spacing: 6px; cursor: pointer;
     }
     #start button:hover { background: #5a4810; }
+    .btns { display:flex; gap:24px; justify-content:center; margin-top:40px; }
+    .btns button { background:none; border:1px solid #8a7a3a; color:#c9ba72; font-family:monospace; font-size:18px; padding:10px 28px; cursor:pointer; letter-spacing:2px; }
+    .btns button:hover { background:#8a7a3a22; }
+    #join-modal { position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;z-index:100; }
+    .modal-box { background:#1a1508;border:1px solid #8a7a3a;padding:40px;min-width:360px; }
+    .modal-title { color:#c9ba72;font-family:monospace;font-size:20px;letter-spacing:4px;margin-bottom:24px; }
+    .modal-box input { display:block;width:100%;box-sizing:border-box;background:#0a0a05;border:1px solid #4a3a1a;color:#c9ba72;font-family:monospace;font-size:14px;padding:8px;margin-bottom:12px; }
+    .modal-btns { display:flex;gap:12px;margin-top:16px; }
+    .modal-btns button { background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:14px;padding:8px 20px;cursor:pointer; }
+    #join-status { color:#a09060;font-family:monospace;font-size:13px;margin-top:12px;min-height:20px; }
 
     #hud {
       position: fixed; top: 12px; left: 14px;
@@ -86,11 +97,26 @@
 <body>
   <canvas id="c"></canvas>
   <div id="start">
-    <h1>THE BACKROOMS</h1>
-    <p>you have no-clipped out of reality.<br><br>
-       there is only the hum of fluorescent lights<br>and the smell of damp carpet.<br><br>
-       there is no exit. there never was.</p>
-    <button id="enter-btn">enter ▶</button>
+    <div class="title">THE BACKROOMS</div>
+    <div class="sub">level 0. somewhere. you are here.</div>
+    <div class="btns">
+      <button id="btn-solo">SOLO ▶</button>
+      <button id="btn-join">JOIN ⬡</button>
+      <button id="btn-host">HOST ⬡</button>
+    </div>
+  </div>
+
+  <div id="join-modal" style="display:none">
+    <div class="modal-box">
+      <div class="modal-title">CONNECT</div>
+      <input id="join-url" type="text" value="ws://localhost:8765" placeholder="server url" spellcheck="false"/>
+      <input id="join-room" type="text" value="backrooms" placeholder="room code" spellcheck="false"/>
+      <div class="modal-btns">
+        <button id="join-cancel">CANCEL</button>
+        <button id="join-connect">ENTER ▶</button>
+      </div>
+      <div id="join-status"></div>
+    </div>
   </div>
   <div id="hud"></div>
   <div id="msg"></div>
@@ -110,10 +136,52 @@
 
   <script type="module">
     import { initGame } from './game.js'
-    document.getElementById('enter-btn').addEventListener('click', async () => {
-      document.getElementById('start').style.display = 'none'
-      await initGame(document.getElementById('c'))
-    })
+    import { createMultiplayerClient } from '../net/client.js'
+
+    const startEl = document.getElementById('start')
+    const joinModal = document.getElementById('join-modal')
+    const joinStatus = document.getElementById('join-status')
+    const canvas = document.getElementById('c')
+
+    async function startSolo() {
+      startEl.style.display = 'none'
+      await initGame(canvas)
+    }
+
+    async function startMultiplayer(serverUrl, roomId) {
+      joinStatus.textContent = 'connecting...'
+      try {
+        const mpClient = createMultiplayerClient(serverUrl)
+        const { worldSeed } = await mpClient.connect(roomId)
+        joinModal.style.display = 'none'
+        startEl.style.display = 'none'
+        await initGame(canvas, { worldSeed, mpClient })
+      } catch (e) {
+        joinStatus.textContent = `failed: ${e.message}`
+      }
+    }
+
+    document.getElementById('btn-solo').onclick = startSolo
+
+    document.getElementById('btn-join').onclick = () => {
+      joinModal.style.display = 'flex'
+    }
+
+    document.getElementById('btn-host').onclick = async () => {
+      const port = await window.backrooms?.startLocalServer?.() ?? 8765
+      await startMultiplayer(`ws://localhost:${port}`, 'local')
+    }
+
+    document.getElementById('join-cancel').onclick = () => {
+      joinModal.style.display = 'none'
+      joinStatus.textContent = ''
+    }
+
+    document.getElementById('join-connect').onclick = () => {
+      const url = document.getElementById('join-url').value.trim()
+      const room = document.getElementById('join-room').value.trim() || 'backrooms'
+      startMultiplayer(url, room)
+    }
   </script>
 </body>
 </html>

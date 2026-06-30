@@ -10,9 +10,9 @@ function chunkHasPresence(cx, cy) {
   return ((h ^ (h >>> 16)) & 0xFF) % 12 === 0
 }
 
-export async function initGame(canvas) {
+export async function initGame(canvas, { worldSeed = null, mpClient = null } = {}) {
   const config = await loadConfig()
-  const cache  = createChunkCache(config)
+  const cache  = createChunkCache(config, worldSeed)
   const entitySys = createEntitySystem(config, (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy))
   const gfx    = createRenderer(canvas, config)
 
