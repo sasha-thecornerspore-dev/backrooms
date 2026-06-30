@@ -30,3 +30,17 @@ jobs:
           CSC_LINK:          ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD:  ${{ secrets.CSC_KEY_PASSWORD }}
         run: npm run release
+
+      - name: Bundle server
+        run: npx esbuild server/index.js --bundle --platform=node --format=esm --outfile=dist/backrooms-server.js --external:ws
+
+      - name: Upload server to latest release
+        run: |
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/latest --jq '.id')
+          gh api repos/${{ github.repository }}/releases/$RELEASE_ID/assets \
+            --method POST \
+            -H "Content-Type: application/javascript" \
+            -F "name=backrooms-server.js" \
+            -F "data=@dist/backrooms-server.js"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
