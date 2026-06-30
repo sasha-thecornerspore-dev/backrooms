@@ -92,10 +92,31 @@
       letter-spacing: 4px; pointer-events: none;
       transition: opacity 0.5s;
     }
+    #btn-settings { position:fixed;top:16px;right:16px;background:none;border:none;color:#6a5a2a;font-size:22px;cursor:pointer;z-index:10; }
+    #btn-settings:hover { color:#c9ba72; }
+    .toggle-row { display:flex;align-items:center;justify-content:space-between;color:#c9ba72;font-family:monospace;font-size:15px;margin:8px 0; }
   </style>
 </head>
 <body>
   <canvas id="c"></canvas>
+  <button id="btn-settings" title="settings">⚙</button>
+
+  <div id="settings-modal" style="display:none;position:fixed;inset:0;background:#0008;align-items:center;justify-content:center;z-index:200;">
+    <div class="modal-box">
+      <div class="modal-title">SETTINGS</div>
+      <label class="toggle-row">
+        <span>Auto-update</span>
+        <input type="checkbox" id="chk-autoupdate" checked/>
+      </label>
+      <div id="update-ready-msg" style="display:none;color:#c9ba72;font-family:monospace;font-size:13px;margin-top:12px;">
+        update ready — <button id="btn-restart" style="background:none;border:none;color:#c9ba72;cursor:pointer;font-family:monospace;text-decoration:underline;">restart now</button>
+      </div>
+      <div class="modal-btns" style="margin-top:24px;">
+        <button id="settings-close">CLOSE</button>
+      </div>
+    </div>
+  </div>
+
   <div id="start">
     <div class="title">THE BACKROOMS</div>
     <div class="sub">level 0. somewhere. you are here.</div>
@@ -193,6 +214,26 @@
       const room = document.getElementById('join-room').value.trim() || 'backrooms'
       startMultiplayer(url, room)
     }
+
+    // settings
+    const settingsMod = document.getElementById('settings-modal')
+    document.getElementById('btn-settings').onclick = async () => {
+      const s = await window.backrooms?.getSettings?.() ?? { autoUpdate: true }
+      document.getElementById('chk-autoupdate').checked = s.autoUpdate
+      settingsMod.style.display = 'flex'
+    }
+    document.getElementById('settings-close').onclick = async () => {
+      const autoUpdate = document.getElementById('chk-autoupdate').checked
+      await window.backrooms?.saveSettings?.({ autoUpdate })
+      settingsMod.style.display = 'none'
+    }
+    document.getElementById('btn-restart')?.addEventListener('click', () => {
+      window.backrooms?.restartNow?.()
+    })
+    // listen for update-ready from main
+    window.backrooms?.onUpdateReady?.(() => {
+      document.getElementById('update-ready-msg').style.display = 'block'
+    })
   </script>
 </body>
 </html>

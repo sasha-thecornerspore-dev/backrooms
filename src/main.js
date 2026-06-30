@@ -1,9 +1,11 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import { join } from 'path'
 import { readFileSync } from 'fs'
 import https from 'https'
 import { autoUpdater } from 'electron-updater'
+import { readSettings, writeSettings } from './settings.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -13,21 +15,6 @@ try {
   const raw = readFileSync(path.join(__dirname, 'build-config.json'), 'utf8')
   buildConfig = { ...buildConfig, ...JSON.parse(raw) }
 } catch { /* dev mode: wish submission will fail gracefully */ }
-
-function createWindow() {
-  const win = new BrowserWindow({
-    width: 1280,
-    height: 720,
-    fullscreenable: true,
-    backgroundColor: '#000000',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  })
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
-}
 
 // GitHub Issues API — creates a wish issue
 ipcMain.handle('submit-wish', async (_event, text) => {
@@ -64,8 +51,45 @@ ipcMain.handle('submit-wish', async (_event, text) => {
   })
 })
 
+let mainWindow = null
+
+function createWindowAndTrack() {
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 720,
+    fullscreenable: true,
+    backgroundColor: '#000000',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'))
+}
+
 app.whenReady().then(() => {
-  createWindow()
+  const settingsPath = join(app.getPath('userData'), 'settings.json')
+
+  ipcMain.handle('get-settings', () => readSettings(settingsPath))
+  ipcMain.handle('save-settings', (_e, settings) => writeSettings(settingsPath, settings))
+  ipcMain.handle('start-local-server', async () => {
+    const { createServer } = await import('../server/index.js')
+    const s = await createServer(0)
+    return s.address().port
+  })
+  ipcMain.on('restart-now', () => autoUpdater.quitAndInstall())
+
+  autoUpdater.on('update-downloaded', () => {
+    const settings = readSettings(settingsPath)
+    if (settings.autoUpdate) {
+      autoUpdater.quitAndInstall()
+    } else {
+      mainWindow?.webContents.send('update-ready')
+    }
+  })
+
+  createWindowAndTrack()
   // Check for updates silently on launch (only runs in production builds)
   if (app.isPackaged) {
     autoUpdater.checkForUpdatesAndNotify()
