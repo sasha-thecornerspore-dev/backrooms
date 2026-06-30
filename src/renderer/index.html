@@ -104,6 +104,7 @@
       <button id="btn-join">JOIN ⬡</button>
       <button id="btn-host">HOST ⬡</button>
     </div>
+    <div id="start-status" style="color:#a09060;font-family:monospace;font-size:13px;margin-top:16px;min-height:20px;text-align:center;"></div>
   </div>
 
   <div id="join-modal" style="display:none">
@@ -141,6 +142,7 @@
     const startEl = document.getElementById('start')
     const joinModal = document.getElementById('join-modal')
     const joinStatus = document.getElementById('join-status')
+    const startStatus = document.getElementById('start-status')
     const canvas = document.getElementById('c')
 
     async function startSolo() {
@@ -161,15 +163,24 @@
       }
     }
 
-    document.getElementById('btn-solo').onclick = startSolo
+    document.getElementById('btn-solo').onclick = () => {
+      startStatus.textContent = ''
+      startSolo()
+    }
 
     document.getElementById('btn-join').onclick = () => {
+      startStatus.textContent = ''
       joinModal.style.display = 'flex'
     }
 
     document.getElementById('btn-host').onclick = async () => {
-      const port = await window.backrooms?.startLocalServer?.() ?? 8765
-      await startMultiplayer(`ws://localhost:${port}`, 'local')
+      startStatus.textContent = 'starting local server...'
+      try {
+        const port = await window.backrooms?.startLocalServer?.() ?? 8765
+        await startMultiplayer(`ws://localhost:${port}`, 'local')
+      } catch (e) {
+        startStatus.textContent = `host failed: ${e.message}`
+      }
     }
 
     document.getElementById('join-cancel').onclick = () => {
