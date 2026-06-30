@@ -6,7 +6,9 @@ export function createMultiplayerClient(serverUrl) {
   const remotePlayers = new Map()  // id → {id, x, y, angle}
 
   function connect(roomId) {
+    if (ws) { ws.close(); ws = null; connected = false; remotePlayers.clear() }
     return new Promise((resolve, reject) => {
+      let settled = false
       ws = new (global.WebSocket ?? window.WebSocket)(serverUrl)
 
       ws.onopen = () => {
@@ -18,6 +20,7 @@ export function createMultiplayerClient(serverUrl) {
         try { msg = JSON.parse(data) } catch { return }
 
         if (msg.type === 'welcome') {
+          settled = true
           connected = true
           playerId = msg.playerId
           resolve({ worldSeed: msg.worldSeed, playerId: msg.playerId, roomId: msg.roomId })
@@ -32,8 +35,8 @@ export function createMultiplayerClient(serverUrl) {
         }
       }
 
-      ws.onerror = (e) => { connected = false; reject(e) }
-      ws.onclose = () => { connected = false; remotePlayers.clear() }
+      ws.onerror = (e) => { if (!settled) { settled = true; connected = false; reject(e) } }
+      ws.onclose = () => { if (!settled) { settled = true; reject(new Error('connection closed before welcome')) } connected = false; remotePlayers.clear() }
     })
   }
 
