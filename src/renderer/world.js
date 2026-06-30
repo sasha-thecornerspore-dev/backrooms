@@ -138,7 +138,7 @@ export function generateChunk(cx, cy, epoch, density = 0.30) {
   return cell
 }
 
-export function createChunkCache(config) {
+export function createChunkCache(config, fixedSeed = null) {
   // Accept either a config object or a bare evictRadius number (legacy/test usage)
   const evictRadius   = (typeof config === 'object' && config !== null)
     ? (config.chunkEvictRadius ?? 3)
@@ -157,7 +157,9 @@ export function createChunkCache(config) {
     for (const [k] of chunks) {
       const [ex, ey] = k.split(',').map(Number)
       if (Math.max(Math.abs(ex - pcx), Math.abs(ey - pcy)) > evictRadius) {
-        epochs.set(k, (epochs.get(k) ?? 0) + 1)
+        if (fixedSeed === null) {
+          epochs.set(k, (epochs.get(k) ?? 0) + 1)
+        }
         chunks.delete(k)
       }
     }
@@ -166,7 +168,8 @@ export function createChunkCache(config) {
   function getChunk(cx, cy, playerCx = cx, playerCy = cy) {
     const k = key(cx, cy)
     if (!chunks.has(k)) {
-      chunks.set(k, generateChunk(cx, cy, epochs.get(k) ?? 0, wallDensity))
+      const epoch = fixedSeed !== null ? fixedSeed : (epochs.get(k) ?? 0)
+      chunks.set(k, generateChunk(cx, cy, epoch, wallDensity))
       evict(playerCx, playerCy)
     }
     return chunks.get(k)
