@@ -1,7 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { fileURLToPath } from 'url'
 import path from 'path'
-import { join } from 'path'
 import { readFileSync } from 'fs'
 import https from 'https'
 import { autoUpdater } from 'electron-updater'
@@ -69,7 +68,7 @@ function createWindowAndTrack() {
 }
 
 app.whenReady().then(() => {
-  const settingsPath = join(app.getPath('userData'), 'settings.json')
+  const settingsPath = path.join(app.getPath('userData'), 'settings.json')
 
   ipcMain.handle('get-settings', () => readSettings(settingsPath))
   ipcMain.handle('save-settings', (_e, settings) => writeSettings(settingsPath, settings))

@@ -215,7 +215,6 @@
       startMultiplayer(url, room)
     }
 
-    // settings
     const settingsMod = document.getElementById('settings-modal')
     document.getElementById('btn-settings').onclick = async () => {
       const s = await window.backrooms?.getSettings?.() ?? { autoUpdate: true }
