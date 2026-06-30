@@ -36,6 +36,7 @@ function getOrCreateRoom(roomId) {
 }
 
 function handleLeave(room, roomId, playerId) {
+  if (!room.players.has(playerId)) return  // already handled (error fires before close)
   room.players.delete(playerId)
   broadcast(room, { type: 'left', id: playerId })
   if (room.players.size === 0) {
