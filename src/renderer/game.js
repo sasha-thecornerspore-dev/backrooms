@@ -196,9 +196,27 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null } = {
     const pcy = Math.floor(player.y / CHUNK_SIZE)
     cache.preload(pcx, pcy)
 
+    // send our position to server
+    if (mpClient?.isConnected()) {
+      mpClient.sendPos(player.x, player.y, player.angle)
+    }
+
     // Entities update before render so positions are current this frame
     entitySys.update(dt, player, pcx, pcy)
-    gfx.render(player, (wx, wy) => cache.isWall(wx, wy, pcx, pcy), flicker, entitySys.getEntities())
+
+    // merge remote players into entity list for rendering
+    const remoteEntities = mpClient
+      ? mpClient.getRemotePlayers().map(p => ({
+          x: p.x, y: p.y,
+          type: 'stalker', state: 'chase',
+          dir: 0, dirTimer: 0,
+          chunkCx: Math.floor(p.x / CHUNK_SIZE),
+          chunkCy: Math.floor(p.y / CHUNK_SIZE),
+        }))
+      : []
+    const allEntities = [...entitySys.getEntities(), ...remoteEntities]
+
+    gfx.render(player, (wx, wy) => cache.isWall(wx, wy, pcx, pcy), flicker, allEntities)
 
     requestAnimationFrame(loop)
   }
