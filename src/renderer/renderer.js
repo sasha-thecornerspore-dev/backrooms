@@ -19,9 +19,15 @@ export function createRenderer(canvas, config) {
   const FOV = Math.PI / 2.4
   const HF  = FOV / 2
 
-  function render(player, isWallFn, flicker) {
+  let zbuffer = null  // Float32Array(W), allocated on first render or resize
+
+  function render(player, isWallFn, flicker, entities = []) {
     const W = canvas.width, H = canvas.height
-    const HH = (H / 2 + player.bobOffset) | 0
+    const HH = (H / 2 + (player.bobOffset ?? 0)) | 0
+
+    // Allocate/reset zbuffer each frame
+    if (!zbuffer || zbuffer.length !== W) zbuffer = new Float32Array(W)
+    zbuffer.fill(0)
 
     const img = ctx.createImageData(W, H)
     const d   = img.data
@@ -72,6 +78,7 @@ export function createRenderer(canvas, config) {
       const hit   = castRay(player.x, player.y, angle, isWallFn)
 
       const corr = hit.dist * Math.cos(angle - player.angle)
+      zbuffer[col] = corr
       const wh   = Math.min(H * 4, H / Math.max(0.001, corr))
       const wt   = HH - wh / 2
 
@@ -84,6 +91,47 @@ export function createRenderer(canvas, config) {
 
       ctx.fillStyle = `rgb(${r},${g},${b})`
       ctx.fillRect(col, wt, 1, wh)
+    }
+
+    // sprite pass — entities rendered as dark billboard silhouettes
+    if (entities && entities.length > 0) {
+      const HALF_FOV = FOV / 2
+      // sort far→near so closer entities overdraw
+      const sorted = [...entities].sort((a, b) => {
+        const da = (a.x - player.x) ** 2 + (a.y - player.y) ** 2
+        const db = (b.x - player.x) ** 2 + (b.y - player.y) ** 2
+        return db - da
+      })
+      for (const ent of sorted) {
+        const ex = ent.x - player.x
+        const ey = ent.y - player.y
+        const entDist = Math.sqrt(ex * ex + ey * ey)
+        if (entDist < 0.5) continue
+        // angle of entity relative to player heading
+        const entAngle = Math.atan2(ey, ex) - player.angle
+        // normalise to [-PI, PI]
+        const relAngle = ((entAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI
+        if (Math.abs(relAngle) > HALF_FOV + 0.2) continue
+
+        const screenX = Math.floor(W / 2 + (relAngle / HALF_FOV) * (W / 2))
+        const spriteH = Math.min(H * 2, Math.floor(H / entDist))
+        const spriteW = Math.floor(spriteH * 0.4)
+        const top = Math.floor((H - spriteH) / 2 + (player.bobOffset ?? 0) * 4)
+
+        // fog factor — same curve as wall fog
+        const fogT = Math.min(1, entDist / config.fogDistance)
+        const alpha = (1 - fogT) * 0.92
+
+        if (alpha < 0.04) continue
+
+        ctx.fillStyle = `rgba(20,15,10,${alpha.toFixed(3)})`
+        for (let sx = screenX - spriteW / 2; sx < screenX + spriteW / 2; sx++) {
+          const col = Math.floor(sx)
+          if (col < 0 || col >= W) continue
+          if (zbuffer[col] <= entDist) continue  // wall is closer — skip this column
+          ctx.fillRect(col, top, 1, spriteH)
+        }
+      }
     }
 
     const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.12, W / 2, H / 2, H * 0.85)
