@@ -2,6 +2,12 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import { createServer as createHttpServer } from 'http'
 import { randomBytes } from 'crypto'
+import { startUpdater } from './updater.js'
+import { readFileSync } from 'fs'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const PORT = parseInt(process.env.PORT ?? '8765', 10)
 
@@ -84,5 +90,9 @@ export function createServer(port = PORT) {
 
 // start when run directly
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
-  createServer().then(s => console.log(`backrooms server on :${s.address().port}`))
+  createServer().then(s => {
+    console.log(`backrooms server on :${s.address().port}`)
+    const { version } = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'))
+    startUpdater(version, 'sasha-thecornerspore-dev/backrooms')
+  })
 }
