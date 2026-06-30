@@ -22,7 +22,7 @@ jobs:
 
       - name: Write build config
         run: |
-          echo '{"wishToken":"${{ secrets.GITHUB_ISSUES_TOKEN }}","githubOwner":"${{ github.repository_owner }}","githubRepo":"backrooms"}' > src/build-config.json
+          echo '{"wishToken":"${{ secrets.ISSUES_TOKEN }}","githubOwner":"${{ github.repository_owner }}","githubRepo":"backrooms"}' > src/build-config.json
 
       - name: Build & sign installer
         env:
