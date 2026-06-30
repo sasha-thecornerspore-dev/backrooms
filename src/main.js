@@ -77,9 +77,11 @@ app.whenReady().then(() => {
     const s = await createServer(0)
     return s.address().port
   })
-  ipcMain.on('restart-now', () => autoUpdater.quitAndInstall())
+  let updateDownloaded = false
+  ipcMain.on('restart-now', () => { if (updateDownloaded) autoUpdater.quitAndInstall() })
 
   autoUpdater.on('update-downloaded', () => {
+    updateDownloaded = true
     const settings = readSettings(settingsPath)
     if (settings.autoUpdate) {
       autoUpdater.quitAndInstall()

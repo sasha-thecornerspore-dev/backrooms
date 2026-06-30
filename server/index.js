@@ -34,7 +34,9 @@ function startBroadcastLoop(room) {
 
 function getOrCreateRoom(roomId) {
   if (!rooms.has(roomId)) {
-    rooms.set(roomId, { worldSeed: seed32(), players: new Map(), expireTimer: null, _ticker: null })
+    let worldSeed = seed32()
+    if (worldSeed === 0) worldSeed = 1
+    rooms.set(roomId, { worldSeed, players: new Map(), expireTimer: null, _ticker: null })
   }
   const room = rooms.get(roomId)
   if (room.expireTimer) { clearTimeout(room.expireTimer); room.expireTimer = null }

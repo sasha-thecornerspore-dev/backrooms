@@ -98,12 +98,16 @@ export function createEntitySystem(config, isWallFn) {
     // try to move; redirect on wall hit
     const nx = e.x + Math.cos(e.dir) * speed * dt
     const ny = e.y + Math.sin(e.dir) * speed * dt
-    if (!isWallFn(Math.floor(nx), Math.floor(e.y), playerCx, playerCy)) {
+    const origX = e.x
+    const origY = e.y
+    const canX = !isWallFn(Math.floor(nx), Math.floor(origY), playerCx, playerCy)
+    const canY = !isWallFn(Math.floor(origX), Math.floor(ny), playerCx, playerCy)
+    if (canX) {
       e.x = nx
     } else {
       e.dir += Math.PI * 0.5  // turn 90° on wall hit
     }
-    if (!isWallFn(Math.floor(e.x), Math.floor(ny), playerCx, playerCy)) {
+    if (canY) {
       e.y = ny
     } else {
       e.dir -= Math.PI * 0.5
