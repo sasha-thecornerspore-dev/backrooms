@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { fileURLToPath } from 'url'
 import path from 'path'
-import { readFileSync } from 'fs'
+import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import https from 'https'
-import { autoUpdater } from 'electron-updater'
+import electronUpdater from 'electron-updater'
+const { autoUpdater } = electronUpdater
 import { readSettings, writeSettings } from './settings.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -59,7 +60,7 @@ function createWindowAndTrack() {
     fullscreenable: true,
     backgroundColor: '#000000',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -72,6 +73,31 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-settings', () => readSettings(settingsPath))
   ipcMain.handle('save-settings', (_e, settings) => writeSettings(settingsPath, settings))
+  ipcMain.handle('get-version', () => app.getVersion())
+
+  // polaroid — the renderer hands over a PNG data URL, we file the evidence
+  ipcMain.handle('save-photo', (_e, dataUrl) => {
+    const PREFIX = 'data:image/png;base64,'
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith(PREFIX)) return null
+    try {
+      const dir = path.join(app.getPath('pictures'), 'backrooms')
+      mkdirSync(dir, { recursive: true })
+      const file = path.join(dir, `evidence-${Date.now()}.png`)
+      writeFileSync(file, Buffer.from(dataUrl.slice(PREFIX.length), 'base64'))
+      return file
+    } catch {
+      return null
+    }
+  })
+
+  // "locate your body" — only Google Maps ever gets opened
+  ipcMain.handle('open-external', (_e, url) => {
+    if (typeof url === 'string' && url.startsWith('https://www.google.com/maps')) {
+      shell.openExternal(url)
+      return true
+    }
+    return false
+  })
   ipcMain.handle('start-local-server', async () => {
     const { createServer } = await import('../server/index.js')
     const s = await createServer(0)

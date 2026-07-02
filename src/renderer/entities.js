@@ -64,16 +64,16 @@ export function createEntitySystem(config, isWallFn) {
     }
   }
 
-  function stepEntity(e, dt, player, isWallFn, playerCx, playerCy) {
+  function stepEntity(e, dt, player, isWallFn, playerCx, playerCy, aggroMul = 1) {
     const dx = player.x - e.x
     const dy = player.y - e.y
     const dist = Math.sqrt(dx * dx + dy * dy)
 
-    // state transitions
+    // state transitions — a playing radio carries; stalkers hear it from farther away
     if (e.type === 'wanderer') {
       e.state = dist < 6 ? 'flee' : 'idle'
     } else {
-      e.state = dist < 24 ? 'chase' : 'idle'
+      e.state = dist < 24 * aggroMul ? 'chase' : 'idle'
     }
 
     // pick speed and direction
@@ -114,10 +114,10 @@ export function createEntitySystem(config, isWallFn) {
     }
   }
 
-  function update(dt, player, playerCx, playerCy) {
+  function update(dt, player, playerCx, playerCy, aggroMul = 1) {
     evict(playerCx, playerCy)
     trySpawnAround(playerCx, playerCy)
-    for (const e of entities) stepEntity(e, dt, player, isWallFn, playerCx, playerCy)
+    for (const e of entities) stepEntity(e, dt, player, isWallFn, playerCx, playerCy, aggroMul)
   }
 
   function getEntities() { return entities }

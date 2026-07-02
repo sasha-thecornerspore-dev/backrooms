@@ -44,6 +44,41 @@ export function setFlicker(intensity) {
   )
 }
 
+// ── radio — a warbling music-box loop from somewhere that isn't here ──
+const RADIO_NOTES = [220, 174.6, 196, 146.8, 220, 261.6, 196, 130.8]
+let radioTimer = null
+let radioStep = 0
+
+export function setRadio(on) {
+  if (!actx) return
+  if (on && !radioTimer) {
+    radioStep = 0
+    radioTimer = setInterval(() => {
+      try {
+        const osc  = actx.createOscillator()
+        const gain = actx.createGain()
+        const filt = actx.createBiquadFilter()
+        filt.type = 'bandpass'
+        filt.frequency.value = 900
+        filt.Q.value = 1.2
+        osc.type = 'triangle'
+        // detuned — the tune is almost right
+        osc.frequency.value = RADIO_NOTES[radioStep % RADIO_NOTES.length] * (1 + (Math.random() - 0.5) * 0.02)
+        gain.gain.setValueAtTime(0, actx.currentTime)
+        gain.gain.linearRampToValueAtTime(0.03, actx.currentTime + 0.04)
+        gain.gain.linearRampToValueAtTime(0, actx.currentTime + 0.42)
+        osc.connect(filt); filt.connect(gain); gain.connect(actx.destination)
+        osc.start()
+        osc.stop(actx.currentTime + 0.5)
+        radioStep++
+      } catch { /* ignore */ }
+    }, 480)
+  } else if (!on && radioTimer) {
+    clearInterval(radioTimer)
+    radioTimer = null
+  }
+}
+
 function scheduleDistant(config) {
   if (!actx) return
   const [minS, maxS] = config.audio.distantEventInterval

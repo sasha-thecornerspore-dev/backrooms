@@ -32,9 +32,9 @@ function startBroadcastLoop(room) {
   }, 50)  // 20Hz
 }
 
-function getOrCreateRoom(roomId) {
+function getOrCreateRoom(roomId, seedOverride = null) {
   if (!rooms.has(roomId)) {
-    let worldSeed = seed32()
+    let worldSeed = seedOverride ?? seed32()
     if (worldSeed === 0) worldSeed = 1
     rooms.set(roomId, { worldSeed, players: new Map(), expireTimer: null, _ticker: null })
   }
@@ -68,7 +68,12 @@ export function createServer(port = PORT) {
 
       if (msg.type === 'join' && !playerId) {
         roomId = String(msg.roomId || 'default').slice(0, 32)
-        room = getOrCreateRoom(roomId)
+        // optional anchor seed — only honoured when the room is being created
+        const requested = Number(msg.worldSeed)
+        const seedOverride = Number.isInteger(requested) && requested > 0 && requested <= 0xFFFFFFFF
+          ? requested
+          : null
+        room = getOrCreateRoom(roomId, seedOverride)
         playerId = uuid()
         room.players.set(playerId, { ws, x: 0, y: 0, angle: 0 })
         ws.send(JSON.stringify({ type: 'welcome', playerId, worldSeed: room.worldSeed, roomId }))

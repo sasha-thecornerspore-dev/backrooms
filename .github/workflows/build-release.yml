@@ -15,16 +15,40 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - run: npm ci
 
+      # Skip only when this version is already fully PUBLISHED.
+      # A leftover draft from a failed run is NOT skipped — electron-builder
+      # reuses the draft and we retry the upload, so releases stay repairable.
+      # (docs-only pushes to main after a good release just skip cleanly.)
+      - name: Check for existing release
+        id: guard
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v$(node -p "require('./package.json').version")"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          IS_DRAFT=$(gh release view "$TAG" --repo "${{ github.repository }}" --json isDraft -q .isDraft 2>/dev/null || echo "missing")
+          if [ "$IS_DRAFT" = "false" ]; then
+            echo "Release $TAG is already published — skipping build."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No published release for $TAG (state: $IS_DRAFT) — building."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Write build config
+        if: steps.guard.outputs.exists == 'false'
+        shell: bash
         run: |
           echo '{"wishToken":"${{ secrets.ISSUES_TOKEN }}","githubOwner":"${{ github.repository_owner }}","githubRepo":"backrooms"}' > src/build-config.json
 
       - name: Build & sign installer
+        if: steps.guard.outputs.exists == 'false'
         env:
           GH_TOKEN:          ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK:          ${{ secrets.CSC_LINK }}
@@ -32,21 +56,21 @@ jobs:
         run: npm run release
 
       - name: Bundle server
+        if: steps.guard.outputs.exists == 'false'
         run: npx esbuild server/index.js --bundle --platform=node --format=esm --outfile=dist/backrooms-server.js --external:ws
 
-      - name: Upload server to latest release
-        run: |
-          TAG="${{ github.ref_name }}"
-          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/tags/$TAG --jq '.id')
-          # Delete existing asset if present (allows workflow re-runs)
-          ASSET_ID=$(gh api repos/${{ github.repository }}/releases/$RELEASE_ID/assets --jq '.[] | select(.name=="backrooms-server.js") | .id')
-          if [ -n "$ASSET_ID" ]; then
-            gh api repos/${{ github.repository }}/releases/assets/$ASSET_ID --method DELETE
-          fi
-          gh api repos/${{ github.repository }}/releases/$RELEASE_ID/assets \
-            --method POST \
-            -H "Content-Type: application/javascript" \
-            -F "name=backrooms-server.js" \
-            -F "data=@dist/backrooms-server.js"
+      - name: Upload server to release
+        if: steps.guard.outputs.exists == 'false'
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.guard.outputs.tag }}" dist/backrooms-server.js --clobber --repo "${{ github.repository }}"
+
+      # Publish only after every asset (installer, latest.yml, blockmap, server)
+      # has landed. Until now the release was a draft, invisible to updaters.
+      - name: Publish the release
+        if: steps.guard.outputs.exists == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ steps.guard.outputs.tag }}" --draft=false --latest --repo "${{ github.repository }}"

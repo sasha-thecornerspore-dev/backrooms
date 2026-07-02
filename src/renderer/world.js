@@ -18,13 +18,15 @@ export const DEFAULT_CONFIG = {
     "the wallpaper is the same in every direction.",
   ],
   messageInterval: [25, 90],
+  items: { density: 5, types: ['almond-water', 'glowstick', 'polaroid', 'radio'] },
 }
 
 export async function loadConfig() {
   try {
     const r = await fetch('./world.json')
     if (!r.ok) return DEFAULT_CONFIG
-    return await r.json()
+    // merge over defaults so a drifted world.json missing a key can't break the engine
+    return { ...DEFAULT_CONFIG, ...(await r.json()) }
   } catch {
     return DEFAULT_CONFIG
   }

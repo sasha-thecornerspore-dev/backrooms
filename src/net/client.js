@@ -5,14 +5,19 @@ export function createMultiplayerClient(serverUrl) {
   let playerId = null
   const remotePlayers = new Map()  // id → {id, x, y, angle}
 
-  function connect(roomId) {
+  function connect(roomId, worldSeed = null) {
     if (ws) { ws.close(); ws = null; connected = false; remotePlayers.clear() }
     return new Promise((resolve, reject) => {
       let settled = false
-      ws = new (global.WebSocket ?? window.WebSocket)(serverUrl)
+      // renderer has no `global`; Node test env has no `window`
+      const WS = (typeof globalThis !== 'undefined' && globalThis.WebSocket) ||
+                 (typeof window !== 'undefined' && window.WebSocket)
+      ws = new WS(serverUrl)
 
       ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'join', roomId: String(roomId) }))
+        const join = { type: 'join', roomId: String(roomId) }
+        if (worldSeed != null) join.worldSeed = worldSeed
+        ws.send(JSON.stringify(join))
       }
 
       ws.onmessage = ({ data }) => {

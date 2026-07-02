@@ -46,6 +46,28 @@ describe('server', () => {
     ws1.close(); ws2.close()
   })
 
+  it('honours a worldSeed override when creating a room', async () => {
+    const ws = await connect()
+    ws.send(JSON.stringify({ type: 'join', roomId: 'anchored', worldSeed: 123456789 }))
+    const msg = await nextMsg(ws)
+    expect(msg.worldSeed).toBe(123456789)
+    // second joiner gets the same seed even if they ask for a different one
+    const ws2 = await connect()
+    ws2.send(JSON.stringify({ type: 'join', roomId: 'anchored', worldSeed: 42 }))
+    const [w2] = await Promise.all([nextMsg(ws2), nextMsg(ws)])
+    expect(w2.worldSeed).toBe(123456789)
+    ws.close(); ws2.close()
+  })
+
+  it('ignores invalid worldSeed overrides', async () => {
+    const ws = await connect()
+    ws.send(JSON.stringify({ type: 'join', roomId: 'badseed', worldSeed: 'evil' }))
+    const msg = await nextMsg(ws)
+    expect(typeof msg.worldSeed).toBe('number')
+    expect(msg.worldSeed).toBeGreaterThan(0)
+    ws.close()
+  })
+
   it('broadcasts players list after pos update', async () => {
     const ws = await connect()
     ws.send(JSON.stringify({ type: 'join', roomId: 'postest' }))

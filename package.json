@@ -1,7 +1,8 @@
 {
   "name": "backrooms",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "The Backrooms — infinite procedural horror maze",
+  "author": "Corner Spore",
   "main": "src/main.js",
   "type": "module",
   "scripts": {
@@ -14,11 +15,11 @@
   "devDependencies": {
     "electron": "^33.2.0",
     "electron-builder": "^24.13.3",
-    "vitest": "^2.1.0",
-    "ws": "^8.21.0"
+    "vitest": "^2.1.0"
   },
   "dependencies": {
-    "electron-updater": "^6.3.0"
+    "electron-updater": "^6.3.0",
+    "ws": "^8.21.0"
   },
   "build": {
     "appId": "dev.cornerspore.backrooms",
@@ -29,12 +30,13 @@
     },
     "files": [
       "src/**/*",
-      "!src/build-config.template.json"
+      "!src/build-config.template.json",
+      "server/**/*",
+      "!server/node_modules/**"
     ],
     "win": {
       "target": "nsis",
-      "certificateFile": "${env.CSC_LINK}",
-      "certificatePassword": "${env.CSC_KEY_PASSWORD}"
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": true,
@@ -44,7 +46,8 @@
     "publish": {
       "provider": "github",
       "owner": "sasha-thecornerspore-dev",
-      "repo": "backrooms"
+      "repo": "backrooms",
+      "releaseType": "draft"
     }
   }
 }

@@ -95,6 +95,39 @@
     #btn-settings { position:fixed;top:16px;right:16px;background:none;border:none;color:#6a5a2a;font-size:22px;cursor:pointer;z-index:10; }
     #btn-settings:hover { color:#c9ba72; }
     .toggle-row { display:flex;align-items:center;justify-content:space-between;color:#c9ba72;font-family:monospace;font-size:15px;margin:8px 0; }
+    #anchor-wrap { display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px; }
+    #anchor-input {
+      width: 340px; background:#00000018; border:1px solid #8a7a3a; color:#2a1e00;
+      font: 12px 'Courier New', monospace; padding:8px 10px; letter-spacing:1px;
+    }
+    #anchor-input::placeholder { color:#4a380099; }
+    #anchor-input:focus { outline:none; border-color:#2a1e00; }
+    #anchor-status { color:#4a3800; font-size:11px; letter-spacing:2px; min-height:14px; opacity:0.8; }
+    #hotbar {
+      position: fixed; bottom: 44px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 6px; pointer-events: none;
+    }
+    #hotbar .slot {
+      width: 64px; height: 30px; border: 1px solid rgba(138,122,58,0.35);
+      color: rgba(200,185,110,0.55); font: 10px 'Courier New', monospace;
+      display: flex; align-items: center; justify-content: center; gap: 4px;
+      letter-spacing: 1px; background: rgba(0,0,0,0.25);
+    }
+    #hotbar .slot.sel { border-color: rgba(200,185,110,0.8); color: rgba(200,185,110,0.9); }
+    #hotbar .slot .num { font-size: 8px; opacity: 0.5; }
+    #item-hint {
+      position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%);
+      color: rgba(200,185,90,0.6); font-size: 11px;
+      letter-spacing: 3px; pointer-events: none;
+      transition: opacity 0.4s;
+    }
+    #stamina-wrap {
+      position: fixed; bottom: 18px; left: 14px; width: 120px; height: 4px;
+      background: rgba(0,0,0,0.4); border: 1px solid rgba(138,122,58,0.3);
+      opacity: 0; transition: opacity 0.6s; pointer-events: none;
+    }
+    #stamina-fill { height: 100%; width: 100%; background: rgba(200,185,110,0.55); }
+    #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 40; }
   </style>
 </head>
 <body>
@@ -111,9 +144,13 @@
       <div id="update-ready-msg" style="display:none;color:#c9ba72;font-family:monospace;font-size:13px;margin-top:12px;">
         update ready — <button id="btn-restart" style="background:none;border:none;color:#c9ba72;cursor:pointer;font-family:monospace;text-decoration:underline;">restart now</button>
       </div>
+      <div id="locate-row" style="display:none;margin-top:12px;">
+        <button id="btn-locate" style="background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:13px;padding:8px 16px;cursor:pointer;letter-spacing:2px;">locate your body ⌖</button>
+      </div>
       <div class="modal-btns" style="margin-top:24px;">
         <button id="settings-close">CLOSE</button>
       </div>
+      <div id="version-line" style="color:#6a5a2a;font-family:monospace;font-size:11px;margin-top:16px;letter-spacing:2px;"></div>
     </div>
   </div>
 
@@ -124,6 +161,10 @@
       <button id="btn-solo">SOLO ▶</button>
       <button id="btn-join">JOIN ⬡</button>
       <button id="btn-host">HOST ⬡</button>
+    </div>
+    <div id="anchor-wrap">
+      <input id="anchor-input" type="text" placeholder="anchor — paste a google maps link or lat,lng (optional)" spellcheck="false"/>
+      <div id="anchor-status"></div>
     </div>
     <div id="start-status" style="color:#a09060;font-family:monospace;font-size:13px;margin-top:16px;min-height:20px;text-align:center;"></div>
   </div>
@@ -142,8 +183,12 @@
   </div>
   <div id="hud"></div>
   <div id="msg"></div>
-  <div id="hint">wasd · move &nbsp;&nbsp; arrows · look &nbsp;&nbsp; click · mouse look &nbsp;&nbsp; e · speak</div>
+  <div id="hint">wasd move · shift run · click look · f take · q use · 1-6 slots · e speak</div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
+  <div id="item-hint" style="opacity:0"></div>
+  <div id="hotbar"></div>
+  <div id="stamina-wrap"><div id="stamina-fill"></div></div>
+  <div id="flash"></div>
   <div id="wish-dialog" style="display:none">
     <div id="wish-inner">
       <p id="wish-prompt">state your request.</p>
@@ -159,6 +204,7 @@
   <script type="module">
     import { initGame } from './game.js'
     import { createMultiplayerClient } from '../net/client.js'
+    import { parseAnchor, anchorSeed, formatAnchor, bodyUrl } from './anchor.js'
 
     const startEl = document.getElementById('start')
     const joinModal = document.getElementById('join-modal')
@@ -166,19 +212,48 @@
     const startStatus = document.getElementById('start-status')
     const canvas = document.getElementById('c')
 
+    // ── anchor — no-clip from a real place ──
+    const anchorInput = document.getElementById('anchor-input')
+    const anchorStatus = document.getElementById('anchor-status')
+    let currentAnchor = null
+
+    anchorInput.addEventListener('input', () => {
+      const a = parseAnchor(anchorInput.value)
+      if (anchorInput.value.trim() === '') {
+        anchorStatus.textContent = ''
+      } else if (a) {
+        anchorStatus.textContent = `anchored — you will fall through ${formatAnchor(a)}`
+      } else {
+        anchorStatus.textContent = 'that place cannot be found'
+      }
+    })
+
+    function takeAnchor() {
+      currentAnchor = parseAnchor(anchorInput.value)
+      const locateRow = document.getElementById('locate-row')
+      if (locateRow) locateRow.style.display = currentAnchor ? 'block' : 'none'
+      return currentAnchor
+    }
+
     async function startSolo() {
+      const anchor = takeAnchor()
       startEl.style.display = 'none'
-      await initGame(canvas)
+      await initGame(canvas, anchor
+        ? { worldSeed: anchorSeed(anchor.lat, anchor.lng), anchor }
+        : {})
     }
 
     async function startMultiplayer(serverUrl, roomId) {
       joinStatus.textContent = 'connecting...'
       try {
+        const anchor = takeAnchor()
+        const requestedSeed = anchor ? anchorSeed(anchor.lat, anchor.lng) : null
         const mpClient = createMultiplayerClient(serverUrl)
-        const { worldSeed } = await mpClient.connect(roomId)
+        // first joiner's seed wins; later joiners inherit the room's world
+        const { worldSeed } = await mpClient.connect(roomId, requestedSeed)
         joinModal.style.display = 'none'
         startEl.style.display = 'none'
-        await initGame(canvas, { worldSeed, mpClient })
+        await initGame(canvas, { worldSeed, mpClient, anchor })
       } catch (e) {
         joinStatus.textContent = `failed: ${e.message}`
       }
@@ -219,7 +294,14 @@
     document.getElementById('btn-settings').onclick = async () => {
       const s = await window.backrooms?.getSettings?.() ?? { autoUpdate: true }
       document.getElementById('chk-autoupdate').checked = s.autoUpdate
+      try {
+        const v = await window.backrooms?.getVersion?.()
+        if (v) document.getElementById('version-line').textContent = `the backrooms v${v}`
+      } catch { /* dev mode */ }
       settingsMod.style.display = 'flex'
+    }
+    document.getElementById('btn-locate').onclick = () => {
+      if (currentAnchor) window.backrooms?.openExternal?.(bodyUrl(currentAnchor))
     }
     document.getElementById('settings-close').onclick = async () => {
       const autoUpdate = document.getElementById('chk-autoupdate').checked
