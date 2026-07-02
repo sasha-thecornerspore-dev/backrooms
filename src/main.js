@@ -1,13 +1,33 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { fileURLToPath } from 'url'
 import path from 'path'
-import { readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'fs'
 import https from 'https'
 import electronUpdater from 'electron-updater'
 const { autoUpdater } = electronUpdater
 import { readSettings, writeSettings } from './settings.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// ── diagnostics log (userData/backrooms.log) ──
+function logPath() { try { return path.join(app.getPath('userData'), 'backrooms.log') } catch { return null } }
+function logLine(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`
+  try { const p = logPath(); if (p) appendFileSync(p, line) } catch { /* ignore */ }
+  console.log(msg)
+}
+process.on('uncaughtException', (e) => logLine(`main uncaughtException: ${e?.stack || e}`))
+process.on('unhandledRejection', (e) => logLine(`main unhandledRejection: ${e?.stack || e}`))
+
+// ── GPU-hang escape hatch: if the user enabled software rendering (because
+// their GPU driver hard-locks the app), disable hardware acceleration. Must be
+// decided BEFORE app is ready, so read settings.json synchronously here. ──
+let hwAccel = true
+try {
+  const sp = path.join(app.getPath('userData'), 'settings.json')
+  const s = JSON.parse(readFileSync(sp, 'utf8'))
+  if (s.softwareRender) { app.disableHardwareAcceleration(); hwAccel = false; logLine('software rendering ON — hardware acceleration disabled') }
+} catch { /* no settings yet, or userData not ready: default to hardware accel */ }
 
 // Build-time config (written by CI, gitignored)
 let buildConfig = { wishToken: '', githubOwner: 'GITHUB_OWNER', githubRepo: 'backrooms' }
@@ -66,6 +86,30 @@ function createWindowAndTrack() {
     },
   })
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'))
+
+  // ── hang / crash recovery: turn a hard lockup into an auto-reload, and log
+  // why it happened so a real GPU/renderer hang leaves evidence behind. ──
+  let unresponsiveTimer = null
+  mainWindow.on('unresponsive', () => {
+    logLine('renderer UNRESPONSIVE')
+    if (unresponsiveTimer) return
+    // give it a chance to recover on its own; if it doesn't, reload the world
+    unresponsiveTimer = setTimeout(() => {
+      unresponsiveTimer = null
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      logLine('renderer still hung after 8s — crashing + reloading it')
+      // crashing the renderer fires 'render-process-gone' below, which reloads
+      try { mainWindow.webContents.forcefullyCrashRenderer() } catch { try { mainWindow.reload() } catch { /* ignore */ } }
+    }, 8000)
+  })
+  mainWindow.on('responsive', () => {
+    logLine('renderer responsive again')
+    if (unresponsiveTimer) { clearTimeout(unresponsiveTimer); unresponsiveTimer = null }
+  })
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    logLine(`render-process-gone: reason=${details.reason} exitCode=${details.exitCode}`)
+    if (mainWindow && !mainWindow.isDestroyed()) { try { mainWindow.reload() } catch { /* ignore */ } }
+  })
 }
 
 app.whenReady().then(() => {
@@ -114,6 +158,13 @@ app.whenReady().then(() => {
     } else {
       mainWindow?.webContents.send('update-ready')
     }
+  })
+
+  logLine(`backrooms v${app.getVersion()} starting (hardwareAccel=${hwAccel})`)
+
+  // GPU process crashing/hanging is the prime suspect for full lockups
+  app.on('child-process-gone', (_e, details) => {
+    logLine(`child-process-gone: type=${details.type} reason=${details.reason} exitCode=${details.exitCode}`)
   })
 
   createWindowAndTrack()

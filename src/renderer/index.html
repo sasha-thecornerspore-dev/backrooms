@@ -141,6 +141,10 @@
         <span>Auto-update</span>
         <input type="checkbox" id="chk-autoupdate" checked/>
       </label>
+      <label class="toggle-row">
+        <span>Software rendering<br><span style="font-size:11px;opacity:0.6;">fixes freezing on some GPUs · restart to apply</span></span>
+        <input type="checkbox" id="chk-software"/>
+      </label>
       <div id="update-ready-msg" style="display:none;color:#c9ba72;font-family:monospace;font-size:13px;margin-top:12px;">
         update ready — <button id="btn-restart" style="background:none;border:none;color:#c9ba72;cursor:pointer;font-family:monospace;text-decoration:underline;">restart now</button>
       </div>
@@ -292,8 +296,9 @@
 
     const settingsMod = document.getElementById('settings-modal')
     document.getElementById('btn-settings').onclick = async () => {
-      const s = await window.backrooms?.getSettings?.() ?? { autoUpdate: true }
+      const s = await window.backrooms?.getSettings?.() ?? { autoUpdate: true, softwareRender: false }
       document.getElementById('chk-autoupdate').checked = s.autoUpdate
+      document.getElementById('chk-software').checked = !!s.softwareRender
       try {
         const v = await window.backrooms?.getVersion?.()
         if (v) document.getElementById('version-line').textContent = `the backrooms v${v}`
@@ -305,7 +310,8 @@
     }
     document.getElementById('settings-close').onclick = async () => {
       const autoUpdate = document.getElementById('chk-autoupdate').checked
-      await window.backrooms?.saveSettings?.({ autoUpdate })
+      const softwareRender = document.getElementById('chk-software').checked
+      await window.backrooms?.saveSettings?.({ autoUpdate, softwareRender })
       settingsMod.style.display = 'none'
     }
     document.getElementById('btn-restart')?.addEventListener('click', () => {

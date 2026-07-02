@@ -20,6 +20,7 @@ function mulberry32(seed) {
 
 const TS = 64            // texture tile size (px per world cell)
 const TMASK = TS - 1
+const OFF = 1 << 24      // large positive offset so `(v+OFF)|0`-OFF == Math.floor(v)
 
 // Drop-ceiling light grid: a panel every other cell on both axes.
 function isLightCell(cx, cy) {
@@ -181,6 +182,10 @@ export function createRenderer(canvas, config) {
     const ca1 = Math.cos(player.angle + HF), sa1 = Math.sin(player.angle + HF)
 
     // ── floor & ceiling (per row, textured, with fluorescent panels) ──
+    // The fog blend is constant along a row, so it collapses to `tex*a + f` per
+    // channel (precomputed here) instead of a lerp() call per pixel. Math.floor
+    // is replaced with a positive-offset bit truncation. ~2x cheaper per pixel.
+    const F0 = fogRgb[0], F1 = fogRgb[1], F2 = fogRgb[2]
     for (let y = 0; y < H; y++) {
       const isFloor = y > HH
       const rowDist = isFloor
@@ -193,37 +198,48 @@ export function createRenderer(canvas, config) {
         continue
       }
 
-      const distF = Math.min(1, rowDist / fog)
-      const tbl = isFloor ? tex.floor : tex.ceil
+      const df   = Math.min(1, rowDist / fog)
+      const a    = (1 - df) * flicker              // texel weight
+      const gR = F0 * df * flicker, gG = F1 * df * flicker, gB = F2 * df * flicker
+      const dfL  = df * 0.45                        // light panels glow through fog
+      const aL   = (1 - dfL) * flicker
+      const gLR = F0 * dfL * flicker, gLG = F1 * dfL * flicker, gLB = F2 * dfL * flicker
+      const ceiling = !isFloor
+      const tbl  = isFloor ? tex.floor : tex.ceil
+      const lt   = tex.light
       const stepX = rowDist * (ca1 - ca0) / W
       const stepY = rowDist * (sa1 - sa0) / W
       let fx = player.x + rowDist * ca0
       let fy = player.y + rowDist * sa0
 
       for (let x = 0; x < W; x++, fx += stepX, fy += stepY) {
-        const cellX = Math.floor(fx), cellY = Math.floor(fy)
+        const cellX = ((fx + OFF) | 0) - OFF
+        const cellY = ((fy + OFF) | 0) - OFF
         const tx = ((fx - cellX) * TS) & TMASK
         const ty = ((fy - cellY) * TS) & TMASK
         const ti = (ty * TS + tx) * 3
 
-        let tr, tg, tb, df = distF
-        if (!isFloor && isLightCell(cellX, cellY)) {
-          tr = tex.light[ti]; tg = tex.light[ti + 1]; tb = tex.light[ti + 2]
-          df *= 0.45           // panels glow through the fog
+        let r, g, b
+        if (ceiling && (cellX & 1) === 0 && (cellY & 1) === 0) {
+          r = lt[ti] * aL + gLR; g = lt[ti + 1] * aL + gLG; b = lt[ti + 2] * aL + gLB
         } else {
-          tr = tbl[ti]; tg = tbl[ti + 1]; tb = tbl[ti + 2]
+          r = tbl[ti] * a + gR;  g = tbl[ti + 1] * a + gG;  b = tbl[ti + 2] * a + gB
         }
-        const r = clamp255(lerp(tr, fogRgb[0], df) * flicker)
-        const g = clamp255(lerp(tg, fogRgb[1], df) * flicker)
-        const b = clamp255(lerp(tb, fogRgb[2], df) * flicker)
-        buf32[rowOff + x] = (255 << 24) | (b << 16) | (g << 8) | r
+        buf32[rowOff + x] = (255 << 24)
+          | ((b > 255 ? 255 : b) | 0) << 16
+          | ((g > 255 ? 255 : g) | 0) << 8
+          | ((r > 255 ? 255 : r) | 0)
       }
     }
 
     // ── walls (per column, textured) ──
+    // Anything past the fog is drawn as solid fog anyway, so there is no point
+    // marching rays (and generating chunks) beyond it. This bounds the per-frame
+    // isWall calls to the visible radius instead of the old 96-unit default.
+    const rayMax = Math.min(96, Math.ceil(fog) + 3)
     for (let col = 0; col < W; col++) {
       const angle = player.angle - HF + (col / W) * FOV
-      const hit   = castRay(player.x, player.y, angle, isWallFn)
+      const hit   = castRay(player.x, player.y, angle, isWallFn, rayMax)
       const corr  = hit.dist * Math.cos(angle - player.angle)
       zbuffer[col] = corr
 
@@ -237,14 +253,22 @@ export function createRenderer(canvas, config) {
       const sideMul = hit.side === 1 ? 0.72 : 1.0
       const texX = Math.min(TMASK, (hit.wallX * TS) | 0)
       const invWh = TS / whF
+      // fog blend is constant down the column → precompute texel weight + fog add
+      const a  = sideMul * (1 - distF) * flicker
+      const wR = fogRgb[0] * distF * flicker, wG = fogRgb[1] * distF * flicker, wB = fogRgb[2] * distF * flicker
+      const wt = tex.wall
+      const base = texX * 3
 
       for (let y = y0; y < y1; y++) {
         const texY = (((y - wtF) * invWh) | 0) & TMASK
-        const ti = (texY * TS + texX) * 3
-        const r = clamp255(lerp(tex.wall[ti]     * sideMul, fogRgb[0], distF) * flicker)
-        const g = clamp255(lerp(tex.wall[ti + 1] * sideMul, fogRgb[1], distF) * flicker)
-        const b = clamp255(lerp(tex.wall[ti + 2] * sideMul, fogRgb[2], distF) * flicker)
-        buf32[y * W + col] = (255 << 24) | (b << 16) | (g << 8) | r
+        const ti = texY * TS * 3 + base
+        const r = wt[ti]     * a + wR
+        const g = wt[ti + 1] * a + wG
+        const b = wt[ti + 2] * a + wB
+        buf32[y * W + col] = (255 << 24)
+          | ((b > 255 ? 255 : b) | 0) << 16
+          | ((g > 255 ? 255 : g) | 0) << 8
+          | ((r > 255 ? 255 : r) | 0)
       }
     }
 
@@ -274,12 +298,13 @@ export function createRenderer(canvas, config) {
       }
     }
 
-    // ── film grain (cheap 'overlay' on the small buffer, before upscale) ──
+    // ── film grain (plain source-over — no 'overlay' blend, which is a heavy
+    // per-frame full-screen composite that can stress the GPU/driver over time.
+    // The tile textures already carry baked static grain; this just adds motion.)
     if (grainPattern) {
       grainPhase = (grainPhase + 37) & TMASK
       wctx.save()
-      wctx.globalAlpha = 0.06
-      wctx.globalCompositeOperation = 'overlay'
+      wctx.globalAlpha = 0.045
       wctx.fillStyle = grainPattern
       wctx.translate(-grainPhase, (grainPhase * 2) & 127)
       wctx.fillRect(grainPhase, -((grainPhase * 2) & 127), W + 128, H + 128)

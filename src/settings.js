@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { dirname } from 'path'
 
-const DEFAULTS = { autoUpdate: true }
+const DEFAULTS = { autoUpdate: true, softwareRender: false }
 
 export function readSettings(filePath) {
   try {
