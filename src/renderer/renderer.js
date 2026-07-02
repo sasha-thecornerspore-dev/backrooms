@@ -4,178 +4,393 @@ function hexToRgb(hex) {
   const n = parseInt(hex.replace('#', ''), 16)
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
-
 function lerp(a, b, t) { return a + (b - a) * t }
+function clamp255(v) { return v < 0 ? 0 : v > 255 ? 255 : v | 0 }
+
+// small deterministic PRNG so the wallpaper is the same every launch
+function mulberry32(seed) {
+  let s = seed >>> 0
+  return () => {
+    s += 0x6D2B79F5
+    let t = Math.imul(s ^ (s >>> 15), 1 | s)
+    t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+const TS = 64            // texture tile size (px per world cell)
+const TMASK = TS - 1
+
+// Drop-ceiling light grid: a panel every other cell on both axes.
+function isLightCell(cx, cy) {
+  return (cx & 1) === 0 && (cy & 1) === 0
+}
+
+// Build the three procedural tiles (wall / ceiling / floor) + the light panel,
+// each as a flat Uint8 RGB array of length TS*TS*3.
+function buildTextures(palette) {
+  const wallRgb  = hexToRgb(palette.wall)
+  const ceilRgb  = hexToRgb(palette.ceiling)
+  const floorRgb = hexToRgb(palette.floor)
+  const rnd = mulberry32(0x0BACC000)
+
+  const wall  = new Uint8Array(TS * TS * 3)
+  const ceil  = new Uint8Array(TS * TS * 3)
+  const floor = new Uint8Array(TS * TS * 3)
+  const light = new Uint8Array(TS * TS * 3)
+  const LIGHT = [250, 247, 224]
+
+  // per-column damp streak profile for the wallpaper
+  const streak = new Float32Array(TS)
+  for (let x = 0; x < TS; x++) streak[x] = 0.94 + 0.10 * rnd()
+  // a few darker vertical stains
+  for (let s = 0; s < 5; s++) {
+    const cx = (rnd() * TS) | 0
+    for (let x = cx - 1; x <= cx + 1; x++) if (x >= 0 && x < TS) streak[x] *= 0.9
+  }
+
+  for (let y = 0; y < TS; y++) {
+    for (let x = 0; x < TS; x++) {
+      const i = (y * TS + x) * 3
+      const n = (rnd() - 0.5) * 10   // fine film noise
+
+      // ── wall: wallpaper + baseboard ──
+      if (y >= TS - 9) {
+        // dark skirting board with a highlight lip at the top edge
+        const lip = y === TS - 9 ? 1.7 : 1.0
+        wall[i]     = clamp255(wallRgb[0] * 0.34 * lip + n)
+        wall[i + 1] = clamp255(wallRgb[1] * 0.34 * lip + n)
+        wall[i + 2] = clamp255(wallRgb[2] * 0.32 * lip + n)
+      } else {
+        let m = streak[x]
+        if (y % 16 === 0) m *= 0.93          // faint horizontal pattern band
+        if ((x + y) % 23 === 0) m *= 1.03    // subtle weave highlight
+        wall[i]     = clamp255(wallRgb[0] * m + n)
+        wall[i + 1] = clamp255(wallRgb[1] * m + n)
+        wall[i + 2] = clamp255(wallRgb[2] * m + n * 0.6)
+      }
+
+      // ── ceiling tile: grid seams + noise ──
+      const seam = (x < 2 || y < 2 || x > TS - 3 || y > TS - 3) ? 0.7 : 1.0
+      ceil[i]     = clamp255(ceilRgb[0] * seam + n * 0.6)
+      ceil[i + 1] = clamp255(ceilRgb[1] * seam + n * 0.6)
+      ceil[i + 2] = clamp255(ceilRgb[2] * seam + n * 0.6)
+
+      // ── light panel: bright emissive centre, darker aluminium frame ──
+      const frame = (x < 4 || y < 4 || x > TS - 5 || y > TS - 5)
+      const lb = frame ? 0.78 : 1.0
+      light[i]     = clamp255(LIGHT[0] * lb + n * 0.4)
+      light[i + 1] = clamp255(LIGHT[1] * lb + n * 0.4)
+      light[i + 2] = clamp255(LIGHT[2] * lb + n * 0.4)
+
+      // ── floor: damp mottled carpet ──
+      const mot = 0.82 + 0.30 * rnd()
+      const seamF = (x < 1 || y < 1) ? 0.8 : 1.0
+      floor[i]     = clamp255(floorRgb[0] * mot * seamF + n * 0.5)
+      floor[i + 1] = clamp255(floorRgb[1] * mot * seamF + n * 0.5)
+      floor[i + 2] = clamp255(floorRgb[2] * mot * seamF + n * 0.4)
+    }
+  }
+  return { wall, ceil, floor, light }
+}
+
+// A tileable grayscale noise canvas for animated film grain.
+function buildGrain() {
+  const N = 128
+  const c = document.createElement('canvas')
+  c.width = N; c.height = N
+  const g = c.getContext('2d')
+  const img = g.createImageData(N, N)
+  const rnd = mulberry32(0x51CE)
+  for (let i = 0; i < N * N; i++) {
+    const v = (rnd() * 255) | 0
+    img.data[i * 4] = v; img.data[i * 4 + 1] = v; img.data[i * 4 + 2] = v
+    img.data[i * 4 + 3] = 255
+  }
+  g.putImageData(img, 0, 0)
+  return c
+}
+
+// The world is raycast into an offscreen buffer at this fraction of the window
+// resolution, then bilinear-upscaled. The fog and grain hide the softness and
+// it roughly triples throughput.
+const RENDER_SCALE = 0.6
 
 export function createRenderer(canvas, config) {
   const ctx = canvas.getContext('2d', { alpha: false })
 
-  const wallRgb  = hexToRgb(config.palette.wall)
-  const ceilRgb  = hexToRgb(config.palette.ceiling)
-  const floorRgb = hexToRgb(config.palette.floor)
-  const fogRgb   = hexToRgb(config.palette.fog)
-  const baseFog  = config.fogDistance
+  const fogRgb  = hexToRgb(config.palette.fog)
+  const baseFog = config.fogDistance
+  const tex     = buildTextures(config.palette)
+  const grainCanvas = buildGrain()
+  let grainPhase = 0
 
   const ITEM_COLORS = {
     'almond-water': [190, 215, 235],
-    'glowstick':    [120, 220, 90],
+    'glowstick':    [120, 235, 90],
     'polaroid':     [235, 230, 220],
-    'radio':        [190, 95, 55],
+    'radio':        [200, 100, 55],
   }
 
   const FOV = Math.PI / 2.4
   const HF  = FOV / 2
 
-  let zbuffer = null  // Float32Array(W), allocated on first render or resize
+  // low-res world buffer + its own 2D context
+  const world = document.createElement('canvas')
+  const wctx  = world.getContext('2d', { alpha: false })
+  const grainPattern = wctx.createPattern(grainCanvas, 'repeat')
 
-  // fogMul > 1 pushes the fog back (glowstick); it resets when the light dies
+  let zbuffer = null
+  let img = null, buf32 = null
+  let vignette = null
+  let RW = 0, RH = 0, winW = 0, winH = 0
+
+  function ensureBuffers(W, H) {
+    if (winW === W && winH === H && img) return
+    winW = W; winH = H
+    RW = Math.max(1, Math.round(W * RENDER_SCALE))
+    RH = Math.max(1, Math.round(H * RENDER_SCALE))
+    world.width = RW; world.height = RH
+    img = wctx.createImageData(RW, RH)
+    buf32 = new Uint32Array(img.data.buffer)
+    zbuffer = new Float32Array(RW)
+
+    // precompute the vignette once (full-res, drawn over the upscaled world)
+    vignette = document.createElement('canvas')
+    vignette.width = W; vignette.height = H
+    const vg = vignette.getContext('2d')
+    const grad = vg.createRadialGradient(W / 2, H / 2, H * 0.12, W / 2, H / 2, H * 0.85)
+    grad.addColorStop(0, 'rgba(0,0,0,0)')
+    grad.addColorStop(1, 'rgba(0,0,0,0.58)')
+    vg.fillStyle = grad
+    vg.fillRect(0, 0, W, H)
+  }
+
   function render(player, isWallFn, flicker, entities = [], fogMul = 1) {
     const fog = baseFog * fogMul
-    const W = canvas.width, H = canvas.height
-    const HH = (H / 2 + (player.bobOffset ?? 0)) | 0
+    ensureBuffers(canvas.width, canvas.height)
+    // everything below draws into the low-res world buffer (RW x RH)
+    const W = RW, H = RH
+    const HH = (H / 2 + (player.bobOffset ?? 0) * RENDER_SCALE) | 0
 
-    // Allocate/reset zbuffer each frame
-    if (!zbuffer || zbuffer.length !== W) zbuffer = new Float32Array(W)
-    zbuffer.fill(0)
-
-    const img = ctx.createImageData(W, H)
-    const d   = img.data
+    // fog colour, pre-flickered, packed once
+    const fr = fogRgb[0] * flicker, fg = fogRgb[1] * flicker, fb = fogRgb[2] * flicker
+    const fogPacked = (255 << 24) | (clamp255(fb) << 16) | (clamp255(fg) << 8) | clamp255(fr)
 
     const ca0 = Math.cos(player.angle - HF), sa0 = Math.sin(player.angle - HF)
     const ca1 = Math.cos(player.angle + HF), sa1 = Math.sin(player.angle + HF)
 
+    // ── floor & ceiling (per row, textured, with fluorescent panels) ──
     for (let y = 0; y < H; y++) {
       const isFloor = y > HH
       const rowDist = isFloor
         ? (H - HH) / Math.max(1, y - HH)
         : HH       / Math.max(1, HH - y)
-
-      const distF = Math.min(1, rowDist / fog)
+      const rowOff = y * W
 
       if (rowDist > fog) {
-        // Beyond fog: solid fog colour
-        const fr = Math.round(fogRgb[0] * flicker)
-        const fg = Math.round(fogRgb[1] * flicker)
-        const fb = Math.round(fogRgb[2] * flicker)
-        for (let x = 0; x < W; x++) {
-          const i = (y * W + x) * 4
-          d[i] = fr; d[i + 1] = fg; d[i + 2] = fb; d[i + 3] = 255
-        }
+        buf32.fill(fogPacked, rowOff, rowOff + W)
         continue
       }
 
+      const distF = Math.min(1, rowDist / fog)
+      const tbl = isFloor ? tex.floor : tex.ceil
       const stepX = rowDist * (ca1 - ca0) / W
       const stepY = rowDist * (sa1 - sa0) / W
       let fx = player.x + rowDist * ca0
       let fy = player.y + rowDist * sa0
 
       for (let x = 0; x < W; x++, fx += stepX, fy += stepY) {
-        const base = isFloor ? floorRgb : ceilRgb
-        const r = Math.min(255, Math.round(lerp(base[0], fogRgb[0], distF) * flicker))
-        const g = Math.min(255, Math.round(lerp(base[1], fogRgb[1], distF) * flicker))
-        const b = Math.min(255, Math.round(lerp(base[2], fogRgb[2], distF) * flicker))
-        const i = (y * W + x) * 4
-        d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255
+        const cellX = Math.floor(fx), cellY = Math.floor(fy)
+        const tx = ((fx - cellX) * TS) & TMASK
+        const ty = ((fy - cellY) * TS) & TMASK
+        const ti = (ty * TS + tx) * 3
+
+        let tr, tg, tb, df = distF
+        if (!isFloor && isLightCell(cellX, cellY)) {
+          tr = tex.light[ti]; tg = tex.light[ti + 1]; tb = tex.light[ti + 2]
+          df *= 0.45           // panels glow through the fog
+        } else {
+          tr = tbl[ti]; tg = tbl[ti + 1]; tb = tbl[ti + 2]
+        }
+        const r = clamp255(lerp(tr, fogRgb[0], df) * flicker)
+        const g = clamp255(lerp(tg, fogRgb[1], df) * flicker)
+        const b = clamp255(lerp(tb, fogRgb[2], df) * flicker)
+        buf32[rowOff + x] = (255 << 24) | (b << 16) | (g << 8) | r
       }
     }
 
-    ctx.putImageData(img, 0, 0)
-
-    const RAYS = W
-    for (let col = 0; col < RAYS; col++) {
-      const angle = player.angle - HF + (col / RAYS) * FOV
+    // ── walls (per column, textured) ──
+    for (let col = 0; col < W; col++) {
+      const angle = player.angle - HF + (col / W) * FOV
       const hit   = castRay(player.x, player.y, angle, isWallFn)
-
-      const corr = hit.dist * Math.cos(angle - player.angle)
+      const corr  = hit.dist * Math.cos(angle - player.angle)
       zbuffer[col] = corr
-      const wh   = Math.min(H * 4, H / Math.max(0.001, corr))
-      const wt   = HH - wh / 2
+
+      const whF = H / Math.max(0.001, corr)   // unclamped slice height
+      const wtF = HH - whF / 2
+      const y0  = Math.max(0, Math.ceil(wtF))
+      const y1  = Math.min(H, Math.floor(wtF + whF))
+      if (y1 <= y0) continue
 
       const distF   = Math.min(1, corr / fog)
       const sideMul = hit.side === 1 ? 0.72 : 1.0
+      const texX = Math.min(TMASK, (hit.wallX * TS) | 0)
+      const invWh = TS / whF
 
-      const r = Math.min(255, Math.round(lerp(wallRgb[0] * sideMul, fogRgb[0], distF) * flicker))
-      const g = Math.min(255, Math.round(lerp(wallRgb[1] * sideMul, fogRgb[1], distF) * flicker))
-      const b = Math.min(255, Math.round(lerp(wallRgb[2] * sideMul, fogRgb[2], distF) * flicker))
-
-      ctx.fillStyle = `rgb(${r},${g},${b})`
-      ctx.fillRect(col, wt, 1, wh)
+      for (let y = y0; y < y1; y++) {
+        const texY = (((y - wtF) * invWh) | 0) & TMASK
+        const ti = (texY * TS + texX) * 3
+        const r = clamp255(lerp(tex.wall[ti]     * sideMul, fogRgb[0], distF) * flicker)
+        const g = clamp255(lerp(tex.wall[ti + 1] * sideMul, fogRgb[1], distF) * flicker)
+        const b = clamp255(lerp(tex.wall[ti + 2] * sideMul, fogRgb[2], distF) * flicker)
+        buf32[y * W + col] = (255 << 24) | (b << 16) | (g << 8) | r
+      }
     }
 
-    // sprite pass — entities rendered as dark billboard silhouettes
+    wctx.putImageData(img, 0, 0)
+
+    // ── sprites (drawn into the low-res world buffer) ──
     if (entities && entities.length > 0) {
-      const HALF_FOV = FOV / 2
-      // sort far→near so closer entities overdraw
       const sorted = [...entities].sort((a, b) => {
         const da = (a.x - player.x) ** 2 + (a.y - player.y) ** 2
         const db = (b.x - player.x) ** 2 + (b.y - player.y) ** 2
         return db - da
       })
       for (const ent of sorted) {
-        const ex = ent.x - player.x
-        const ey = ent.y - player.y
+        const ex = ent.x - player.x, ey = ent.y - player.y
         const entDist = Math.sqrt(ex * ex + ey * ey)
-        if (entDist < 0.5) continue
-        // angle of entity relative to player heading
-        const entAngle = Math.atan2(ey, ex) - player.angle
-        // normalise to [-PI, PI]
-        const relAngle = ((entAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI
-        if (Math.abs(relAngle) > HALF_FOV + 0.2) continue
-
-        const screenX = Math.floor(W / 2 + (relAngle / HALF_FOV) * (W / 2))
-
-        // fog factor — same curve as wall fog
+        if (entDist < 0.4) continue
+        const relAngle = ((Math.atan2(ey, ex) - player.angle + Math.PI * 3) % (Math.PI * 2)) - Math.PI
+        if (Math.abs(relAngle) > HF + 0.3) continue
+        const screenX = Math.floor(W / 2 + (relAngle / HF) * (W / 2))
         const fogT = Math.min(1, entDist / fog)
 
         if (ent.kind === 'item') {
-          // small, floor-anchored, faintly luminous
-          const spriteH = Math.max(2, Math.min(H, Math.floor((H / entDist) * 0.22)))
-          const spriteW = Math.max(1, Math.floor(spriteH * 0.55))
-          const bottom = HH + (H / entDist) / 2
-          const top = Math.floor(bottom - spriteH)
-          const alpha = (1 - fogT) * 0.9
-          if (alpha < 0.04) continue
-          const [ir, ig, ib] = ITEM_COLORS[ent.itemType] ?? [220, 220, 220]
-          for (let sx = screenX - spriteW / 2; sx < screenX + spriteW / 2; sx++) {
-            const col = Math.floor(sx)
-            if (col < 0 || col >= W) continue
-            if (zbuffer[col] <= entDist) continue
-            const core = Math.abs(sx - screenX) < spriteW * 0.2
-            const a = core ? Math.min(1, alpha * 1.4) : alpha
-            ctx.fillStyle = `rgba(${ir},${ig},${ib},${a.toFixed(3)})`
-            ctx.fillRect(col, top, 1, spriteH)
-          }
-          continue
-        }
-
-        const spriteH = Math.min(H * 2, Math.floor(H / entDist))
-        const spriteW = Math.floor(spriteH * 0.4)
-        const top = Math.floor((H - spriteH) / 2 + (player.bobOffset ?? 0) * 4)
-
-        const alpha = (1 - fogT) * 0.92
-
-        if (alpha < 0.04) continue
-
-        ctx.fillStyle = `rgba(20,15,10,${alpha.toFixed(3)})`
-        for (let sx = screenX - spriteW / 2; sx < screenX + spriteW / 2; sx++) {
-          const col = Math.floor(sx)
-          if (col < 0 || col >= W) continue
-          if (zbuffer[col] <= entDist) continue  // wall is closer — skip this column
-          ctx.fillRect(col, top, 1, spriteH)
+          drawItem(ent, screenX, entDist, fogT, HH, H, W)
+        } else {
+          drawFigure(ent, screenX, entDist, fogT, HH, H, W)
         }
       }
     }
 
-    const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.12, W / 2, H / 2, H * 0.85)
-    vig.addColorStop(0, 'rgba(0,0,0,0)')
-    vig.addColorStop(1, 'rgba(0,0,0,0.55)')
-    ctx.fillStyle = vig
-    ctx.fillRect(0, 0, W, H)
+    // ── film grain (cheap 'overlay' on the small buffer, before upscale) ──
+    if (grainPattern) {
+      grainPhase = (grainPhase + 37) & TMASK
+      wctx.save()
+      wctx.globalAlpha = 0.06
+      wctx.globalCompositeOperation = 'overlay'
+      wctx.fillStyle = grainPattern
+      wctx.translate(-grainPhase, (grainPhase * 2) & 127)
+      wctx.fillRect(grainPhase, -((grainPhase * 2) & 127), W + 128, H + 128)
+      wctx.restore()
+    }
 
+    // ── upscale the world buffer to the window (bilinear softens it into fog) ──
+    const OW = canvas.width, OH = canvas.height
+    ctx.imageSmoothingEnabled = true
+    ctx.drawImage(world, 0, 0, RW, RH, 0, 0, OW, OH)
+
+    // ── vignette (precomputed) + flicker blackout, at full resolution ──
+    if (vignette) ctx.drawImage(vignette, 0, 0)
     if (flicker < 0.9) {
       ctx.fillStyle = `rgba(0,0,0,${(1 - flicker) * 0.75})`
-      ctx.fillRect(0, 0, W, H)
+      ctx.fillRect(0, 0, OW, OH)
     }
+  }
+
+  // A cloaked standing figure: a rounded hood widening to a skirt, with faint
+  // eyes when close. Column spans respect the wall zbuffer so it hides properly.
+  // Drawn into the low-res world buffer (wctx).
+  function drawFigure(ent, screenX, entDist, fogT, HH, H, W) {
+    const spriteH = Math.min(H * 2, Math.floor(H / entDist))
+    const spriteW = Math.floor(spriteH * 0.42)
+    if (spriteW < 1) return
+    const topBase = Math.floor(HH - spriteH * 0.5)
+    const bottom  = topBase + spriteH
+    const alpha = (1 - fogT) * 0.95
+    if (alpha < 0.04) return
+    const half = spriteW / 2
+
+    for (let sx = -half; sx <= half; sx++) {
+      const col = Math.floor(screenX + sx)
+      if (col < 0 || col >= W) continue
+      if (zbuffer[col] <= entDist) continue
+      const u = sx / half                    // -1..1 across the body
+      // rounded hood: edges start lower than the centre → hunched silhouette
+      const top = topBase + (u * u) * spriteH * 0.34
+      const hgt = bottom - top
+      if (hgt <= 0) continue
+      // slightly darker toward the centre for volume
+      const shade = 18 - Math.abs(u) * 6
+      wctx.fillStyle = `rgba(${shade | 0},${(shade * 0.8) | 0},${(shade * 0.6) | 0},${alpha.toFixed(3)})`
+      wctx.fillRect(col, top | 0, 1, hgt | 0)
+    }
+
+    // faint pale eyes when it's close
+    if (entDist < 9) {
+      const eyeAlpha = (1 - entDist / 9) * 0.5
+      const eyeY = topBase + spriteH * 0.16
+      const eyeDx = spriteW * 0.13
+      const eyeR = Math.max(1, spriteW * 0.05)
+      wctx.fillStyle = `rgba(220,225,210,${eyeAlpha.toFixed(3)})`
+      for (const dx of [-eyeDx, eyeDx]) {
+        const col = Math.floor(screenX + dx)
+        if (col >= 0 && col < W && zbuffer[col] > entDist) {
+          wctx.fillRect(col - (eyeR | 0), eyeY, (eyeR * 2) | 0, (eyeR * 1.4) | 0)
+        }
+      }
+    }
+  }
+
+  // Small floor-anchored pickups: a soft glow plus a suggestive shape per type.
+  // Drawn into the low-res world buffer (wctx).
+  function drawItem(ent, screenX, entDist, fogT, HH, H, W) {
+    const size = Math.max(3, Math.min(H * 0.5, (H / entDist) * 0.24))
+    const bottom = HH + (H / entDist) / 2
+    const top = bottom - size
+    const alpha = (1 - fogT) * 0.95
+    if (alpha < 0.05) return
+    const [r, g, b] = ITEM_COLORS[ent.itemType] ?? [220, 220, 220]
+    const cx = screenX
+    const w = Math.max(2, size * 0.5)
+
+    // occlusion: skip entirely if the centre column is behind a wall
+    if (screenX >= 0 && screenX < W && zbuffer[screenX] <= entDist) return
+
+    wctx.save()
+    // soft glow
+    const glow = wctx.createRadialGradient(cx, top + size * 0.5, 1, cx, top + size * 0.5, size * 1.3)
+    glow.addColorStop(0, `rgba(${r},${g},${b},${(alpha * 0.5).toFixed(3)})`)
+    glow.addColorStop(1, 'rgba(0,0,0,0)')
+    wctx.fillStyle = glow
+    wctx.fillRect(cx - size * 1.3, top - size * 0.4, size * 2.6, size * 1.9)
+
+    wctx.globalAlpha = alpha
+    const t = ent.itemType
+    if (t === 'glowstick') {
+      wctx.fillStyle = `rgb(${r},${g},${b})`
+      wctx.fillRect(cx - w * 0.18, top, w * 0.36, size)         // bright rod
+      wctx.fillStyle = 'rgba(255,255,255,0.8)'
+      wctx.fillRect(cx - w * 0.06, top, w * 0.12, size)         // hot core
+    } else if (t === 'almond-water') {
+      wctx.fillStyle = `rgb(${r},${g},${b})`
+      wctx.fillRect(cx - w * 0.28, top + size * 0.22, w * 0.56, size * 0.78) // bottle
+      wctx.fillStyle = 'rgba(230,240,250,0.9)'
+      wctx.fillRect(cx - w * 0.10, top, w * 0.20, size * 0.28)  // neck/cap
+    } else if (t === 'polaroid') {
+      wctx.fillStyle = `rgb(${r},${g},${b})`
+      wctx.fillRect(cx - w * 0.4, top + size * 0.2, w * 0.8, size * 0.7) // body
+      wctx.fillStyle = 'rgba(30,30,40,0.9)'
+      wctx.fillRect(cx - w * 0.14, top + size * 0.38, w * 0.28, size * 0.34) // lens
+    } else { // radio
+      wctx.fillStyle = `rgb(${r},${g},${b})`
+      wctx.fillRect(cx - w * 0.4, top + size * 0.35, w * 0.8, size * 0.6) // box
+      wctx.strokeStyle = 'rgba(220,220,200,0.8)'
+      wctx.lineWidth = Math.max(1, w * 0.06)
+      wctx.beginPath(); wctx.moveTo(cx + w * 0.2, top + size * 0.35); wctx.lineTo(cx + w * 0.45, top); wctx.stroke() // antenna
+    }
+    wctx.restore()
   }
 
   return { render }
