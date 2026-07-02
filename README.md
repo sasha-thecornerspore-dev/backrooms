@@ -4,6 +4,21 @@
 
 an infinite procedural first-person horror maze. fluorescent lights, damp carpet, no exit.
 
+<p align="center">
+  <img src="docs/screenshots/pillars.jpg" width="100%" alt="the backrooms — pillars under a fluorescent ceiling grid">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/lights.jpg"   width="49%" alt="glowing ceiling panels over yellow rooms">
+  <img src="docs/screenshots/corridor.jpg" width="49%" alt="a symmetric corridor receding into fog">
+</p>
+<p align="center">
+  <img src="docs/screenshots/expanse.jpg"  width="49%" alt="an endless expanse of pillars in the haze">
+  <img src="docs/screenshots/title.jpg"    width="49%" alt="the title screen, anchored to a real place">
+</p>
+
+<sub>rendered by a hand-written textured raycaster — no game engine, no assets, just math and the colour yellow.</sub>
+
 ---
 
 ## install
