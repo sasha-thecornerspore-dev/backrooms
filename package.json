@@ -13,9 +13,9 @@
     "release": "electron-builder --publish always"
   },
   "devDependencies": {
-    "electron": "^33.2.0",
-    "electron-builder": "^24.13.3",
-    "vitest": "^2.1.0"
+    "electron": "^39.8.5",
+    "electron-builder": "^26.15.3",
+    "vitest": "^3.2.6"
   },
   "dependencies": {
     "electron-updater": "^6.3.0",
