@@ -35,7 +35,7 @@
     .btns button { background:none; border:1px solid #8a7a3a; color:#c9ba72; font-family:monospace; font-size:18px; padding:10px 28px; cursor:pointer; letter-spacing:2px; }
     .btns button:hover { background:#8a7a3a22; }
     #join-modal { position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;z-index:100; }
-    .modal-box { background:#1a1508;border:1px solid #8a7a3a;padding:40px;min-width:360px; }
+    .modal-box { background:#1a1508;border:1px solid #8a7a3a;padding:40px;min-width:360px;max-height:88vh;overflow-y:auto; }
     .modal-title { color:#c9ba72;font-family:monospace;font-size:20px;letter-spacing:4px;margin-bottom:24px; }
     .modal-box input { display:block;width:100%;box-sizing:border-box;background:#0a0a05;border:1px solid #4a3a1a;color:#c9ba72;font-family:monospace;font-size:14px;padding:8px;margin-bottom:12px; }
     .modal-btns { display:flex;gap:12px;margin-top:16px; }
@@ -111,7 +111,11 @@
     }
     #btn-settings { position:fixed;top:16px;right:16px;background:none;border:none;color:#6a5a2a;font-size:22px;cursor:pointer;z-index:10; }
     #btn-settings:hover { color:#c9ba72; }
-    .toggle-row { display:flex;align-items:center;justify-content:space-between;color:#c9ba72;font-family:monospace;font-size:15px;margin:8px 0; }
+    .toggle-row { display:flex;align-items:center;justify-content:space-between;color:#c9ba72;font-family:monospace;font-size:15px;margin:8px 0;gap:16px; }
+    .toggle-row input[type=range] { width:150px; accent-color:#c9ba72; }
+    .toggle-row input[type=checkbox] { accent-color:#c9ba72; width:16px; height:16px; cursor:pointer; }
+    .set-section { border-top:1px solid #3a2f14; margin:16px 0 4px; padding-top:12px; color:#8a7a3a; font-family:monospace; font-size:11px; letter-spacing:3px; }
+    .set-hint { font-size:10px; opacity:0.5; letter-spacing:1px; }
     #anchor-wrap { display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px; }
     #anchor-input {
       width: 340px; background:#00000018; border:1px solid #8a7a3a; color:#2a1e00;
@@ -182,6 +186,18 @@
         <span>Software rendering<br><span style="font-size:11px;opacity:0.6;">fixes freezing on some GPUs · restart to apply</span></span>
         <input type="checkbox" id="chk-software"/>
       </label>
+
+      <div class="set-section">GAMEPLAY &amp; FEEL</div>
+      <label class="toggle-row"><span>Music <span class="set-hint">generative</span></span><input type="checkbox" id="set-music"/></label>
+      <label class="toggle-row"><span>Music volume</span><input type="range" id="set-musicvol" min="0" max="150" step="5"/></label>
+      <label class="toggle-row"><span>Ambience <span class="set-hint">hum &amp; drone</span></span><input type="checkbox" id="set-ambience"/></label>
+      <label class="toggle-row"><span>Film grain</span><input type="checkbox" id="set-grain"/></label>
+      <label class="toggle-row"><span>Crosshair</span><input type="checkbox" id="set-crosshair"/></label>
+      <label class="toggle-row"><span>Head-bob</span><input type="checkbox" id="set-headbob"/></label>
+      <label class="toggle-row"><span>Mouse sensitivity</span><input type="range" id="set-sens" min="25" max="250" step="5"/></label>
+      <label class="toggle-row"><span>Creatures <span class="set-hint">below level 0</span></span><input type="checkbox" id="set-creatures"/></label>
+      <label class="toggle-row"><span>Can take damage <span class="set-hint">peaceful = off</span></span><input type="checkbox" id="set-damage"/></label>
+
       <div id="update-ready-msg" style="display:none;color:#c9ba72;font-family:monospace;font-size:13px;margin-top:12px;">
         update ready — <button id="btn-restart" style="background:none;border:none;color:#c9ba72;cursor:pointer;font-family:monospace;text-decoration:underline;">restart now</button>
       </div>
@@ -225,7 +241,7 @@
   <div id="hud"></div>
   <div id="hp-wrap"><span id="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div></div></div>
   <div id="msg"></div>
-  <div id="hint">wasd move · shift run · mouse look · f take / no-clip · q use · x drop · 1-6 slots · e speak</div>
+  <div id="hint">wasd move · shift run · mouse look · f take / no-clip · q use · x drop · 1-6 slots · e speak · m music</div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
   <div id="item-hint" style="opacity:0"></div>
   <div id="hotbar"></div>
@@ -250,6 +266,7 @@
     import { initGame } from './game.js'
     import { createMultiplayerClient } from '../net/client.js'
     import { parseAnchor, anchorSeed, formatAnchor, bodyUrl } from './anchor.js'
+    import { getPrefs, setPref } from './prefs.js'
 
     const startEl = document.getElementById('start')
     const joinModal = document.getElementById('join-modal')
@@ -336,10 +353,31 @@
     }
 
     const settingsMod = document.getElementById('settings-modal')
+
+    // ── gameplay & feel prefs (persisted via prefs.js → localStorage) ──
+    const prefChk   = (id, key) => document.getElementById(id).addEventListener('change', e => setPref(key, e.target.checked))
+    const prefRange = (id, key) => document.getElementById(id).addEventListener('input',  e => setPref(key, +e.target.value))
+    prefChk('set-music', 'music');       prefRange('set-musicvol', 'musicVolume'); prefChk('set-ambience', 'ambience')
+    prefChk('set-grain', 'grain');       prefChk('set-crosshair', 'crosshair');    prefChk('set-headbob', 'headBob')
+    prefRange('set-sens', 'mouseSensitivity'); prefChk('set-creatures', 'creatures'); prefChk('set-damage', 'damage')
+    function loadPrefsIntoPanel() {
+      const p = getPrefs()
+      document.getElementById('set-music').checked      = p.music
+      document.getElementById('set-musicvol').value     = p.musicVolume
+      document.getElementById('set-ambience').checked   = p.ambience
+      document.getElementById('set-grain').checked      = p.grain
+      document.getElementById('set-crosshair').checked  = p.crosshair
+      document.getElementById('set-headbob').checked    = p.headBob
+      document.getElementById('set-sens').value         = p.mouseSensitivity
+      document.getElementById('set-creatures').checked  = p.creatures
+      document.getElementById('set-damage').checked     = p.damage
+    }
+
     document.getElementById('btn-settings').onclick = async () => {
       const s = await window.backrooms?.getSettings?.() ?? { autoUpdate: true, softwareRender: false }
       document.getElementById('chk-autoupdate').checked = s.autoUpdate
       document.getElementById('chk-software').checked = !!s.softwareRender
+      loadPrefsIntoPanel()
       try {
         const v = await window.backrooms?.getVersion?.()
         if (v) document.getElementById('version-line').textContent = `the backrooms v${v}`

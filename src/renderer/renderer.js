@@ -117,8 +117,9 @@ function buildGrain() {
 // it roughly triples throughput.
 const RENDER_SCALE = 0.6
 
-export function createRenderer(canvas, config) {
+export function createRenderer(canvas, config, renderOpts = {}) {
   const ctx = canvas.getContext('2d', { alpha: false })
+  const ropts = renderOpts   // shared mutable object: { grain, crosshair } — read live
 
   const fogRgb  = hexToRgb(config.palette.fog)
   const baseFog = config.fogDistance
@@ -308,7 +309,7 @@ export function createRenderer(canvas, config) {
     // ── film grain (plain source-over — no 'overlay' blend, which is a heavy
     // per-frame full-screen composite that can stress the GPU/driver over time.
     // The tile textures already carry baked static grain; this just adds motion.)
-    if (grainPattern) {
+    if (grainPattern && ropts.grain !== false) {
       grainPhase = (grainPhase + 37) & TMASK
       wctx.save()
       wctx.globalAlpha = 0.045
@@ -331,14 +332,16 @@ export function createRenderer(canvas, config) {
     }
 
     // ── crosshair — a small dark dot with a faint light outline, centred ──
-    const ccx = OW / 2, ccy = OH / 2
-    ctx.save()
-    ctx.globalAlpha = 0.5
-    ctx.fillStyle = 'rgba(255,255,255,0.7)'
-    ctx.fillRect(ccx - 2, ccy - 2, 4, 4)
-    ctx.fillStyle = 'rgba(0,0,0,0.9)'
-    ctx.fillRect(ccx - 1, ccy - 1, 2, 2)
-    ctx.restore()
+    if (ropts.crosshair !== false) {
+      const ccx = OW / 2, ccy = OH / 2
+      ctx.save()
+      ctx.globalAlpha = 0.5
+      ctx.fillStyle = 'rgba(255,255,255,0.7)'
+      ctx.fillRect(ccx - 2, ccy - 2, 4, 4)
+      ctx.fillStyle = 'rgba(0,0,0,0.9)'
+      ctx.fillRect(ccx - 1, ccy - 1, 2, 2)
+      ctx.restore()
+    }
   }
 
   // Soft contact shadow ellipse under a floor-standing sprite.

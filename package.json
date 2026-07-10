@@ -1,6 +1,6 @@
 {
   "name": "backrooms",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "The Backrooms — infinite procedural horror maze",
   "author": "Corner Spore",
   "main": "src/main.js",
@@ -13,9 +13,9 @@
     "release": "electron-builder --publish always"
   },
   "devDependencies": {
-    "electron": "^33.2.0",
-    "electron-builder": "^24.13.3",
-    "vitest": "^2.1.0"
+    "electron": "^33.4.11",
+    "electron-builder": "^26.15.3",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "electron-updater": "^6.3.0",

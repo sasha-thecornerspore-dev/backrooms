@@ -22,6 +22,9 @@ export const LEVELS = [
       palette: { wall: '#C8B870', ceiling: '#E8E0C0', floor: '#4A3820', fog: '#D4C87A' },
       fogDistance: 16,
       flicker: { rate: 0.06, depth: 0.55, recoverySpeed: 12 },
+      // dreamy, nostalgic mall-muzak that isn't quite right
+      music: { root: 220, scale: [0, 2, 4, 7, 9], tempo: 620, density: 0.55,
+               brightness: 1500, wobble: 0.008, bend: 0.10, chordEvery: 8, noteLen: 1.7, volume: 0.06 },
       maze:  { salt: 0x0000, roomChance: 0.16, braid: 0.12, corridor: 1 },
       lights: true,
       entities: { enabled: false },
@@ -51,6 +54,9 @@ export const LEVELS = [
       palette: { wall: '#8C8674', ceiling: '#9E9A88', floor: '#39372F', fog: '#A29C86' },
       fogDistance: 14,
       flicker: { rate: 0.10, depth: 0.70, recoverySpeed: 10 },
+      // melancholy, minor — the muzak has curdled
+      music: { root: 174.61, scale: [0, 3, 5, 7, 10], tempo: 760, density: 0.5,
+               brightness: 1050, wobble: 0.013, bend: 0.16, chordEvery: 10, noteLen: 1.8, volume: 0.055 },
       maze:  { salt: 0x1111, roomChance: 0.15, braid: 0.12, corridor: 1 },
       lights: true,
       entities: { enabled: true, spawnDenom: 12, stalkerDenom: 4, chaseRange: 22, damage: 14 },
@@ -79,6 +85,9 @@ export const LEVELS = [
       palette: { wall: '#705C46', ceiling: '#4C4238', floor: '#2B2520', fog: '#5C503E' },
       fogDistance: 11,
       flicker: { rate: 0.16, depth: 0.85, recoverySpeed: 9 },
+      // dizzy whole-tone drift — nothing resolves down here
+      music: { root: 146.83, scale: [0, 2, 4, 6, 8, 10], tempo: 900, density: 0.45,
+               brightness: 820, wobble: 0.02, bend: 0.22, chordEvery: 12, noteLen: 2.0, volume: 0.05 },
       maze:  { salt: 0x2222, roomChance: 0.10, braid: 0.08, corridor: 1 },
       lights: false,
       entities: { enabled: true, spawnDenom: 8, stalkerDenom: 3, chaseRange: 26, damage: 18 },
@@ -106,6 +115,9 @@ export const LEVELS = [
       palette: { wall: '#4C505A', ceiling: '#3A3E46', floor: '#22252B', fog: '#363B44' },
       fogDistance: 10,
       flicker: { rate: 0.22, depth: 0.92, recoverySpeed: 8 },
+      // dissonant, half-step clusters — the current sings wrong
+      music: { root: 130.81, scale: [0, 1, 3, 6, 7, 10], tempo: 1000, density: 0.4,
+               brightness: 700, wobble: 0.03, bend: 0.28, chordEvery: 13, noteLen: 2.2, volume: 0.05 },
       maze:  { salt: 0x3333, roomChance: 0.08, braid: 0.06, corridor: 1 },
       lights: false,
       entities: { enabled: true, spawnDenom: 6, stalkerDenom: 2, chaseRange: 30, damage: 22 },
@@ -137,6 +149,7 @@ export function levelConfig(base, index) {
     palette:  merge('palette'),
     flicker:  merge('flicker'),
     maze:     merge('maze'),
+    music:    merge('music'),
     entities: { ...(c.entities ?? {}) },   // level fully owns entity rules
     items:    merge('items'),
     props:    merge('props'),

@@ -80,9 +80,27 @@ the spirits decide. or rather, i do.
 | x | drop the selected item |
 | 1–6 | select inventory slot |
 | e | speak to a presence |
+| m | mute / unmute the music |
 | esc | unlock mouse / close dialog |
 
 your **hit points** sit under the level name, top-left. level 0 is safe; below it, the things in the fog will take them from you. bandages and time bring them back.
+
+---
+
+## settings
+
+hit the gear ⚙ (top-right) for the control panel. everything added is optional and modular, and your choices persist between runs:
+
+| toggle | what it does |
+|--------|--------------|
+| music | the generative bed on/off, plus a volume slider |
+| ambience | the fluorescent hum, drone, and distant events |
+| film grain / crosshair / head-bob | visual feel |
+| mouse sensitivity | look speed |
+| creatures | turn every entity off for pure liminal exploration |
+| can take damage | off for a peaceful, no-stakes wander |
+
+auto-update and software rendering live in the same panel.
 
 ---
 
@@ -97,6 +115,8 @@ your **hit points** sit under the level name, top-left. level 0 is safe; below i
 the maze generates infinitely in every direction. chunks are cached for a small radius around you. when you travel far and return, the world may not remember what it was. it is not trying to confuse you. it simply does not care.
 
 it is rendered with a hand-written textured raycaster — damp wallpaper, drop-ceiling tiles lit by flickering fluorescent panels, mottled carpet, film grain. no game engine, no assets, just math and the color yellow.
+
+the sound is the same: **generative weirdcore music**, synthesised live and never looping. detuned pads breathe under a music-box melody that is almost-but-not-quite right, washed through a reverb built from noise, with tape wow-and-flutter and the occasional pitch that slides away. every level tunes it to its own mood — dreamy in the lobby, curdled below, dissonant at the bottom. no `.mp3`, no loop point; it writes itself as you walk. press **m** to silence it.
 
 ---
 

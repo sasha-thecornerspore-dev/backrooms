@@ -4,7 +4,8 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience } from './audio.js'
+import { getPref, setPref, onPrefChange } from './prefs.js'
 import { formatAnchor, driftMeters } from './anchor.js'
 
 // Presence: 1 in 12 chunks has a spirit at its midpoint
@@ -53,6 +54,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
   initAudio(base)
 
+  // shared, live-mutable render options (toggled from the settings panel)
+  const renderOpts = { grain: getPref('grain'), crosshair: getPref('crosshair') }
+
   // ── per-level state, rebuilt on every transition ──
   let level = null
   let transitioning = false
@@ -64,7 +68,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     cache.preload(0, 0)
     const entitySys = createEntitySystem(cfg, (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy))
     const decor     = createDecorSystem(cfg, (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy))
-    const gfx       = createRenderer(canvas, cfg)
+    const gfx       = createRenderer(canvas, cfg, renderOpts)
     itemSys.enterLevel(cfg)
 
     // spawn at the origin room (always carved open in world.js)
@@ -81,6 +85,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // through a proxy, so the object must exist first.
     level = { index, cfg, cache, entitySys, decor, gfx, messages }
     decor.update(0, 0); itemSys.update(0, 0)
+    setMusic(cfg.music)          // morph the generative bed into this level's mood
 
     updateHud()
     renderHotbar()
@@ -129,7 +134,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   window.addEventListener('keyup',   e => { K[e.code] = false })
   canvas.addEventListener('click', () => canvas.requestPointerLock())
   document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas })
-  document.addEventListener('mousemove', e => { if (locked) player.angle += e.movementX * 0.002 })
+  document.addEventListener('mousemove', e => { if (locked) player.angle += e.movementX * 0.002 * (getPref('mouseSensitivity') / 100) })
 
   // ── wish dialog ──
   let dialogOpen = false
@@ -276,6 +281,19 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   buildLevel(0)
   showMessage(level.cfg.levelName)
 
+  // apply saved audio/visual prefs, then keep them live as the panel changes them
+  setMusicEnabled(getPref('music'))
+  setMusicVolume(getPref('musicVolume'))
+  setAmbience(getPref('ambience'))
+  onPrefChange((k, v) => {
+    if (k === 'grain')          renderOpts.grain = v
+    else if (k === 'crosshair') renderOpts.crosshair = v
+    else if (k === 'music')     setMusicEnabled(v)
+    else if (k === 'musicVolume') setMusicVolume(v)
+    else if (k === 'ambience')  setAmbience(v)
+    // mouseSensitivity, headBob, creatures and damage are read live each frame
+  })
+
   let last = 0
   function loop(ts) {
     const dt = Math.min((ts - last) / 1000, 0.05)
@@ -318,7 +336,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
     player.moving = moved
     if (moved) player.bob += 0.12
-    player.bobOffset = moved ? Math.sin(player.bob) * 4 : 0
+    player.bobOffset = (moved && getPref('headBob')) ? Math.sin(player.bob) * 4 : 0
 
     if (fogTimer > 0) fogTimer -= dt
     const fogMul = fogTimer > 0 ? 1.6 : 1
@@ -387,6 +405,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       }
       if (K['KeyQ']) { K['KeyQ'] = false; applyItemEffect(itemSys.useSelected()) }
       if (K['KeyX']) { K['KeyX'] = false; discardSelected() }
+      if (K['KeyM']) { K['KeyM'] = false; const on = !getPref('music'); setPref('music', on); showMessage(on ? 'the music seeps back in.' : 'the music stops.') }
       for (let i = 0; i < 6; i++) {
         const code = `Digit${i + 1}`
         if (K[code]) { K[code] = false; itemSys.select(i); renderHotbar() }
@@ -400,11 +419,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     itemSys.update(pcx, pcy)
     level.decor.update(pcx, pcy)
     if (mpClient?.isConnected()) mpClient.sendPos(player.x, player.y, player.angle)
-    level.entitySys.update(dt, player, pcx, pcy, radioOn ? 1.5 : 1)
+    // creatures can be switched off entirely (pure liminal exploration)
+    const creaturesOn = getPref('creatures')
+    if (creaturesOn) level.entitySys.update(dt, player, pcx, pcy, radioOn ? 1.5 : 1)
 
     // ── HP: stalker contact damage, i-frames, delayed regen, death ──
     if (invuln > 0) invuln -= dt
-    if (!transitioning && cfg.entities?.enabled && invuln <= 0) {
+    if (!transitioning && creaturesOn && getPref('damage') && cfg.entities?.enabled && invuln <= 0) {
       const dmg = cfg.entities.damage ?? 16
       for (const e of level.entitySys.getEntities()) {
         if (e.type !== 'stalker') continue
@@ -432,8 +453,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const propEntities = level.decor.getProps().map(p => ({ x: p.x, y: p.y, kind: 'prop', type: p.type }))
     const exitEntities = level.decor.getExits().map(e => ({ x: e.x, y: e.y, kind: 'exit' }))
     const itemEntities = itemSys.getWorldItems().map(it => ({ x: it.x, y: it.y, kind: 'item', itemType: it.type }))
+    const enemyEntities = creaturesOn ? level.entitySys.getEntities() : []
     const allEntities = [
-      ...level.entitySys.getEntities(), ...remoteEntities,
+      ...enemyEntities, ...remoteEntities,
       ...propEntities, ...exitEntities, ...itemEntities,
     ]
 
