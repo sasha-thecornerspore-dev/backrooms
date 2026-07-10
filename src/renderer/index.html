@@ -44,22 +44,38 @@
 
     #hud {
       position: fixed; top: 12px; left: 14px;
-      color: rgba(200,185,110,0.4); font-size: 11px;
+      color: #14110a; font-size: 12px; font-weight: bold;
       line-height: 1.7; pointer-events: none; white-space: pre;
+      text-shadow: 0 0 5px rgba(255,255,255,0.55);
     }
+    /* hit points */
+    #hp-wrap {
+      position: fixed; top: 34px; left: 14px;
+      display: flex; align-items: center; gap: 8px; pointer-events: none;
+    }
+    #hp-label { color: #14110a; font-size: 10px; letter-spacing: 2px; font-weight: bold;
+      text-shadow: 0 0 5px rgba(255,255,255,0.55); }
+    #hp-bar {
+      width: 150px; height: 8px; background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(0,0,0,0.5); box-shadow: 0 0 4px rgba(255,255,255,0.35);
+    }
+    #hp-fill { height: 100%; width: 100%; background: rgba(60,150,70,0.85); transition: width 0.2s, background 0.4s; }
     #msg {
       position: fixed; top: 38%; left: 50%; transform: translateX(-50%);
-      color: rgba(200,185,90,0); font-size: 13px;
+      color: #14110a; font-size: 14px; font-weight: bold; opacity: 0;
       text-align: center; pointer-events: none;
       line-height: 1.9; letter-spacing: 2px; white-space: pre;
-      text-shadow: 0 0 12px rgba(180,160,60,0.6);
-      transition: color 1.5s;
+      text-shadow: 0 0 8px rgba(255,255,255,0.7), 0 1px 2px rgba(255,255,255,0.5);
+      transition: opacity 1.5s;
     }
     #hint {
-      position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-      color: rgba(180,165,90,0.3); font-size: 10px;
-      letter-spacing: 3px; pointer-events: none;
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      color: #14110a; font-size: 10px; font-weight: bold;
+      letter-spacing: 2px; pointer-events: none;
+      text-shadow: 0 0 5px rgba(255,255,255,0.55);
+      animation: hintfade 15s ease-in forwards;
     }
+    @keyframes hintfade { 0%,55% { opacity: 0.85; } 100% { opacity: 0; } }
     #wish-dialog {
       position: fixed; inset: 0;
       background: rgba(0,0,0,0.7);
@@ -88,8 +104,9 @@
     #wish-response { color: rgba(180,160,60,0.6); font-size: 11px; letter-spacing: 2px; min-height: 18px; }
     #presence-hint {
       position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
-      color: rgba(200,185,90,0.5); font-size: 11px;
+      color: #14110a; font-size: 11px; font-weight: bold;
       letter-spacing: 4px; pointer-events: none;
+      text-shadow: 0 0 5px rgba(255,255,255,0.55);
       transition: opacity 0.5s;
     }
     #btn-settings { position:fixed;top:16px;right:16px;background:none;border:none;color:#6a5a2a;font-size:22px;cursor:pointer;z-index:10; }
@@ -105,21 +122,41 @@
     #anchor-status { color:#4a3800; font-size:11px; letter-spacing:2px; min-height:14px; opacity:0.8; }
     #hotbar {
       position: fixed; bottom: 44px; left: 50%; transform: translateX(-50%);
-      display: flex; gap: 6px; pointer-events: none;
+      display: flex; gap: 6px; align-items: center; pointer-events: none;
     }
     #hotbar .slot {
-      width: 64px; height: 30px; border: 1px solid rgba(138,122,58,0.35);
-      color: rgba(200,185,110,0.55); font: 10px 'Courier New', monospace;
+      width: 64px; height: 30px; border: 1px solid rgba(0,0,0,0.4);
+      color: #14110a; font: bold 10px 'Courier New', monospace;
       display: flex; align-items: center; justify-content: center; gap: 4px;
-      letter-spacing: 1px; background: rgba(0,0,0,0.25);
+      letter-spacing: 1px; background: rgba(228,222,200,0.55); cursor: pointer;
+      pointer-events: auto;
     }
-    #hotbar .slot.sel { border-color: rgba(200,185,110,0.8); color: rgba(200,185,110,0.9); }
-    #hotbar .slot .num { font-size: 8px; opacity: 0.5; }
+    #hotbar .slot.sel { border-color: #14110a; background: rgba(240,236,214,0.85); box-shadow: 0 0 6px rgba(255,255,255,0.4); }
+    #hotbar .slot .num { font-size: 8px; opacity: 0.55; }
+    #btn-discard {
+      position: fixed; bottom: 44px; left: 50%; transform: translateX(218px);
+      pointer-events: auto; cursor: pointer;
+      background: rgba(205,55,45,0.2); border: 1px solid rgba(150,40,35,0.75);
+      color: #3a0d0a; font: bold 10px 'Courier New', monospace; letter-spacing: 2px;
+      height: 30px; padding: 0 12px;
+    }
+    #btn-discard:hover { background: rgba(205,55,45,0.34); }
     #item-hint {
       position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%);
-      color: rgba(200,185,90,0.6); font-size: 11px;
+      color: #14110a; font-size: 12px; font-weight: bold;
       letter-spacing: 3px; pointer-events: none;
+      text-shadow: 0 0 6px rgba(255,255,255,0.6);
       transition: opacity 0.4s;
+    }
+    /* combat + transition overlays */
+    #hurt {
+      position: fixed; inset: 0; opacity: 0; pointer-events: none; z-index: 38;
+      background: radial-gradient(ellipse at center, rgba(140,0,0,0) 45%, rgba(150,0,0,0.75) 100%);
+      transition: opacity 0.25s;
+    }
+    #fade {
+      position: fixed; inset: 0; background: #000; opacity: 0;
+      pointer-events: none; z-index: 45; transition: opacity 0.55s;
     }
     #stamina-wrap {
       position: fixed; bottom: 18px; left: 14px; width: 120px; height: 4px;
@@ -186,12 +223,16 @@
     </div>
   </div>
   <div id="hud"></div>
+  <div id="hp-wrap"><span id="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div></div></div>
   <div id="msg"></div>
-  <div id="hint">wasd move · shift run · click look · f take · q use · 1-6 slots · e speak</div>
+  <div id="hint">wasd move · shift run · mouse look · f take / no-clip · q use · x drop · 1-6 slots · e speak</div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
   <div id="item-hint" style="opacity:0"></div>
   <div id="hotbar"></div>
+  <button id="btn-discard" title="drop the selected item (x)">✕ discard</button>
   <div id="stamina-wrap"><div id="stamina-fill"></div></div>
+  <div id="hurt"></div>
+  <div id="fade"></div>
   <div id="flash"></div>
   <div id="wish-dialog" style="display:none">
     <div id="wish-inner">

@@ -1,0 +1,152 @@
+// levels.js — the descent.
+//
+// The Backrooms is no longer one endless yellow floor. It is a stack of
+// levels, each with its own look, its own rules, and its own way down.
+// Descriptions and the no-clip transition lore follow the Backrooms wiki
+// canon (Level 0 "The Lobby" → 1 "Habitable Zone" → 2 "Pipe Dreams" →
+// 3 "Electrical Station").
+//
+// Each level is a partial config that is merged OVER the base world config
+// (DEFAULT_CONFIG, possibly drifted by world.json). game.js rebuilds the
+// world, renderer, entities and decor from the merged config on every
+// transition. Inventory and hit points carry with you; the world does not.
+
+export const LEVELS = [
+  // ── Level 0 — The Lobby ──────────────────────────────────────────────
+  // Mono-yellow rooms, damp carpet, the fluorescent hum. Safe. No entities.
+  {
+    id: 0,
+    name: 'level 0 — the lobby',
+    sub: 'the hum of fluorescent light. damp carpet. no exit. you are here.',
+    config: {
+      palette: { wall: '#C8B870', ceiling: '#E8E0C0', floor: '#4A3820', fog: '#D4C87A' },
+      fogDistance: 16,
+      flicker: { rate: 0.06, depth: 0.55, recoverySpeed: 12 },
+      maze:  { salt: 0x0000, roomChance: 0.16, braid: 0.12, corridor: 1 },
+      lights: true,
+      entities: { enabled: false },
+      items: { density: 5, types: ['almond-water', 'glowstick', 'polaroid', 'radio'] },
+      props: { density: 3, types: ['chair', 'cabinet', 'box', 'cone', 'papers', 'plant'] },
+      exit:  { target: 1, denom: 6, label: 'no-clip deeper',
+               hint: 'the walls are thin here — no-clip through a torn corner and you fall out of the lobby.' },
+      messages: [
+        'the wallpaper is the same in every direction.',
+        'the carpet is damp.',
+        'the lights do not turn off.',
+        'you have been walking for hours. days. weeks.',
+        'the humming never stops.',
+        'there is no exit. keep looking.',
+        'level 0. somewhere. always.',
+      ],
+    },
+  },
+
+  // ── Level 1 — Habitable Zone ─────────────────────────────────────────
+  // Bigger, colder concrete. Dim service lighting. Things live here now.
+  {
+    id: 1,
+    name: 'level 1 — habitable zone',
+    sub: 'concrete and dim service lights. something moved in the warehouse dark.',
+    config: {
+      palette: { wall: '#8C8674', ceiling: '#9E9A88', floor: '#39372F', fog: '#A29C86' },
+      fogDistance: 14,
+      flicker: { rate: 0.10, depth: 0.70, recoverySpeed: 10 },
+      maze:  { salt: 0x1111, roomChance: 0.15, braid: 0.12, corridor: 1 },
+      lights: true,
+      entities: { enabled: true, spawnDenom: 12, stalkerDenom: 4, chaseRange: 22, damage: 14 },
+      items: { density: 5, types: ['almond-water', 'glowstick', 'bandage', 'polaroid', 'radio'] },
+      props: { density: 4, types: ['pallet', 'barrel', 'crate', 'couch', 'cart', 'box'] },
+      exit:  { target: 2, denom: 7, label: 'descend',
+               hint: 'find a hole in the floor or a stairwell down — the pipes are below.' },
+      messages: [
+        'the concrete sweats.',
+        'a shopping cart, alone, a mile from anywhere.',
+        'you are not the only thing awake here.',
+        'the lights buzz, then stop, then buzz.',
+        'something followed you in from the lobby.',
+        'level 1. it is bigger than it looks.',
+      ],
+    },
+  },
+
+  // ── Level 2 — Pipe Dreams ────────────────────────────────────────────
+  // A maze of maintenance tunnels. Hot, dark, steaming. It is worse here.
+  {
+    id: 2,
+    name: 'level 2 — pipe dreams',
+    sub: 'endless maintenance tunnels. steam, rust, and the dark between the pipes.',
+    config: {
+      palette: { wall: '#705C46', ceiling: '#4C4238', floor: '#2B2520', fog: '#5C503E' },
+      fogDistance: 11,
+      flicker: { rate: 0.16, depth: 0.85, recoverySpeed: 9 },
+      maze:  { salt: 0x2222, roomChance: 0.10, braid: 0.08, corridor: 1 },
+      lights: false,
+      entities: { enabled: true, spawnDenom: 8, stalkerDenom: 3, chaseRange: 26, damage: 18 },
+      items: { density: 4, types: ['almond-water', 'glowstick', 'bandage', 'radio'] },
+      props: { density: 5, types: ['pipe', 'valve', 'drum', 'toolbox', 'vent', 'crate'] },
+      exit:  { target: 3, denom: 8, label: 'descend',
+               hint: 'follow the pipes to a service hatch, then drop into the dark below.' },
+      messages: [
+        'the pipes tick as they cool. or fill.',
+        'steam, from somewhere. it is warm and wrong.',
+        'do not follow the sound of running water.',
+        'the dark here has weight.',
+        'level 2. bring your own light.',
+      ],
+    },
+  },
+
+  // ── Level 3 — Electrical Station ─────────────────────────────────────
+  // A lightless labyrinth of transformers and live cable. Then, the way up.
+  {
+    id: 3,
+    name: 'level 3 — electrical station',
+    sub: 'transformers hum with current in the black. one door leads back up.',
+    config: {
+      palette: { wall: '#4C505A', ceiling: '#3A3E46', floor: '#22252B', fog: '#363B44' },
+      fogDistance: 10,
+      flicker: { rate: 0.22, depth: 0.92, recoverySpeed: 8 },
+      maze:  { salt: 0x3333, roomChance: 0.08, braid: 0.06, corridor: 1 },
+      lights: false,
+      entities: { enabled: true, spawnDenom: 6, stalkerDenom: 2, chaseRange: 30, damage: 22 },
+      items: { density: 4, types: ['almond-water', 'glowstick', 'bandage', 'bandage', 'radio'] },
+      props: { density: 5, types: ['transformer', 'cabinet-e', 'spool', 'sign', 'drum'] },
+      exit:  { target: 0, denom: 9, label: 'climb out',
+               hint: 'a door humming with current — through it, the lobby waits again.' },
+      messages: [
+        'everything here is live. do not touch the walls.',
+        'the current hums a note you can feel in your teeth.',
+        'something with too many joints is in here with you.',
+        'the way up is here. somewhere. find the humming door.',
+        'level 3. the deepest you should go.',
+      ],
+    },
+  },
+]
+
+// Merge a level's partial config over a base config. Object-valued keys
+// (palette, flicker, maze, entities, items, props, exit) are shallow-merged
+// so a level need only override the fields it cares about.
+export function levelConfig(base, index) {
+  const lvl = LEVELS[((index % LEVELS.length) + LEVELS.length) % LEVELS.length]
+  const c = lvl.config
+  const merge = (k) => ({ ...(base?.[k] ?? {}), ...(c?.[k] ?? {}) })
+  return {
+    ...base,
+    ...c,
+    palette:  merge('palette'),
+    flicker:  merge('flicker'),
+    maze:     merge('maze'),
+    entities: { ...(c.entities ?? {}) },   // level fully owns entity rules
+    items:    merge('items'),
+    props:    merge('props'),
+    exit:     { ...(c.exit ?? {}) },
+    // level messages replace the base atmospheric set
+    messages: c.messages ?? base?.messages ?? [],
+    levelIndex: lvl.id,
+    levelName:  lvl.name,
+    levelSub:   lvl.sub,
+  }
+}
+
+export function levelCount() { return LEVELS.length }

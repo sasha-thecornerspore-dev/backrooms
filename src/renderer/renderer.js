@@ -125,10 +125,12 @@ export function createRenderer(canvas, config) {
   const tex     = buildTextures(config.palette)
   const grainCanvas = buildGrain()
   let grainPhase = 0
+  let frame = 0
 
   const ITEM_COLORS = {
     'almond-water': [190, 215, 235],
     'glowstick':    [120, 235, 90],
+    'bandage':      [235, 235, 240],
     'polaroid':     [235, 230, 220],
     'radio':        [200, 100, 55],
   }
@@ -168,6 +170,7 @@ export function createRenderer(canvas, config) {
   }
 
   function render(player, isWallFn, flicker, entities = [], fogMul = 1) {
+    frame++
     const fog = baseFog * fogMul
     ensureBuffers(canvas.width, canvas.height)
     // everything below draws into the low-res world buffer (RW x RH)
@@ -292,6 +295,10 @@ export function createRenderer(canvas, config) {
 
         if (ent.kind === 'item') {
           drawItem(ent, screenX, entDist, fogT, HH, H, W)
+        } else if (ent.kind === 'prop') {
+          drawProp(ent, screenX, entDist, fogT, HH, H, W)
+        } else if (ent.kind === 'exit') {
+          drawExit(ent, screenX, entDist, fogT, HH, H, W)
         } else {
           drawFigure(ent, screenX, entDist, fogT, HH, H, W)
         }
@@ -322,6 +329,166 @@ export function createRenderer(canvas, config) {
       ctx.fillStyle = `rgba(0,0,0,${(1 - flicker) * 0.75})`
       ctx.fillRect(0, 0, OW, OH)
     }
+
+    // ── crosshair — a small dark dot with a faint light outline, centred ──
+    const ccx = OW / 2, ccy = OH / 2
+    ctx.save()
+    ctx.globalAlpha = 0.5
+    ctx.fillStyle = 'rgba(255,255,255,0.7)'
+    ctx.fillRect(ccx - 2, ccy - 2, 4, 4)
+    ctx.fillStyle = 'rgba(0,0,0,0.9)'
+    ctx.fillRect(ccx - 1, ccy - 1, 2, 2)
+    ctx.restore()
+  }
+
+  // Soft contact shadow ellipse under a floor-standing sprite.
+  function contactShadow(cx, floorY, w, alpha) {
+    if (alpha < 0.03) return
+    wctx.save()
+    wctx.globalAlpha = alpha
+    wctx.fillStyle = '#000'
+    wctx.beginPath()
+    wctx.ellipse(cx, floorY, w * 0.6, Math.max(1, w * 0.18), 0, 0, Math.PI * 2)
+    wctx.fill()
+    wctx.restore()
+  }
+
+  // Palette-tinted clutter: chairs, cabinets, pipes, transformers… Billboarded,
+  // floor-anchored, non-interactive. Recognisable silhouettes over fidelity.
+  const PROP_SPEC = {
+    chair:       { h: 0.95, w: 0.6, c: [40, 34, 26] },
+    cabinet:     { h: 1.55, w: 0.7, c: [70, 66, 54] },
+    box:         { h: 0.7,  w: 0.8, c: [122, 96, 58] },
+    crate:       { h: 0.75, w: 0.85, c: [110, 88, 56] },
+    cone:        { h: 0.6,  w: 0.5, c: [200, 90, 30] },
+    papers:      { h: 0.16, w: 0.7, c: [220, 214, 196] },
+    plant:       { h: 1.1,  w: 0.6, c: [60, 74, 40] },
+    pallet:      { h: 0.26, w: 1.0, c: [120, 96, 60] },
+    barrel:      { h: 1.0,  w: 0.55, c: [90, 70, 46] },
+    drum:        { h: 1.0,  w: 0.6, c: [70, 78, 60] },
+    couch:       { h: 0.85, w: 1.3, c: [78, 68, 54] },
+    cart:        { h: 1.0,  w: 0.8, c: [150, 150, 156] },
+    pipe:        { h: 1.4,  w: 0.5, c: [96, 84, 64] },
+    valve:       { h: 0.9,  w: 0.6, c: [110, 92, 66] },
+    vent:        { h: 0.8,  w: 0.9, c: [90, 84, 70] },
+    toolbox:     { h: 0.4,  w: 0.7, c: [150, 60, 40] },
+    transformer: { h: 1.8,  w: 0.9, c: [76, 80, 90] },
+    'cabinet-e': { h: 1.7,  w: 0.8, c: [70, 74, 84] },
+    spool:       { h: 1.0,  w: 1.0, c: [96, 82, 62] },
+    sign:        { h: 0.9,  w: 0.7, c: [210, 170, 40] },
+  }
+
+  function drawProp(ent, screenX, entDist, fogT, HH, H, W) {
+    if (screenX < 0 || screenX >= W || zbuffer[screenX] <= entDist) return
+    const spec = PROP_SPEC[ent.type] ?? PROP_SPEC.box
+    const unit = H / entDist                         // pixels per world unit
+    const floorY = HH + unit / 2
+    const ph = spec.h * unit
+    const pw = spec.w * unit
+    const top = floorY - ph
+    const alpha = (1 - fogT) * 0.96
+    if (alpha < 0.05 || pw < 1) return
+    const [r, g, b] = spec.c
+    const shade = 1 - fogT * 0.6
+    const col = (m = 1) => `rgba(${(r * m * shade) | 0},${(g * m * shade) | 0},${(b * m * shade) | 0},${alpha.toFixed(3)})`
+    const cx = screenX
+    const L = cx - pw / 2
+
+    contactShadow(cx, floorY, pw, alpha * 0.4)
+    wctx.save()
+    const t = ent.type
+
+    if (t === 'chair') {
+      wctx.fillStyle = col(1)
+      wctx.fillRect(L + pw * 0.15, top + ph * 0.45, pw * 0.7, ph * 0.14)   // seat
+      wctx.fillRect(L + pw * 0.15, top, pw * 0.16, ph * 0.6)               // backrest
+      wctx.fillStyle = col(0.7)
+      wctx.fillRect(L + pw * 0.2, top + ph * 0.6, pw * 0.1, ph * 0.4)      // legs
+      wctx.fillRect(L + pw * 0.7, top + ph * 0.6, pw * 0.1, ph * 0.4)
+    } else if (t === 'cabinet' || t === 'cabinet-e' || t === 'transformer') {
+      wctx.fillStyle = col(1)
+      wctx.fillRect(L, top, pw, ph)
+      wctx.strokeStyle = col(0.6); wctx.lineWidth = Math.max(1, pw * 0.04)
+      for (let d = 1; d <= 3; d++) { const yy = top + ph * d / 4; wctx.beginPath(); wctx.moveTo(L, yy); wctx.lineTo(L + pw, yy); wctx.stroke() }
+      if (t === 'transformer') { wctx.fillStyle = `rgba(220,180,40,${(alpha * 0.8).toFixed(3)})`; wctx.fillRect(L + pw * 0.3, top + ph * 0.1, pw * 0.4, ph * 0.1) }
+    } else if (t === 'cone') {
+      wctx.fillStyle = col(1)
+      wctx.beginPath(); wctx.moveTo(cx, top); wctx.lineTo(L, floorY); wctx.lineTo(L + pw, floorY); wctx.closePath(); wctx.fill()
+      wctx.fillStyle = `rgba(240,240,235,${(alpha * 0.8).toFixed(3)})`
+      wctx.fillRect(L + pw * 0.2, top + ph * 0.4, pw * 0.6, ph * 0.14)     // reflective band
+    } else if (t === 'plant') {
+      wctx.fillStyle = col(0.8); wctx.fillRect(L + pw * 0.3, top + ph * 0.6, pw * 0.4, ph * 0.4)   // pot
+      wctx.fillStyle = col(1)
+      for (let i = -2; i <= 2; i++) { wctx.beginPath(); wctx.moveTo(cx, top + ph * 0.6); wctx.lineTo(cx + i * pw * 0.18, top); wctx.lineTo(cx + i * pw * 0.05, top + ph * 0.6); wctx.closePath(); wctx.fill() }
+    } else if (t === 'barrel' || t === 'drum') {
+      wctx.fillStyle = col(1); wctx.fillRect(L + pw * 0.15, top, pw * 0.7, ph)
+      wctx.strokeStyle = col(0.6); wctx.lineWidth = Math.max(1, pw * 0.05)
+      for (const f of [0.25, 0.5, 0.75]) { const yy = top + ph * f; wctx.beginPath(); wctx.moveTo(L + pw * 0.15, yy); wctx.lineTo(L + pw * 0.85, yy); wctx.stroke() }
+    } else if (t === 'couch') {
+      wctx.fillStyle = col(1); wctx.fillRect(L, top + ph * 0.3, pw, ph * 0.7)
+      wctx.fillRect(L, top, pw * 0.16, ph); wctx.fillRect(L + pw * 0.84, top, pw * 0.16, ph)
+    } else if (t === 'pallet' || t === 'papers') {
+      wctx.fillStyle = col(1); wctx.fillRect(L, top, pw, ph)
+      wctx.strokeStyle = col(0.6); wctx.lineWidth = 1
+      for (let i = 1; i < 4; i++) { const xx = L + pw * i / 4; wctx.beginPath(); wctx.moveTo(xx, top); wctx.lineTo(xx, top + ph); wctx.stroke() }
+    } else if (t === 'pipe' || t === 'valve' || t === 'vent') {
+      wctx.fillStyle = col(1); wctx.fillRect(L + pw * 0.35, top, pw * 0.3, ph)   // vertical pipe
+      if (t === 'valve') { wctx.strokeStyle = col(0.7); wctx.lineWidth = Math.max(1, pw * 0.08); wctx.beginPath(); wctx.arc(cx, top + ph * 0.5, pw * 0.3, 0, Math.PI * 2); wctx.stroke() }
+      if (t === 'vent') { wctx.fillStyle = col(0.7); wctx.fillRect(L, top + ph * 0.2, pw, ph * 0.5) }
+    } else if (t === 'cart') {
+      wctx.strokeStyle = col(1); wctx.lineWidth = Math.max(1, pw * 0.06)
+      wctx.strokeRect(L + pw * 0.15, top + ph * 0.2, pw * 0.7, ph * 0.5)       // basket
+      wctx.fillStyle = col(0.5); wctx.beginPath(); wctx.arc(L + pw * 0.3, floorY - ph * 0.05, pw * 0.09, 0, 7); wctx.arc(L + pw * 0.7, floorY - ph * 0.05, pw * 0.09, 0, 7); wctx.fill()
+    } else if (t === 'spool') {
+      wctx.fillStyle = col(1); wctx.fillRect(L, top, pw * 0.12, ph); wctx.fillRect(L + pw * 0.88, top, pw * 0.12, ph)
+      wctx.fillStyle = col(0.7); wctx.fillRect(L + pw * 0.12, top + ph * 0.15, pw * 0.76, ph * 0.7)
+    } else if (t === 'sign') {
+      wctx.fillStyle = col(1)
+      wctx.beginPath(); wctx.moveTo(cx, top); wctx.lineTo(L, floorY); wctx.lineTo(L + pw, floorY); wctx.closePath(); wctx.fill()
+      wctx.fillStyle = `rgba(20,20,20,${alpha.toFixed(3)})`; wctx.fillRect(cx - pw * 0.04, top + ph * 0.3, pw * 0.08, ph * 0.35)   // exclamation
+      wctx.fillRect(cx - pw * 0.04, top + ph * 0.72, pw * 0.08, pw * 0.08)
+    } else { // box / crate / toolbox / default
+      wctx.fillStyle = col(1); wctx.fillRect(L, top, pw, ph)
+      wctx.strokeStyle = col(0.65); wctx.lineWidth = Math.max(1, pw * 0.05)
+      wctx.strokeRect(L, top, pw, ph)
+      wctx.beginPath(); wctx.moveTo(L, top); wctx.lineTo(L + pw, top + ph); wctx.moveTo(L + pw, top); wctx.lineTo(L, top + ph); wctx.stroke()
+    }
+    wctx.restore()
+  }
+
+  // A "no-clip" exit: a dark doorway/hole standing on the floor, with a faint
+  // rim that breathes so it reads as findable in the fog.
+  function drawExit(ent, screenX, entDist, fogT, HH, H, W) {
+    if (screenX < 0 || screenX >= W || zbuffer[screenX] <= entDist) return
+    const unit = H / entDist
+    const floorY = HH + unit / 2
+    const dh = 1.5 * unit
+    const dw = 0.9 * unit
+    const top = floorY - dh
+    const alpha = (1 - fogT)
+    if (alpha < 0.05 || dw < 1) return
+    const cx = screenX
+    const L = cx - dw / 2
+    const pulse = 0.55 + 0.45 * Math.sin(frame * 0.06)
+
+    contactShadow(cx, floorY, dw * 1.1, alpha * 0.5)
+    wctx.save()
+    // the void
+    wctx.globalAlpha = alpha
+    wctx.fillStyle = '#040404'
+    wctx.beginPath()
+    wctx.moveTo(L, floorY)
+    wctx.lineTo(L + dw * 0.12, top + dh * 0.06)
+    wctx.quadraticCurveTo(cx, top, L + dw * 0.88, top + dh * 0.06)
+    wctx.lineTo(L + dw, floorY)
+    wctx.closePath()
+    wctx.fill()
+    // breathing rim
+    wctx.globalAlpha = alpha * pulse
+    wctx.strokeStyle = 'rgba(190,205,225,0.9)'
+    wctx.lineWidth = Math.max(1, dw * 0.05)
+    wctx.stroke()
+    wctx.restore()
   }
 
   // A cloaked standing figure: a rounded hood widening to a skirt, with faint
@@ -403,6 +570,12 @@ export function createRenderer(canvas, config) {
       wctx.fillRect(cx - w * 0.28, top + size * 0.22, w * 0.56, size * 0.78) // bottle
       wctx.fillStyle = 'rgba(230,240,250,0.9)'
       wctx.fillRect(cx - w * 0.10, top, w * 0.20, size * 0.28)  // neck/cap
+    } else if (t === 'bandage') {
+      wctx.fillStyle = `rgb(${r},${g},${b})`
+      wctx.fillRect(cx - w * 0.32, top + size * 0.25, w * 0.64, size * 0.6) // white box
+      wctx.fillStyle = 'rgba(210,50,50,0.95)'                              // red cross
+      wctx.fillRect(cx - w * 0.05, top + size * 0.33, w * 0.10, size * 0.44)
+      wctx.fillRect(cx - w * 0.20, top + size * 0.48, w * 0.40, size * 0.14)
     } else if (t === 'polaroid') {
       wctx.fillStyle = `rgb(${r},${g},${b})`
       wctx.fillRect(cx - w * 0.4, top + size * 0.2, w * 0.8, size * 0.7) // body

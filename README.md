@@ -2,7 +2,7 @@
 
 > you have no-clipped out of reality.
 
-an infinite procedural first-person horror maze. fluorescent lights, damp carpet, no exit.
+an infinite procedural first-person horror maze that descends through four levels. fluorescent lights, damp carpet, tight office corridors, no exit — only the way down.
 
 <p align="center">
   <img src="docs/screenshots/pillars.jpg" width="100%" alt="the backrooms — pillars under a fluorescent ceiling grid">
@@ -47,10 +47,11 @@ the backrooms restocks itself. things are left lying around; walk close and pres
 |------|---------|
 | almond water | restores your legs, and the lights hold steady for a while |
 | glowstick | pushes the fog back. temporarily. |
+| bandage | patches you up — restores hit points. carry a few before you go deep. |
 | polaroid camera | captures evidence — saved to `Pictures/backrooms/` |
 | radio | plays a tune that is almost right. presences can be found from much farther away. other things also hear it. |
 
-six slots. `1–6` selects, `q` uses. some things are worth carrying, some are worth using where you found them.
+six slots. `1–6` selects, `q` uses, `x` drops. some things are worth carrying, some are worth using where you found them, some are worth leaving behind.
 
 ---
 
@@ -74,11 +75,14 @@ the spirits decide. or rather, i do.
 | shift | run (watch your legs) |
 | arrow keys | turn (when mouse unlocked) |
 | click | lock mouse for look |
-| f | take an item |
+| f | take an item · no-clip through an exit |
 | q | use selected item |
+| x | drop the selected item |
 | 1–6 | select inventory slot |
 | e | speak to a presence |
 | esc | unlock mouse / close dialog |
+
+your **hit points** sit under the level name, top-left. level 0 is safe; below it, the things in the fog will take them from you. bandages and time bring them back.
 
 ---
 
@@ -95,6 +99,19 @@ the maze generates infinitely in every direction. chunks are cached for a small 
 it is rendered with a hand-written textured raycaster — damp wallpaper, drop-ceiling tiles lit by flickering fluorescent panels, mottled carpet, film grain. no game engine, no assets, just math and the color yellow.
 
 ---
+
+## the descent
+
+the maze is no longer one endless yellow floor. it is a stack of levels, and each one has a way down. find a **no-clip exit** — a dark, breathing doorway standing in the fog — and press **f** to fall through. there is always one within a short walk; the game whispers how to find the next as you arrive.
+
+| level | what it is | the way down |
+|-------|-----------|--------------|
+| **0 — the lobby** | mono-yellow rooms, damp carpet, the fluorescent hum. safe. nothing hunts you here. | no-clip through a thin, torn corner and fall out of the lobby. |
+| **1 — habitable zone** | colder concrete and dim service lights. things live here now — watch your hit points. | a hole in the floor, or a stairwell down into the pipes. |
+| **2 — pipe dreams** | a maze of maintenance tunnels. steam, rust, and the dark between the pipes. bring your own light. | follow the pipes to a service hatch and drop into the dark. |
+| **3 — electrical station** | a lightless labyrinth of transformers and live cable. the deepest you should go. | a door humming with current — through it, the lobby waits again. |
+
+descend and the world changes around you: the palette, the fog, the clutter, and what is in it with you. your hit points and your inventory come with you. the floor you left does not remember you.
 
 ## building from source
 

@@ -126,3 +126,55 @@ describe('use & selection', () => {
     expect(sys.getSelected().type).toBe('almond-water')
   })
 })
+
+describe('discard', () => {
+  function loaded(types) {
+    const sys = makeSystem(openWorld, { items: { density: 1, types: ['glowstick'] } })
+    sys.inventory.length = 0
+    for (const t of types) sys.inventory.push({ type: t })
+    return sys
+  }
+
+  it('drops the selected item and returns its type', () => {
+    const sys = loaded(['almond-water', 'radio'])
+    sys.select(0)
+    expect(sys.discardSelected()).toEqual({ type: 'almond-water' })
+    expect(sys.inventory.map(i => i.type)).toEqual(['radio'])
+  })
+
+  it('drops even the radio (unlike use, which toggles it)', () => {
+    const sys = loaded(['radio'])
+    sys.select(0)
+    expect(sys.discardSelected()).toEqual({ type: 'radio' })
+    expect(sys.inventory).toHaveLength(0)
+  })
+
+  it('returns null on an empty slot', () => {
+    const sys = loaded([])
+    expect(sys.discardSelected()).toBeNull()
+  })
+
+  it('clamps selection after dropping the last slot', () => {
+    const sys = loaded(['almond-water', 'glowstick'])
+    sys.select(1)
+    sys.discardSelected()
+    expect(sys.selected).toBe(0)
+    expect(sys.getSelected().type).toBe('almond-water')
+  })
+})
+
+describe('enterLevel', () => {
+  it('wipes world items and rescans with the new level type set, keeping inventory', () => {
+    const sys = makeSystem()
+    sys.update(0, 0)
+    sys.inventory.push({ type: 'polaroid' })
+    expect(sys.getWorldItems().length).toBeGreaterThan(0)
+
+    sys.enterLevel({ items: { density: 1, types: ['bandage'] }, maze: { salt: 0x99 } })
+    expect(sys.getWorldItems()).toHaveLength(0)   // cleared until next scan
+    expect(sys.inventory.map(i => i.type)).toEqual(['polaroid']) // inventory survives
+
+    sys.update(0, 0)
+    expect(sys.getWorldItems().every(i => i.type === 'bandage')).toBe(true)
+  })
+})

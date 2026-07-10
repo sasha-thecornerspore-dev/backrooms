@@ -1,9 +1,11 @@
 // items.js — things the Backrooms leaves lying around.
 // Pure state module: deterministic chunk-seeded spawns, pickup, a small
-// inventory, and use() descriptors. Effects are applied by game.js.
+// inventory, use() and discard() descriptors. Effects are applied by game.js.
+// Inventory persists across level transitions; world items are reset per level
+// via enterLevel().
 import { CHUNK_SIZE } from './world.js'
 
-export const ITEM_TYPES = ['almond-water', 'glowstick', 'polaroid', 'radio']
+export const ITEM_TYPES = ['almond-water', 'glowstick', 'bandage', 'polaroid', 'radio']
 export const MAX_SLOTS = 6
 
 function hash(a, b) {
@@ -19,22 +21,24 @@ function itemRng(cx, cy) {
 }
 
 export function createItemSystem(config, isWallFn) {
-  const density = Math.max(1, config.items?.density ?? 5)
-  const types   = (config.items?.types?.length ? config.items.types : ITEM_TYPES)
+  let density = Math.max(1, config.items?.density ?? 5)
+  let types   = (config.items?.types?.length ? config.items.types : ITEM_TYPES)
+  // salt lets each level place a distinct set of world items at the same chunk
+  let salt    = 0
 
   const worldItems = new Map()  // "cx,cy" → {key, x, y, type}
   const scanned    = new Set()  // chunks already checked this residency
-  const taken      = new Set()  // picked up this session — never respawns
-  const inventory  = []         // [{type, on?}]
+  const taken      = new Set()  // picked up this level — never respawns
+  const inventory  = []         // [{type, on?}] — persists across levels
   let   selected   = 0
 
   function chunkHasItem(cx, cy) {
-    return hash(cx + 7777, cy + 9999) % density === 0
+    return hash(cx + 7777 + salt, cy + 9999 + salt) % density === 0
   }
 
   function placeItem(cx, cy, pcx, pcy) {
-    const rng = itemRng(cx, cy)
-    const type = types[hash(cx + 31, cy + 17) % types.length]
+    const rng = itemRng(cx + salt, cy + salt)
+    const type = types[hash(cx + 31 + salt, cy + 17 + salt) % types.length]
     for (let tries = 0; tries < 20; tries++) {
       const lx = 2 + Math.floor(rng() * (CHUNK_SIZE - 4))
       const ly = 2 + Math.floor(rng() * (CHUNK_SIZE - 4))
@@ -110,13 +114,34 @@ export function createItemSystem(config, isWallFn) {
     return { type: item.type }
   }
 
+  // Drop the selected item out of the inventory entirely. Returns the removed
+  // item descriptor (or null if the slot was empty).
+  function discardSelected() {
+    const item = inventory[selected]
+    if (!item) return null
+    inventory.splice(selected, 1)
+    if (selected >= inventory.length && selected > 0) selected = inventory.length - 1
+    return { type: item.type }
+  }
+
   function isRadioOn() {
     return inventory.some(i => i.type === 'radio' && i.on)
   }
 
+  // Reconfigure item types/density for a new level and wipe world-item state.
+  // Inventory and the currently-selected slot are intentionally preserved.
+  function enterLevel(cfg) {
+    density = Math.max(1, cfg?.items?.density ?? density)
+    types   = (cfg?.items?.types?.length ? cfg.items.types : types)
+    salt    = (cfg?.maze?.salt | 0)
+    worldItems.clear()
+    scanned.clear()
+    taken.clear()
+  }
+
   return {
     update, getWorldItems, nearestItem, pickUp,
-    select, getSelected, useSelected, isRadioOn,
+    select, getSelected, useSelected, discardSelected, isRadioOn, enterLevel,
     inventory,
     get selected() { return selected },
   }

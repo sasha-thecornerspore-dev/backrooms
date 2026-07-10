@@ -5,6 +5,9 @@ export const DEFAULT_CONFIG = {
   chunkEvictRadius: 3,
   flicker: { rate: 0.07, depth: 0.60, recoverySpeed: 12 },
   audio: { humFrequency: 120, droneFrequency: 60, distantEventInterval: [8, 28] },
+  // office-maze knobs (see generateChunk): rooms carved out of a loopy corridor grid
+  maze: { salt: 0x0000, roomChance: 0.16, braid: 0.12, corridor: 1 },
+  lights: true,
   messages: [
     "you shouldn't be here.",
     "the carpet is damp.",
@@ -19,6 +22,7 @@ export const DEFAULT_CONFIG = {
   ],
   messageInterval: [25, 90],
   items: { density: 5, types: ['almond-water', 'glowstick', 'polaroid', 'radio'] },
+  props: { density: 3, types: ['chair', 'cabinet', 'box', 'cone', 'papers', 'plant'] },
 }
 
 export async function loadConfig() {
@@ -50,91 +54,99 @@ function hash2(a, b) {
   return h ^ (h >>> 16)
 }
 
-export function generateChunk(cx, cy, epoch, density = 0.30) {
-  const seed = hash2(hash2(cx, cy), Math.imul(epoch, 2654435761) | 0)
-  const rnd  = mulberry32(seed)
-  const cell = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE)
+function normalizeMaze(opts) {
+  // Accept a bare density number (legacy/test usage) or a maze options object.
+  const o = (typeof opts === 'number') ? { density: opts } : (opts || {})
+  return {
+    salt:       o.salt | 0,
+    roomChance: o.roomChance ?? 0.16,
+    braid:      o.braid ?? 0.12,
+    corridor:   o.corridor ?? 1,
+  }
+}
 
-  // Random fill
-  for (let i = 0; i < cell.length; i++) cell[i] = rnd() > (1 - density) ? 1 : 0
+// Generate one chunk as a tight OFFICE MAZE rather than an open cave:
+//   • a randomised-DFS corridor grid over a lattice of nodes (1-cell walls),
+//   • some walls knocked through ("braid") so it loops like a real building,
+//   • some nodes expanded into small rooms,
+//   • a guaranteed central cross hallway (full mid row + mid column) that also
+//     provides the always-open border passages adjacent chunks connect through.
+//
+// Invariants (relied on by world.test.js and by cross-chunk navigation):
+//   - deterministic in (cx, cy, epoch, salt)
+//   - the entire midpoint row is open, and the four border midpoints are open
+//   - every cell is 0 (floor) or 1 (wall)
+export function generateChunk(cx, cy, epoch, opts = {}) {
+  const o    = normalizeMaze(opts)
+  const N    = CHUNK_SIZE
+  const m     = N >> 1
+  const seed  = (hash2(hash2(cx, cy), Math.imul(epoch, 2654435761) | 0) ^ (o.salt | 0)) >>> 0
+  const rnd   = mulberry32(seed)
+  const cell  = new Uint8Array(N * N).fill(1)   // start fully solid, then carve
 
-  // Cellular automata smoothing — 3 passes, Moore neighbourhood, threshold 5
-  for (let pass = 0; pass < 3; pass++) {
-    const tmp = new Uint8Array(cell)
-    for (let y = 1; y < CHUNK_SIZE - 1; y++) {
-      for (let x = 1; x < CHUNK_SIZE - 1; x++) {
-        let w = 0
-        for (let dy = -1; dy <= 1; dy++)
-          for (let dx = -1; dx <= 1; dx++)
-            w += cell[(y + dy) * CHUNK_SIZE + (x + dx)]
-        tmp[y * CHUNK_SIZE + x] = w >= 5 ? 1 : 0
+  const idx  = (x, y) => y * N + x
+  const open = (x, y) => { if (x >= 0 && x < N && y >= 0 && y < N) cell[idx(x, y)] = 0 }
+
+  // Node lattice: nodes sit on odd interior cells 1,3,…,N-3 (walls on even cells).
+  const NN       = Math.floor((N - 2) / 2)     // nodes per axis
+  const nodeCell = (i) => 1 + 2 * i
+
+  // ── randomised DFS carves a spanning maze over the node grid ──
+  const visited = new Uint8Array(NN * NN)
+  const stack   = []
+  const sc      = NN >> 1
+  let cur = sc * NN + sc
+  visited[cur] = 1
+  open(nodeCell(cur % NN), nodeCell((cur / NN) | 0))
+  stack.push(cur)
+  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+  while (stack.length) {
+    cur = stack[stack.length - 1]
+    const nx0 = cur % NN, ny0 = (cur / NN) | 0
+    const nb = []
+    for (const [dx, dy] of DIRS) {
+      const nx = nx0 + dx, ny = ny0 + dy
+      if (nx >= 0 && nx < NN && ny >= 0 && ny < NN && !visited[ny * NN + nx]) nb.push([nx, ny])
+    }
+    if (nb.length === 0) { stack.pop(); continue }
+    const [nx, ny] = nb[(rnd() * nb.length) | 0]
+    const cx0 = nodeCell(nx0), cy0 = nodeCell(ny0), cx1 = nodeCell(nx), cy1 = nodeCell(ny)
+    open(cx1, cy1)
+    open((cx0 + cx1) >> 1, (cy0 + cy1) >> 1)     // the wall cell between the two nodes
+    visited[ny * NN + nx] = 1
+    stack.push(ny * NN + nx)
+  }
+
+  // ── braid: reopen some inter-node walls so the floor loops like a building ──
+  for (let ny = 0; ny < NN; ny++) {
+    for (let nx = 0; nx < NN; nx++) {
+      if (nx + 1 < NN && rnd() < o.braid) open((nodeCell(nx) + nodeCell(nx + 1)) >> 1, nodeCell(ny))
+      if (ny + 1 < NN && rnd() < o.braid) open(nodeCell(nx), (nodeCell(ny) + nodeCell(ny + 1)) >> 1)
+    }
+  }
+
+  // ── rooms: expand some nodes into small open rooms (offices, storerooms) ──
+  for (let ny = 0; ny < NN; ny++) {
+    for (let nx = 0; nx < NN; nx++) {
+      if (rnd() < o.roomChance) {
+        const cxn = nodeCell(nx), cyn = nodeCell(ny)
+        const rw = rnd() < 0.22 ? 2 : 1
+        for (let yy = cyn - rw; yy <= cyn + rw; yy++)
+          for (let xx = cxn - rw; xx <= cxn + rw; xx++)
+            if (xx >= 1 && xx < N - 1 && yy >= 1 && yy < N - 1) open(xx, yy)
       }
     }
-    cell.set(tmp)
   }
 
-  // Forced cross-corridors at chunk midpoints (3 cells wide)
-  const m = CHUNK_SIZE >> 1
-  for (let y = 0; y < CHUNK_SIZE; y++) {
-    for (let w = -1; w <= 1; w++) {
-      const x = m + w
-      if (x >= 0 && x < CHUNK_SIZE) cell[y * CHUNK_SIZE + x] = 0
-    }
-  }
-  for (let x = 0; x < CHUNK_SIZE; x++) {
-    for (let w = -1; w <= 1; w++) {
-      const y = m + w
-      if (y >= 0 && y < CHUNK_SIZE) cell[y * CHUNK_SIZE + x] = 0
-    }
-  }
+  // ── central cross hallway — the main hall, and the chunk's border passages ──
+  for (let y = 0; y < N; y++) open(m, y)
+  for (let x = 0; x < N; x++) open(x, m)
 
-  // Random pillars in corridors for visual depth
-  const rnd2 = mulberry32(seed ^ 0xDEAD0000)
-  for (let y = 4; y < CHUNK_SIZE - 4; y++) {
-    for (let x = 4; x < CHUNK_SIZE - 4; x++) {
-      const onH = Math.abs(x - m) <= 1
-      const onV = Math.abs(y - m) <= 1
-      if ((onH || onV) && rnd2() > 0.91) cell[y * CHUNK_SIZE + x] = 1
-    }
-  }
-
-  // Re-clear cross-corridors after pillar pass to ensure full rows/cols are open
-  for (let y = 0; y < CHUNK_SIZE; y++) {
-    for (let w = -1; w <= 1; w++) {
-      const x = m + w
-      if (x >= 0 && x < CHUNK_SIZE) cell[y * CHUNK_SIZE + x] = 0
-    }
-  }
-  for (let x = 0; x < CHUNK_SIZE; x++) {
-    for (let w = -1; w <= 1; w++) {
-      const y = m + w
-      if (y >= 0 && y < CHUNK_SIZE) cell[y * CHUNK_SIZE + x] = 0
-    }
-  }
-
-  // Open 3-cell passages at chunk borders (ensures cross-chunk navigation)
-  for (let w = -1; w <= 1; w++) {
-    const lx = m + w, ly = m + w
-    if (lx >= 0 && lx < CHUNK_SIZE) {
-      cell[0 * CHUNK_SIZE + lx] = 0
-      cell[1 * CHUNK_SIZE + lx] = 0
-      cell[(CHUNK_SIZE - 1) * CHUNK_SIZE + lx] = 0
-      cell[(CHUNK_SIZE - 2) * CHUNK_SIZE + lx] = 0
-    }
-    if (ly >= 0 && ly < CHUNK_SIZE) {
-      cell[ly * CHUNK_SIZE + 0] = 0
-      cell[ly * CHUNK_SIZE + 1] = 0
-      cell[ly * CHUNK_SIZE + CHUNK_SIZE - 1] = 0
-      cell[ly * CHUNK_SIZE + CHUNK_SIZE - 2] = 0
-    }
-  }
-
-  // Clear spawn area for origin chunk
-  if (cx === 0 && cy === 0 && epoch === 0) {
-    for (let y = m - 3; y <= m + 3; y++)
-      for (let x = m - 3; x <= m + 3; x++)
-        if (y >= 0 && y < CHUNK_SIZE && x >= 0 && x < CHUNK_SIZE)
-          cell[y * CHUNK_SIZE + x] = 0
+  // ── a small clear room at the world origin so you never spawn in a wall ──
+  if (cx === 0 && cy === 0) {
+    for (let yy = m - 2; yy <= m + 2; yy++)
+      for (let xx = m - 2; xx <= m + 2; xx++)
+        open(xx, yy)
   }
 
   return cell
@@ -142,12 +154,13 @@ export function generateChunk(cx, cy, epoch, density = 0.30) {
 
 export function createChunkCache(config, fixedSeed = null) {
   // Accept either a config object or a bare evictRadius number (legacy/test usage)
-  const evictRadius   = (typeof config === 'object' && config !== null)
+  const evictRadius = (typeof config === 'object' && config !== null)
     ? (config.chunkEvictRadius ?? 3)
     : (config ?? 3)
-  const wallDensity   = (typeof config === 'object' && config !== null)
-    ? (config.wallDensity ?? 0.30)
-    : 0.30
+  // Maze options: prefer config.maze, else fall back to a legacy wallDensity number.
+  const mazeOpts = (typeof config === 'object' && config !== null)
+    ? (config.maze ?? { density: config.wallDensity ?? 0.30 })
+    : { density: 0.30 }
 
   const chunks = new Map()  // "cx,cy" → Uint8Array
   const epochs = new Map()  // "cx,cy" → eviction count
@@ -171,7 +184,7 @@ export function createChunkCache(config, fixedSeed = null) {
     const k = key(cx, cy)
     if (!chunks.has(k)) {
       const epoch = fixedSeed !== null ? fixedSeed : (epochs.get(k) ?? 0)
-      chunks.set(k, generateChunk(cx, cy, epoch, wallDensity))
+      chunks.set(k, generateChunk(cx, cy, epoch, mazeOpts))
       evict(playerCx, playerCy)
     }
     return chunks.get(k)

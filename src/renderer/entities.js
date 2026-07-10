@@ -1,8 +1,6 @@
 import { CHUNK_SIZE } from './world.js'
 
 const MAX_ENTITIES = 20
-const SPAWN_DENOM = 8      // 1 in 8 chunks spawns
-const STALKER_DENOM = 4    // 1 in 4 spawning chunks is a stalker
 
 function hash(a, b) {
   let h = (a * 2654435761 ^ b * 2246822519) >>> 0
@@ -16,13 +14,13 @@ function entityRng(cx, cy) {
   return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 0xffffffff }
 }
 
-function shouldSpawn(cx, cy) {
-  return hash(cx + 1000, cy + 2000) % SPAWN_DENOM === 0
+function shouldSpawn(cx, cy, spawnDenom) {
+  return hash(cx + 1000, cy + 2000) % spawnDenom === 0
 }
 
-function makeEntity(cx, cy) {
+function makeEntity(cx, cy, stalkerDenom) {
   const rng = entityRng(cx, cy)
-  const type = rng() < 1 / STALKER_DENOM ? 'stalker' : 'wanderer'
+  const type = rng() < 1 / stalkerDenom ? 'stalker' : 'wanderer'
   return {
     x: cx * CHUNK_SIZE + CHUNK_SIZE / 2 + (rng() - 0.5) * 4,
     y: cy * CHUNK_SIZE + CHUNK_SIZE / 2 + (rng() - 0.5) * 4,
@@ -39,8 +37,17 @@ export function createEntitySystem(config, isWallFn) {
   const entities = []
   const spawnedChunks = new Set()
 
+  // Per-level rules. Defaults match the historic single-level behaviour so
+  // any caller without an `entities` block (e.g. unit tests) keeps spawning.
+  const ent         = config?.entities ?? {}
+  const enabled     = ent.enabled ?? true
+  const spawnDenom  = Math.max(1, ent.spawnDenom ?? 8)
+  const stalkerDenom = Math.max(1, ent.stalkerDenom ?? 4)
+  const chaseRange  = ent.chaseRange ?? 24
+  const fleeRange   = ent.fleeRange ?? 6
+
   function evict(playerCx, playerCy) {
-    const radius = (config.chunkEvictRadius ?? 3) + 2
+    const radius = (config?.chunkEvictRadius ?? 3) + 2
     for (let i = entities.length - 1; i >= 0; i--) {
       const e = entities[i]
       if (Math.abs(e.chunkCx - playerCx) > radius || Math.abs(e.chunkCy - playerCy) > radius) {
@@ -51,7 +58,8 @@ export function createEntitySystem(config, isWallFn) {
   }
 
   function trySpawnAround(playerCx, playerCy) {
-    const r = config.chunkEvictRadius ?? 3
+    if (!enabled) return
+    const r = config?.chunkEvictRadius ?? 3
     for (let dx = -r; dx <= r; dx++) {
       for (let dy = -r; dy <= r; dy++) {
         if (entities.length >= MAX_ENTITIES) return
@@ -59,7 +67,7 @@ export function createEntitySystem(config, isWallFn) {
         const key = `${cx},${cy}`
         if (spawnedChunks.has(key)) continue
         spawnedChunks.add(key)
-        if (shouldSpawn(cx, cy)) entities.push(makeEntity(cx, cy))
+        if (shouldSpawn(cx, cy, spawnDenom)) entities.push(makeEntity(cx, cy, stalkerDenom))
       }
     }
   }
@@ -71,9 +79,9 @@ export function createEntitySystem(config, isWallFn) {
 
     // state transitions — a playing radio carries; stalkers hear it from farther away
     if (e.type === 'wanderer') {
-      e.state = dist < 6 ? 'flee' : 'idle'
+      e.state = dist < fleeRange ? 'flee' : 'idle'
     } else {
-      e.state = dist < 24 * aggroMul ? 'chase' : 'idle'
+      e.state = dist < chaseRange * aggroMul ? 'chase' : 'idle'
     }
 
     // pick speed and direction
