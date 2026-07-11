@@ -60,6 +60,12 @@
       border: 1px solid rgba(0,0,0,0.5); box-shadow: 0 0 4px rgba(255,255,255,0.35);
     }
     #hp-fill { height: 100%; width: 100%; background: rgba(60,150,70,0.85); transition: width 0.2s, background 0.4s; }
+    #exit-compass {
+      position: fixed; top: 52px; left: 14px;
+      color: #14110a; font-size: 12px; font-weight: bold; letter-spacing: 1px;
+      pointer-events: none; opacity: 0; transition: opacity 0.4s;
+      text-shadow: 0 0 5px rgba(255,255,255,0.6);
+    }
     #msg {
       position: fixed; top: 38%; left: 50%; transform: translateX(-50%);
       color: #14110a; font-size: 14px; font-weight: bold; opacity: 0;
@@ -252,6 +258,7 @@
   </div>
   <div id="hud"></div>
   <div id="hp-wrap"><span id="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div></div></div>
+  <div id="exit-compass"></div>
   <div id="msg"></div>
   <div id="hint">wasd move · shift run · mouse look · f take / no-clip · q use · x drop · 1-6 slots · e speak · m music</div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>

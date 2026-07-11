@@ -23,6 +23,14 @@ const ITEM_NAMES = {
   'radio':        'radio',
 }
 
+// A directional arrow (clockwise from straight-ahead) for the descent compass.
+const EXIT_DIRS = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖']
+function exitArrow(rel) {
+  let a = rel % (Math.PI * 2)
+  if (a < 0) a += Math.PI * 2
+  return EXIT_DIRS[Math.round(a / (Math.PI / 4)) % 8]
+}
+
 export async function initGame(canvas, { worldSeed = null, mpClient = null, anchor = null } = {}) {
   const base = await loadConfig()
 
@@ -377,8 +385,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     // ── items: pickup prompt ──
     const nearItem = itemSys.nearestItem(player.x, player.y, 1.4)
-    // ── exits: descent prompt ──
-    const nearExit = level.decor.nearestExit(player.x, player.y, 1.1)
+    // ── exits: descent prompt (wider grab range) ──
+    const nearExit = level.decor.nearestExit(player.x, player.y, 1.6)
 
     const itemHintEl = document.getElementById('item-hint')
     if (itemHintEl) {
@@ -390,6 +398,19 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.style.opacity = '1'
       } else {
         itemHintEl.style.opacity = '0'
+      }
+    }
+
+    // ── descent compass — points at the nearest loaded exit so it's findable ──
+    const compassEl = document.getElementById('exit-compass')
+    if (compassEl) {
+      const anyExit = level.decor.nearestExitAny(player.x, player.y)
+      if (anyExit && !nearExit) {
+        const rel = Math.atan2(anyExit.y - player.y, anyExit.x - player.x) - player.angle
+        compassEl.textContent = `${exitArrow(rel)}  ${cfg.exit?.label ?? 'descent'}  ·  ${Math.round(anyExit.dist)}m`
+        compassEl.style.opacity = '1'
+      } else {
+        compassEl.style.opacity = '0'
       }
     }
 

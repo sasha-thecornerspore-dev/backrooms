@@ -105,6 +105,16 @@ export function createDecorSystem(config, isWallFn) {
     return best
   }
 
+  // Nearest loaded exit at ANY distance (for the HUD direction indicator).
+  function nearestExitAny(px, py) {
+    let best = null, bestD = Infinity
+    for (const e of exits.values()) {
+      const d = (e.x - px) ** 2 + (e.y - py) ** 2
+      if (d < bestD) { bestD = d; best = e }
+    }
+    return best ? { x: best.x, y: best.y, dist: Math.sqrt(bestD) } : null
+  }
+
   function enterLevel(cfg) {
     propTypes = cfg.props?.types?.length ? cfg.props.types : propTypes
     propDens  = cfg.props?.density ?? propDens
@@ -116,5 +126,5 @@ export function createDecorSystem(config, isWallFn) {
     scanned.clear()
   }
 
-  return { update, getProps, getExits, nearestExit, enterLevel }
+  return { update, getProps, getExits, nearestExit, nearestExitAny, enterLevel }
 }

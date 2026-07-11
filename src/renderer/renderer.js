@@ -465,20 +465,30 @@ export function createRenderer(canvas, config, renderOpts = {}) {
     if (screenX < 0 || screenX >= W || zbuffer[screenX] <= entDist) return
     const unit = H / entDist
     const floorY = HH + unit / 2
-    const dh = 1.5 * unit
+    const dh = 1.6 * unit
     const dw = 0.9 * unit
     const top = floorY - dh
     const alpha = (1 - fogT)
-    if (alpha < 0.05 || dw < 1) return
+    if (alpha < 0.04 || dw < 1) return
     const cx = screenX
     const L = cx - dw / 2
-    const pulse = 0.55 + 0.45 * Math.sin(frame * 0.06)
+    const pulse = 0.55 + 0.45 * Math.sin(frame * 0.07)
 
-    contactShadow(cx, floorY, dw * 1.1, alpha * 0.5)
+    contactShadow(cx, floorY, dw * 1.2, alpha * 0.5)
     wctx.save()
-    // the void
+
+    // glowing light beam rising from the spot — the beacon that carries through fog
+    const beamTop = floorY - dh * 1.7
+    const beam = wctx.createLinearGradient(0, beamTop, 0, floorY)
+    const ba = (alpha * (0.32 + 0.26 * pulse)).toFixed(3)
+    beam.addColorStop(0, 'rgba(150,190,230,0)')
+    beam.addColorStop(1, `rgba(175,208,242,${ba})`)
+    wctx.fillStyle = beam
+    wctx.fillRect(cx - dw * 0.34, beamTop, dw * 0.68, floorY - beamTop)
+
+    // the dark portal itself
     wctx.globalAlpha = alpha
-    wctx.fillStyle = '#040404'
+    wctx.fillStyle = '#050608'
     wctx.beginPath()
     wctx.moveTo(L, floorY)
     wctx.lineTo(L + dw * 0.12, top + dh * 0.06)
@@ -486,11 +496,21 @@ export function createRenderer(canvas, config, renderOpts = {}) {
     wctx.lineTo(L + dw, floorY)
     wctx.closePath()
     wctx.fill()
-    // breathing rim
-    wctx.globalAlpha = alpha * pulse
-    wctx.strokeStyle = 'rgba(190,205,225,0.9)'
-    wctx.lineWidth = Math.max(1, dw * 0.05)
+
+    // bright breathing rim
+    wctx.globalAlpha = alpha * (0.7 + 0.3 * pulse)
+    wctx.strokeStyle = 'rgba(205,224,248,0.95)'
+    wctx.lineWidth = Math.max(1.5, dw * 0.06)
     wctx.stroke()
+
+    // bright base ring on the floor — reads even at distance
+    wctx.globalAlpha = alpha * (0.45 + 0.5 * pulse)
+    wctx.strokeStyle = 'rgba(185,214,244,0.9)'
+    wctx.lineWidth = Math.max(1, dw * 0.05)
+    wctx.beginPath()
+    wctx.ellipse(cx, floorY, dw * 0.5, Math.max(1, dw * 0.16), 0, 0, Math.PI * 2)
+    wctx.stroke()
+
     wctx.restore()
   }
 
