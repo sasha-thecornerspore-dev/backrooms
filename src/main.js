@@ -119,6 +119,10 @@ app.whenReady().then(() => {
   ipcMain.handle('save-settings', (_e, settings) => writeSettings(settingsPath, settings))
   ipcMain.handle('get-version', () => app.getVersion())
 
+  // renderer diagnostics — surface renderer-side errors/stalls into the log file
+  // so a freeze that never trips 'unresponsive' still leaves a cause behind.
+  ipcMain.on('renderer-log', (_e, msg) => logLine(`renderer: ${String(msg).slice(0, 800)}`))
+
   // polaroid — the renderer hands over a PNG data URL, we file the evidence
   ipcMain.handle('save-photo', (_e, dataUrl) => {
     const PREFIX = 'data:image/png;base64,'

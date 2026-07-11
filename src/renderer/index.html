@@ -170,6 +170,18 @@
     #stamina-fill { height: 100%; width: 100%; background: rgba(200,185,110,0.55); }
     #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 40; }
   </style>
+  <script>
+    // Early renderer-error capture → main log (before modules load), so any
+    // uncaught error or promise rejection that could freeze the game is recorded.
+    window.addEventListener('error', function (e) {
+      try { window.backrooms && window.backrooms.logError &&
+        window.backrooms.logError('error: ' + (e.message || '') + ' @ ' + (e.filename || '') + ':' + (e.lineno || 0) + ':' + (e.colno || 0) + ' ' + ((e.error && e.error.stack) || '')); } catch (_) {}
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      try { var r = e.reason; window.backrooms && window.backrooms.logError &&
+        window.backrooms.logError('reject: ' + ((r && r.stack) || r)); } catch (_) {}
+    });
+  </script>
 </head>
 <body>
   <canvas id="c"></canvas>

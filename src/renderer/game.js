@@ -295,7 +295,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   })
 
   let last = 0
+  let frameCount = 0
+  let loopErrs = 0
   function loop(ts) {
+   try {
     const dt = Math.min((ts - last) / 1000, 0.05)
     last = ts
     const cfg = level.cfg
@@ -460,7 +463,29 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     ]
 
     level.gfx.render(player, (wx, wy) => level.cache.isWall(wx, wy, pcx, pcy), flicker, allEntities, fogMul)
-    requestAnimationFrame(loop)
+    frameCount++
+   } catch (e) {
+    // A per-frame error must never permanently freeze the game: log it (first
+    // few only, to avoid flooding) and fall through to reschedule below.
+    loopErrs++
+    if (loopErrs <= 5) {
+      try { window.backrooms?.logError?.(`loop#${loopErrs} @frame${frameCount} lvl${level?.index}: ${(e && e.stack) || e}`) } catch (_) {}
+    }
+   }
+   requestAnimationFrame(loop)   // ALWAYS reschedule — resilience over a stray throw
   }
   requestAnimationFrame(loop)
+
+  // Stall watchdog — if requestAnimationFrame stops advancing (a GPU/compositor
+  // hang that never trips main's 'unresponsive'), record it so the freeze finally
+  // leaves a trace in the log instead of vanishing silently.
+  let watchPrev = -1
+  setInterval(() => {
+    // Only a real stall counts — rAF legitimately pauses when the window is
+    // hidden/minimized, so don't cry wolf then.
+    if (frameCount === watchPrev && document.visibilityState === 'visible') {
+      try { window.backrooms?.logError?.(`render loop STALLED — no new frames for ~4s at frame ${frameCount} (level ${level?.index})`) } catch (_) {}
+    }
+    watchPrev = frameCount
+  }, 4000)
 }
