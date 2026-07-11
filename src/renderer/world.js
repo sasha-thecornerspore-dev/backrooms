@@ -8,8 +8,8 @@ export const DEFAULT_CONFIG = {
   // office-maze knobs (see generateChunk): rooms carved out of a loopy corridor grid
   maze: { salt: 0x0000, roomChance: 0.16, braid: 0.12, corridor: 1 },
   // generative weirdcore music bed (audio.js) — levels override per mood
-  music: { root: 220, scale: [0, 2, 4, 7, 9], tempo: 640, density: 0.5,
-           brightness: 1300, wobble: 0.01, bend: 0.12, chordEvery: 9, noteLen: 1.7, volume: 0.06 },
+  music: { root: 220, scale: [0, 2, 4, 7, 9], progression: [0, 3, 4, 2], tempo: 440, beatsPerChord: 8,
+           arpLen: 0.5, leadChance: 0.35, brightness: 1300, wobble: 0.008, bend: 0.12, noteLen: 1.5, volume: 0.06 },
   lights: true,
   messages: [
     "you shouldn't be here.",

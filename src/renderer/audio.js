@@ -118,17 +118,16 @@ function buildReverb(seconds = 3.2, decay = 2.6) {
 
 function initMusic() {
   if (!actx || music) return
-  const now = actx.currentTime
   const master = actx.createGain(); master.gain.value = 0        // faded in by setMusic
   const reverb = buildReverb()
-  const wet = actx.createGain(); wet.gain.value = 0.55
-  const dry = actx.createGain(); dry.gain.value = 0.6
-  const bus = actx.createBiquadFilter(); bus.type = 'lowpass'; bus.frequency.value = 1100; bus.Q.value = 0.4
+  const wet = actx.createGain(); wet.gain.value = 0.5
+  const dry = actx.createGain(); dry.gain.value = 0.62
+  const bus = actx.createBiquadFilter(); bus.type = 'lowpass'; bus.frequency.value = 1200; bus.Q.value = 0.4
   bus.connect(dry); bus.connect(reverb)
   reverb.connect(wet); wet.connect(master); dry.connect(master)
   master.connect(actx.destination)
 
-  // three detuned pad voices (the chord that breathes)
+  // three sustained pad voices — the chord
   const pad = [0, 1, 2].map(() => {
     const o = actx.createOscillator(); o.type = 'triangle'
     const g = actx.createGain(); g.gain.value = 0
@@ -136,60 +135,88 @@ function initMusic() {
     return { o, g }
   })
 
+  // bass voice — the chord root an octave down, giving the music a floor
+  const bassOsc = actx.createOscillator(); bassOsc.type = 'triangle'
+  const bassGain = actx.createGain(); bassGain.gain.value = 0
+  bassOsc.connect(bassGain); bassGain.connect(bus); bassOsc.start()
+
   // tape wow/flutter — a slow LFO nudging every pad voice's detune
   const flutter = actx.createOscillator(); flutter.type = 'sine'; flutter.frequency.value = 0.17
-  const flutterAmt = actx.createGain(); flutterAmt.gain.value = 7   // cents
+  const flutterAmt = actx.createGain(); flutterAmt.gain.value = 6   // cents
   flutter.connect(flutterAmt); pad.forEach(p => flutterAmt.connect(p.o.detune)); flutter.start()
 
   // slow filter drift — the muffled dream tide
   const drift = actx.createOscillator(); drift.type = 'sine'; drift.frequency.value = 0.045
-  const driftAmt = actx.createGain(); driftAmt.gain.value = 350
+  const driftAmt = actx.createGain(); driftAmt.gain.value = 300
   drift.connect(driftAmt); driftAmt.connect(bus.frequency); drift.start()
 
-  music = { master, bus, pad, mood: null, enabled: true, volScale: 1, stepTimer: null, chordTimer: null }
+  music = { master, bus, pad, bass: bassOsc, bassGain, mood: null, enabled: true,
+            volScale: 1, beatTimer: null, beat: 0, chordTones: [0, 2, 4] }
 }
 
-function padChord() {
+// Move pads + bass to the next chord of the progression (a triad stacked within
+// the scale). Glides rather than jumps.
+function goToChord(progStep) {
   const m = music, mood = m.mood
-  const base = Math.floor(Math.random() * mood.scale.length)
-  const degs = [base, base + 2, base + 4]                    // stacked thirds within the scale
+  const prog = (mood.progression && mood.progression.length) ? mood.progression : [0]
+  const rootDeg = prog[((progStep % prog.length) + prog.length) % prog.length]
+  m.chordTones = [rootDeg, rootDeg + 2, rootDeg + 4]
   const t = actx.currentTime
   m.pad.forEach((p, i) => {
-    const f = scaleFrequency(mood.root, mood.scale, degs[i]) * (1 + (Math.random() - 0.5) * 0.006)
-    p.o.frequency.setTargetAtTime(f, t, 0.9)                 // glide, don't jump
-    p.g.gain.setTargetAtTime(0.02, t, 1.4)
+    const f = scaleFrequency(mood.root, mood.scale, m.chordTones[i]) * (1 + (Math.random() - 0.5) * 0.004)
+    p.o.frequency.setTargetAtTime(f, t, 0.7)
+    p.g.gain.setTargetAtTime(0.013, t, 1.0)
   })
+  m.bass.frequency.setTargetAtTime(scaleFrequency(mood.root, mood.scale, rootDeg, -1), t, 0.25)
+  m.bassGain.gain.setTargetAtTime(0.06, t, 0.4)
 }
 
-function melodyNote() {
-  const m = music, mood = m.mood
+// A single soft plucked note (used for the arpeggio and the lead melody).
+function playPluck(freq, peak, len, bendProb) {
   try {
-    const o = actx.createOscillator()
-    const g = actx.createGain()
+    const o = actx.createOscillator(), g = actx.createGain()
     o.type = Math.random() < 0.5 ? 'triangle' : 'sine'
-    const deg = Math.floor(Math.random() * mood.scale.length)
-    const oct = 1 + (Math.random() < 0.3 ? 1 : 0)
-    let f = scaleFrequency(mood.root, mood.scale, deg, oct)
-    f *= 1 + (Math.random() - 0.5) * (mood.wobble ?? 0.012)  // the tune is almost right
     const t = actx.currentTime
-    const len = mood.noteLen ?? 1.6
-    o.frequency.setValueAtTime(f, t)
-    if (Math.random() < (mood.bend ?? 0.14)) o.frequency.exponentialRampToValueAtTime(f * 0.5, t + len) // tape drop
+    o.frequency.setValueAtTime(freq, t)
+    if (bendProb && Math.random() < bendProb) o.frequency.exponentialRampToValueAtTime(freq * 0.5, t + len)
     g.gain.setValueAtTime(0, t)
-    g.gain.linearRampToValueAtTime(0.05, t + 0.06)
-    g.gain.exponentialRampToValueAtTime(0.0008, t + len)
-    o.connect(g); g.connect(m.bus)
-    o.start(t); o.stop(t + len + 0.1)
+    g.gain.linearRampToValueAtTime(peak, t + 0.015)
+    g.gain.exponentialRampToValueAtTime(0.0006, t + len)
+    o.connect(g); g.connect(music.bus)
+    o.start(t); o.stop(t + len + 0.05)
   } catch { /* ignore */ }
+}
+
+// One beat: advance the chord on the bar line, ripple an arpeggio up the current
+// chord, and occasionally drop a higher lead note. This is what makes it read as
+// music instead of random tones.
+function onBeat() {
+  const m = music, mood = m.mood
+  if (!m.enabled) { m.beat++; return }
+  const bpc = mood.beatsPerChord ?? 8
+  if (m.beat % bpc === 0) goToChord(Math.floor(m.beat / bpc))
+
+  const tones = m.chordTones
+  const idx = m.beat % (tones.length * 2)
+  const tone = tones[idx % tones.length]
+  const oct = 1 + (idx >= tones.length ? 1 : 0)          // arp rises across two octaves
+  const af = scaleFrequency(mood.root, mood.scale, tone, oct) * (1 + (Math.random() - 0.5) * (mood.wobble ?? 0.006))
+  playPluck(af, 0.03, mood.arpLen ?? 0.55, 0)
+
+  if (m.beat % 4 === 2 && Math.random() < (mood.leadChance ?? 0.35)) {
+    const lt = tones[(Math.random() * tones.length) | 0] + (Math.random() < 0.5 ? 1 : 0)
+    const lf = scaleFrequency(mood.root, mood.scale, lt, 2) * (1 + (Math.random() - 0.5) * (mood.wobble ?? 0.008))
+    playPluck(lf, 0.04, mood.noteLen ?? 1.4, mood.bend ?? 0.12)   // the lead is the one allowed to bend "wrong"
+  }
+  m.beat++
 }
 
 function restartSchedulers() {
   const mood = music.mood
-  clearInterval(music.stepTimer); clearInterval(music.chordTimer)
-  music.chordTimer = setInterval(() => { if (music.enabled) padChord() }, (mood.chordEvery ?? 9) * 1000)
-  music.stepTimer  = setInterval(() => {
-    if (music.enabled && Math.random() < (mood.density ?? 0.5)) melodyNote()
-  }, mood.tempo ?? 680)
+  clearInterval(music.beatTimer)
+  music.beat = 0
+  goToChord(0)
+  music.beatTimer = setInterval(onBeat, mood.tempo ?? 440)
 }
 
 // Set the level's mood — the engine morphs into it without stopping.
@@ -198,9 +225,8 @@ export function setMusic(mood) {
   initMusic()
   if (!music) return
   music.mood = mood
-  if (music.bus) music.bus.frequency.setTargetAtTime(mood.brightness ?? 1100, actx.currentTime, 2)
-  music.master.gain.setTargetAtTime(music.enabled ? (mood.volume ?? 0.06) * music.volScale : 0, actx.currentTime, 2.5)
-  padChord()
+  if (music.bus) music.bus.frequency.setTargetAtTime(mood.brightness ?? 1200, actx.currentTime, 2)
+  music.master.gain.setTargetAtTime(music.enabled ? (mood.volume ?? 0.06) * music.volScale : 0, actx.currentTime, 2.0)
   restartSchedulers()
 }
 
