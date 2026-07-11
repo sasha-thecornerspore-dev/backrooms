@@ -187,8 +187,14 @@ export function createChunkCache(config, fixedSeed = null) {
     const k = key(cx, cy)
     if (!chunks.has(k)) {
       const epoch = fixedSeed !== null ? fixedSeed : (epochs.get(k) ?? 0)
-      chunks.set(k, generateChunk(cx, cy, epoch, mazeOpts))
+      const chunk = generateChunk(cx, cy, epoch, mazeOpts)
+      chunks.set(k, chunk)
       evict(playerCx, playerCy)
+      // Return the chunk we just generated — evict() may have removed it from the
+      // map again if it lies beyond the evict radius (e.g. a far-wandering entity
+      // checking walls). Reading chunks.get(k) here could yield undefined and, one
+      // frame later, crash isWall on `undefined[i]` and freeze the render loop.
+      return chunk
     }
     return chunks.get(k)
   }

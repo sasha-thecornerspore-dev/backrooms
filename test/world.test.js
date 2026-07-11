@@ -125,4 +125,28 @@ describe('createChunkCache', () => {
     for (let i = 0; i < 100; i++) diffs += c1.isWall(i * 5 + i, i * 7 - i * 2, 0, 0) !== c2.isWall(i * 5 + i, i * 7 - i * 2, 0, 0) ? 1 : 0
     expect(diffs).toBeGreaterThan(0)
   })
+
+  it('getChunk never returns undefined when eviction removes the just-created far chunk (freeze regression)', () => {
+    const cache = createChunkCache({ chunkEvictRadius: 3 })
+    // fill the cache past the 49-chunk eviction threshold, all near the player at (0,0)
+    for (let cx = -3; cx <= 3; cx++)
+      for (let cy = -3; cy <= 3; cy++)
+        cache.getChunk(cx, cy, 0, 0)
+    // a chunk far from the player is generated, then evict() deletes it in the same
+    // call (it is beyond evictRadius) — getChunk must still return what it generated.
+    const far = cache.getChunk(50, 50, 0, 0)
+    expect(far).toBeInstanceOf(Uint8Array)
+  })
+
+  it('isWall does not throw for a cell far beyond the evict radius (freeze regression)', () => {
+    const cache = createChunkCache({ chunkEvictRadius: 3 })
+    for (let cx = -3; cx <= 3; cx++)
+      for (let cy = -3; cy <= 3; cy++)
+        cache.getChunk(cx, cy, 0, 0)
+    // exactly what a far-wandering entity does: check a wall many chunks from the
+    // player. Before the fix this threw "Cannot read properties of undefined" and
+    // froze the render loop.
+    expect(() => cache.isWall(50 * CHUNK_SIZE, 50 * CHUNK_SIZE, 0, 0)).not.toThrow()
+    expect(typeof cache.isWall(50 * CHUNK_SIZE, 50 * CHUNK_SIZE, 0, 0)).toBe('boolean')
+  })
 })
