@@ -27,7 +27,7 @@ function startBroadcastLoop(room) {
   if (room._ticker) return
   room._ticker = setInterval(() => {
     if (room.players.size === 0) return
-    const list = [...room.players.entries()].map(([id, p]) => ({ id, x: p.x, y: p.y, angle: p.angle }))
+    const list = [...room.players.entries()].map(([id, p]) => ({ id, x: p.x, y: p.y, angle: p.angle, name: p.name }))
     broadcast(room, { type: 'players', list })
   }, 50)  // 20Hz
 }
@@ -45,8 +45,9 @@ function getOrCreateRoom(roomId, seedOverride = null) {
 
 function handleLeave(room, roomId, playerId) {
   if (!room.players.has(playerId)) return  // already handled (error fires before close)
+  const name = room.players.get(playerId)?.name
   room.players.delete(playerId)
-  broadcast(room, { type: 'left', id: playerId })
+  broadcast(room, { type: 'left', id: playerId, name })
   if (room.players.size === 0) {
     clearInterval(room._ticker); room._ticker = null
     room.expireTimer = setTimeout(() => rooms.delete(roomId), 30000)
@@ -75,9 +76,10 @@ export function createServer(port = PORT) {
           : null
         room = getOrCreateRoom(roomId, seedOverride)
         playerId = uuid()
-        room.players.set(playerId, { ws, x: 0, y: 0, angle: 0 })
+        const name = String(msg.name || 'wanderer').slice(0, 24)
+        room.players.set(playerId, { ws, x: 0, y: 0, angle: 0, name })
         ws.send(JSON.stringify({ type: 'welcome', playerId, worldSeed: room.worldSeed, roomId }))
-        broadcast(room, { type: 'joined', id: playerId }, playerId)
+        broadcast(room, { type: 'joined', id: playerId, name }, playerId)
         startBroadcastLoop(room)
         return
       }
@@ -85,6 +87,13 @@ export function createServer(port = PORT) {
       if (msg.type === 'pos' && playerId && room) {
         const p = room.players.get(playerId)
         if (p) { p.x = +msg.x || 0; p.y = +msg.y || 0; p.angle = +msg.angle || 0 }
+        return
+      }
+
+      if (msg.type === 'chat' && playerId && room) {
+        const p = room.players.get(playerId)
+        const text = String(msg.text ?? '').slice(0, 200)
+        if (p && text.trim()) broadcast(room, { type: 'chat', id: playerId, name: p.name, text }, playerId)
       }
     })
 

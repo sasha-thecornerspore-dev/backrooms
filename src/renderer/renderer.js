@@ -279,6 +279,7 @@ export function createRenderer(canvas, config, renderOpts = {}) {
     wctx.putImageData(img, 0, 0)
 
     // ── sprites (drawn into the low-res world buffer) ──
+    const namePlates = []   // remote-player labels, drawn crisp at full-res later
     if (entities && entities.length > 0) {
       const sorted = [...entities].sort((a, b) => {
         const da = (a.x - player.x) ** 2 + (a.y - player.y) ** 2
@@ -300,6 +301,8 @@ export function createRenderer(canvas, config, renderOpts = {}) {
           drawProp(ent, screenX, entDist, fogT, HH, H, W)
         } else if (ent.kind === 'exit') {
           drawExit(ent, screenX, entDist, fogT, HH, H, W)
+        } else if (ent.kind === 'player') {
+          drawPlayer(ent, screenX, entDist, fogT, HH, H, W, namePlates)
         } else {
           drawFigure(ent, screenX, entDist, fogT, HH, H, W)
         }
@@ -329,6 +332,26 @@ export function createRenderer(canvas, config, renderOpts = {}) {
     if (flicker < 0.9) {
       ctx.fillStyle = `rgba(0,0,0,${(1 - flicker) * 0.75})`
       ctx.fillRect(0, 0, OW, OH)
+    }
+
+    // ── remote-player nameplates — full-res so names stay crisp ──
+    if (namePlates.length) {
+      const inv = 1 / RENDER_SCALE
+      ctx.save()
+      ctx.font = 'bold 13px "Courier New", monospace'
+      ctx.textAlign = 'center'
+      for (const np of namePlates) {
+        if (np.sx < 0 || np.sx >= RW) continue
+        const fx = np.sx * inv
+        const fy = Math.max(16, np.y * inv)
+        const w = ctx.measureText(np.name).width + 14
+        ctx.globalAlpha = Math.min(1, np.alpha + 0.25)
+        ctx.fillStyle = 'rgba(8,10,14,0.72)'
+        ctx.fillRect(fx - w / 2, fy - 15, w, 18)
+        ctx.fillStyle = 'rgba(226,233,246,0.96)'
+        ctx.fillText(np.name, fx, fy - 2)
+      }
+      ctx.restore()
     }
 
     // ── crosshair — a small dark dot with a faint light outline, centred ──
@@ -556,6 +579,40 @@ export function createRenderer(canvas, config, renderOpts = {}) {
         }
       }
     }
+  }
+
+  // A fellow wanderer (remote player): a pale, upright human figure — clearly a
+  // person, not one of the lurking things — and a nameplate recorded for full-res.
+  function drawPlayer(ent, screenX, entDist, fogT, HH, H, W, namePlates) {
+    const spriteH = Math.min(H * 2, Math.floor(H / entDist))
+    const spriteW = Math.floor(spriteH * 0.36)
+    if (spriteW < 1) return
+    const topBase = Math.floor(HH - spriteH * 0.5)
+    const bottom  = topBase + spriteH
+    const alpha = (1 - fogT) * 0.96
+    if (alpha < 0.05) return
+    const half = spriteW / 2
+
+    for (let sx = -half; sx <= half; sx++) {
+      const col = Math.floor(screenX + sx)
+      if (col < 0 || col >= W) continue
+      if (zbuffer[col] <= entDist) continue
+      const u = sx / half
+      const top = topBase + spriteH * 0.20 + (u * u) * spriteH * 0.06
+      const hgt = bottom - top
+      if (hgt <= 0) continue
+      const shade = 120 - Math.abs(u) * 42
+      wctx.fillStyle = `rgba(${shade | 0},${(shade * 1.05) | 0},${(shade * 1.18) | 0},${alpha.toFixed(3)})`
+      wctx.fillRect(col, top | 0, 1, hgt | 0)
+    }
+    const sc = Math.floor(screenX)
+    if (sc >= 0 && sc < W && zbuffer[sc] > entDist) {
+      const headR = Math.max(1, spriteW * 0.22)
+      wctx.fillStyle = `rgba(152,158,170,${alpha.toFixed(3)})`
+      wctx.beginPath(); wctx.arc(screenX, topBase + spriteH * 0.12, headR, 0, Math.PI * 2); wctx.fill()
+    }
+    contactShadow(screenX, bottom, spriteW * 0.9, alpha * 0.4)
+    if (ent.name) namePlates.push({ sx: screenX, y: topBase - spriteH * 0.03, name: ent.name, alpha })
   }
 
   // Small floor-anchored pickups: a soft glow plus a suggestive shape per type.

@@ -66,6 +66,25 @@
       pointer-events: none; opacity: 0; transition: opacity 0.4s;
       text-shadow: 0 0 5px rgba(255,255,255,0.6);
     }
+    #player-name {
+      background: rgba(20,16,6,0.6); border: 1px solid #6a5a2a; color: #e8d9a0;
+      font: 14px 'Courier New', monospace; padding: 10px 14px; width: 260px;
+      text-align: center; letter-spacing: 1px; margin-bottom: 6px; outline: none;
+    }
+    #player-name:focus { border-color: #c9ba72; }
+    #chat-log {
+      position: fixed; left: 16px; bottom: 92px; max-width: 46vw;
+      font: 13px 'Courier New', monospace; pointer-events: none; opacity: 0;
+      transition: opacity 0.4s; text-shadow: 0 1px 3px rgba(0,0,0,0.9); z-index: 55;
+    }
+    #chat-log .chat-line { color: #eef2fa; margin: 2px 0; }
+    #chat-log .chat-line b { color: #9fd0ff; }
+    #chat-log .chat-sys { color: #b7ad86; font-style: italic; margin: 2px 0; }
+    #chat-input {
+      position: fixed; left: 16px; bottom: 66px; width: 44vw;
+      background: rgba(10,12,18,0.88); border: 1px solid #6a7a9a; color: #eef2fa;
+      font: 14px 'Courier New', monospace; padding: 8px 12px; outline: none; z-index: 60;
+    }
     #msg {
       position: fixed; top: 38%; left: 50%; transform: translateX(-50%);
       color: #14110a; font-size: 14px; font-weight: bold; opacity: 0;
@@ -232,10 +251,13 @@
   <div id="start">
     <div class="title">THE BACKROOMS</div>
     <div class="sub">level 0. somewhere. you are here.</div>
+    <input id="player-name" type="text" placeholder="your name" maxlength="24" spellcheck="false"/>
     <div class="btns">
+      <button id="btn-continue" style="display:none">CONTINUE ▶</button>
       <button id="btn-solo">SOLO ▶</button>
-      <button id="btn-join">JOIN ⬡</button>
-      <button id="btn-host">HOST ⬡</button>
+      <button id="btn-online">PLAY ONLINE ⬡</button>
+      <button id="btn-join">JOIN LAN</button>
+      <button id="btn-host">HOST LAN</button>
     </div>
     <div id="anchor-wrap">
       <input id="anchor-input" type="text" placeholder="anchor — paste a google maps link or lat,lng (optional)" spellcheck="false"/>
@@ -256,7 +278,25 @@
       <div id="join-status"></div>
     </div>
   </div>
+
+  <div id="online-modal" style="display:none">
+    <div class="modal-box">
+      <div class="modal-title">PLAY ONLINE</div>
+      <div style="color:#a09060;font-family:monospace;font-size:12px;margin-bottom:12px;max-width:340px;line-height:1.5;">
+        pick a room code and share it with your friend. you'll both fall into the same world — anywhere, no setup.
+      </div>
+      <input id="online-room" type="text" value="" placeholder="room code (e.g. jeff-and-maddie)" spellcheck="false"/>
+      <div class="modal-btns">
+        <button id="online-cancel">CANCEL</button>
+        <button id="online-connect">ENTER ▶</button>
+      </div>
+      <div id="online-status"></div>
+    </div>
+  </div>
+
   <div id="hud"></div>
+  <div id="chat-log"></div>
+  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels)" spellcheck="false" style="display:none"/>
   <div id="hp-wrap"><span id="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div></div></div>
   <div id="exit-compass"></div>
   <div id="msg"></div>
@@ -286,6 +326,8 @@
     import { createMultiplayerClient } from '../net/client.js'
     import { parseAnchor, anchorSeed, formatAnchor, bodyUrl } from './anchor.js'
     import { getPrefs, setPref } from './prefs.js'
+    import { readSave } from './save.js'
+    const RELAY_URL = 'wss://backrooms-relay.jeff-schatz112.workers.dev'
 
     const startEl = document.getElementById('start')
     const joinModal = document.getElementById('join-modal')
@@ -324,19 +366,27 @@
         : {})
     }
 
-    async function startMultiplayer(serverUrl, roomId) {
-      joinStatus.textContent = 'connecting...'
+    // player name (persisted)
+    const nameInput = document.getElementById('player-name')
+    nameInput.value = getPrefs().playerName || ''
+    nameInput.addEventListener('input', () => setPref('playerName', nameInput.value.slice(0, 24)))
+    const getName = () => (nameInput.value.trim() || 'wanderer').slice(0, 24)
+
+    async function startMultiplayer(serverUrl, roomId, statusEl) {
+      const st = statusEl || joinStatus
+      st.textContent = 'connecting...'
       try {
         const anchor = takeAnchor()
         const requestedSeed = anchor ? anchorSeed(anchor.lat, anchor.lng) : null
         const mpClient = createMultiplayerClient(serverUrl)
         // first joiner's seed wins; later joiners inherit the room's world
-        const { worldSeed } = await mpClient.connect(roomId, requestedSeed)
+        const { worldSeed } = await mpClient.connect(roomId, requestedSeed, getName())
         joinModal.style.display = 'none'
+        document.getElementById('online-modal').style.display = 'none'
         startEl.style.display = 'none'
         await initGame(canvas, { worldSeed, mpClient, anchor })
       } catch (e) {
-        joinStatus.textContent = `failed: ${e.message}`
+        st.textContent = `failed: ${e.message || 'could not connect'}`
       }
     }
 
@@ -369,6 +419,33 @@
       const url = document.getElementById('join-url').value.trim()
       const room = document.getElementById('join-room').value.trim() || 'backrooms'
       startMultiplayer(url, room)
+    }
+
+    // ── play online (Cloudflare relay — one public URL, no host, no setup) ──
+    document.getElementById('btn-online').onclick = () => {
+      startStatus.textContent = ''
+      const room = document.getElementById('online-room')
+      if (!room.value.trim()) room.value = `room-${Math.random().toString(36).slice(2, 7)}`
+      document.getElementById('online-modal').style.display = 'flex'
+    }
+    document.getElementById('online-cancel').onclick = () => {
+      document.getElementById('online-modal').style.display = 'none'
+    }
+    document.getElementById('online-connect').onclick = () => {
+      const code = (document.getElementById('online-room').value.trim() || 'default').slice(0, 32)
+      startMultiplayer(`${RELAY_URL}/?room=${encodeURIComponent(code)}`, code, document.getElementById('online-status'))
+    }
+
+    // ── continue a saved run ──
+    const savedRun = readSave()
+    if (savedRun) {
+      const cont = document.getElementById('btn-continue')
+      cont.style.display = ''
+      cont.onclick = async () => {
+        startStatus.textContent = ''
+        startEl.style.display = 'none'
+        await initGame(canvas, { worldSeed: savedRun.worldSeed ?? null, anchor: savedRun.anchor ?? null, resume: savedRun })
+      }
     }
 
     const settingsMod = document.getElementById('settings-modal')

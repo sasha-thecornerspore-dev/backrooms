@@ -6,6 +6,7 @@ import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
 import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
+import { writeSave } from './save.js'
 import { formatAnchor, driftMeters } from './anchor.js'
 
 // Presence: 1 in 12 chunks has a spirit at its midpoint
@@ -31,7 +32,7 @@ function exitArrow(rel) {
   return EXIT_DIRS[Math.round(a / (Math.PI / 4)) % 8]
 }
 
-export async function initGame(canvas, { worldSeed = null, mpClient = null, anchor = null } = {}) {
+export async function initGame(canvas, { worldSeed = null, mpClient = null, anchor = null, resume = null } = {}) {
   const base = await loadConfig()
 
   // ── player state — PERSISTS across level transitions (hp + inventory carry) ──
@@ -54,6 +55,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let invuln     = 0    // i-frames after a hit
   let hurt       = 0    // red-flash intensity
   let regenDelay = 0    // seconds before hp regen resumes
+  let netTimer   = 0    // throttles position updates to the server (~20Hz)
 
   // Flicker state (persists; retuned per level via level.cfg.flicker)
   let flicker    = 1.0
@@ -116,6 +118,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     document.exitPointerLock()
     fadeThen(() => {
       buildLevel(target)
+      persist()                       // save on every descent
       showMessage(level.cfg.levelName)
       if (level.cfg.exit?.hint) setTimeout(() => showMessage(level.cfg.exit.hint), 3800)
       setTimeout(() => { transitioning = false }, 150)
@@ -236,6 +239,45 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
   document.getElementById('btn-discard')?.addEventListener('click', discardSelected)
 
+  // ── multiplayer chat ──
+  const chatLogEl   = document.getElementById('chat-log')
+  const chatInputEl = document.getElementById('chat-input')
+  let chatOpen = false
+  const escapeHtml = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  const chatLines = []
+  function renderChat() {
+    if (!chatLogEl) return
+    chatLogEl.innerHTML = chatLines.map(l => l.sys
+      ? `<div class="chat-sys">— ${escapeHtml(l.from)} ${escapeHtml(l.text)}</div>`
+      : `<div class="chat-line"><b>${escapeHtml(l.from)}:</b> ${escapeHtml(l.text)}</div>`).join('')
+    chatLogEl.style.opacity = '1'
+    clearTimeout(renderChat._t)
+    renderChat._t = setTimeout(() => { if (!chatOpen) chatLogEl.style.opacity = '0.28' }, 7000)
+  }
+  function addChatLine(from, text, isSystem) {
+    chatLines.push({ from, text, sys: isSystem })
+    if (chatLines.length > 7) chatLines.shift()
+    renderChat()
+  }
+  function openChat() {
+    if (!mpClient || !chatInputEl || chatOpen) return
+    chatOpen = true
+    for (const k in K) K[k] = false            // drop any held movement keys
+    document.exitPointerLock()
+    chatInputEl.style.display = 'block'; chatInputEl.value = ''; chatInputEl.focus()
+    if (chatLogEl) chatLogEl.style.opacity = '1'
+  }
+  function closeChat() { chatOpen = false; if (chatInputEl) chatInputEl.style.display = 'none' }
+  chatInputEl?.addEventListener('keydown', (e) => {
+    e.stopPropagation()
+    if (e.code === 'Enter' || e.code === 'NumpadEnter') { const t = chatInputEl.value.trim(); if (t) mpClient?.sendChat(t); closeChat() }
+    else if (e.code === 'Escape') closeChat()
+  })
+  if (mpClient) {
+    mpClient.onChat(addChatLine)
+    addChatLine('', 'connected — press Enter to chat', true)
+  }
+
   // ── messages (black text, fades via opacity — see CSS) ──
   const msgEl  = document.getElementById('msg')
   let msgTimer = 0
@@ -285,8 +327,38 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     renderHotbar()
   }
 
-  // ── boot the first level ──
-  buildLevel(0)
+  // ── snapshot + persistence (solo progress & inventory — the "save game") ──
+  function snapshot() {
+    return {
+      level: level?.index ?? 0,
+      x: player.x, y: player.y, angle: player.angle,
+      hp: player.hp, maxHp: player.maxHp,
+      inventory: itemSys.inventory.map(i => ({ type: i.type, ...(i.on ? { on: true } : {}) })),
+      selected: itemSys.selected,
+      worldSeed, anchor,
+    }
+  }
+  let saveTimer = 0
+  const persist = () => { if (!mpClient) writeSave(snapshot()) }   // solo runs are the ones you resume
+  window.addEventListener('beforeunload', persist)
+
+  // ── boot: resume a saved run, or start fresh at level 0 ──
+  if (resume) {
+    buildLevel(resume.level ?? 0)
+    player.x = resume.x ?? player.x
+    player.y = resume.y ?? player.y
+    player.angle = resume.angle ?? 0
+    player.maxHp = resume.maxHp ?? 100
+    player.hp = resume.hp ?? player.maxHp
+    if (Array.isArray(resume.inventory)) {
+      itemSys.inventory.length = 0
+      for (const it of resume.inventory) itemSys.inventory.push({ type: it.type, ...(it.on ? { on: true } : {}) })
+      itemSys.select(Math.max(0, Math.min(5, resume.selected ?? 0)))
+      renderHotbar()
+    }
+  } else {
+    buildLevel(0)
+  }
   showMessage(level.cfg.levelName)
 
   // apply saved audio/visual prefs, then keep them live as the panel changes them
@@ -329,9 +401,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     flicker += (flickTgt - flicker) * Math.min(1, dt * fl.recoverySpeed)
     setFlicker(flicker)
 
-    // ── movement (frozen during a transition fade) ──
+    // ── movement (frozen during a transition fade or while typing in chat) ──
     let moved = false
-    if (!transitioning) {
+    if (!transitioning && !chatOpen) {
       const wantSprint = (K['ShiftLeft'] || K['ShiftRight']) && stamina > 0
       const mult = wantSprint ? 1.8 : 1
       const sp = SPEED * dt * 60 * mult
@@ -360,6 +432,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       showMessage(level.messages[Math.floor(Math.random() * level.messages.length)])
     }
     updateHud(); updateHp(); updateStamina()
+    saveTimer += dt
+    if (saveTimer > 8) { saveTimer = 0; persist() }
 
     // ── radio audio sync ──
     const radioOn = itemSys.isRadioOn()
@@ -414,7 +488,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       }
     }
 
-    if (!transitioning && !dialogOpen) {
+    // Enter opens chat when connected to others
+    if (mpClient && !chatOpen && !dialogOpen && (K['Enter'] || K['NumpadEnter'])) {
+      K['Enter'] = false; K['NumpadEnter'] = false; openChat()
+    }
+
+    if (!transitioning && !dialogOpen && !chatOpen) {
       // F — item first, else exit
       if (K['KeyF']) {
         K['KeyF'] = false
@@ -442,7 +521,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     level.cache.preload(pcx, pcy)
     itemSys.update(pcx, pcy)
     level.decor.update(pcx, pcy)
-    if (mpClient?.isConnected()) mpClient.sendPos(player.x, player.y, player.angle)
+    netTimer += dt
+    if (mpClient?.isConnected() && netTimer >= 0.05) { netTimer = 0; mpClient.sendPos(player.x, player.y, player.angle) }
     // creatures can be switched off entirely (pure liminal exploration)
     const creaturesOn = getPref('creatures')
     if (creaturesOn) level.entitySys.update(dt, player, pcx, pcy, radioOn ? 1.5 : 1)
@@ -469,10 +549,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     // ── assemble sprites and render ──
     const remoteEntities = mpClient
-      ? mpClient.getRemotePlayers().map(p => ({
-          x: p.x, y: p.y, type: 'stalker', state: 'chase', dir: 0, dirTimer: 0,
-          chunkCx: Math.floor(p.x / CHUNK_SIZE), chunkCy: Math.floor(p.y / CHUNK_SIZE),
-        }))
+      ? mpClient.getRemotePlayers().map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle }))
       : []
     const propEntities = level.decor.getProps().map(p => ({ x: p.x, y: p.y, kind: 'prop', type: p.type }))
     const exitEntities = level.decor.getExits().map(e => ({ x: e.x, y: e.y, kind: 'exit' }))

@@ -5,3 +5,6 @@ out/
 src/build-config.json
 *.pfx
 *.p12
+_relaytest.mjs
+.wrangler/
+relay/.wrangler/
