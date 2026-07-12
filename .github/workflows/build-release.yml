@@ -18,7 +18,9 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - run: npm ci
+      # npm install (not ci): npm 10 writes inconsistent lockfiles for rollup's
+      # optional native/WASM deps, which trips `npm ci`. install reconciles it.
+      - run: npm install --no-audit --no-fund
 
       # Skip only when this version is already fully PUBLISHED.
       # A leftover draft from a failed run is NOT skipped — electron-builder
