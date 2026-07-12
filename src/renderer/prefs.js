@@ -16,6 +16,7 @@ export const PREF_DEFAULTS = {
   musicVolume:      60,     // % of each level's base music level (0–150)
   ambience:         true,   // fluorescent hum / drone / distant events
   grain:            true,   // film-grain overlay
+  particles:        true,   // dust / steam / spark motes
   crosshair:        true,   // centre dot
   headBob:          true,   // walking view bob
   mouseSensitivity: 100,    // % — 100% == the classic 0.002 rad/px

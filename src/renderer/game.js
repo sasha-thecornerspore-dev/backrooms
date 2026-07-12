@@ -65,7 +65,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   initAudio(base)
 
   // shared, live-mutable render options (toggled from the settings panel)
-  const renderOpts = { grain: getPref('grain'), crosshair: getPref('crosshair') }
+  const renderOpts = { grain: getPref('grain'), particles: getPref('particles'), crosshair: getPref('crosshair') }
 
   // ── per-level state, rebuilt on every transition ──
   let level = null
@@ -394,6 +394,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   setAmbience(getPref('ambience'))
   onPrefChange((k, v) => {
     if (k === 'grain')          renderOpts.grain = v
+    else if (k === 'particles') renderOpts.particles = v
     else if (k === 'crosshair') renderOpts.crosshair = v
     else if (k === 'music')     setMusicEnabled(v)
     else if (k === 'musicVolume') setMusicVolume(v)

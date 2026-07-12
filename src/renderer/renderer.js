@@ -128,6 +128,17 @@ export function createRenderer(canvas, config, renderOpts = {}) {
   let grainPhase = 0
   let frame = 0
 
+  // ── atmospheric particles: dust motes, rising steam, or electrical sparks ──
+  const pcfg = config.particles || {}
+  const PCOUNT = Math.max(0, pcfg.count ?? 0)
+  const particles = []
+  function seedParticles() {
+    particles.length = 0
+    for (let i = 0; i < PCOUNT; i++) {
+      particles.push({ x: Math.random() * winW, y: Math.random() * winH, z: 0.35 + Math.random() * 0.65, ph: Math.random() * 6.283 })
+    }
+  }
+
   const ITEM_COLORS = {
     'almond-water': [190, 215, 235],
     'glowstick':    [120, 235, 90],
@@ -168,6 +179,8 @@ export function createRenderer(canvas, config, renderOpts = {}) {
     grad.addColorStop(1, 'rgba(0,0,0,0.58)')
     vg.fillStyle = grad
     vg.fillRect(0, 0, W, H)
+
+    seedParticles()
   }
 
   function render(player, isWallFn, flicker, entities = [], fogMul = 1) {
@@ -332,6 +345,28 @@ export function createRenderer(canvas, config, renderOpts = {}) {
     if (flicker < 0.9) {
       ctx.fillStyle = `rgba(0,0,0,${(1 - flicker) * 0.75})`
       ctx.fillRect(0, 0, OW, OH)
+    }
+
+    // ── atmospheric particles (dust / steam / sparks), full-res over the scene ──
+    if (PCOUNT && ropts.particles !== false) {
+      const col = pcfg.color || [225, 220, 200]
+      const cs = `${col[0]},${col[1]},${col[2]}`
+      const rise = !!pcfg.rise, spark = !!pcfg.spark
+      const sway = pcfg.sway ?? 0.3, speed = pcfg.speed ?? 0.3, baseSize = pcfg.size ?? 1.4
+      ctx.save()
+      ctx.fillStyle = `rgb(${cs})`
+      for (const p of particles) {
+        p.ph += 0.02
+        p.x += Math.sin(p.ph) * sway * p.z
+        p.y += (rise ? -1 : 1) * speed * (0.5 + p.z)
+        if (p.y < -8)      { p.y = OH + 8; p.x = Math.random() * OW }
+        else if (p.y > OH + 8) { p.y = -8; p.x = Math.random() * OW }
+        if (p.x < -8) p.x = OW + 8; else if (p.x > OW + 8) p.x = -8
+        const flick = spark ? (0.25 + 0.75 * Math.abs(Math.sin(p.ph * 4))) : 1
+        ctx.globalAlpha = (spark ? 0.7 : 0.28) * (0.4 + 0.6 * p.z) * flick * flicker
+        ctx.beginPath(); ctx.arc(p.x, p.y, baseSize * (0.6 + p.z), 0, 6.283); ctx.fill()
+      }
+      ctx.restore()
     }
 
     // ── remote-player nameplates — full-res so names stay crisp ──

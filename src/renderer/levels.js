@@ -27,6 +27,7 @@ export const LEVELS = [
                tempo: 400, beatsPerChord: 8, beatsPerBar: 4, groove: 0.5, arpLen: 0.5, leadChance: 0.35,
                brightness: 1500, wobble: 0.006, bend: 0.10, noteLen: 1.5, volume: 0.06 },
       maze:  { salt: 0x0000, roomChance: 0.16, braid: 0.12, corridor: 1 },
+      particles: { count: 45, color: [235, 228, 190], size: 1.4, sway: 0.35, speed: 0.25 },   // pale dust
       lights: true,
       entities: { enabled: false },
       items: { density: 5, types: ['almond-water', 'glowstick', 'polaroid', 'radio'] },
@@ -60,6 +61,7 @@ export const LEVELS = [
                tempo: 440, beatsPerChord: 8, beatsPerBar: 4, groove: 0.55, arpLen: 0.55, leadChance: 0.32,
                brightness: 1050, wobble: 0.010, bend: 0.16, noteLen: 1.6, volume: 0.055 },
       maze:  { salt: 0x1111, roomChance: 0.15, braid: 0.12, corridor: 1 },
+      particles: { count: 55, color: [205, 208, 200], size: 1.4, sway: 0.3, speed: 0.3 },   // grey dust
       lights: true,
       entities: { enabled: true, spawnDenom: 12, stalkerDenom: 4, chaseRange: 22, damage: 14 },
       items: { density: 5, types: ['almond-water', 'glowstick', 'bandage', 'polaroid', 'radio'] },
@@ -92,6 +94,7 @@ export const LEVELS = [
                tempo: 500, beatsPerChord: 8, beatsPerBar: 4, groove: 0.35, arpLen: 0.6, leadChance: 0.28,
                brightness: 820, wobble: 0.016, bend: 0.22, noteLen: 1.8, volume: 0.05 },
       maze:  { salt: 0x2222, roomChance: 0.10, braid: 0.08, corridor: 1 },
+      particles: { count: 40, color: [190, 182, 170], size: 2.6, sway: 0.55, speed: 0.5, rise: true },   // rising steam
       lights: false,
       entities: { enabled: true, spawnDenom: 8, stalkerDenom: 3, chaseRange: 26, damage: 18 },
       items: { density: 4, types: ['almond-water', 'glowstick', 'bandage', 'radio'] },
@@ -123,6 +126,7 @@ export const LEVELS = [
                tempo: 520, beatsPerChord: 8, beatsPerBar: 4, groove: 0.65, arpLen: 0.6, leadChance: 0.26,
                brightness: 700, wobble: 0.022, bend: 0.28, noteLen: 2.0, volume: 0.05 },
       maze:  { salt: 0x3333, roomChance: 0.08, braid: 0.06, corridor: 1 },
+      particles: { count: 34, color: [170, 215, 255], size: 1.3, sway: 0.25, speed: 0.65, spark: true },   // electrical sparks
       lights: false,
       entities: { enabled: true, spawnDenom: 6, stalkerDenom: 2, chaseRange: 30, damage: 22 },
       items: { density: 4, types: ['almond-water', 'glowstick', 'bandage', 'bandage', 'radio'] },
