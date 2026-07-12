@@ -4,7 +4,7 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, blip } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { writeSave } from './save.js'
 import { formatAnchor, driftMeters } from './anchor.js'
@@ -240,24 +240,45 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   document.getElementById('btn-discard')?.addEventListener('click', discardSelected)
 
   // ── multiplayer chat ──
-  const chatLogEl   = document.getElementById('chat-log')
-  const chatInputEl = document.getElementById('chat-input')
+  const chatLogEl    = document.getElementById('chat-log')
+  const chatInputEl  = document.getElementById('chat-input')
+  const chatTypingEl = document.getElementById('chat-typing')
   let chatOpen = false
   const escapeHtml = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  const nameColor = (n) => { let h = 0; for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0; return `hsl(${h % 360} 72% 68%)` }
   const chatLines = []
   function renderChat() {
     if (!chatLogEl) return
-    chatLogEl.innerHTML = chatLines.map(l => l.sys
-      ? `<div class="chat-sys">— ${escapeHtml(l.from)} ${escapeHtml(l.text)}</div>`
-      : `<div class="chat-line"><b>${escapeHtml(l.from)}:</b> ${escapeHtml(l.text)}</div>`).join('')
+    chatLogEl.innerHTML = chatLines.map(l => {
+      if (l.sys) return `<div class="chat-sys">— ${escapeHtml(l.from)} ${escapeHtml(l.text)}</div>`
+      if (l.text.startsWith('/me ')) return `<div class="chat-me" style="color:${nameColor(l.from)}">✦ ${escapeHtml(l.from)} ${escapeHtml(l.text.slice(4))}</div>`
+      return `<div class="chat-line"><b style="color:${nameColor(l.from)}">${escapeHtml(l.from)}</b> ${escapeHtml(l.text)}</div>`
+    }).join('')
     chatLogEl.style.opacity = '1'
     clearTimeout(renderChat._t)
-    renderChat._t = setTimeout(() => { if (!chatOpen) chatLogEl.style.opacity = '0.28' }, 7000)
+    renderChat._t = setTimeout(() => { if (!chatOpen) chatLogEl.style.opacity = '0.3' }, 7000)
   }
   function addChatLine(from, text, isSystem) {
     chatLines.push({ from, text, sys: isSystem })
-    if (chatLines.length > 7) chatLines.shift()
+    if (chatLines.length > 8) chatLines.shift()
     renderChat()
+    if (!isSystem && mpClient && from !== mpClient.getName()) blip()   // ping on others' messages
+  }
+  // incoming "is typing…"
+  let typingHideT = null
+  function showTyping(name, on) {
+    if (!chatTypingEl) return
+    clearTimeout(typingHideT)
+    if (on) { chatTypingEl.textContent = `${name} is typing…`; chatTypingEl.style.opacity = '1'; typingHideT = setTimeout(() => { chatTypingEl.style.opacity = '0' }, 4000) }
+    else { chatTypingEl.style.opacity = '0' }
+  }
+  // outgoing typing signal (debounced)
+  let typingSent = false, typingStopT = null
+  function noteTyping() {
+    if (!mpClient) return
+    if (!typingSent) { typingSent = true; mpClient.sendTyping(true) }
+    clearTimeout(typingStopT)
+    typingStopT = setTimeout(() => { typingSent = false; mpClient.sendTyping(false) }, 1800)
   }
   function openChat() {
     if (!mpClient || !chatInputEl || chatOpen) return
@@ -267,15 +288,21 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     chatInputEl.style.display = 'block'; chatInputEl.value = ''; chatInputEl.focus()
     if (chatLogEl) chatLogEl.style.opacity = '1'
   }
-  function closeChat() { chatOpen = false; if (chatInputEl) chatInputEl.style.display = 'none' }
+  function closeChat() {
+    chatOpen = false
+    if (chatInputEl) chatInputEl.style.display = 'none'
+    if (typingSent) { typingSent = false; clearTimeout(typingStopT); mpClient?.sendTyping(false) }
+  }
   chatInputEl?.addEventListener('keydown', (e) => {
     e.stopPropagation()
     if (e.code === 'Enter' || e.code === 'NumpadEnter') { const t = chatInputEl.value.trim(); if (t) mpClient?.sendChat(t); closeChat() }
     else if (e.code === 'Escape') closeChat()
+    else noteTyping()
   })
   if (mpClient) {
     mpClient.onChat(addChatLine)
-    addChatLine('', 'connected — press Enter to chat', true)
+    mpClient.onTyping(showTyping)
+    addChatLine('', 'connected — Enter to chat · /me to emote', true)
   }
 
   // ── messages (black text, fades via opacity — see CSS) ──
@@ -549,7 +576,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     // ── assemble sprites and render ──
     const remoteEntities = mpClient
-      ? mpClient.getRemotePlayers().map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle }))
+      ? mpClient.getRemotePlayers().map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle, chatText: p.chatText }))
       : []
     const propEntities = level.decor.getProps().map(p => ({ x: p.x, y: p.y, kind: 'prop', type: p.type }))
     const exitEntities = level.decor.getExits().map(e => ({ x: e.x, y: e.y, kind: 'exit' }))

@@ -51,6 +51,8 @@ export class Room extends DurableObject {
     } else if (msg.type === 'chat') {
       const text = String(msg.text ?? '').slice(0, 200)
       if (text.trim()) this.broadcast({ type: 'chat', id: att.id, name: att.name, text }, att.id)
+    } else if (msg.type === 'typing') {
+      this.broadcast({ type: 'typing', id: att.id, name: att.name, on: !!msg.on }, att.id)
     }
   }
 

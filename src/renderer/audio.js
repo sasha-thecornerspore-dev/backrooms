@@ -346,3 +346,20 @@ export function setAmbience(on) {
   if (!ambienceGain || !actx) return
   ambienceGain.gain.setTargetAtTime(on ? 1 : 0, actx.currentTime, 0.5)
 }
+
+// A short chirp when a chat message arrives (a UI ping, always audible).
+export function blip() {
+  if (!actx) return
+  try {
+    const o = actx.createOscillator(), g = actx.createGain()
+    o.type = 'sine'
+    const t = actx.currentTime
+    o.frequency.setValueAtTime(880, t)
+    o.frequency.exponentialRampToValueAtTime(1320, t + 0.05)
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(0.05, t + 0.01)
+    g.gain.exponentialRampToValueAtTime(0.0004, t + 0.14)
+    o.connect(g); g.connect(actx.destination)
+    o.start(t); o.stop(t + 0.16)
+  } catch { /* ignore */ }
+}

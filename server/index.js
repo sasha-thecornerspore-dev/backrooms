@@ -94,6 +94,12 @@ export function createServer(port = PORT) {
         const p = room.players.get(playerId)
         const text = String(msg.text ?? '').slice(0, 200)
         if (p && text.trim()) broadcast(room, { type: 'chat', id: playerId, name: p.name, text }, playerId)
+        return
+      }
+
+      if (msg.type === 'typing' && playerId && room) {
+        const p = room.players.get(playerId)
+        if (p) broadcast(room, { type: 'typing', id: playerId, name: p.name, on: !!msg.on }, playerId)
       }
     })
 

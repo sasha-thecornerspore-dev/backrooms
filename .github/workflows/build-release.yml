@@ -57,6 +57,25 @@ jobs:
           CSC_KEY_PASSWORD:  ${{ secrets.CSC_KEY_PASSWORD }}
         run: npm run release
 
+      # electron-builder's own upload of the large installer is flaky (it can exit
+      # while the .exe is still in flight, leaving only the blockmap). Re-upload the
+      # installer, blockmap and latest.yml explicitly with dashed names (matching
+      # what electron-builder writes into latest.yml) so the release is complete.
+      - name: Ensure installer assets uploaded
+        if: steps.guard.outputs.exists == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          cp "dist/The Backrooms Setup ${VER}.exe"          "dist/The-Backrooms-Setup-${VER}.exe"
+          cp "dist/The Backrooms Setup ${VER}.exe.blockmap" "dist/The-Backrooms-Setup-${VER}.exe.blockmap"
+          gh release upload "v${VER}" \
+            "dist/The-Backrooms-Setup-${VER}.exe" \
+            "dist/The-Backrooms-Setup-${VER}.exe.blockmap" \
+            "dist/latest.yml" \
+            --clobber --repo "${{ github.repository }}"
+
       - name: Bundle server
         if: steps.guard.outputs.exists == 'false'
         run: npx esbuild server/index.js --bundle --platform=node --format=esm --outfile=dist/backrooms-server.js --external:ws

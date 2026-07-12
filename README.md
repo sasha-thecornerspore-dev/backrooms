@@ -80,6 +80,7 @@ the spirits decide. or rather, i do.
 | x | drop the selected item |
 | 1–6 | select inventory slot |
 | e | speak to a presence |
+| enter | chat (in online play) |
 | m | mute / unmute the music |
 | esc | unlock mouse / close dialog |
 
@@ -106,7 +107,15 @@ auto-update and software rendering live in the same panel.
 
 ## multiplayer
 
-**host** spins up a local room; **join** connects to someone else's (`ws://host:port` + room code). everyone in a room shares one world and sees each other as dark figures in the fog. the standalone server ships as `backrooms-server.js` on each release (`node backrooms-server.js`, default port 8765) and keeps itself up to date.
+type your **name**, hit **PLAY ONLINE**, pick a **room code**, and share it. anyone who enters the same code falls into the same world — anywhere on the internet, no host and no port-forwarding. it runs on a small always-on Cloudflare relay (`relay/`). you see each other as pale figures with nameplates, and **press Enter to chat**.
+
+- **PLAY ONLINE** — the public relay + a room code (the easy way).
+- **JOIN LAN / HOST LAN** — the old direct-connection path (`ws://host:port` + room code) for same-network play; the standalone server ships as `backrooms-server.js` on each release (`node backrooms-server.js`, default port 8765).
+- the first person into a room fixes its world; everyone else inherits it.
+
+## save & continue
+
+solo runs auto-save — your level, position, hit points and whole inventory — every few seconds, on every descent, and when you quit. **CONTINUE** on the title screen drops you back exactly where you left off.
 
 ---
 

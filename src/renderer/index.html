@@ -73,18 +73,26 @@
     }
     #player-name:focus { border-color: #c9ba72; }
     #chat-log {
-      position: fixed; left: 16px; bottom: 92px; max-width: 46vw;
+      position: fixed; left: 16px; bottom: 96px; max-width: 46vw;
       font: 13px 'Courier New', monospace; pointer-events: none; opacity: 0;
-      transition: opacity 0.4s; text-shadow: 0 1px 3px rgba(0,0,0,0.9); z-index: 55;
+      transition: opacity 0.4s; text-shadow: 0 1px 3px rgba(0,0,0,0.95); z-index: 55;
     }
-    #chat-log .chat-line { color: #eef2fa; margin: 2px 0; }
-    #chat-log .chat-line b { color: #9fd0ff; }
-    #chat-log .chat-sys { color: #b7ad86; font-style: italic; margin: 2px 0; }
+    #chat-log .chat-line { color: #eef2fa; margin: 3px 0; line-height: 1.35; }
+    #chat-log .chat-line b { font-weight: bold; margin-right: 6px; }
+    #chat-log .chat-me  { font-style: italic; margin: 3px 0; }
+    #chat-log .chat-sys { color: #b7ad86; font-style: italic; margin: 3px 0; opacity: 0.8; }
+    #chat-typing {
+      position: fixed; left: 16px; bottom: 74px; z-index: 56;
+      color: #9fd0ff; font: italic 12px 'Courier New', monospace; opacity: 0;
+      transition: opacity 0.3s; text-shadow: 0 1px 3px rgba(0,0,0,0.9); pointer-events: none;
+    }
     #chat-input {
       position: fixed; left: 16px; bottom: 66px; width: 44vw;
-      background: rgba(10,12,18,0.88); border: 1px solid #6a7a9a; color: #eef2fa;
-      font: 14px 'Courier New', monospace; padding: 8px 12px; outline: none; z-index: 60;
+      background: rgba(10,12,18,0.9); border: 1px solid #6a7a9a; color: #eef2fa;
+      font: 14px 'Courier New', monospace; padding: 9px 13px; outline: none; z-index: 60;
+      box-shadow: 0 0 18px rgba(80,140,220,0.25);
     }
+    #chat-input:focus { border-color: #9fd0ff; }
     #msg {
       position: fixed; top: 38%; left: 50%; transform: translateX(-50%);
       color: #14110a; font-size: 14px; font-weight: bold; opacity: 0;
@@ -296,11 +304,12 @@
 
   <div id="hud"></div>
   <div id="chat-log"></div>
-  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels)" spellcheck="false" style="display:none"/>
+  <div id="chat-typing"></div>
+  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote)" spellcheck="false" style="display:none"/>
   <div id="hp-wrap"><span id="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div></div></div>
   <div id="exit-compass"></div>
   <div id="msg"></div>
-  <div id="hint">wasd move · shift run · mouse look · f take / no-clip · q use · x drop · 1-6 slots · e speak · m music</div>
+  <div id="hint">wasd move · shift run · mouse look · f take / no-clip · q use · x drop · 1-6 slots · e speak · enter chat · m music</div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
   <div id="item-hint" style="opacity:0"></div>
   <div id="hotbar"></div>

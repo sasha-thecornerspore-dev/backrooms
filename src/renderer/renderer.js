@@ -338,18 +338,32 @@ export function createRenderer(canvas, config, renderOpts = {}) {
     if (namePlates.length) {
       const inv = 1 / RENDER_SCALE
       ctx.save()
-      ctx.font = 'bold 13px "Courier New", monospace'
       ctx.textAlign = 'center'
       for (const np of namePlates) {
         if (np.sx < 0 || np.sx >= RW) continue
         const fx = np.sx * inv
         const fy = Math.max(16, np.y * inv)
+        // nameplate
+        ctx.font = 'bold 13px "Courier New", monospace'
         const w = ctx.measureText(np.name).width + 14
         ctx.globalAlpha = Math.min(1, np.alpha + 0.25)
         ctx.fillStyle = 'rgba(8,10,14,0.72)'
         ctx.fillRect(fx - w / 2, fy - 15, w, 18)
         ctx.fillStyle = 'rgba(226,233,246,0.96)'
         ctx.fillText(np.name, fx, fy - 2)
+        // floating speech bubble above the name — you SEE them talk in the fog
+        if (np.speech) {
+          ctx.font = '13px "Courier New", monospace'
+          const msg = np.speech.length > 44 ? np.speech.slice(0, 43) + '…' : np.speech
+          const bw = ctx.measureText(msg).width + 16
+          const by = fy - 22
+          ctx.globalAlpha = 1
+          ctx.fillStyle = 'rgba(14,17,24,0.92)'
+          ctx.fillRect(fx - bw / 2, by - 16, bw, 20)
+          ctx.beginPath(); ctx.moveTo(fx - 4, by + 4); ctx.lineTo(fx + 4, by + 4); ctx.lineTo(fx, by + 9); ctx.closePath(); ctx.fill()
+          ctx.fillStyle = 'rgba(150,210,255,0.98)'
+          ctx.fillText(msg, fx, by - 2)
+        }
       }
       ctx.restore()
     }
@@ -612,7 +626,7 @@ export function createRenderer(canvas, config, renderOpts = {}) {
       wctx.beginPath(); wctx.arc(screenX, topBase + spriteH * 0.12, headR, 0, Math.PI * 2); wctx.fill()
     }
     contactShadow(screenX, bottom, spriteW * 0.9, alpha * 0.4)
-    if (ent.name) namePlates.push({ sx: screenX, y: topBase - spriteH * 0.03, name: ent.name, alpha })
+    if (ent.name) namePlates.push({ sx: screenX, y: topBase - spriteH * 0.03, name: ent.name, alpha, speech: ent.chatText })
   }
 
   // Small floor-anchored pickups: a soft glow plus a suggestive shape per type.
