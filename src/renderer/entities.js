@@ -18,13 +18,16 @@ function shouldSpawn(cx, cy, spawnDenom) {
   return hash(cx + 1000, cy + 2000) % spawnDenom === 0
 }
 
-function makeEntity(cx, cy, stalkerDenom) {
+function makeEntity(cx, cy, stalkerDenom, variants) {
   const rng = entityRng(cx, cy)
   const type = rng() < 1 / stalkerDenom ? 'stalker' : 'wanderer'
+  const list = (variants && variants[type] && variants[type].length) ? variants[type] : ['shade']
+  const variant = list[(rng() * list.length) | 0]
   return {
     x: cx * CHUNK_SIZE + CHUNK_SIZE / 2 + (rng() - 0.5) * 4,
     y: cy * CHUNK_SIZE + CHUNK_SIZE / 2 + (rng() - 0.5) * 4,
     type,
+    variant,
     state: 'idle',
     dir: rng() * Math.PI * 2,
     dirTimer: 3 + rng() * 4,
@@ -45,6 +48,7 @@ export function createEntitySystem(config, isWallFn) {
   const stalkerDenom = Math.max(1, ent.stalkerDenom ?? 4)
   const chaseRange  = ent.chaseRange ?? 24
   const fleeRange   = ent.fleeRange ?? 6
+  const variants    = { stalker: ent.stalkerVariants || ['shade'], wanderer: ent.wandererVariants || ['shade'] }
 
   function evict(playerCx, playerCy) {
     const radius = (config?.chunkEvictRadius ?? 3) + 2
@@ -67,7 +71,7 @@ export function createEntitySystem(config, isWallFn) {
         const key = `${cx},${cy}`
         if (spawnedChunks.has(key)) continue
         spawnedChunks.add(key)
-        if (shouldSpawn(cx, cy, spawnDenom)) entities.push(makeEntity(cx, cy, stalkerDenom))
+        if (shouldSpawn(cx, cy, spawnDenom)) entities.push(makeEntity(cx, cy, stalkerDenom, variants))
       }
     }
   }

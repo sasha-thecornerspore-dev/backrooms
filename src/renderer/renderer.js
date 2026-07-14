@@ -183,7 +183,7 @@ export function createRenderer(canvas, config, renderOpts = {}) {
     seedParticles()
   }
 
-  function render(player, isWallFn, flicker, entities = [], fogMul = 1) {
+  function render(player, isWallFn, flicker, entities = [], fogMul = 1, lights = {}) {
     frame++
     const fog = baseFog * fogMul
     ensureBuffers(canvas.width, canvas.height)
@@ -314,7 +314,7 @@ export function createRenderer(canvas, config, renderOpts = {}) {
           drawProp(ent, screenX, entDist, fogT, HH, H, W)
         } else if (ent.kind === 'exit') {
           drawExit(ent, screenX, entDist, fogT, HH, H, W)
-        } else if (ent.kind === 'player') {
+        } else if (ent.kind === 'player' || ent.kind === 'npc') {
           drawPlayer(ent, screenX, entDist, fogT, HH, H, W, namePlates)
         } else {
           drawFigure(ent, screenX, entDist, fogT, HH, H, W)
@@ -367,6 +367,23 @@ export function createRenderer(canvas, config, renderOpts = {}) {
         ctx.beginPath(); ctx.arc(p.x, p.y, baseSize * (0.6 + p.z), 0, 6.283); ctx.fill()
       }
       ctx.restore()
+    }
+
+    // ── the player's own light: flashlight cone + a glowstick's colored wash ──
+    if (lights.flashlight) {
+      const g = ctx.createRadialGradient(OW / 2, OH * 0.52, OH * 0.04, OW / 2, OH * 0.52, OH * 0.72)
+      g.addColorStop(0, 'rgba(255,244,212,0.24)')
+      g.addColorStop(0.5, 'rgba(255,238,196,0.09)')
+      g.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g; ctx.fillRect(0, 0, OW, OH); ctx.restore()
+    }
+    if (lights.glow) {
+      const [gr, gg, gb] = lights.glow
+      const pulse = 0.72 + 0.28 * Math.sin(frame * 0.11)
+      const g = ctx.createRadialGradient(OW / 2, OH * 0.6, OH * 0.03, OW / 2, OH * 0.6, OH * 0.62)
+      g.addColorStop(0, `rgba(${gr},${gg},${gb},${(0.20 * pulse).toFixed(3)})`)
+      g.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g; ctx.fillRect(0, 0, OW, OH); ctx.restore()
     }
 
     // ── remote-player nameplates — full-res so names stay crisp ──
@@ -589,43 +606,68 @@ export function createRenderer(canvas, config, renderOpts = {}) {
   // A cloaked standing figure: a rounded hood widening to a skirt, with faint
   // eyes when close. Column spans respect the wall zbuffer so it hides properly.
   // Drawn into the low-res world buffer (wctx).
+  // Per-variant silhouette + tells. `shade` is the classic hunched figure; the
+  // others read differently in the fog — a low hound, a tall lurker, a grinning
+  // smiler, an electric thing — so levels feel populated by distinct creatures.
+  const FIG = {
+    shade:   { w: 0.42, h: 1.0,  tint: [18, 15, 12], low: false },
+    watcher: { w: 0.40, h: 1.0,  tint: [16, 16, 18], low: false, eyes: true },
+    smiler:  { w: 0.44, h: 1.0,  tint: [14, 12, 12], low: false, grin: true },
+    hound:   { w: 0.72, h: 0.5,  tint: [22, 14, 10], low: true,  eyes: true },
+    crawler: { w: 0.9,  h: 0.42, tint: [16, 14, 12], low: true },
+    lurker:  { w: 0.3,  h: 1.25, tint: [10, 12, 14], low: false, eyes: true },
+    tesla:   { w: 0.42, h: 1.05, tint: [16, 22, 32], low: false, electric: true, eyes: true },
+  }
   function drawFigure(ent, screenX, entDist, fogT, HH, H, W) {
-    const spriteH = Math.min(H * 2, Math.floor(H / entDist))
-    const spriteW = Math.floor(spriteH * 0.42)
+    const s = FIG[ent.variant] || FIG.shade
+    const fullH = H / entDist
+    const spriteH = Math.min(H * 2, Math.floor(fullH * s.h))
+    const spriteW = Math.floor(spriteH * s.w)
     if (spriteW < 1) return
-    const topBase = Math.floor(HH - spriteH * 0.5)
-    const bottom  = topBase + spriteH
+    const bottom  = s.low ? (HH + fullH / 2) : Math.floor(HH + spriteH * 0.5)
+    const topBase = bottom - spriteH
     const alpha = (1 - fogT) * 0.95
     if (alpha < 0.04) return
     const half = spriteW / 2
+    const hood = s.low ? 0.12 : 0.34
 
     for (let sx = -half; sx <= half; sx++) {
       const col = Math.floor(screenX + sx)
       if (col < 0 || col >= W) continue
       if (zbuffer[col] <= entDist) continue
-      const u = sx / half                    // -1..1 across the body
-      // rounded hood: edges start lower than the centre → hunched silhouette
-      const top = topBase + (u * u) * spriteH * 0.34
+      const u = sx / half
+      const top = topBase + (u * u) * spriteH * hood
       const hgt = bottom - top
       if (hgt <= 0) continue
-      // slightly darker toward the centre for volume
-      const shade = 18 - Math.abs(u) * 6
-      wctx.fillStyle = `rgba(${shade | 0},${(shade * 0.8) | 0},${(shade * 0.6) | 0},${alpha.toFixed(3)})`
+      const sh = 1 - Math.abs(u) * 0.32
+      wctx.fillStyle = `rgba(${(s.tint[0] * sh) | 0},${(s.tint[1] * sh) | 0},${(s.tint[2] * sh) | 0},${alpha.toFixed(3)})`
       wctx.fillRect(col, top | 0, 1, hgt | 0)
     }
 
-    // faint pale eyes when it's close
-    if (entDist < 9) {
-      const eyeAlpha = (1 - entDist / 9) * 0.5
-      const eyeY = topBase + spriteH * 0.16
+    const sc = Math.floor(screenX)
+    // smiler — a wide, too-bright grin
+    if (s.grin && entDist < 12 && sc >= 0 && sc < W && zbuffer[sc] > entDist) {
+      const gy = topBase + spriteH * 0.19
+      wctx.strokeStyle = `rgba(232,226,205,${((1 - entDist / 12) * 0.9).toFixed(3)})`
+      wctx.lineWidth = Math.max(1, spriteW * 0.06)
+      wctx.beginPath(); wctx.arc(sc, gy - spriteW * 0.25, spriteW * 0.42, 0.18 * Math.PI, 0.82 * Math.PI); wctx.stroke()
+    }
+    // tesla — flickering electric outline
+    if (s.electric && ((frame + sc) % 6) < 2) {
+      wctx.strokeStyle = `rgba(150,210,255,${(alpha * 0.65).toFixed(3)})`
+      wctx.lineWidth = 1
+      wctx.strokeRect(sc - half, topBase, spriteW, spriteH)
+    }
+    // pale eyes when close
+    if (s.eyes && entDist < 9) {
+      const eyeAlpha = (1 - entDist / 9) * (s.electric ? 0.7 : 0.5)
+      const eyeY = topBase + spriteH * (s.low ? 0.22 : 0.16)
       const eyeDx = spriteW * 0.13
       const eyeR = Math.max(1, spriteW * 0.05)
-      wctx.fillStyle = `rgba(220,225,210,${eyeAlpha.toFixed(3)})`
+      wctx.fillStyle = s.electric ? `rgba(170,220,255,${eyeAlpha.toFixed(3)})` : `rgba(220,225,210,${eyeAlpha.toFixed(3)})`
       for (const dx of [-eyeDx, eyeDx]) {
         const col = Math.floor(screenX + dx)
-        if (col >= 0 && col < W && zbuffer[col] > entDist) {
-          wctx.fillRect(col - (eyeR | 0), eyeY, (eyeR * 2) | 0, (eyeR * 1.4) | 0)
-        }
+        if (col >= 0 && col < W && zbuffer[col] > entDist) wctx.fillRect(col - (eyeR | 0), eyeY, (eyeR * 2) | 0, (eyeR * 1.4) | 0)
       }
     }
   }

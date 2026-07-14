@@ -63,7 +63,8 @@ export const LEVELS = [
       maze:  { salt: 0x1111, roomChance: 0.15, braid: 0.12, corridor: 1 },
       particles: { count: 55, color: [205, 208, 200], size: 1.4, sway: 0.3, speed: 0.3 },   // grey dust
       lights: true,
-      entities: { enabled: true, spawnDenom: 12, stalkerDenom: 4, chaseRange: 22, damage: 14 },
+      entities: { enabled: true, spawnDenom: 12, stalkerDenom: 4, chaseRange: 22, damage: 14,
+                  stalkerVariants: ['smiler', 'hound'], wandererVariants: ['watcher'] },
       items: { density: 5, types: ['almond-water', 'glowstick', 'bandage', 'polaroid', 'radio'] },
       props: { density: 4, types: ['pallet', 'barrel', 'crate', 'couch', 'cart', 'box'] },
       exit:  { target: 2, denom: 4, label: 'descend',
@@ -96,7 +97,8 @@ export const LEVELS = [
       maze:  { salt: 0x2222, roomChance: 0.10, braid: 0.08, corridor: 1 },
       particles: { count: 40, color: [190, 182, 170], size: 2.6, sway: 0.55, speed: 0.5, rise: true },   // rising steam
       lights: false,
-      entities: { enabled: true, spawnDenom: 8, stalkerDenom: 3, chaseRange: 26, damage: 18 },
+      entities: { enabled: true, spawnDenom: 8, stalkerDenom: 3, chaseRange: 26, damage: 18,
+                  stalkerVariants: ['lurker', 'hound'], wandererVariants: ['crawler'] },
       items: { density: 4, types: ['almond-water', 'glowstick', 'bandage', 'radio'] },
       props: { density: 5, types: ['pipe', 'valve', 'drum', 'toolbox', 'vent', 'crate'] },
       exit:  { target: 3, denom: 5, label: 'descend',
@@ -128,7 +130,8 @@ export const LEVELS = [
       maze:  { salt: 0x3333, roomChance: 0.08, braid: 0.06, corridor: 1 },
       particles: { count: 34, color: [170, 215, 255], size: 1.3, sway: 0.25, speed: 0.65, spark: true },   // electrical sparks
       lights: false,
-      entities: { enabled: true, spawnDenom: 6, stalkerDenom: 2, chaseRange: 30, damage: 22 },
+      entities: { enabled: true, spawnDenom: 6, stalkerDenom: 2, chaseRange: 30, damage: 22,
+                  stalkerVariants: ['tesla', 'smiler'], wandererVariants: ['watcher'] },
       items: { density: 4, types: ['almond-water', 'glowstick', 'bandage', 'bandage', 'radio'] },
       props: { density: 5, types: ['transformer', 'cabinet-e', 'spool', 'sign', 'drum'] },
       exit:  { target: 0, denom: 5, label: 'climb out',

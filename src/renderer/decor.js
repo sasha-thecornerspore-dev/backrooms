@@ -27,10 +27,12 @@ export function createDecorSystem(config, isWallFn) {
   let propDens  = config.props?.density ?? 3
   let exitDenom = Math.max(1, config.exit?.denom ?? 6)
   let exitTarget = config.exit?.target ?? 0
+  let npcDenom  = Math.max(1, config.npc?.denom ?? 16)
   let salt      = config.maze?.salt | 0
 
   const props   = new Map()   // "cx,cy" → [{key,x,y,type,rot}]
   const exits    = new Map()  // "cx,cy" → {key,x,y,target}
+  const npcs     = new Map()  // "cx,cy" → {key,x,y}  (a lost soul)
   const scanned  = new Set()
 
   function openCell(cx, cy, rng, pcx, pcy) {
@@ -65,6 +67,13 @@ export function createDecorSystem(config, isWallFn) {
       const spot = openCell(cx, cy, erng, pcx, pcy)
       if (spot) exits.set(key, { key, x: spot.wx, y: spot.wy, target: exitTarget })
     }
+
+    // a lost soul — rare, neutral, speaks when you approach
+    if (hash(cx + 2200 + salt, cy + 3300 + salt) % npcDenom === 0) {
+      const nrng = rngFrom(cx * 617 + salt + 41, cy * 733 + salt + 23)
+      const spot = openCell(cx, cy, nrng, pcx, pcy)
+      if (spot) npcs.set(key, { key, x: spot.wx, y: spot.wy })
+    }
   }
 
   function update(pcx, pcy) {
@@ -75,6 +84,7 @@ export function createDecorSystem(config, isWallFn) {
         scanned.delete(k)
         props.delete(k)
         exits.delete(k)
+        npcs.delete(k)
       }
     }
     for (let dy = -r; dy <= r; dy++) {
@@ -115,16 +125,28 @@ export function createDecorSystem(config, isWallFn) {
     return best ? { x: best.x, y: best.y, dist: Math.sqrt(bestD) } : null
   }
 
+  function getNpcs() { return [...npcs.values()] }
+  function nearestNpc(px, py, maxDist = 1.6) {
+    let best = null, bestD = maxDist * maxDist
+    for (const n of npcs.values()) {
+      const d = (n.x - px) ** 2 + (n.y - py) ** 2
+      if (d < bestD) { bestD = d; best = n }
+    }
+    return best
+  }
+
   function enterLevel(cfg) {
     propTypes = cfg.props?.types?.length ? cfg.props.types : propTypes
     propDens  = cfg.props?.density ?? propDens
     exitDenom = Math.max(1, cfg.exit?.denom ?? exitDenom)
     exitTarget = cfg.exit?.target ?? exitTarget
+    npcDenom  = Math.max(1, cfg.npc?.denom ?? npcDenom)
     salt      = cfg.maze?.salt | 0
     props.clear()
     exits.clear()
+    npcs.clear()
     scanned.clear()
   }
 
-  return { update, getProps, getExits, nearestExit, nearestExitAny, enterLevel }
+  return { update, getProps, getExits, nearestExit, nearestExitAny, getNpcs, nearestNpc, enterLevel }
 }

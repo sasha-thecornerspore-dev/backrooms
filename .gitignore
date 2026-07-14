@@ -6,5 +6,7 @@ src/build-config.json
 *.pfx
 *.p12
 _relaytest.mjs
+_chattest.mjs
+.claude/
 .wrangler/
 relay/.wrangler/

@@ -24,6 +24,22 @@ const ITEM_NAMES = {
   'radio':        'radio',
 }
 
+// Things a lost soul might tell you — lore, warnings, and the odd real hint.
+const NPC_LINES = [
+  'i have been here longer than you have been alive.',
+  "don't trust the almond water on the deeper floors.",
+  'if the lights go out, stop moving. it hunts movement.',
+  'the way down is near the torn wallpaper. never a way up.',
+  'you hear the smiler before you see it. that grin.',
+  'the humming is a language. i almost understand it now.',
+  'have you seen my daughter? she was right behind me.',
+  'the walls are thin where the carpet is wet. clip through.',
+  'stay away from the ones that walk on all fours.',
+  'we are not lost. we are exactly where it wants us.',
+  'bring a light to the pipes. the dark there is not empty.',
+  "if you make it out, don't tell them about me.",
+]
+
 // A directional arrow (clockwise from straight-ahead) for the descent compass.
 const EXIT_DIRS = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖']
 function exitArrow(rel) {
@@ -56,6 +72,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let hurt       = 0    // red-flash intensity
   let regenDelay = 0    // seconds before hp regen resumes
   let netTimer   = 0    // throttles position updates to the server (~20Hz)
+  let flashlight = true // the player's own light (toggle with L)
 
   // Flicker state (persists; retuned per level via level.cfg.flicker)
   let flicker    = 1.0
@@ -489,6 +506,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const nearItem = itemSys.nearestItem(player.x, player.y, 1.4)
     // ── exits: descent prompt (wider grab range) ──
     const nearExit = level.decor.nearestExit(player.x, player.y, 1.6)
+    const nearNpc  = level.decor.nearestNpc(player.x, player.y, 1.8)
 
     const itemHintEl = document.getElementById('item-hint')
     if (itemHintEl) {
@@ -497,6 +515,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.style.opacity = '1'
       } else if (nearExit) {
         itemHintEl.textContent = `f · ${cfg.exit?.label ?? 'descend'}`
+        itemHintEl.style.opacity = '1'
+      } else if (nearNpc) {
+        itemHintEl.textContent = 'e · speak to the lost soul'
         itemHintEl.style.opacity = '1'
       } else {
         itemHintEl.style.opacity = '0'
@@ -537,11 +558,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (K['KeyQ']) { K['KeyQ'] = false; applyItemEffect(itemSys.useSelected()) }
       if (K['KeyX']) { K['KeyX'] = false; discardSelected() }
       if (K['KeyM']) { K['KeyM'] = false; const on = !getPref('music'); setPref('music', on); showMessage(on ? 'the music seeps back in.' : 'the music stops.') }
+      if (K['KeyL']) { K['KeyL'] = false; flashlight = !flashlight; showMessage(flashlight ? 'flashlight on.' : 'flashlight off — the dark leans in.') }
       for (let i = 0; i < 6; i++) {
         const code = `Digit${i + 1}`
         if (K[code]) { K[code] = false; itemSys.select(i); renderHotbar() }
       }
-      if (K['KeyE'] && nearPresence) { K['KeyE'] = false; openDialog() }
+      if (K['KeyE']) {
+        K['KeyE'] = false
+        if (nearPresence) openDialog()
+        else if (nearNpc) showMessage(NPC_LINES[Math.floor(Math.random() * NPC_LINES.length)])
+      }
     }
     if (K['Escape'] && dialogOpen) { K['Escape'] = false; closeDialog() }
 
@@ -581,14 +607,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       : []
     const propEntities = level.decor.getProps().map(p => ({ x: p.x, y: p.y, kind: 'prop', type: p.type }))
     const exitEntities = level.decor.getExits().map(e => ({ x: e.x, y: e.y, kind: 'exit' }))
+    const npcEntities  = level.decor.getNpcs().map(n => ({ x: n.x, y: n.y, kind: 'npc', name: 'a lost soul' }))
     const itemEntities = itemSys.getWorldItems().map(it => ({ x: it.x, y: it.y, kind: 'item', itemType: it.type }))
     const enemyEntities = creaturesOn ? level.entitySys.getEntities() : []
     const allEntities = [
-      ...enemyEntities, ...remoteEntities,
+      ...enemyEntities, ...remoteEntities, ...npcEntities,
       ...propEntities, ...exitEntities, ...itemEntities,
     ]
 
-    level.gfx.render(player, (wx, wy) => level.cache.isWall(wx, wy, pcx, pcy), flicker, allEntities, fogMul)
+    level.gfx.render(player, (wx, wy) => level.cache.isWall(wx, wy, pcx, pcy), flicker, allEntities, fogMul,
+      { flashlight, glow: fogTimer > 0 ? [80, 235, 110] : null })
     frameCount++
    } catch (e) {
     // A per-frame error must never permanently freeze the game: log it (first
