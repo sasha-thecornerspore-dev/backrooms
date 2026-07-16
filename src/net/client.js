@@ -71,8 +71,8 @@ export function createMultiplayerClient(serverUrl) {
     })
   }
 
-  function sendPos(x, y, angle) {
-    if (ws && connected) { try { ws.send(JSON.stringify({ type: 'pos', x, y, angle })) } catch {} }
+  function sendPos(x, y, angle, hp) {
+    if (ws && connected) { try { ws.send(JSON.stringify({ type: 'pos', x, y, angle, hp })) } catch {} }
   }
 
   function sendChat(text) {

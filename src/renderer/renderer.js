@@ -416,6 +416,15 @@ export function createRenderer(canvas, config, renderOpts = {}) {
           ctx.fillStyle = 'rgba(150,210,255,0.98)'
           ctx.fillText(msg, fx, by - 2)
         }
+        // teammate HP bar under the name (co-op awareness)
+        if (np.hp != null) {
+          const bw = 42, bx = fx - bw / 2, hy = fy + 3
+          ctx.globalAlpha = Math.min(1, np.alpha + 0.25)
+          ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(bx - 1, hy - 1, bw + 2, 5)
+          const hpf = Math.max(0, Math.min(1, np.hp / 100))
+          ctx.fillStyle = hpf > 0.5 ? 'rgba(90,190,100,0.95)' : hpf > 0.25 ? 'rgba(210,180,60,0.95)' : 'rgba(210,70,60,0.95)'
+          ctx.fillRect(bx, hy, bw * hpf, 3)
+        }
       }
       ctx.restore()
     }
@@ -703,7 +712,7 @@ export function createRenderer(canvas, config, renderOpts = {}) {
       wctx.beginPath(); wctx.arc(screenX, topBase + spriteH * 0.12, headR, 0, Math.PI * 2); wctx.fill()
     }
     contactShadow(screenX, bottom, spriteW * 0.9, alpha * 0.4)
-    if (ent.name) namePlates.push({ sx: screenX, y: topBase - spriteH * 0.03, name: ent.name, alpha, speech: ent.chatText })
+    if (ent.name) namePlates.push({ sx: screenX, y: topBase - spriteH * 0.03, name: ent.name, alpha, speech: ent.chatText, hp: ent.hp })
   }
 
   // Small floor-anchored pickups: a soft glow plus a suggestive shape per type.

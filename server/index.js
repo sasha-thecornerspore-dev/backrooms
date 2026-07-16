@@ -27,7 +27,7 @@ function startBroadcastLoop(room) {
   if (room._ticker) return
   room._ticker = setInterval(() => {
     if (room.players.size === 0) return
-    const list = [...room.players.entries()].map(([id, p]) => ({ id, x: p.x, y: p.y, angle: p.angle, name: p.name }))
+    const list = [...room.players.entries()].map(([id, p]) => ({ id, x: p.x, y: p.y, angle: p.angle, name: p.name, hp: p.hp ?? 100 }))
     broadcast(room, { type: 'players', list })
   }, 50)  // 20Hz
 }
@@ -86,7 +86,7 @@ export function createServer(port = PORT) {
 
       if (msg.type === 'pos' && playerId && room) {
         const p = room.players.get(playerId)
-        if (p) { p.x = +msg.x || 0; p.y = +msg.y || 0; p.angle = +msg.angle || 0 }
+        if (p) { p.x = +msg.x || 0; p.y = +msg.y || 0; p.angle = +msg.angle || 0; p.hp = (msg.hp == null ? 100 : +msg.hp) }
         return
       }
 

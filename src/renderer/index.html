@@ -60,8 +60,23 @@
       border: 1px solid rgba(0,0,0,0.5); box-shadow: 0 0 4px rgba(255,255,255,0.35);
     }
     #hp-fill { height: 100%; width: 100%; background: rgba(60,150,70,0.85); transition: width 0.2s, background 0.4s; }
-    #exit-compass {
+    #hp-label, #san-label { min-width: 32px; display: inline-block; }
+    #san-wrap {
       position: fixed; top: 52px; left: 14px;
+      display: flex; align-items: center; gap: 8px; pointer-events: none;
+    }
+    #san-label { color: #14110a; font-size: 10px; letter-spacing: 2px; font-weight: bold;
+      text-shadow: 0 0 5px rgba(255,255,255,0.55); }
+    #san-bar { width: 150px; height: 8px; background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(0,0,0,0.5); box-shadow: 0 0 4px rgba(255,255,255,0.35); }
+    #san-fill { height: 100%; width: 100%; background: rgba(120,112,185,0.82); transition: width 0.2s, background 0.4s; }
+    #insanity {
+      position: fixed; inset: 0; opacity: 0; pointer-events: none; z-index: 40;
+      background: radial-gradient(ellipse at center, rgba(40,0,42,0) 28%, rgba(28,0,40,0.88) 100%);
+      transition: opacity 0.6s;
+    }
+    #exit-compass {
+      position: fixed; top: 74px; left: 14px;
       color: #14110a; font-size: 12px; font-weight: bold; letter-spacing: 1px;
       pointer-events: none; opacity: 0; transition: opacity 0.4s;
       text-shadow: 0 0 5px rgba(255,255,255,0.6);
@@ -308,6 +323,7 @@
   <div id="chat-typing"></div>
   <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote)" spellcheck="false" style="display:none"/>
   <div id="hp-wrap"><span id="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div></div></div>
+  <div id="san-wrap"><span id="san-label">SAN</span><div id="san-bar"><div id="san-fill"></div></div></div>
   <div id="exit-compass"></div>
   <div id="msg"></div>
   <div id="hint">wasd move · shift run · mouse look · f take / no-clip · q use · x drop · 1-6 slots · e speak · enter chat · l light · m music</div>
@@ -316,6 +332,7 @@
   <div id="hotbar"></div>
   <button id="btn-discard" title="drop the selected item (x)">✕ discard</button>
   <div id="stamina-wrap"><div id="stamina-fill"></div></div>
+  <div id="insanity"></div>
   <div id="hurt"></div>
   <div id="fade"></div>
   <div id="flash"></div>

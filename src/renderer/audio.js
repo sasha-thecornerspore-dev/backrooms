@@ -347,6 +347,43 @@ export function setAmbience(on) {
   ambienceGain.gain.setTargetAtTime(on ? 1 : 0, actx.currentTime, 0.5)
 }
 
+// A low heart-thump — game.js pulses it faster as something closes on you.
+export function heartbeat(intensity = 1) {
+  if (!actx) return
+  try {
+    const o = actx.createOscillator(), g = actx.createGain()
+    o.type = 'sine'
+    const t = actx.currentTime
+    o.frequency.setValueAtTime(72, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.14)
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(0.12 * intensity, t + 0.02)
+    g.gain.exponentialRampToValueAtTime(0.0004, t + 0.22)
+    o.connect(g); g.connect(actx.destination)
+    o.start(t); o.stop(t + 0.26)
+  } catch { /* ignore */ }
+}
+
+// A brief, wavering whisper — surfaces when your sanity runs low.
+export function whisper() {
+  if (!actx) return
+  try {
+    const dur = 0.6 + Math.random() * 0.5
+    const len = Math.floor(actx.sampleRate * dur)
+    const buf = actx.createBuffer(1, len, actx.sampleRate)
+    const d = buf.getChannelData(0)
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.4)
+    const src = actx.createBufferSource(); src.buffer = buf
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1100 + Math.random() * 1500; bp.Q.value = 6
+    const lfo = actx.createOscillator(); lfo.frequency.value = 6 + Math.random() * 8
+    const lg = actx.createGain(); lg.gain.value = 400
+    lfo.connect(lg); lg.connect(bp.frequency); lfo.start()
+    const g = actx.createGain(); const t = actx.currentTime
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.03, t + 0.2); g.gain.linearRampToValueAtTime(0, t + dur)
+    src.connect(bp); bp.connect(g); g.connect(actx.destination)
+    src.start(t); src.stop(t + dur); lfo.stop(t + dur)
+  } catch { /* ignore */ }
+}
+
 // A short chirp when a chat message arrives (a UI ping, always audible).
 export function blip() {
   if (!actx) return

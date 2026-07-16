@@ -4,7 +4,7 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, blip } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, blip, heartbeat, whisper } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { writeSave } from './save.js'
 import { formatAnchor, driftMeters } from './anchor.js'
@@ -73,6 +73,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let regenDelay = 0    // seconds before hp regen resumes
   let netTimer   = 0    // throttles position updates to the server (~20Hz)
   let flashlight = true // the player's own light (toggle with L)
+  let sanity     = 100  // the dark and the things eat at it; light + friends restore it
+  let sanWhisperT = 0
+  let heartT     = 0
+  let shake      = 0    // screen-shake magnitude, decays each frame
 
   // Flicker state (persists; retuned per level via level.cfg.flicker)
   let flicker    = 1.0
@@ -224,6 +228,18 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
                             :            'rgba(205,55,45,0.95)'
   }
 
+  // ── sanity bar + the low-sanity screen wash ──
+  const sanFill  = document.getElementById('san-fill')
+  const insaneEl = document.getElementById('insanity')
+  function updateSanity() {
+    if (!sanFill) return
+    const pct = Math.max(0, Math.min(100, sanity))
+    sanFill.style.width = pct + '%'
+    sanFill.style.background = pct > 50 ? 'rgba(120,112,185,0.82)'
+                             : pct > 25 ? 'rgba(150,92,182,0.86)'
+                             :            'rgba(184,60,140,0.92)'
+  }
+
   // ── stamina bar ──
   const stamWrap = document.getElementById('stamina-wrap')
   const stamFill = document.getElementById('stamina-fill')
@@ -355,8 +371,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function applyItemEffect(eff) {
     if (!eff) return
     if (eff.type === 'almond-water') {
-      stamina = 100; calmTimer = 20
-      showMessage('the water is sweet. the lights steady.')
+      stamina = 100; calmTimer = 20; sanity = Math.min(100, sanity + 35)
+      showMessage('the water is sweet. the lights steady, and so does your mind.')
     } else if (eff.type === 'glowstick') {
       fogTimer = 45
       showMessage('green light pushes at the dark.')
@@ -576,23 +592,28 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     itemSys.update(pcx, pcy)
     level.decor.update(pcx, pcy)
     netTimer += dt
-    if (mpClient?.isConnected() && netTimer >= 0.05) { netTimer = 0; mpClient.sendPos(player.x, player.y, player.angle) }
+    if (mpClient?.isConnected() && netTimer >= 0.05) { netTimer = 0; mpClient.sendPos(player.x, player.y, player.angle, player.hp) }
     // creatures can be switched off entirely (pure liminal exploration)
     const creaturesOn = getPref('creatures')
     if (creaturesOn) level.entitySys.update(dt, player, pcx, pcy, radioOn ? 1.5 : 1)
 
-    // ── HP: stalker contact damage, i-frames, delayed regen, death ──
-    if (invuln > 0) invuln -= dt
-    if (!transitioning && creaturesOn && getPref('damage') && cfg.entities?.enabled && invuln <= 0) {
-      const dmg = cfg.entities.damage ?? 16
+    // ── nearest stalker (drives contact damage, the heartbeat, and sanity) ──
+    let nearD2 = Infinity
+    const creaturesLive = creaturesOn && cfg.entities?.enabled
+    if (creaturesLive) {
       for (const e of level.entitySys.getEntities()) {
         if (e.type !== 'stalker') continue
-        if ((e.x - player.x) ** 2 + (e.y - player.y) ** 2 < 0.6 * 0.6) {
-          player.hp -= dmg; invuln = 0.7; hurt = 1; regenDelay = 6
-          showMessage('it has you.')
-          break
-        }
+        const d2 = (e.x - player.x) ** 2 + (e.y - player.y) ** 2
+        if (d2 < nearD2) nearD2 = d2
       }
+    }
+    const nearD = Math.sqrt(nearD2)
+
+    // ── HP: contact damage, i-frames, delayed regen, death ──
+    if (invuln > 0) invuln -= dt
+    if (!transitioning && creaturesLive && getPref('damage') && invuln <= 0 && nearD < 0.62) {
+      player.hp -= (cfg.entities.damage ?? 16); invuln = 0.7; hurt = 1; regenDelay = 6; shake = 1
+      showMessage('it has you.')
     }
     if (regenDelay > 0) regenDelay -= dt
     else if (player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + 3.5 * dt)
@@ -601,9 +622,33 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (hurtEl) hurtEl.style.opacity = (hurt * 0.55).toFixed(2)
     if (player.hp <= 0) { player.hp = 0; die() }
 
+    // ── heartbeat — quickens as something closes in ──
+    if (!transitioning && creaturesLive && nearD < 12) {
+      heartT -= dt
+      if (heartT <= 0) { const prox = 1 - nearD / 12; heartbeat(0.5 + prox); heartT = 1.15 - prox * 0.8 }
+    } else heartT = 0
+
+    // ── sanity — dark + the hunt drain it; light, almond water, a friend restore it ──
+    let sdelta = flashlight ? 2 : -2
+    sdelta -= level.index * 0.5
+    if (nearD < 10) sdelta -= 4
+    if (mpClient) { for (const rp of mpClient.getRemotePlayers()) { if ((rp.x - player.x) ** 2 + (rp.y - player.y) ** 2 < 36) { sdelta += 3; break } } }
+    sanity = Math.max(0, Math.min(100, sanity + sdelta * dt))
+    updateSanity()
+    const insane = Math.max(0, Math.min(1, (42 - sanity) / 42))
+    if (insaneEl) insaneEl.style.opacity = (insane * 0.6).toFixed(2)
+    if (insane > 0.25 && !transitioning) { sanWhisperT -= dt; if (sanWhisperT <= 0) { whisper(); sanWhisperT = 3 + Math.random() * 6 } }
+
+    // ── screen shake (decays) ──
+    if (shake > 0.01) {
+      shake = Math.max(0, shake - dt * 3)
+      const m = shake * 8
+      canvas.style.transform = `translate(${((Math.random() - 0.5) * m).toFixed(1)}px, ${((Math.random() - 0.5) * m).toFixed(1)}px)`
+    } else if (canvas.style.transform) canvas.style.transform = ''
+
     // ── assemble sprites and render ──
     const remoteEntities = mpClient
-      ? mpClient.getRemotePlayers().map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle, chatText: p.chatText }))
+      ? mpClient.getRemotePlayers().map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle, chatText: p.chatText, hp: p.hp }))
       : []
     const propEntities = level.decor.getProps().map(p => ({ x: p.x, y: p.y, kind: 'prop', type: p.type }))
     const exitEntities = level.decor.getExits().map(e => ({ x: e.x, y: e.y, kind: 'exit' }))

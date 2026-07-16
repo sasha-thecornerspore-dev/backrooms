@@ -45,7 +45,7 @@ export class Room extends DurableObject {
       this.broadcast({ type: 'joined', id: att.id, name: att.name }, att.id)
       this.pushPlayers()
     } else if (msg.type === 'pos') {
-      att.x = +msg.x || 0; att.y = +msg.y || 0; att.angle = +msg.angle || 0
+      att.x = +msg.x || 0; att.y = +msg.y || 0; att.angle = +msg.angle || 0; att.hp = (msg.hp == null ? 100 : +msg.hp)
       ws.serializeAttachment(att)
       this.pushPlayers()
     } else if (msg.type === 'chat') {
@@ -79,7 +79,7 @@ export class Room extends DurableObject {
     const sockets = this.ctx.getWebSockets()
     const list = sockets.map(s => {
       const a = s.deserializeAttachment() || {}
-      return { id: a.id, x: a.x, y: a.y, angle: a.angle, name: a.name }
+      return { id: a.id, x: a.x, y: a.y, angle: a.angle, name: a.name, hp: a.hp ?? 100 }
     })
     const raw = JSON.stringify({ type: 'players', list })
     for (const s of sockets) { try { s.send(raw) } catch { /* ignore */ } }
