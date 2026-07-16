@@ -4,6 +4,8 @@
 **Status:** proposed — subsystem #1 of 5
 **Scope:** the foundation only. Portals, teams, capture and modes are sketched here *only* to prove this foundation does not block them.
 
+> **Amended by [2026-07-16-level-zero-factions-and-grain-design.md](2026-07-16-level-zero-factions-and-grain-design.md)**, which answers every open question in §11, adds Baltimore neighborhood grain (§5 there), makes Phase 1b mandatory, brings `custom:` into Phase 1, and adds Level ∅ and the faction function. Read both. Where they disagree, the amendment wins.
+
 ---
 
 ## 0. The vision, and the decomposition
