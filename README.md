@@ -21,6 +21,14 @@ an infinite procedural first-person horror maze that descends through four level
 
 ---
 
+## 📖 the field manual
+
+**[open the illustrated field manual →](docs/manual.html)**
+
+everything in one place: controls, how to read your instruments, the four-floor descent, a bestiary of what lives down there, the items, and how to play online with someone. open it in any browser.
+
+---
+
 ## install
 
 download the latest installer from [releases](../../releases/latest) and run it. the game auto-updates when new versions ship (you can turn that off in settings ⚙ — you'll get a quiet "restart now" prompt instead).
