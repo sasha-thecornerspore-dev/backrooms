@@ -10,20 +10,16 @@
 // Workers free plan. Per-connection state (id, name, position) rides in each
 // socket's attachment, so it survives hibernation between bursts of traffic.
 import { DurableObject } from 'cloudflare:workers'
+import { roomSeed } from './seed.js'
 
 export class Room extends DurableObject {
   async fetch(request) {
-    const url = new URL(request.url)
-    const seedParam = Number(url.searchParams.get('seed'))
-    // first connection into an empty room fixes the world seed
-    let seed = await this.ctx.storage.get('seed')
-    if (seed == null) {
-      seed = (Number.isInteger(seedParam) && seedParam > 0 && seedParam <= 0xFFFFFFFF)
-        ? seedParam
-        : (Math.floor(Math.random() * 0xFFFFFFFF) + 1)
-      await this.ctx.storage.put('seed', seed)
-    }
-
+    // No seed logic here. This is the WebSocket upgrade, and the join message
+    // carrying the client's requested seed has not arrived yet — which is why
+    // the old ?seed= param could never work: index.html never sent one, so
+    // Number(null) === 0 failed the guard and every room fell to Math.random()
+    // while the HUD reported the player's real anchor. The world is decided in
+    // webSocketMessage('join') instead.
     const pair = new WebSocketPair()
     const client = pair[0], server = pair[1]
     const id = crypto.randomUUID().slice(0, 12)
@@ -40,8 +36,15 @@ export class Room extends DurableObject {
     if (msg.type === 'join') {
       att.name = String(msg.name || 'wanderer').slice(0, 24)
       ws.serializeAttachment(att)
-      const seed = await this.ctx.storage.get('seed')
-      ws.send(JSON.stringify({ type: 'welcome', playerId: att.id, worldSeed: seed, roomId: '' }))
+      const roomId = String(msg.roomId || 'default').slice(0, 32)
+      // The first joiner into a virgin room fixes its world — from their anchor
+      // if they sent one, mirroring server/index.js:72-77. Durable Object input
+      // gates make this get/put atomic: no other event is delivered while a
+      // storage op is in flight, so two simultaneous joins cannot interleave.
+      const stored = await this.ctx.storage.get('seed')
+      const seed = roomSeed(msg.worldSeed, stored)
+      if (stored == null) await this.ctx.storage.put('seed', seed)
+      ws.send(JSON.stringify({ type: 'welcome', playerId: att.id, worldSeed: seed, roomId }))
       this.broadcast({ type: 'joined', id: att.id, name: att.name }, att.id)
       this.pushPlayers()
     } else if (msg.type === 'pos') {
@@ -59,10 +62,10 @@ export class Room extends DurableObject {
   async webSocketClose(ws) {
     const att = ws.deserializeAttachment() || {}
     this.broadcast({ type: 'left', id: att.id, name: att.name }, att.id)
-    // if the last player is gone, forget the world so the room can be reborn
-    if (this.ctx.getWebSockets().length <= 1) {
-      try { await this.ctx.storage.delete('seed') } catch { /* ignore */ }
-    }
+    // The world is NEVER forgotten. A room is a persistent place.
+    // This used to delete the seed once the last player left, so the same room
+    // code produced a different maze tomorrow — and nothing persistent (least
+    // of all territory) can be built on a room that erases itself.
   }
 
   webSocketError() { /* close handler does the cleanup */ }
