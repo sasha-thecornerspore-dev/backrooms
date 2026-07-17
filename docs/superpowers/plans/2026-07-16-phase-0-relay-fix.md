@@ -12,7 +12,7 @@
 
 - **Tests:** vitest, `environment: 'node'`, `include: ['test/**/*.test.js']`. **Zero mocks** — house style. 99 tests currently pass; they must all still pass.
 - **No new dependencies.** Do **not** add `@cloudflare/vitest-pool-workers` — it forces a config split and breaks the zero-mock style.
-- **Do not touch the electron version.** It is pinned at `^33.4.11`. Bumping it caused a GPU hard-lock previously.
+- **Do not touch the electron version in this plan** — it is `^33.4.11` and is simply out of scope here. *(Not because it is dangerous: electron was **wrongly blamed** for the hard-lock. The bump was tested 2026-07-10 and reverted; the real cause — `getChunk` returning `undefined` after `evict`, crashing `isWall` — was found the next day in `5a02abf`. That bug hard-locked the game on **any** electron version, so it was almost certainly what froze the electron test too. PR #2's CVE bump is very likely safe and should be re-evaluated on its own merits, not blocked by this misattribution.)*
 - ES modules throughout (`"type": "module"`).
 - **Seeds are uint32, `> 0` and `<= 0xFFFFFFFF`, and never 0.** `world.js:191` treats `0` as both "fixed seed" and "unseeded first visit" — a 0 seed silently produces the drift world while claiming to be seeded. This project has hit it three times.
 - **The relay is deployed and live** at `wss://backrooms-relay.jeff-schatz112.workers.dev`. A passing unit test does not prove the anchor survives the wire. Task 5 is not optional.
