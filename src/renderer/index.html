@@ -251,6 +251,7 @@
       <label class="toggle-row"><span>Music <span class="set-hint">generative</span></span><input type="checkbox" id="set-music"/></label>
       <label class="toggle-row"><span>Music volume</span><input type="range" id="set-musicvol" min="0" max="150" step="5"/></label>
       <label class="toggle-row"><span>Ambience <span class="set-hint">hum &amp; drone</span></span><input type="checkbox" id="set-ambience"/></label>
+      <label class="toggle-row"><span>Ambience volume</span><input type="range" id="set-ambiencevol" min="0" max="150" step="5"/></label>
       <label class="toggle-row"><span>Film grain</span><input type="checkbox" id="set-grain"/></label>
       <label class="toggle-row"><span>Particles <span class="set-hint">dust / steam / sparks</span></span><input type="checkbox" id="set-particles"/></label>
       <label class="toggle-row"><span>Crosshair</span><input type="checkbox" id="set-crosshair"/></label>
@@ -493,12 +494,14 @@
     const prefChk   = (id, key) => document.getElementById(id).addEventListener('change', e => setPref(key, e.target.checked))
     const prefRange = (id, key) => document.getElementById(id).addEventListener('input',  e => setPref(key, +e.target.value))
     prefChk('set-music', 'music');       prefRange('set-musicvol', 'musicVolume'); prefChk('set-ambience', 'ambience')
+    prefRange('set-ambiencevol', 'ambienceVolume')
     prefChk('set-grain', 'grain');       prefChk('set-particles', 'particles');    prefChk('set-crosshair', 'crosshair');    prefChk('set-headbob', 'headBob')
     prefRange('set-sens', 'mouseSensitivity'); prefChk('set-creatures', 'creatures'); prefChk('set-damage', 'damage')
     function loadPrefsIntoPanel() {
       const p = getPrefs()
       document.getElementById('set-music').checked      = p.music
       document.getElementById('set-musicvol').value     = p.musicVolume
+      document.getElementById('set-ambiencevol').value  = p.ambienceVolume
       document.getElementById('set-ambience').checked   = p.ambience
       document.getElementById('set-grain').checked      = p.grain
       document.getElementById('set-particles').checked  = p.particles

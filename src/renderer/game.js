@@ -4,7 +4,7 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, blip, heartbeat, whisper } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { writeSave } from './save.js'
 import { formatAnchor, driftMeters } from './anchor.js'
@@ -424,6 +424,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // apply saved audio/visual prefs, then keep them live as the panel changes them
   setMusicEnabled(getPref('music'))
   setMusicVolume(getPref('musicVolume'))
+  setAmbienceVolume(getPref('ambienceVolume'))   // volume before the toggle, so the first ramp lands on the right level
   setAmbience(getPref('ambience'))
   onPrefChange((k, v) => {
     if (k === 'grain')          renderOpts.grain = v
@@ -432,6 +433,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     else if (k === 'music')     setMusicEnabled(v)
     else if (k === 'musicVolume') setMusicVolume(v)
     else if (k === 'ambience')  setAmbience(v)
+    else if (k === 'ambienceVolume') setAmbienceVolume(v)
     // mouseSensitivity, headBob, creatures and damage are read live each frame
   })
 
