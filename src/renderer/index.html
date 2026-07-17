@@ -378,11 +378,19 @@
       }
     })
 
-    function takeAnchor() {
-      currentAnchor = parseAnchor(anchorInput.value)
+    // The single place currentAnchor and the locate row are set. Called from
+    // all three start paths — solo, online, continue — so a resumed run gets a
+    // working "locate your body" button instead of a dead one. index.html has
+    // no test coverage, so this risk lives in one function, not three copies.
+    function applyIdentity({ anchor }) {
+      currentAnchor = anchor || null
       const locateRow = document.getElementById('locate-row')
       if (locateRow) locateRow.style.display = currentAnchor ? 'block' : 'none'
       return currentAnchor
+    }
+
+    function takeAnchor() {
+      return applyIdentity({ anchor: parseAnchor(anchorInput.value) })
     }
 
     async function startSolo() {
@@ -470,8 +478,12 @@
       cont.style.display = ''
       cont.onclick = async () => {
         startStatus.textContent = ''
+        // Restore the identity, not just the world: currentAnchor was never set
+        // on this path, so a resumed anchored run had a working drift HUD but a
+        // hidden, dead "locate your body" button.
+        const anchor = applyIdentity({ anchor: savedRun.anchor ?? null })
         startEl.style.display = 'none'
-        await initGame(canvas, { worldSeed: savedRun.worldSeed ?? null, anchor: savedRun.anchor ?? null, resume: savedRun })
+        await initGame(canvas, { worldSeed: savedRun.worldSeed ?? null, anchor, resume: savedRun })
       }
     }
 
