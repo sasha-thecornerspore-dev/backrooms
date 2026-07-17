@@ -15,6 +15,8 @@ export const PREF_DEFAULTS = {
   music:            true,   // generative weirdcore music bed
   musicVolume:      60,     // % of each level's base music level (0–150)
   ambience:         true,   // fluorescent hum / drone / distant events
+  ambienceVolume:   100,    // % of the environmental layer's base level (0–150)
+  track:            -1,     // -1 = each floor's own mood; 0..n = an alternate from TRACKS (N cycles)
   grain:            true,   // film-grain overlay
   particles:        true,   // dust / steam / spark motes
   crosshair:        true,   // centre dot

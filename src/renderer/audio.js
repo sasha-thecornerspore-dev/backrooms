@@ -1,4 +1,6 @@
 let actx, humGain, humOsc, ambienceGain
+let ambienceOn  = true   // the toggle
+let ambienceVol = 1      // the volume scale (1 == 100%, the historic level)
 
 export function initAudio(config) {
   try {
@@ -341,10 +343,26 @@ function playDistant() {
   } catch (e) { /* ignore */ }
 }
 
+// The environmental layer (hum / drone / distant events) has two independent
+// controls that must compose, not overwrite each other: an on/off toggle and a
+// volume scale. Both funnel through here so flipping the toggle can't wipe the
+// volume and vice versa.
+function applyAmbience() {
+  if (!ambienceGain || !actx) return
+  ambienceGain.gain.setTargetAtTime(ambienceOn ? ambienceVol : 0, actx.currentTime, 0.5)
+}
+
 // Toggle the whole environmental layer (hum / drone / distant events).
 export function setAmbience(on) {
-  if (!ambienceGain || !actx) return
-  ambienceGain.gain.setTargetAtTime(on ? 1 : 0, actx.currentTime, 0.5)
+  ambienceOn = !!on
+  applyAmbience()
+}
+
+// Scale the environmental layer as a percentage (0–150) of its base level.
+// Mirrors setMusicVolume. 100 == the level it has always played at.
+export function setAmbienceVolume(pct) {
+  ambienceVol = Math.max(0, Math.min(1.5, (pct ?? 100) / 100))
+  applyAmbience()
 }
 
 // A low heart-thump — game.js pulses it faster as something closes on you.

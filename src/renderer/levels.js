@@ -174,3 +174,49 @@ export function levelConfig(base, index) {
 }
 
 export function levelCount() { return LEVELS.length }
+
+// ── alternate tracks ────────────────────────────────────────────────────────
+// Each level's own `music` block above is its native mood, and stays the
+// default. These are hand-tuned alternates the player cycles with N.
+//
+// They are slow, beatless ambient in the Marconi Union vein, and the recipe is
+// deliberate rather than decorative:
+//   groove: 0        — switches the kick/hat off entirely (audio.js:262). No pulse.
+//   tempo 900–1200   — 50–66 BPM, resting-heart-rate territory.
+//   beatsPerChord 16 — 16–19 seconds on a single chord. Harmony you drift in,
+//                      not harmony that goes somewhere.
+//   leadChance ~0.1  — sparse and irregular, so no melody ever repeats and the
+//                      ear can't anticipate the next note. That unpredictability
+//                      is the whole trick behind Weightless; a hummable tune
+//                      would defeat it.
+//   long noteLen     — notes outlast their own chord and blur into the next.
+// Pentatonic scales throughout: no leading tone, so nothing ever resolves.
+export const TRACKS = [
+  {
+    name: 'weightless',
+    hint: 'something almost restful.',
+    mood: { root: 130.81, scale: [0, 3, 5, 7, 10],
+            progressions: [[0, 2], [0, 3], [2, 0], [3, 0]],
+            tempo: 1000, beatsPerChord: 16, beatsPerBar: 4, groove: 0,
+            arpLen: 2.0, leadChance: 0.10, brightness: 700, wobble: 0.004,
+            bend: 0.05, noteLen: 4.0, volume: 0.055 },
+  },
+  {
+    name: 'deep field',
+    hint: 'the room exhales.',
+    mood: { root: 110, scale: [0, 2, 3, 7, 10],
+            progressions: [[0, 3], [0, 2], [3, 2]],
+            tempo: 1200, beatsPerChord: 16, beatsPerBar: 4, groove: 0,
+            arpLen: 2.4, leadChance: 0.08, brightness: 520, wobble: 0.006,
+            bend: 0.04, noteLen: 5.0, volume: 0.05 },
+  },
+  {
+    name: 'tape loop',
+    hint: 'a warmth that is not quite in tune.',
+    mood: { root: 146.83, scale: [0, 2, 4, 7, 9],
+            progressions: [[0, 3, 2], [0, 2], [2, 0, 3]],
+            tempo: 900, beatsPerChord: 12, beatsPerBar: 4, groove: 0,
+            arpLen: 1.6, leadChance: 0.14, brightness: 900, wobble: 0.014,
+            bend: 0.09, noteLen: 3.5, volume: 0.055 },
+  },
+]
