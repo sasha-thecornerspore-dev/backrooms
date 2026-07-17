@@ -376,7 +376,13 @@ Every failure converges on the ledger — one screen, already the primary path.
 
 The renderer runs at a `file://` origin (`main.js:88 loadFile`). **Any outbound HTTP must live in the main process behind a narrow IPC method.** There is no HTTP in v1, but the constraint is recorded because a later phase may need it.
 
-> **Proof this constraint is real, and a free bug fix:** `world.js:35` does `fetch('./world.json')` from a `file://` page. Chromium's `fetch` has no `file:` scheme, so it throws, and `world.js:39-41`'s bare `catch { return DEFAULT_CONFIG }` swallows it. Nobody noticed because `src/renderer/world.json` happens to equal `DEFAULT_CONFIG`. **Anyone tuning the game by editing `world.json` today is editing a no-op.** Delete the file and the fetch, or load it via IPC. Five lines; it is currently lying to whoever touches it.
+> **Proof this constraint is real:** `world.js:35` does `fetch('./world.json')` from a `file://` page. Chromium's `fetch` has no `file:` scheme, so it throws, and `world.js:39-41`'s bare `catch { return DEFAULT_CONFIG }` swallows it. `game.js:52` (`await loadConfig()`) has therefore always received `DEFAULT_CONFIG`. Nobody noticed because `src/renderer/world.json` still closely matches it.
+>
+> **This is not a five-line cleanup, and an earlier draft of this spec was wrong to call it one.** `world.json` is the **output of the wish pipeline** — `.github/workflows/wish-grant.yml` reads it (`:25`), writes the Claude-modified version back (`:59`), commits it (`:78`), and merging ships a release players auto-update into. README sells this as a headline feature: *"when a wish is granted, the world drifts… players update and notice the world is not quite as it was."*
+>
+> **Every granted wish has therefore been a no-op.** The issue is labelled, the API is called, the PR opens, the version bumps, the installer builds, players update — and the game reads `DEFAULT_CONFIG` exactly as before.
+>
+> So the fix is **not** "delete the file and the fetch" — that would silently delete the wish system. It is to **make `world.json` load via IPC from the main process**, which would make the wish pipeline work for the first time. That touches the release pipeline and is unrelated to sectors: **it gets its own spec and plan.** Removed from Phase 0.
 
 **New — pure / shared**
 
@@ -490,7 +496,7 @@ The moment anyone notices, "your real county is your world" is revealed as a ski
 
 | Phase | Contents | Proves |
 |---|---|---|
-| **0** | Relay: read `msg.worldSeed`; **delete** `storage.delete('seed')`; echo `roomId`; `relay/seed.js` + test. `applyIdentity()` (Defect D). Delete the dead `world.json` fetch. | Anchored online play works **for the first time**. Worlds survive an empty room. **Ships alone, no new UI.** |
+| **0** | Relay: read `msg.worldSeed`; **delete** `storage.delete('seed')`; echo `roomId`; `relay/seed.js` + test. `applyIdentity()` (Defect D). | Anchored online play works **for the first time**. Worlds survive an empty room. **Ships alone, no new UI.** |
 | **1** | `sector.js`, `places.gen.js`, `gazetteer.js`, `sector-ui.js` (ledger + ID entry), swap the seed origins, `datasetVersion` in the handshake. | ~250 lines, pure, node-testable, zero network. Two players typing `baltimore` provably get the same world. |
 | **1b** | Thread `worldSeed` into items/decor (§9). | Sectors feel like different places. |
 | **2** | `places.js` polygons, `resolveSectorAt`, the pin reveal, neighbour table. | Real geo tether, offline. Unlocks #2. |
