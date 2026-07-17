@@ -90,6 +90,7 @@ the spirits decide. or rather, i do.
 | e | speak to a presence |
 | enter | chat (in online play) |
 | m | mute / unmute the music |
+| n | next track — cycle the ambient beds, or back to the floor's own song |
 | esc | unlock mouse / close dialog |
 
 your **hit points** sit under the level name, top-left. level 0 is safe; below it, the things in the fog will take them from you. bandages and time bring them back.

@@ -1,5 +1,5 @@
 import { loadConfig, CHUNK_SIZE, createChunkCache } from './world.js'
-import { levelConfig } from './levels.js'
+import { levelConfig, TRACKS } from './levels.js'
 import { createEntitySystem } from './entities.js'
 import { createItemSystem } from './items.js'
 import { createDecorSystem } from './decor.js'
@@ -93,6 +93,28 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let transitioning = false
   const fadeEl = document.getElementById('fade')
 
+  // ── track selection (N) ──
+  // -1 means "this floor's own mood"; 0..n-1 index TRACKS. The choice persists
+  // across descents (see buildLevel) so a track you like isn't torn away the
+  // moment you fall through a floor. Declared HERE, above buildLevel, because
+  // buildLevel reads it and runs before this point in initGame — a `let` further
+  // down would be in the temporal dead zone and throw on boot.
+  let trackIdx = getPref('track')
+  if (!Number.isInteger(trackIdx) || trackIdx < -1 || trackIdx >= TRACKS.length) trackIdx = -1
+
+  function cycleTrack() {
+    trackIdx = trackIdx + 1 >= TRACKS.length ? -1 : trackIdx + 1
+    setPref('track', trackIdx)
+    if (trackIdx < 0) {
+      setMusic(level.cfg.music)
+      showMessage('the building resumes its own song.')
+    } else {
+      const t = TRACKS[trackIdx]
+      setMusic(t.mood)
+      showMessage(t.hint)
+    }
+  }
+
   function buildLevel(index) {
     const cfg   = levelConfig(base, index)
     const cache = createChunkCache(cfg, worldSeed)   // cfg.maze.salt differentiates levels
@@ -116,7 +138,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // through a proxy, so the object must exist first.
     level = { index, cfg, cache, entitySys, decor, gfx, messages }
     decor.update(0, 0); itemSys.update(0, 0)
-    setMusic(cfg.music)          // morph the generative bed into this level's mood
+    // Morph the bed into this level's mood — unless the player has chosen an
+    // alternate track with N, in which case their choice follows them down.
+    setMusic(trackIdx < 0 ? cfg.music : TRACKS[trackIdx].mood)
 
     updateHud()
     renderHotbar()
@@ -576,6 +600,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (K['KeyQ']) { K['KeyQ'] = false; applyItemEffect(itemSys.useSelected()) }
       if (K['KeyX']) { K['KeyX'] = false; discardSelected() }
       if (K['KeyM']) { K['KeyM'] = false; const on = !getPref('music'); setPref('music', on); showMessage(on ? 'the music seeps back in.' : 'the music stops.') }
+      if (K['KeyN']) { K['KeyN'] = false; cycleTrack() }
       if (K['KeyL']) { K['KeyL'] = false; flashlight = !flashlight; showMessage(flashlight ? 'flashlight on.' : 'flashlight off — the dark leans in.') }
       for (let i = 0; i < 6; i++) {
         const code = `Digit${i + 1}`
