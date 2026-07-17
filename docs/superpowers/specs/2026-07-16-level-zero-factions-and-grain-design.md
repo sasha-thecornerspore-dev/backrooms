@@ -83,12 +83,50 @@ One hand-authored location. The shared front door: everyone enters here, the map
 
 Harlem Park, West Baltimore. Every link verified (§A.3):
 
-| Year | Document | Effect |
+| Year | Document / act | Effect |
 |---|---|---|
 | **1937** | HOLC *Residential Security Map of Baltimore* | Graded **D — "hazardous."** Red. Capital leaves. |
+| **1937** | **Formstone patented** in Baltimore (Lasting Products Co.) | Fake stone over real brick. *Trompe-l'œil masonry — the "stones" and "mortar" are the same material.* Sold **"respectability, modernity, and the appearance of upward mobility"** to the neighborhoods the map had just condemned. John Waters: *"the polyester of brick."* |
 | **1961** | Harlem Park urban renewal plan | Demolishes hundreds of alley houses — **Woodyear Street, Vincent Street**. Hundreds of residents relocated. |
 | 1960s– | 29 **"inner block parks"** created | *"that the remaining residents did not want, that the city had no intention of maintaining and that soon became dumping grounds for trash"* |
-| **now** | 451 open Vacant Building Notices | **283 of them status `EXTENSION`.** Only 13 ever reached `COMPLIANCE`. |
+| **2004** | **Creative Camouflage Inc.** | Life-sized **photographs of windows and doors** glued to the plywood over vacants, to *"let neighbors feel like they live in a neighborhood that's not as decayed as it is."* $5,000 pilot. |
+| **2004-11-08** | Notice `30150A`, 806 N Carey St | Status **`EXTENSION`**. Still. Twenty-one years. |
+| **now** | 451 open Vacant Building Notices | **283 status `EXTENSION`.** Only 13 ever reached `COMPLIANCE`. Front doors filled with concrete block. |
+
+**The same year a federal map graded this block hazardous, this city patented the material for covering it up.** That is a coincidence. Use it anyway.
+
+### 2.1a The thesis: the engine's limitation is the subject
+
+The reason literal Baltimore fails (§1.1) is that a raycaster **cannot render depth** — every surface is a flat texture pretending to be a thing.
+
+This block is made of exactly that:
+
+| Surface | What it actually is |
+|---|---|
+| Formstone | flat stucco pretending to be stone *and* mortar |
+| Creative Camouflage | a **photograph of a window**, glued where a window was |
+| Painted CMU in a door frame | flat grey pretending to be a door |
+
+**The raycaster fakes surfaces because that is all it can do. The block is fake surfaces because that is what was done to it.** The medium and the subject are the same technique. Level ∅ is not a compromise forced by the renderer — it is the one subject this renderer was accidentally built to tell the truth about.
+
+The epigraph is a real resident, quoted in the *Baltimore Sun*, 2004, about a real photograph glued to a real house:
+
+> **"Even though it's fake, you have to look up on it to see that it's fake."** — Barbara Lloyd
+
+### 2.1b The material set (from Street View reference, 800-block N Carey St)
+
+The palette and props are **observed, not invented**:
+
+| Element | Detail |
+|---|---|
+| **Sealed doors** | Wooden surround intact — arch, carved keystone, peeling cream paint, green-black algae staining — and the opening behind it **filled with grey CMU**. Not plywood. Masonry. |
+| **Plywood** | Weathered grey-brown, visible grain, over some doors/windows. **House number hand-sprayed on it** — `808` dark, `810` orange. |
+| **Formstone** | Irregular tan / grey / brown / pink blocks. Kitsch, durable, and a lie. |
+| **Open windows** | Upper floors: no glass, no board. **A black hole in the brick.** The most Backrooms thing on the street and it costs one texture. |
+| **Marble steps** | Cracked. Classic Baltimore stoop. |
+| **Occupied houses interleaved** | Real curtains, real glass, reflecting trees — **directly beside the sealed ones**. This matters: the block is not abandoned, it is *processed*. People live there. |
+| **Palette** | brick red-orange · formstone tan/grey · plywood grey-brown · CMU grey · marble white-grey · foliage green · **the black of open windows** |
+| **Notice** | A small pale/pink slip on the door. Weathered, curling, unreadable at distance (§9.4). |
 
 **A plan erased a street and replaced it with an enclosed empty space nobody asked for and nobody has maintained since 1961.** It is reachable only through gaps between rowhouses. It has been sitting inside that block for sixty-five years being *not a street, not a yard, not a park*.
 
@@ -118,13 +156,21 @@ Everything that made accurate Baltimore hopeless was about *outdoors at scale*. 
 
 **Same engine.** A hand-authored grid map is what this engine's ancestors did.
 
-### 2.4 The prop
+### 2.4 The prop — and how you get in
 
-Baltimore City Code **§120.2.1** prescribes the notice. It must advise that the structure is **"condemned as being unsafe or dangerous for occupancy or use"** and that **"the public is warned to keep away."** At least **24 inches wide × 8 inches high**. **Signed by the Building Official.**
+Baltimore City Code **§120.2.1** prescribes the notice: it must advise that the structure is **"condemned as being unsafe or dangerous for occupancy or use"** and that **"the public is warned to keep away."** At least **24 inches wide × 8 inches high**. **Signed by the Building Official.**
 
-Rendered to the inch, with real wording and a real notice number. The door is **806 N Carey Street** — notice **`30150A`**, issued **2004-11-08**, block 0089 lot 060, status **`EXTENSION`**. Real, still open, twenty-one years later.
+The door is **806 N Carey Street** — notice **`30150A`**, issued **2004-11-08**, block 0089 lot 060, status **`EXTENSION`**. Real, still open, twenty-one years later.
 
 **`EXTENSION` is the most Backrooms word in the dataset.** The notice never resolves. It is extended. Indefinitely.
+
+**But you cannot go in the front, and that is not a design decision.** Street View confirms the doors on this block are **filled with concrete block** behind their original frames. A masoned door does not open. **The inner block park behind the row is therefore the only way in** — the space the 1961 plan created and then forgot is the only unsealed thing on the block.
+
+Geometry, lore and gameplay converge without being made to:
+
+> The front was sealed by the city. The back was emptied by the city. You enter through the gap the paperwork left.
+
+**Readability — §9.4 is answered by the photographs.** The statutory placard is small, weathered and curling; at 2 m wall height through a 0.6-scale buffer it will not be legible, and that is **fine, because it is not the readable element**. On this block the number that is actually legible is the **house number, hand-sprayed on the plywood in foot-tall letters** — `808`, `810`. That is what the player reads. That is what they can look up. The statutory notice stays as an unreadable pale slip, exactly as it appears in reality — **an official document nobody can read, on a door nobody can open.** The prop survives; only the assumption about *which* text carries it was wrong.
 
 ### 2.5 The join
 
@@ -242,7 +288,9 @@ Contested world territories are content for nobody at this scale. **Factions are
 1. **Which inner block park?** Harlem Park has 29. Needs one chosen on its documentary record (which alley did it eat) and its shape. Woodyear Street and Vincent Street are named in the record — start there.
 2. **Does ∅ break the save?** `save.js:12` — `s.v === 1` else `null`. A format bump **silently discards every saved run**. ∅'s level index must ride in the existing `v: 1` shape (the parent spec's rule: `snapshot()` gains keys, `v` stays 1).
 3. **How does ∅ interact with multiplayer?** Everyone enters through the same door — do players see each other *in* ∅ before they fall? Probably yes, and it's the best cold-start moment the game will ever have. Not designed yet.
-4. **Is the plywood readable?** The notice is a 24×8 inch prop; at 2 m wall height and `RENDER_SCALE` 0.6, can the player actually read a notice number? If not, the whole prop is decoration. **Prototype this before committing to ∅** — it is the feature's thesis in one texture.
+4. ~~**Is the plywood readable?**~~ **Answered** by Street View reference (§2.4): the legible element is the foot-tall hand-sprayed house number, not the statutory placard. The placard stays deliberately unreadable — which is truer than the original plan.
+5. **The camouflage beat — where does it land?** Creative Camouflage (§2.1) is the strongest single image available: a *photograph of a window*, peeling off a board, with nothing behind it. The obvious staging is that the player passes several and only notices at the third. **Unstaged.** Note it is also the level's only "monster" — a horror that is a municipal contractor.
+6. **Occupied houses are non-negotiable.** The reference shows lived-in homes **directly beside** the sealed ones — real curtains, real glass. The block is not abandoned, it is *processed*. Rendering an empty street would be both a lie and the poverty-tourism failure this design exists to avoid. **Some windows have lights on. Nobody comes out.**
 
 ---
 
@@ -263,6 +311,10 @@ Contested world territories are content for nobody at this scale. **Factions are
 - **Baltimore Heritage — Harlem Park**: the 1961 plan, the demolition of Woodyear and Vincent Streets, the 29 inner block parks *"that the remaining residents did not want, that the city had no intention of maintaining and that soon became dumping grounds for trash."* https://baltimoreheritage.org/programs/harlem-park/ · https://explore.baltimoreheritage.org/items/show/9
 - **HOLC 1937 Residential Security Map of Baltimore** — grade D = "hazardous"; West Baltimore redlined; grading criteria explicitly included *"percentage of 'negro families'"*. https://www.library.jhu.edu/news/2017/09/the-baltimore-redlining-map-ranking-neighborhoods/
 - **Harlem Park abandonment**: more than half the properties on Harlem Park study blocks abandoned; ~a quarter of buildings vacant.
+- **Formstone** — patented 1937, Lewis Albert Knight, Lasting Products Co., Baltimore. *"Stucco colored and shaped to imitate masonry… trompe-l'œil… the 'stones' and 'mortar' being of the same material."* Baltimore became "the Formstone capital of the world." John Waters, *"the polyester of brick"* (and a 1997 documentary, *Little Castles: A Formstone Phenomenon*). https://en.wikipedia.org/wiki/Formstone
+- **Creative Camouflage Inc.** — *Baltimore Sun*, "Illusions of occupancy," 2004-06-12. Life-sized **photographs of windows and doors** glued to plywood on vacants; founder Charles W. "Bill" Coleman; ~$5,000 for the Aisquith Street pilot; purpose *"let neighbors feel like they live in a neighborhood that's not as decayed as it is."* Resident Barbara Lloyd: **"Even though it's fake, you have to look up on it to see that it's fake."** Housing Commissioner Paul Graziano: *"worth a closer look."* ACORN's Jacquiline Johnson: *"insulting to the residents of Baltimore."* Criminologist George Kelling: *"a pretty transparent fake."* https://www.baltimoresun.com/2004/06/12/illusions-of-occupancy/
+- **Street View reference** (user-supplied, 800-block N Carey St, §2.1b): doors sealed with CMU behind intact wooden surrounds; house numbers hand-sprayed on plywood; formstone; open unboarded upper windows; occupied houses interleaved with sealed ones.
+- **Cinder-block sealing is standard practice**: *"Cinderblocks wall off the door and windows of burned and abandoned rowhouses."* Baltimore is now piloting clear polycarbonate panels on ~300 of ~12,000 vacants. https://www.thebanner.com/community/housing/baltimore-clear-boarding-pilot-RSSS6NTD5FCGDD6ZJRRYRCGPHQ/
 - **Baltimore City Code Art. 1 Subtitle 9 (Ord. 16-463)** — the open data statute.
 - **Natural Earth terms**: *"No permission is needed to use Natural Earth. Crediting the authors is unnecessary."*
 
