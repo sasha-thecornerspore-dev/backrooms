@@ -586,6 +586,26 @@ git push origin docs/geo-tethered-sectors-spec
 
 ---
 
+## Deployment record
+
+Deployed **2026-07-17**, wrangler 4.105.0, **Version ID `52c68b9a-b9d0-4d71-91f5-265cb9351489`**.
+
+Verified against the live Worker immediately after deploy:
+
+```
+seed_is_what_jeff_requested: true    (requested 123456789 → received 123456789)
+maddie_inherited_jeffs_world: true
+roomId_echoed:                true
+survived_empty_room:          true    (555000111 held through the room emptying)
+refused_the_second_request:   true    (later client asked 999888777, got 555000111)
+```
+
+The same smoke test failed against the previous deploy minutes earlier — both clients received `226116016`, a random number, while `seeds_match` (the old script's only assertion) was **true**.
+
+**Pre-existing rooms keep their random world forever.** Any room code used before this deploy already has a random seed in Durable Object storage, and storage now survives the room emptying. Those rooms will never honour an anchor — the first joiner fixed the world, and that is now permanent and correct behaviour.
+
+**No migration.** A room code is free; use a new one to get an anchored world. Wiping storage would be the alternative and is not worth it — it would reset every existing room's world for no gain.
+
 ## Verification summary
 
 | Defect | Proof it is fixed |
