@@ -10,25 +10,29 @@
 // enterLevel(); nothing here is ever picked up, so there is no "taken" set.
 import { CHUNK_SIZE } from './world.js'
 
-function hash(a, b) {
-  let h = (a * 2654435761 ^ b * 2246822519) >>> 0
+// The third channel `c` is the world seed. Math.imul(0, K) === 0 and X ^ 0 === X,
+// so with seed 0 this hash is byte-identical to the original — the unseeded world
+// and every golden test are untouched. See items.js for the full rationale.
+function hash(a, b, c = 0) {
+  let h = (a * 2654435761 ^ b * 2246822519 ^ Math.imul(c, 3266489917)) >>> 0
   h ^= h >>> 16; h = Math.imul(h, 0x45d9f3b) >>> 0
   h ^= h >>> 16
   return h >>> 0
 }
 
-function rngFrom(a, b) {
-  let s = hash(a, b) | 1
+function rngFrom(a, b, seed = 0) {
+  let s = hash(a, b, seed) | 1
   return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 0xffffffff }
 }
 
-export function createDecorSystem(config, isWallFn) {
+export function createDecorSystem(config, isWallFn, worldSeed = 0) {
   let propTypes = config.props?.types?.length ? config.props.types : ['box']
   let propDens  = config.props?.density ?? 3
   let exitDenom = Math.max(1, config.exit?.denom ?? 6)
   let exitTarget = config.exit?.target ?? 0
   let npcDenom  = Math.max(1, config.npc?.denom ?? 16)
   let salt      = config.maze?.salt | 0
+  const seed    = worldSeed | 0   // null / undefined → 0 → the unseeded world
 
   const props   = new Map()   // "cx,cy" → [{key,x,y,type,rot}]
   const exits    = new Map()  // "cx,cy" → {key,x,y,target}
@@ -50,7 +54,7 @@ export function createDecorSystem(config, isWallFn) {
     const key = `${cx},${cy}`
 
     // props
-    const prng  = rngFrom(cx * 131 + salt + 4242, cy * 197 + salt + 8484)
+    const prng  = rngFrom(cx * 131 + salt + 4242, cy * 197 + salt + 8484, seed)
     const count = Math.floor(propDens) + (prng() < (propDens % 1) ? 1 : 0)
     const list  = []
     for (let i = 0; i < count; i++) {
@@ -62,15 +66,15 @@ export function createDecorSystem(config, isWallFn) {
     if (list.length) props.set(key, list)
 
     // exit
-    if (hash(cx + 5150 + salt, cy + 6270 + salt) % exitDenom === 0) {
-      const erng = rngFrom(cx * 313 + salt + 99, cy * 911 + salt + 77)
+    if (hash(cx + 5150 + salt, cy + 6270 + salt, seed) % exitDenom === 0) {
+      const erng = rngFrom(cx * 313 + salt + 99, cy * 911 + salt + 77, seed)
       const spot = openCell(cx, cy, erng, pcx, pcy)
       if (spot) exits.set(key, { key, x: spot.wx, y: spot.wy, target: exitTarget })
     }
 
     // a lost soul — rare, neutral, speaks when you approach
-    if (hash(cx + 2200 + salt, cy + 3300 + salt) % npcDenom === 0) {
-      const nrng = rngFrom(cx * 617 + salt + 41, cy * 733 + salt + 23)
+    if (hash(cx + 2200 + salt, cy + 3300 + salt, seed) % npcDenom === 0) {
+      const nrng = rngFrom(cx * 617 + salt + 41, cy * 733 + salt + 23, seed)
       const spot = openCell(cx, cy, nrng, pcx, pcy)
       if (spot) npcs.set(key, { key, x: spot.wx, y: spot.wy })
     }
