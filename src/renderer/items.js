@@ -8,23 +8,30 @@ import { CHUNK_SIZE } from './world.js'
 export const ITEM_TYPES = ['almond-water', 'glowstick', 'bandage', 'polaroid', 'radio']
 export const MAX_SLOTS = 6
 
-function hash(a, b) {
-  let h = (a * 2654435761 ^ b * 2246822519) >>> 0
+// The third channel `c` is the world seed. Math.imul is an EXACT 32-bit multiply
+// (no float rounding, identical on every engine), and Math.imul(0, K) === 0, so
+// X ^ 0 === X: with seed 0 this hash is byte-identical to the original two-arg
+// version. Different worlds therefore get different placement; the unseeded
+// world — and every existing golden test — is untouched.
+function hash(a, b, c = 0) {
+  let h = (a * 2654435761 ^ b * 2246822519 ^ Math.imul(c, 3266489917)) >>> 0
   h ^= h >>> 16; h = Math.imul(h, 0x45d9f3b) >>> 0
   h ^= h >>> 16
   return h >>> 0
 }
 
-function itemRng(cx, cy) {
-  let s = hash(cx + 7777, cy + 9999) | 1
+function itemRng(cx, cy, seed = 0) {
+  let s = hash(cx + 7777, cy + 9999, seed) | 1
   return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 0xffffffff }
 }
 
-export function createItemSystem(config, isWallFn) {
+export function createItemSystem(config, isWallFn, worldSeed = 0) {
   let density = Math.max(1, config.items?.density ?? 5)
   let types   = (config.items?.types?.length ? config.items.types : ITEM_TYPES)
-  // salt lets each level place a distinct set of world items at the same chunk
+  // salt picks WHICH floor (per level); seed picks WHICH world (per anchor/sector).
+  // They stay orthogonal: seed rides a separate hash channel, salt shifts coords.
   let salt    = 0
+  const seed  = worldSeed | 0   // null / undefined → 0 → the unseeded world
 
   const worldItems = new Map()  // "cx,cy" → {key, x, y, type}
   const scanned    = new Set()  // chunks already checked this residency
@@ -33,12 +40,12 @@ export function createItemSystem(config, isWallFn) {
   let   selected   = 0
 
   function chunkHasItem(cx, cy) {
-    return hash(cx + 7777 + salt, cy + 9999 + salt) % density === 0
+    return hash(cx + 7777 + salt, cy + 9999 + salt, seed) % density === 0
   }
 
   function placeItem(cx, cy, pcx, pcy) {
-    const rng = itemRng(cx + salt, cy + salt)
-    const type = types[hash(cx + 31 + salt, cy + 17 + salt) % types.length]
+    const rng = itemRng(cx + salt, cy + salt, seed)
+    const type = types[hash(cx + 31 + salt, cy + 17 + salt, seed) % types.length]
     for (let tries = 0; tries < 20; tries++) {
       const lx = 2 + Math.floor(rng() * (CHUNK_SIZE - 4))
       const ly = 2 + Math.floor(rng() * (CHUNK_SIZE - 4))

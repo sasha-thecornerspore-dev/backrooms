@@ -61,7 +61,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let spawnX = player.x, spawnY = player.y
 
   // inventory lives in itemSys and persists; its wall test reads the CURRENT level
-  const itemSys = createItemSystem(base, (wx, wy, pcx, pcy) => level.cache.isWall(wx, wy, pcx, pcy))
+  const itemSys = createItemSystem(base, (wx, wy, pcx, pcy) => level.cache.isWall(wx, wy, pcx, pcy), worldSeed)
 
   // persistent effect / combat timers
   let stamina    = 100
@@ -120,7 +120,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const cache = createChunkCache(cfg, worldSeed)   // cfg.maze.salt differentiates levels
     cache.preload(0, 0)
     const entitySys = createEntitySystem(cfg, (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy))
-    const decor     = createDecorSystem(cfg, (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy))
+    const decor     = createDecorSystem(cfg, (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy), worldSeed)
     const gfx       = createRenderer(canvas, cfg, renderOpts)
     itemSys.enterLevel(cfg)
 
