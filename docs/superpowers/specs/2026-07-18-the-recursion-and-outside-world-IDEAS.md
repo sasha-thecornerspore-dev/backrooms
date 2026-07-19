@@ -13,6 +13,22 @@ Three directions dropped in one breath. Kept faithful; my notes are clearly sepa
 
 Open-ended. The seed: the game and the real world are linked in a way that is the *spectacle*, not a gimmick. (Ties to the sectors/anchors already shipped — see notes.)
 
+**Refinement (2026-07-18) — it's a TWO-WAY membrane:**
+
+> "there's an outside component like two ways, since the game is reality. you can go places to get things in game, or you can go in the game"
+
+Because the game *is* reality (recursively), the boundary is crossable both directions, and both are legitimate paths to the same end:
+
+- **Physical → game.** Go somewhere in the real world and it gives you something in-game. Standing in a real place (your sector, a landmark, a friend's town) unlocks / spawns / delivers in-game content tied to that place.
+- **Game → the thing.** Or reach the same thing by going *into the game* — descend, warp, explore — no travel required.
+
+The point is the **symmetry**: two routes, one destination. Physical travel and in-game travel are interchangeable because reality and simulation are the same substance. This is the mechanic that *demonstrates* the recursion rather than narrating it.
+
+Claude's notes on fit + the one hard constraint:
+- This is exactly the shape of the **warp-portals subsystem (#2)** already sketched in the sectors spec: the in-game path to another sector. The "two ways" adds the *physical* path to the same sector — walk there IRL, or warp there in-game.
+- **The hard constraint (already surfaced in the sectors research §A.1):** verifiable real-world location on a *desktop* app is weak/absent, and the current design deliberately keeps "nothing leaves the machine." A physical→game mechanic needs location that is (a) sensed and (b) trusted. Tiers: **trust-based check-in** (paste a Maps pin of where you are — fine among friends, unverifiable) → **QR / codes at real places** → **a phone companion with real GPS** (big scope, and it breaks the privacy stance). Decide the trust model before building.
+- "Go in the game" as the inverse could also mean the game surfaces *real* information/quests (the recursion proof) — clarify with the user which meaning, or both.
+
 ---
 
 ## 2. The core backlore — the recursion and the Planck length
