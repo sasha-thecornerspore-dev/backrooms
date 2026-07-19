@@ -24,11 +24,11 @@ export function castRay(px, py, angle, isWallFn, maxDist = 96) {
       const dist = side === 0 ? sdx - ddx : sdy - ddy
       let wallX = side === 0 ? py + dist * sa : px + dist * ca
       wallX -= Math.floor(wallX)
-      return { dist, side, wallX }
+      return { dist, side, wallX, mx, my }   // mx,my = hit cell, for per-cell wall materials
     }
 
     if (Math.sqrt((mx - px) ** 2 + (my - py) ** 2) > maxDist) break
   }
 
-  return { dist: maxDist, side: 0, wallX: 0 }
+  return { dist: maxDist, side: 0, wallX: 0, mx, my }
 }
