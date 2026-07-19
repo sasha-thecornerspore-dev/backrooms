@@ -47,4 +47,14 @@ describe('decor system', () => {
     sys.enterLevel(L2); sys.update(0, 0)
     for (const p of sys.getProps()) expect(L2.props.types).toContain(p.type)
   })
+
+  it('a fixed-map level pins exactly one exit at exitAt and skips the scatter', () => {
+    const cfg = { ...L0, exitAt: { x: 12.5, y: 9.5 }, exit: { target: 0, denom: 1 } }
+    const sys = createDecorSystem(cfg, open); sys.update(0, 0)
+    const exits = sys.getExits()
+    expect(exits).toHaveLength(1)                          // one, not the denom-1 scatter
+    expect(exits[0]).toMatchObject({ x: 12.5, y: 9.5, target: 0 })
+    sys.update(40, 40)                                     // walking far never evicts it
+    expect(sys.getExits()).toHaveLength(1)
+  })
 })
