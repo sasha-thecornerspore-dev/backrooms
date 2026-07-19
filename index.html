@@ -58,7 +58,11 @@
     color:var(--yb);min-height:1.6em}
   .hook .cur{color:var(--yb);animation:blink 1s steps(1) infinite}
   @keyframes blink{50%{opacity:0}}
-  .gift{font-size:13px;letter-spacing:4px;color:var(--dim);text-transform:uppercase}
+  .gift{font-size:13px;letter-spacing:4px;color:var(--dim);text-transform:uppercase;
+    font-family:var(--mono),"Segoe UI Historic","Noto Sans Runic","Segoe UI Symbol",sans-serif;min-height:1.6em}
+  .gift .r{color:var(--faint)}                    /* still-encoded runes: dim */
+  .gift .done{animation:decode .5s ease-out}      /* the moment a glyph resolves */
+  @keyframes decode{from{color:var(--yb);text-shadow:0 0 10px var(--y)}to{color:var(--dim);text-shadow:none}}
   .down{position:absolute;bottom:26px;font-size:22px;color:var(--faint);animation:bob 2.4s ease-in-out infinite}
   @keyframes bob{50%{transform:translateY(8px);opacity:.4}}
 
@@ -118,7 +122,7 @@
   <div class="meta">case ∅ — do not distribute</div>
   <h1 class="flick">THE&nbsp;BACKROOMS</h1>
   <div class="hook"><span id="tw"></span><span class="cur">▌</span></div>
-  <div class="gift">if you can read this, you have the gift</div>
+  <div class="gift" id="gift" aria-label="if you can read this, you have the gift"></div>
   <div class="down">▾</div>
 </header>
 
@@ -178,10 +182,40 @@
 </footer>
 
 <script>
-  // typewriter hook
+  // the gift line: starts in Elder Futhark, decodes into English for those who can read it
+  const GIFT="if you can read this, you have the gift";
+  const RUNE={a:'ᚨ',b:'ᛒ',c:'ᚲ',d:'ᛞ',e:'ᛖ',f:'ᚠ',g:'ᚷ',h:'ᚺ',i:'ᛁ',j:'ᛃ',k:'ᚲ',l:'ᛚ',m:'ᛗ',n:'ᚾ',o:'ᛟ',p:'ᛈ',q:'ᚲ',r:'ᚱ',s:'ᛊ',t:'ᛏ',u:'ᚢ',v:'ᚹ',w:'ᚹ',x:'ᚲ',y:'ᛃ',z:'ᛉ'};
+  const RUNES="ᚨᛒᚲᛞᛖᚠᚷᚺᛁᛃᛚᛗᚾᛟᛈᚱᛊᛏᚢᚹᛉᚦᛇᛦᛥ";
+  const giftEl=document.getElementById('gift');
+  const cells=[...GIFT].map(ch=>{
+    const s=document.createElement('span');
+    const letter=/[a-z]/i.test(ch);
+    s.textContent = letter ? RUNE[ch.toLowerCase()] : (ch===' ' ? ' ' : ch);
+    if(letter) s.className='r';
+    giftEl.appendChild(s);
+    return {s,ch,letter};
+  });
+  function decodeGift(){
+    cells.forEach(({s,ch,letter},i)=>{
+      const delay=350+i*60;
+      if(!letter){ setTimeout(()=>s.classList.add('done'),delay); return }
+      setTimeout(()=>{
+        let n=0;
+        const iv=setInterval(()=>{
+          if(n++>=5){ clearInterval(iv); s.textContent=ch; s.classList.remove('r'); s.classList.add('done') }
+          else s.textContent=RUNES[(Math.random()*RUNES.length)|0];
+        },50);
+      },delay);
+    });
+  }
+
+  // typewriter hook → then the runes decode
   const line="you have no-clipped out of reality.";
-  const tw=document.getElementById('tw');let i=0;
-  (function type(){ if(i<=line.length){tw.textContent=line.slice(0,i++);setTimeout(type,55+Math.random()*40)} })();
+  const tw=document.getElementById('tw');let i=0;let decoded=false;
+  (function type(){
+    if(i<=line.length){tw.textContent=line.slice(0,i++);setTimeout(type,55+Math.random()*40)}
+    else if(!decoded){decoded=true;setTimeout(decodeGift,500)}
+  })();
   // scroll reveals
   const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.18});
   document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
