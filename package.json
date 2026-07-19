@@ -1,6 +1,6 @@
 {
   "name": "backrooms",
-  "version": "1.3.4",
+  "version": "1.4.0",
   "description": "The Backrooms — infinite procedural horror maze",
   "author": "Corner Spore",
   "main": "src/main.js",
