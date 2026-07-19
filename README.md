@@ -83,6 +83,7 @@ the spirits decide. or rather, i do.
 | shift | run (watch your legs) |
 | arrow keys | turn (when mouse unlocked) |
 | click | lock mouse for look |
+| space | **ward** — shove back and disperse the things that hunt you (costs your legs) |
 | f | take an item · no-clip through an exit |
 | q | use selected item |
 | x | drop the selected item |
@@ -94,6 +95,8 @@ the spirits decide. or rather, i do.
 | esc | unlock mouse / close dialog |
 
 your **hit points** sit under the level name, top-left. level 0 is safe; below it, the things in the fog will take them from you. bandages and time bring them back.
+
+you are not defenceless. face a thing that hunts you and press **space** — a **ward**, a shove of will and light that throws it back and leaves it reeling, unable to reach you while it recovers. keep at it and the presence comes apart entirely. warding spends your stamina, so you cannot lean on it forever — pick your moment.
 
 ---
 

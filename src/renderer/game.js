@@ -5,7 +5,7 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { writeSave } from './save.js'
 import { formatAnchor, driftMeters } from './anchor.js'
@@ -72,6 +72,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let invuln     = 0    // i-frames after a hit
   let hurt       = 0    // red-flash intensity
   let regenDelay = 0    // seconds before hp regen resumes
+  let wardCd     = 0    // cooldown between wards (the fight-back)
   let netTimer   = 0    // throttles position updates to the server (~20Hz)
   let flashlight = true // the player's own light (toggle with L)
   let sanity     = 100  // the dark and the things eat at it; light + friends restore it
@@ -192,7 +193,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── input ──
   const K = Object.create(null)
   let locked = false
-  window.addEventListener('keydown', e => { K[e.code] = true })
+  window.addEventListener('keydown', e => { if (e.code === 'Space') e.preventDefault(); K[e.code] = true })
   window.addEventListener('keyup',   e => { K[e.code] = false })
   canvas.addEventListener('click', () => canvas.requestPointerLock())
   document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas })
@@ -618,6 +619,21 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if (nearPresence) openDialog()
         else if (nearNpc) showMessage(NPC_LINES[Math.floor(Math.random() * NPC_LINES.length)])
       }
+      // Space — the ward: a shove of will and light. Knocks the things back and
+      // leaves them reeling; ward one enough times and it comes apart. Costs legs.
+      if (K['Space']) {
+        K['Space'] = false
+        if (wardCd <= 0) {
+          if (stamina >= 20) {
+            stamina -= 20; wardCd = 0.65
+            const res = getPref('creatures') ? level.entitySys.ward(player) : { hit: 0, dispelled: 0 }
+            wardPulse(); shake = Math.max(shake, 0.45)
+            if      (res.dispelled > 0) showMessage(res.dispelled > 1 ? 'they come apart in the light.' : 'it comes apart in the light.')
+            else if (res.hit > 0)       showMessage(res.hit > 1 ? 'they recoil from you.' : 'it recoils from you.')
+            else                        showMessage('you push at the dark. it gives nothing back.')
+          } else showMessage('nothing left in your legs to push with.')
+        }
+      }
     }
     if (K['Escape'] && dialogOpen) { K['Escape'] = false; closeDialog() }
 
@@ -637,6 +653,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (creaturesLive) {
       for (const e of level.entitySys.getEntities()) {
         if (e.type !== 'stalker') continue
+        if (e.stagger > 0) continue        // reeling from a ward — cannot reach you
         const d2 = (e.x - player.x) ** 2 + (e.y - player.y) ** 2
         if (d2 < nearD2) nearD2 = d2
       }
@@ -645,6 +662,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     // ── HP: contact damage, i-frames, delayed regen, death ──
     if (invuln > 0) invuln -= dt
+    if (wardCd > 0) wardCd -= dt
     if (!transitioning && creaturesLive && getPref('damage') && invuln <= 0 && nearD < 0.62) {
       player.hp -= (cfg.entities.damage ?? 16); invuln = 0.7; hurt = 1; regenDelay = 6; shake = 1
       showMessage('it has you.')

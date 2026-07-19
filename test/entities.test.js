@@ -85,3 +85,62 @@ describe('entity AI', () => {
     expect(sys.getEntities()[0].x).not.toBe(xBefore)
   })
 })
+
+describe('the ward (fighting back)', () => {
+  // a stalker directly in front of a player facing +x (angle 0), 1.5 units away
+  const inFront = () => ({ x: 11.5, y: 10, type: 'stalker', state: 'chase', dir: 0, dirTimer: 99, stagger: 0, wardHits: 0, chunkCx: 0, chunkCy: 0 })
+
+  it('exposes a ward() method', () => {
+    expect(typeof createEntitySystem(config, isWall).ward).toBe('function')
+  })
+
+  it('staggers and knocks back a presence in the cone ahead', () => {
+    const sys = createEntitySystem(config, isWall)
+    sys.getEntities().push(inFront())
+    const before = sys.getEntities()[0].x
+    const res = sys.ward({ x: 10, y: 10, angle: 0 })
+    const e = sys.getEntities()[0]
+    expect(res.hit).toBe(1)
+    expect(e.stagger).toBeGreaterThan(0)
+    expect(e.x).toBeGreaterThan(before)          // shoved further along +x, away from player
+  })
+
+  it('ignores presences behind the player (outside the cone)', () => {
+    const sys = createEntitySystem(config, isWall)
+    sys.getEntities().push({ ...inFront(), x: 8.5 })   // behind a player facing +x
+    const res = sys.ward({ x: 10, y: 10, angle: 0 })
+    expect(res.hit).toBe(0)
+    expect(sys.getEntities()[0].stagger).toBe(0)
+  })
+
+  it('ignores presences beyond ward range', () => {
+    const sys = createEntitySystem(config, isWall)
+    sys.getEntities().push({ ...inFront(), x: 20 })    // ~10 units ahead, out of range
+    expect(sys.ward({ x: 10, y: 10, angle: 0 }).hit).toBe(0)
+  })
+
+  it('disperses a presence after enough wards', () => {
+    const sys = createEntitySystem(config, isWall)
+    sys.getEntities().push(inFront())
+    // dispelAt defaults to 3 — clear stagger between hits so it stays in range/cone
+    let last
+    for (let i = 0; i < 3; i++) {
+      const e = sys.getEntities()[0]
+      if (e) { e.stagger = 0; e.x = 11.5 }             // re-place in front for the next strike
+      last = sys.ward({ x: 10, y: 10, angle: 0 })
+    }
+    expect(last.dispelled).toBe(1)
+    expect(sys.getEntities().length).toBe(0)           // it came apart
+  })
+
+  it('a staggered presence flees and recovers over time', () => {
+    const sys = createEntitySystem(config, isWall)
+    sys.getEntities().push({ ...inFront(), stagger: 1.0 })
+    const dBefore = Math.abs(sys.getEntities()[0].x - 10)
+    sys.update(0.2, { x: 10, y: 10 }, 0, 0)
+    const e = sys.getEntities()[0]
+    expect(e.state).toBe('stagger')
+    expect(e.stagger).toBeLessThan(1.0)                // ticking down
+    expect(Math.abs(e.x - 10)).toBeGreaterThan(dBefore) // moving away from the player
+  })
+})

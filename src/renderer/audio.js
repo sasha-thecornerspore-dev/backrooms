@@ -418,3 +418,20 @@ export function blip() {
     o.start(t); o.stop(t + 0.16)
   } catch { /* ignore */ }
 }
+
+// The ward — a low, downward "whump" of force pushing out into the dark.
+export function wardPulse() {
+  if (!actx) return
+  try {
+    const t = actx.currentTime
+    const o = actx.createOscillator(), g = actx.createGain()
+    o.type = 'triangle'
+    o.frequency.setValueAtTime(200, t)
+    o.frequency.exponentialRampToValueAtTime(48, t + 0.28)
+    g.gain.setValueAtTime(0.0001, t)
+    g.gain.exponentialRampToValueAtTime(0.16, t + 0.015)
+    g.gain.exponentialRampToValueAtTime(0.0004, t + 0.34)
+    o.connect(g); g.connect(actx.destination)
+    o.start(t); o.stop(t + 0.36)
+  } catch { /* ignore */ }
+}
