@@ -40,7 +40,7 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - run: npm ci
+      - run: npm install --no-audit --no-fund
 
       - name: Arbitrate the oldest overdue wish
         run: |
