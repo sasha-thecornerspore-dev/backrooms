@@ -70,12 +70,24 @@ jobs:
           BODY=$(echo "$ISSUE" | jq -r '.body')
           echo "Arbitrating wish #$NUM"
 
-          deny () {   # $1 = message
+          deny () {   # $1 = message — a real, in-fiction denial
+            msg="${1:-the spirits did not answer.}"; [ -z "$msg" ] && msg="the spirits did not answer."
             gh issue edit "$NUM" --add-label denied --remove-label pending
-            gh issue comment "$NUM" --body "$1"
+            gh issue comment "$NUM" --body "$msg"
             gh issue close "$NUM"
             exit 0
           }
+          flag () {   # $1 = message — could NOT arbitrate; leave open for a keeper
+            msg="${1:-the spirits could not be reached. a keeper must look.}"; [ -z "$msg" ] && msg="the spirits could not be reached. a keeper must look."
+            gh issue edit "$NUM" --add-label auto-failed
+            gh issue comment "$NUM" --body "$msg"
+            exit 0   # NOT a denial — the wish stays open and pending for a human
+          }
+
+          # without a working key the arbiter cannot interpret anything — flag, never false-deny
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            flag "the spirits are unreachable — the arbiter has no voice (ANTHROPIC_API_KEY is unset). a keeper must look."
+          fi
 
           # 20% denial, out the gate — the spirits are capricious
           if [ "$(node -e 'process.stdout.write(Math.random() < 0.20 ? "1" : "0")')" = "1" ]; then
@@ -91,12 +103,19 @@ jobs:
           RESP=$(curl -s https://api.anthropic.com/v1/messages \
             -H "x-api-key: $ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
             -d "$PAYLOAD")
-          OUT=$(echo "$RESP" | jq -r '.content[0].text // empty' | sed -e 's/^```json$//' -e 's/^```$//')
+          OUT=$(printf '%s' "$RESP" | jq -r '.content[0].text // empty' 2>/dev/null | sed -e 's/^```json$//' -e 's/^```$//')
 
-          VERDICT=$(echo "$OUT" | jq -r '.verdict // "deny"' 2>/dev/null || echo deny)
-          NOTE=$(echo "$OUT" | jq -r '.note // "the spirits did not answer."' 2>/dev/null || echo "the spirits did not answer.")
+          # empty or non-JSON reply → the spirits were reachable but said nothing coherent.
+          # Flag for a human — do NOT silently deny a wish because our call failed.
+          if [ -z "$OUT" ] || ! printf '%s' "$OUT" | jq empty >/dev/null 2>&1; then
+            ERR=$(printf '%s' "$RESP" | jq -r '.error.message // empty' 2>/dev/null)
+            flag "the spirits reached for it and found only static${ERR:+ ($ERR)}. a keeper must look."
+          fi
 
-          if [ "$VERDICT" = "deny" ] || ! echo "$OUT" | jq -e '.world' >/dev/null 2>&1; then
+          VERDICT=$(printf '%s' "$OUT" | jq -r '.verdict // "deny"')
+          NOTE=$(printf '%s' "$OUT" | jq -r '.note // empty'); [ -z "$NOTE" ] && NOTE="the spirits did not answer."
+
+          if [ "$VERDICT" = "deny" ] || ! printf '%s' "$OUT" | jq -e '.world != null' >/dev/null 2>&1; then
             deny "$NOTE"
           fi
 
