@@ -27,7 +27,18 @@ The point is the **symmetry**: two routes, one destination. Physical travel and 
 Claude's notes on fit + the one hard constraint:
 - This is exactly the shape of the **warp-portals subsystem (#2)** already sketched in the sectors spec: the in-game path to another sector. The "two ways" adds the *physical* path to the same sector — walk there IRL, or warp there in-game.
 - **The hard constraint (already surfaced in the sectors research §A.1):** verifiable real-world location on a *desktop* app is weak/absent, and the current design deliberately keeps "nothing leaves the machine." A physical→game mechanic needs location that is (a) sensed and (b) trusted. Tiers: **trust-based check-in** (paste a Maps pin of where you are — fine among friends, unverifiable) → **QR / codes at real places** → **a phone companion with real GPS** (big scope, and it breaks the privacy stance). Decide the trust model before building.
-- "Go in the game" as the inverse could also mean the game surfaces *real* information/quests (the recursion proof) — clarify with the user which meaning, or both.
+- "Go in the game" as the inverse could also mean the game surfaces *real* information/quests (the recursion proof). **User confirmed (2026-07-18): BOTH** — the in-game lane substitutes for travel *and* going deep in-game surfaces real coordinates/clues.
+
+**Refinement (2026-07-18) — verification tiers, the beacon, the patent seed:**
+
+- **All three sensing tiers ship, and verifiability *scales the reward.*** trust-pin < on-site code < GPS/beacon. Spoofing the weak tier only yields weak loot; strong rewards demand strong proof of presence ("verifiability adding to the value of what you can gain"). This ladder is the core mechanic, not a fallback.
+- **"A novel electronic beacon in a limited physical area"** — sensing menu, ordered by how *local* / hard to spoof:
+  - **Ultrasonic chirp** — a speaker emits an inaudible code; only a device physically *in the room* hears it (walls block sound). Proves **co-presence**, not just coordinates. The sleeper "novel" pick.
+  - **BLE beacon puck** (iBeacon/Eddystone) — cheap hardware you place; phones detect within metres.
+  - **Wi-Fi BSSID fingerprint** — "you're here iff you see these exact APs." No hardware to place.
+  - **NFC tag / QR** — tap/scan on site; cheap but forwardable.
+  - **UWB** — cm-range, hardest to fake, newest phones only.
+- **Patent seed — NOT legal advice; needs a prior-art search + a real attorney.** Novelty likely is *not* any single sensing method (Niantic/Apple hold heavy prior art) but the **combination**: *presence-proof strength dynamically gating procedurally-generated reward value against a shared deterministic world seed* — "the better you prove you were really there, the more the world gives you." Prior art to clear: Niantic location-gaming patents; Activision **US12296271B2** (GPS→seed→procedural world, already flagged in the sectors spec §11); QONQR **US9861889B2** (expired — that lane is open). Constraint: desktop has no reliable GPS, so the strong tier likely needs a **phone companion**, which breaks the current "nothing leaves the machine" stance — a real tradeoff to decide.
 
 ---
 
