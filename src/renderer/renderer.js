@@ -25,9 +25,72 @@ const OFF = 1 << 24      // large positive offset so `(v+OFF)|0`-OFF == Math.flo
 // The drop-ceiling light grid — a panel every other cell on both axes — is
 // inlined into the ceiling pass in render() (gated on `lightsOn`) for speed.
 
+// A single wall material tile (TS*TS RGB). `kind` is the material code from the
+// authored map (see level-null-map.js): F formstone, C CMU-sealed, P plywood,
+// B brick, W black window, O occupied (lit), M marble. Used only by fixed-map
+// levels (Level ∅); procedural levels use material '0' = the wallpaper below.
+function buildWallTile(base, kind, rnd) {
+  const [br, bg, bb] = base
+  const out = new Uint8Array(TS * TS * 3)
+  for (let y = 0; y < TS; y++) {
+    for (let x = 0; x < TS; x++) {
+      const i = (y * TS + x) * 3
+      const n = (rnd() - 0.5) * 10
+      let r = br, g = bg, b = bb, m = 1
+      switch (kind) {
+        case 'F': {                                   // formstone: irregular fake-stone blocks + mortar
+          const bx = (x / 13) | 0, by = (y / 11) | 0
+          m = 0.86 + ((bx * 7 + by * 13) % 5) * 0.055
+          if (x % 13 === 0 || y % 11 === 0) m *= 0.68  // mortar lines (same material — that's the lie)
+          break
+        }
+        case 'C':                                     // CMU: cold flat grey, cinderblock courses
+          m = 0.96
+          if (y % 8 === 0) m *= 0.8                     // course line
+          if (x % (TS >> 1) === 0) m *= 0.85           // stacked vertical joint
+          break
+        case 'P':                                     // plywood + a sprayed house number
+          m = 0.9 + Math.sin(y * 0.55) * 0.045          // horizontal grain
+          if (x >= TS * 0.32 && x <= TS * 0.68 && y >= TS * 0.26 && y <= TS * 0.5 &&
+              (Math.floor((x - TS * 0.32) / 6) + Math.floor((y - TS * 0.26) / 8)) % 2 === 0) {
+            r = 250; g = 150; b = 40; m = 1             // the number, hand-sprayed
+          }
+          break
+        case 'B': {                                   // brick: offset courses + mortar
+          const row = (y / 8) | 0, off = (row % 2) * 8
+          m = 0.92
+          if (y % 8 === 0) m *= 0.7
+          if ((x + off) % 16 === 0) m *= 0.7
+          break
+        }
+        case 'W':                                     // open upper window: a black hole in the brick
+          r = 13; g = 13; b = 17; m = 1
+          if (x < 3 || y < 3 || x > TS - 4 || y > TS - 4) { r = 66; g = 60; b = 50 } // frame remnant
+          break
+        case 'O':                                     // occupied: a warm lit window — nobody comes out
+          m = 0.9
+          if (x >= TS * 0.55 && x <= TS * 0.86 && y >= TS * 0.28 && y <= TS * 0.62) { r = 255; g = 216; b = 138; m = 1 }
+          else if (x < 3 || y < 3) m *= 0.8
+          break
+        case 'M':                                     // marble stoop: pale, veined, cracked
+          r = 212; g = 210; b = 202; m = 1
+          if (Math.abs(Math.sin(x * 0.31 + y * 0.12)) > 0.9) { r *= 0.84; g *= 0.84; b *= 0.84 }
+          break
+        default:
+          m = 0.94
+      }
+      out[i]     = clamp255(r * m + n)
+      out[i + 1] = clamp255(g * m + n)
+      out[i + 2] = clamp255(b * m + n)
+    }
+  }
+  return out
+}
+
 // Build the three procedural tiles (wall / ceiling / floor) + the light panel,
-// each as a flat Uint8 RGB array of length TS*TS*3.
-function buildTextures(palette) {
+// each as a flat Uint8 RGB array of length TS*TS*3. `materials` (optional) adds
+// one extra wall tile per authored-map material code, keyed by that code.
+function buildTextures(palette, materials = null) {
   const wallRgb  = hexToRgb(palette.wall)
   const ceilRgb  = hexToRgb(palette.ceiling)
   const floorRgb = hexToRgb(palette.floor)
@@ -90,7 +153,17 @@ function buildTextures(palette) {
       floor[i + 2] = clamp255(floorRgb[2] * mot * seamF + n * 0.4)
     }
   }
-  return { wall, ceil, floor, light }
+  // Default wall = material '0' (the wallpaper the loop above produced, byte for
+  // byte). Extra materials get their own tiles from a fresh PRNG, so building
+  // them cannot perturb the default's texture. Procedural levels never sample them.
+  const walls = { '0': wall }
+  if (materials) {
+    for (const ch of Object.keys(materials)) {
+      const base = hexToRgb(materials[ch] || palette.wall)
+      walls[ch] = buildWallTile(base, ch, mulberry32(0x5EED0000 ^ ch.charCodeAt(0)))
+    }
+  }
+  return { walls, ceil, floor, light }
 }
 
 // A tileable grayscale noise canvas for animated film grain.
@@ -115,9 +188,13 @@ function buildGrain() {
 // it roughly triples throughput.
 const RENDER_SCALE = 0.6
 
-export function createRenderer(canvas, config, renderOpts = {}) {
+export function createRenderer(canvas, config, renderOpts = {}, worldHooks = {}) {
   const ctx = canvas.getContext('2d', { alpha: false })
   const ropts = renderOpts   // shared mutable object: { grain, crosshair } — read live
+
+  // Fixed-map levels (Level ∅) supply materialAt(wx,wy) -> material code so walls
+  // can differ cell-to-cell. Absent (procedural levels) → every wall is '0'.
+  const materialAt = worldHooks.materialAt || null
 
   const fogRgb  = hexToRgb(config.palette.fog)
   const baseFog = config.fogDistance
@@ -126,7 +203,10 @@ export function createRenderer(canvas, config, renderOpts = {}) {
   // below. Was declared in config and levels but read nowhere; the panels drew
   // unconditionally. `!== false` keeps the lit default for any config missing it.
   const lightsOn = config.lights !== false
-  const tex     = buildTextures(config.palette)
+  // Outdoor levels (Level ∅) replace the drop-ceiling with open sky.
+  const skyRgb  = config.sky ? hexToRgb(config.sky) : null
+  const hasSky  = !!skyRgb
+  const tex     = buildTextures(config.palette, config.materials)
   const grainCanvas = buildGrain()
   let grainPhase = 0
   let frame = 0
@@ -213,6 +293,21 @@ export function createRenderer(canvas, config, renderOpts = {}) {
         : HH       / Math.max(1, HH - y)
       const rowOff = y * W
 
+      // ── open sky (outdoor levels) — a steady vertical gradient from sky at
+      // the top to the fog colour at the horizon; no drop-ceiling, no panels. ──
+      if (!isFloor && hasSky) {
+        const t = HH > 0 ? y / HH : 1                 // 0 top → 1 horizon
+        const sr = (skyRgb[0] * (1 - t) + F0 * t) * flicker
+        const sg = (skyRgb[1] * (1 - t) + F1 * t) * flicker
+        const sb = (skyRgb[2] * (1 - t) + F2 * t) * flicker
+        const packed = (255 << 24)
+          | ((sb > 255 ? 255 : sb) | 0) << 16
+          | ((sg > 255 ? 255 : sg) | 0) << 8
+          | ((sr > 255 ? 255 : sr) | 0)
+        buf32.fill(packed, rowOff, rowOff + W)
+        continue
+      }
+
       if (rowDist > fog) {
         buf32.fill(fogPacked, rowOff, rowOff + W)
         continue
@@ -276,7 +371,9 @@ export function createRenderer(canvas, config, renderOpts = {}) {
       // fog blend is constant down the column → precompute texel weight + fog add
       const a  = sideMul * (1 - distF) * flicker
       const wR = fogRgb[0] * distF * flicker, wG = fogRgb[1] * distF * flicker, wB = fogRgb[2] * distF * flicker
-      const wt = tex.wall
+      // per-cell material (fixed-map levels); procedural walls are always '0'
+      const mat = materialAt ? materialAt(hit.mx + 0.5, hit.my + 0.5) : null
+      const wt = (mat && tex.walls[mat]) || tex.walls['0']
       const base = texX * 3
 
       for (let y = y0; y < y1; y++) {

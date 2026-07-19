@@ -10,6 +10,7 @@
 // (DEFAULT_CONFIG, possibly drifted by world.json). game.js rebuilds the
 // world, renderer, entities and decor from the merged config on every
 // transition. Inventory and hit points carry with you; the world does not.
+import { NULL_MAP, NULL_SPAWN, NULL_EXIT } from './level-null-map.js'
 
 export const LEVELS = [
   // ── Level 0 — The Lobby ──────────────────────────────────────────────
@@ -142,6 +143,58 @@ export const LEVELS = [
         'something with too many joints is in here with you.',
         'the way up is here. somewhere. find the humming door.',
         'level 3. the deepest you should go.',
+      ],
+    },
+  },
+
+  // ── Level ∅ — The Block ──────────────────────────────────────────────
+  // A hand-authored real place: an inner-block park in Harlem Park, West
+  // Baltimore, grounded in the record (see level-null-map.js). Outdoors —
+  // open sky instead of a ceiling — enclosed by rowhouse backs of formstone,
+  // brick, plywood, black windows, and lit occupied houses. The shared front
+  // door of the whole game: you enter here and fall one-way into the lobby.
+  // Appended at index 4; the descent ring (0→1→2→3→0) never targets it, so it
+  // stays a one-time entrance OUTSIDE the ring.
+  {
+    id: '∅',
+    name: 'level ∅ — the block',
+    sub: 'harlem park, west baltimore. a plan erased the street and left this.',
+    config: {
+      // ceiling is unused (sky replaces it); wall is the material-'0' fallback
+      palette: { wall: '#B8A888', ceiling: '#B9B7AE', floor: '#5A5048', fog: '#9A968C' },
+      fogDistance: 22,
+      flicker: { rate: 0.02, depth: 0.20, recoverySpeed: 14 },   // daylight — barely flickers
+      sky: '#B9B7AE',                                            // overcast Baltimore grey
+      lights: false,                                            // outdoor — no drop-ceiling
+      map: NULL_MAP, spawn: NULL_SPAWN, exitAt: NULL_EXIT,       // the authored fixed grid
+      materials: {
+        F: '#B8A888',   // formstone — fake stone over brick
+        C: '#8F8F8F',   // CMU block, sealing a door
+        P: '#7A6A52',   // plywood, house number sprayed on
+        B: '#8A4A3A',   // brick
+        W: '#141414',   // an open upper window: a black hole
+        O: '#7A5A48',   // occupied — a light on
+        M: '#D2D0C8',   // marble stoop
+      },
+      // dead-air ambient: wind, distant city, no muzak — beatless and bleak
+      music: { root: 98, scale: [0, 2, 3, 7, 10], progressions: [[0, 3], [0, 2], [3, 0]],
+               tempo: 1100, beatsPerChord: 16, beatsPerBar: 4, groove: 0, arpLen: 2.2,
+               leadChance: 0.07, brightness: 600, wobble: 0.010, bend: 0.05, noteLen: 4.5, volume: 0.045 },
+      maze:  { salt: 0x4444 },                                  // unused (fixed map) — kept distinct
+      particles: { count: 30, color: [180, 176, 168], size: 1.6, sway: 0.4, speed: 0.2 },  // drifting ash/dust
+      entities: { enabled: false },                             // the monster here is a municipal filing system
+      items: { density: 40, types: ['polaroid'] },              // sparse — a camera, for evidence
+      props: { density: 0.4, types: ['trash', 'tire', 'weeds', 'box'] },  // the dumping-ground yard
+      exit:  { target: 0, denom: 1, label: 'no-clip out',
+               hint: 'the front doors are sealed with block. the only way out is the gap the paperwork left.' },
+      messages: [
+        'a form was left on the counter. someone started filling it out. they got bored.',
+        'the front doors are filled with concrete block, behind the original frames.',
+        'a photograph of a window, glued where a window was.',
+        'graded hazardous in 1937. the same year they patented the stone to cover it.',
+        'the notice on the door says EXTENSION. it has said EXTENSION for twenty-one years.',
+        'some of the windows have lights on. nobody comes out.',
+        'you are standing in woodyear street. woodyear street is not there.',
       ],
     },
   },

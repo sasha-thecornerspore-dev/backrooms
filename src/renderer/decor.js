@@ -33,6 +33,9 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
   let npcDenom  = Math.max(1, config.npc?.denom ?? 16)
   let salt      = config.maze?.salt | 0
   const seed    = worldSeed | 0   // null / undefined → 0 → the unseeded world
+  // Fixed-map levels (Level ∅) place ONE exit at an authored point instead of
+  // scattering them by chunk hash. When set, procedural exit placement is skipped.
+  let fixedExit = config.exitAt || null
 
   const props   = new Map()   // "cx,cy" → [{key,x,y,type,rot}]
   const exits    = new Map()  // "cx,cy" → {key,x,y,target}
@@ -65,8 +68,8 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
     }
     if (list.length) props.set(key, list)
 
-    // exit
-    if (hash(cx + 5150 + salt, cy + 6270 + salt, seed) % exitDenom === 0) {
+    // exit — procedural scatter, unless this level pins a single authored exit
+    if (!fixedExit && hash(cx + 5150 + salt, cy + 6270 + salt, seed) % exitDenom === 0) {
       const erng = rngFrom(cx * 313 + salt + 99, cy * 911 + salt + 77, seed)
       const spot = openCell(cx, cy, erng, pcx, pcy)
       if (spot) exits.set(key, { key, x: spot.wx, y: spot.wy, target: exitTarget })
@@ -99,6 +102,10 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
         scanned.add(key)
         placeChunk(cx, cy, pcx, pcy)
       }
+    }
+    // the single authored exit for a fixed-map level — never chunk-bound, never evicted
+    if (fixedExit && !exits.has('∅')) {
+      exits.set('∅', { key: '∅', x: fixedExit.x, y: fixedExit.y, target: exitTarget })
     }
   }
 
@@ -146,6 +153,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
     exitTarget = cfg.exit?.target ?? exitTarget
     npcDenom  = Math.max(1, cfg.npc?.denom ?? npcDenom)
     salt      = cfg.maze?.salt | 0
+    fixedExit = cfg.exitAt || null
     props.clear()
     exits.clear()
     npcs.clear()

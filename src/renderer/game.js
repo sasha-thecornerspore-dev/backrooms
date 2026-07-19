@@ -1,4 +1,5 @@
 import { loadConfig, CHUNK_SIZE, createChunkCache } from './world.js'
+import { createFixedMap } from './fixedmap.js'
 import { levelConfig, TRACKS } from './levels.js'
 import { createEntitySystem } from './entities.js'
 import { createItemSystem } from './items.js'
@@ -117,15 +118,20 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
   function buildLevel(index) {
     const cfg   = levelConfig(base, index)
-    const cache = createChunkCache(cfg, worldSeed)   // cfg.maze.salt differentiates levels
+    // Level ∅ is a hand-authored fixed grid; the rest are procedural chunk worlds.
+    // Both expose the same isWall(wx,wy,pcx,pcy); the fixed map adds materialAt.
+    const cache = cfg.map ? createFixedMap(cfg.map) : createChunkCache(cfg, worldSeed)
     cache.preload(0, 0)
-    const entitySys = createEntitySystem(cfg, (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy))
-    const decor     = createDecorSystem(cfg, (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy), worldSeed)
-    const gfx       = createRenderer(canvas, cfg, renderOpts)
+    const isWall = (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy)
+    const entitySys = createEntitySystem(cfg, isWall)
+    const decor     = createDecorSystem(cfg, isWall, worldSeed)
+    const gfx       = createRenderer(canvas, cfg, renderOpts,
+      cfg.map ? { materialAt: (wx, wy) => cache.materialAt(wx, wy) } : {})
     itemSys.enterLevel(cfg)
 
-    // spawn at the origin room (always carved open in world.js)
-    player.x = HALF + 0.5; player.y = HALF + 0.5
+    // fixed maps spawn at their authored point; procedural at the origin room (carved open)
+    if (cfg.spawn) { player.x = cfg.spawn.x; player.y = cfg.spawn.y }
+    else { player.x = HALF + 0.5; player.y = HALF + 0.5 }
     spawnX = player.x; spawnY = player.y
 
     const messages = [
@@ -426,7 +432,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const persist = () => { if (!mpClient) writeSave(snapshot()) }   // solo runs are the ones you resume
   window.addEventListener('beforeunload', persist)
 
-  // ── boot: resume a saved run, or start fresh at level 0 ──
+  // ── boot: resume a saved run, else a fresh SOLO run enters through Level ∅
+  //    (the block — index 4), while online play starts in the lobby together. ──
   if (resume) {
     buildLevel(resume.level ?? 0)
     player.x = resume.x ?? player.x
@@ -441,7 +448,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       renderHotbar()
     }
   } else {
-    buildLevel(0)
+    buildLevel(mpClient ? 0 : 4)   // solo: fall in through the block (∅); online: the lobby
   }
   showMessage(level.cfg.levelName)
 

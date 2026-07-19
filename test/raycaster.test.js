@@ -42,4 +42,19 @@ describe('castRay', () => {
     const far  = castRay(1.5, 0.5, 0, wallRight)
     expect(far.dist).toBeGreaterThan(near.dist)
   })
+
+  it('reports the integer hit cell (mx,my) for per-cell wall materials', () => {
+    // Player at (5.5,5.5) facing up hits the wall cell (5,2)
+    const r = castRay(5.5, 5.5, -Math.PI / 2, testWall)
+    expect(Number.isInteger(r.mx)).toBe(true)
+    expect(Number.isInteger(r.my)).toBe(true)
+    expect(r.mx).toBe(5)
+    expect(r.my).toBe(2)
+  })
+
+  it('still reports a hit cell when no wall is found', () => {
+    const r = castRay(0.5, 0.5, 0, () => false, 96)
+    expect(Number.isInteger(r.mx)).toBe(true)
+    expect(Number.isInteger(r.my)).toBe(true)
+  })
 })
