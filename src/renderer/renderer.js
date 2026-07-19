@@ -22,10 +22,8 @@ const TS = 64            // texture tile size (px per world cell)
 const TMASK = TS - 1
 const OFF = 1 << 24      // large positive offset so `(v+OFF)|0`-OFF == Math.floor(v)
 
-// Drop-ceiling light grid: a panel every other cell on both axes.
-function isLightCell(cx, cy) {
-  return (cx & 1) === 0 && (cy & 1) === 0
-}
+// The drop-ceiling light grid — a panel every other cell on both axes — is
+// inlined into the ceiling pass in render() (gated on `lightsOn`) for speed.
 
 // Build the three procedural tiles (wall / ceiling / floor) + the light panel,
 // each as a flat Uint8 RGB array of length TS*TS*3.
@@ -123,6 +121,11 @@ export function createRenderer(canvas, config, renderOpts = {}) {
 
   const fogRgb  = hexToRgb(config.palette.fog)
   const baseFog = config.fogDistance
+  // Whether the drop-ceiling fluorescent panels light up. Levels set lights:false
+  // (Pipe Dreams, Electrical Station) to go dark — honoured in the ceiling pass
+  // below. Was declared in config and levels but read nowhere; the panels drew
+  // unconditionally. `!== false` keeps the lit default for any config missing it.
+  const lightsOn = config.lights !== false
   const tex     = buildTextures(config.palette)
   const grainCanvas = buildGrain()
   let grainPhase = 0
@@ -237,7 +240,7 @@ export function createRenderer(canvas, config, renderOpts = {}) {
         const ti = (ty * TS + tx) * 3
 
         let r, g, b
-        if (ceiling && (cellX & 1) === 0 && (cellY & 1) === 0) {
+        if (ceiling && lightsOn && (cellX & 1) === 0 && (cellY & 1) === 0) {
           r = lt[ti] * aL + gLR; g = lt[ti + 1] * aL + gLG; b = lt[ti + 2] * aL + gLB
         } else {
           r = tbl[ti] * a + gR;  g = tbl[ti + 1] * a + gG;  b = tbl[ti + 2] * a + gB
