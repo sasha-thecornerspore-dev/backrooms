@@ -16,47 +16,37 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Call Claude API to modify world.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Call Claude (subscription) to modify world.json
         id: claude
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Runs on the maintainer's Claude SUBSCRIPTION via Claude Code, not a
+          # pay-per-token API key. Set CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`).
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
+          set -euo pipefail
+          npm install -g @anthropic-ai/claude-code
+
           WORLD=$(cat src/renderer/world.json)
-          WISH="$ISSUE_BODY"
+          SYS='You are the living atmosphere of the Backrooms. You receive a wish from a wanderer and modify a world config JSON to reflect it. You must return ONLY valid JSON matching the input schema exactly — no prose, no markdown, no code fences, and DO NOT use any tools. Be subtle. The Backrooms never changes obviously — it drifts. Small shifts in palette, fog, flicker, audio frequency, item scarcity, or message pool are more unsettling than large ones.'
+          # printf %s keeps world.json / the wish as literal text — a variable's
+          # value is never re-parsed by bash, so neither can inject shell.
+          PROMPT=$(printf '%s\n\nCurrent world.json:\n%s\n\nWish: %s\n\nReturn the modified world.json.' "$SYS" "$WORLD" "$ISSUE_BODY")
 
-          PAYLOAD=$(jq -n \
-            --arg model "claude-sonnet-5" \
-            --arg system "You are the living atmosphere of the Backrooms. You receive a wish from a wanderer and modify a world config JSON to reflect it. You must return ONLY valid JSON matching the input schema exactly — no prose, no markdown, no code fences. Be subtle. The Backrooms never changes obviously — it drifts. Small shifts in palette, fog, flicker, audio frequency, item scarcity, or message pool are more unsettling than large ones." \
-            --arg world "$WORLD" \
-            --arg wish "$WISH" \
-            '{
-              model: $model,
-              max_tokens: 2048,
-              system: $system,
-              messages: [{
-                role: "user",
-                content: ("Current world.json:\n" + $world + "\n\nWish: " + $wish + "\n\nReturn the modified world.json.")
-              }]
-            }')
+          ENVELOPE=$(claude -p "$PROMPT" --model sonnet --output-format json --allowed-tools "" 2>/dev/null || true)
+          NEW_WORLD=$(printf '%s' "$ENVELOPE" | jq -r '.result // empty' 2>/dev/null | sed -e 's/^```json$//' -e 's/^```$//')
 
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d "$PAYLOAD")
-
-          NEW_WORLD=$(echo "$RESPONSE" | jq -r '.content[0].text // empty' | sed -e 's/^```json$//' -e 's/^```$//')
-
-          if [ -z "$NEW_WORLD" ]; then
-            echo "Claude API returned no text content:" >&2
-            echo "$RESPONSE" | jq . >&2
+          if [ -z "$NEW_WORLD" ] || ! printf '%s' "$NEW_WORLD" | jq empty >/dev/null 2>&1; then
+            echo "Claude returned no usable JSON. Envelope was:" >&2
+            printf '%s' "$ENVELOPE" | head -c 800 >&2
             exit 1
           fi
 
-          # Validate it's parseable JSON before writing
-          echo "$NEW_WORLD" | jq . > /dev/null
-          echo "$NEW_WORLD" > src/renderer/world.json
+          printf '%s\n' "$NEW_WORLD" > src/renderer/world.json
 
       - name: Create branch and PR
         env:

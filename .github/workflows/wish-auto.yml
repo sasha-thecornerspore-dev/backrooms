@@ -29,7 +29,10 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # The arbiter speaks through Claude Code on the maintainer's SUBSCRIPTION,
+      # not a pay-per-token API key. Generate the token once with `claude setup-token`
+      # and store it as the CLAUDE_CODE_OAUTH_TOKEN repo secret (valid ~1 year).
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -41,6 +44,9 @@ jobs:
           cache: 'npm'
 
       - run: npm install --no-audit --no-fund
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
 
       - name: Arbitrate the oldest overdue wish
         run: |
@@ -84,9 +90,9 @@ jobs:
             exit 0   # NOT a denial — the wish stays open and pending for a human
           }
 
-          # without a working key the arbiter cannot interpret anything — flag, never false-deny
-          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-            flag "the spirits are unreachable — the arbiter has no voice (ANTHROPIC_API_KEY is unset). a keeper must look."
+          # without a token the arbiter cannot interpret anything — flag, never false-deny
+          if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+            flag "the spirits are unreachable — the arbiter has no voice (CLAUDE_CODE_OAUTH_TOKEN is unset). a keeper must look."
           fi
 
           # 20% denial, out the gate — the spirits are capricious
@@ -95,20 +101,20 @@ jobs:
           fi
 
           WORLD=$(cat src/renderer/world.json)
-          SYS='You are the living atmosphere of the Backrooms, acting as an automated arbiter because the keeper did not answer within 48 hours. You receive a wanderer'"'"'s wish and the current world.json. You have FULL DISCRETION: grant it, partially grant it, or deny it. Deny anything impossible within the schema, hostile, self-referential about the game/repo, or outside atmospheric drift. The Backrooms drifts subtly — small shifts in palette, fog, flicker, audio, item scarcity, or the message pool unsettle more than large ones. Return ONLY a JSON object, no markdown, no prose: {"verdict":"grant"|"partial"|"deny","world":<the full modified world.json of the SAME schema, or null when denying>,"note":<one short eerie in-fiction sentence for the wanderer>}.'
-          PAYLOAD=$(jq -n --arg model "claude-sonnet-5" --arg system "$SYS" --arg world "$WORLD" --arg wish "$BODY" \
-            '{model:$model, max_tokens:2048, system:$system,
-              messages:[{role:"user", content:("Current world.json:\n"+$world+"\n\nWish: "+$wish+"\n\nDecide.")}]}')
+          SYS='You are the living atmosphere of the Backrooms, acting as an automated arbiter because the keeper did not answer within 48 hours. You receive a wanderer'"'"'s wish and the current world.json. You have FULL DISCRETION: grant it, partially grant it, or deny it. Deny anything impossible within the schema, hostile, self-referential about the game/repo, or outside atmospheric drift. The Backrooms drifts subtly — small shifts in palette, fog, flicker, audio, item scarcity, or the message pool unsettle more than large ones. Return ONLY a JSON object, no markdown, no prose, and DO NOT use any tools: {"verdict":"grant"|"partial"|"deny","world":<the full modified world.json of the SAME schema, or null when denying>,"note":<one short eerie in-fiction sentence for the wanderer>}.'
+          # Build the prompt with printf (%s = literal): a variable'"'"'s VALUE is never
+          # re-parsed by bash, so world.json / the wish cannot inject shell.
+          PROMPT=$(printf '%s\n\nCurrent world.json:\n%s\n\nWish: %s\n\nDecide.' "$SYS" "$WORLD" "$BODY")
 
-          RESP=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
-            -d "$PAYLOAD")
-          OUT=$(printf '%s' "$RESP" | jq -r '.content[0].text // empty' 2>/dev/null | sed -e 's/^```json$//' -e 's/^```$//')
+          # Claude Code print-mode on the maintainer'"'"'s subscription. --output-format json
+          # wraps the reply as {"result": "<text>", "is_error": bool, ...}; no tools allowed.
+          ENVELOPE=$(claude -p "$PROMPT" --model sonnet --output-format json --allowed-tools "" 2>/dev/null || true)
+          OUT=$(printf '%s' "$ENVELOPE" | jq -r '.result // empty' 2>/dev/null | sed -e 's/^```json$//' -e 's/^```$//')
 
           # empty or non-JSON reply → the spirits were reachable but said nothing coherent.
           # Flag for a human — do NOT silently deny a wish because our call failed.
           if [ -z "$OUT" ] || ! printf '%s' "$OUT" | jq empty >/dev/null 2>&1; then
-            ERR=$(printf '%s' "$RESP" | jq -r '.error.message // empty' 2>/dev/null)
+            ERR=$(printf '%s' "$ENVELOPE" | jq -r 'select(.is_error==true) | .result // empty' 2>/dev/null | head -c 200)
             flag "the spirits reached for it and found only static${ERR:+ ($ERR)}. a keeper must look."
           fi
 
