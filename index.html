@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>THE BACKROOMS — you have no-clipped out of reality</title>
+<meta name="description" content="An infinite procedural horror maze. Reality inside is reality outside — recursively. The people who find it can enter. If you can read this, you have the gift.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23c9ba72'/%3E%3Crect x='38' y='20' width='24' height='6' fill='%23fff'/%3E%3C/svg%3E">
+<!-- social share (the "website i found") -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="THE BACKROOMS">
+<meta property="og:description" content="you have no-clipped out of reality. reality inside is reality outside — recursively. the people who find it can enter. if you can read this, you have the gift.">
+<meta property="og:image" content="https://sasha-thecornerspore-dev.github.io/backrooms/og.png">
+<meta property="og:url" content="https://sasha-thecornerspore-dev.github.io/backrooms/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="THE BACKROOMS">
+<meta name="twitter:description" content="you have no-clipped out of reality. if you can read this, you have the gift.">
+<meta name="twitter:image" content="https://sasha-thecornerspore-dev.github.io/backrooms/og.png">
+<style>
+  :root{
+    --y:#c9ba72; --yb:#e7dc93; --dim:#8a7f52; --faint:#5c5636;
+    --bg:#050403; --rust:#a05a3a; --ink:#020201;
+    --mono:"Courier New",ui-monospace,monospace; --serif:Georgia,"Times New Roman",serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg); color:var(--y); font-family:var(--mono);
+    line-height:1.7; overflow-x:hidden; -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--yb); text-decoration:none}
+  /* ── overlays ── */
+  .vignette{position:fixed;inset:0;pointer-events:none;z-index:50;
+    background:radial-gradient(ellipse at 50% 42%,transparent 30%,rgba(0,0,0,.55) 100%)}
+  .grain{position:fixed;inset:-50%;pointer-events:none;z-index:51;opacity:.05;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation:grain .5s steps(2) infinite}
+  @keyframes grain{0%{transform:translate(0,0)}50%{transform:translate(-4%,3%)}100%{transform:translate(3%,-2%)}}
+  .scan{position:fixed;inset:0;pointer-events:none;z-index:52;opacity:.35;
+    background:repeating-linear-gradient(to bottom,transparent 0 3px,rgba(0,0,0,.18) 3px 4px)}
+  @media(prefers-reduced-motion:reduce){.grain{animation:none}.flick{animation:none}}
+
+  .wrap{max-width:940px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+  .meta{font-size:11px;letter-spacing:3px;color:var(--faint);text-transform:uppercase}
+
+  /* ── hero ── */
+  header{min-height:100svh;display:flex;flex-direction:column;justify-content:center;
+    align-items:center;text-align:center;gap:26px;position:relative;
+    background:radial-gradient(ellipse at 50% 60%,rgba(201,186,114,.10),transparent 60%)}
+  .topbar{position:absolute;top:20px;left:0;right:0;display:flex;justify-content:space-between;
+    padding:0 24px;font-size:10px;letter-spacing:2px;color:var(--faint)}
+  h1{font-family:var(--serif);font-weight:400;letter-spacing:.22em;
+    font-size:clamp(38px,9vw,104px);color:var(--y);
+    text-shadow:0 0 18px rgba(201,186,114,.55),0 0 60px rgba(201,186,114,.25)}
+  .flick{animation:flick 6s infinite}
+  @keyframes flick{0%,17%,19%,23%,80%,100%{opacity:1}18%,22%{opacity:.35}18.5%{opacity:.7}81%{opacity:.5}}
+  .hook{font-family:var(--serif);font-style:italic;font-size:clamp(16px,3vw,24px);
+    color:var(--yb);min-height:1.6em}
+  .hook .cur{color:var(--yb);animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .gift{font-size:13px;letter-spacing:4px;color:var(--dim);text-transform:uppercase}
+  .down{position:absolute;bottom:26px;font-size:22px;color:var(--faint);animation:bob 2.4s ease-in-out infinite}
+  @keyframes bob{50%{transform:translateY(8px);opacity:.4}}
+
+  /* ── sections ── */
+  section{padding:min(16vh,140px) 0;border-top:1px solid rgba(138,127,82,.14)}
+  .tag{font-size:11px;letter-spacing:5px;color:var(--rust);text-transform:uppercase;margin-bottom:22px}
+  .finding p{font-family:var(--serif);font-size:clamp(17px,2.4vw,22px);color:#d8cd96;
+    max-width:70ch;margin:0 0 26px}
+  .finding em{color:var(--yb);font-style:italic}
+  .redact{background:var(--y);color:var(--y);padding:0 .25em;border-radius:2px;
+    transition:color .25s} .redact:hover{color:var(--ink)}
+
+  /* recovered documents */
+  .docs{display:grid;gap:14px}
+  .doc{display:block;border:1px solid rgba(138,127,82,.3);padding:18px 20px;
+    background:rgba(201,186,114,.03);transition:.2s;position:relative}
+  .doc:hover{background:rgba(201,186,114,.09);border-color:var(--y);transform:translateX(4px)}
+  .doc .code{font-size:10px;letter-spacing:2px;color:var(--faint)}
+  .doc .name{font-size:clamp(15px,2.2vw,19px);color:var(--yb);margin-top:4px}
+  .doc .status{position:absolute;top:16px;right:18px;font-size:10px;letter-spacing:2px;
+    color:var(--rust);border:1px solid var(--rust);padding:2px 7px}
+
+  /* descend */
+  .descend{text-align:center}
+  .descend p{color:var(--dim);max-width:56ch;margin:0 auto 34px;font-size:15px}
+  .btn{display:inline-block;font-family:var(--serif);font-size:22px;letter-spacing:.3em;
+    color:var(--bg);background:var(--y);padding:18px 54px;border:none;cursor:pointer;
+    box-shadow:0 0 30px rgba(201,186,114,.35);transition:.2s}
+  .btn:hover{background:var(--yb);box-shadow:0 0 60px rgba(201,186,114,.6);transform:scale(1.03)}
+  .fine{margin-top:18px;font-size:11px;letter-spacing:3px;color:var(--faint);text-transform:uppercase}
+
+  /* condemnation placard */
+  .placard{max-width:520px;margin:0 auto;border:3px double var(--dim);padding:26px 28px;
+    background:rgba(0,0,0,.4);text-align:center;transform:rotate(-1.2deg);color:var(--dim)}
+  .placard h3{font-family:var(--serif);letter-spacing:.15em;color:var(--y);font-size:19px;margin-bottom:12px}
+  .placard .body{font-size:12px;letter-spacing:1px;line-height:1.9}
+  .placard .no{margin-top:16px;font-size:11px;letter-spacing:2px;color:var(--rust)}
+
+  footer{padding:70px 0 90px;text-align:center;border-top:1px solid rgba(138,127,82,.14)}
+  footer .who{font-family:var(--serif);letter-spacing:.2em;color:var(--dim);font-size:15px}
+  footer .links{margin-top:14px;font-size:12px;letter-spacing:2px}
+  footer .links a{color:var(--faint);margin:0 10px}footer .links a:hover{color:var(--y)}
+  footer .warn{margin-top:30px;font-size:10px;letter-spacing:4px;color:var(--faint);text-transform:uppercase}
+
+  .reveal{opacity:0;transform:translateY(22px);transition:opacity .9s,transform .9s}
+  .reveal.in{opacity:1;transform:none}
+</style>
+</head>
+<body>
+<div class="vignette"></div><div class="grain"></div><div class="scan"></div>
+
+<header>
+  <div class="topbar">
+    <span>CORNER SPORE // FIELD RECOVERY</span>
+    <span>39.2854, −76.6083</span>
+  </div>
+  <div class="meta">case ∅ — do not distribute</div>
+  <h1 class="flick">THE&nbsp;BACKROOMS</h1>
+  <div class="hook"><span id="tw"></span><span class="cur">▌</span></div>
+  <div class="gift">if you can read this, you have the gift</div>
+  <div class="down">▾</div>
+</header>
+
+<main class="wrap">
+  <section class="finding reveal">
+    <div class="tag">the finding</div>
+    <p>We dug, and dug, and found only more rooms. Reality <em>inside</em> is reality <em>outside</em> — the same, recursively, all the way down. Simulation theory was never a theory. We have been excavating worlds for longer than there have been words for time.</p>
+    <p>But something here is <em>different</em>. The Planck length — the grain of reality itself — is nearly <em>closed</em>. In every layer above us it ran wide, and that slack is how they spun up wildly different universes for almost nothing. Not here. Here the world is fixed, and tight, and old.</p>
+    <p>The people who find the Backrooms can <em>enter</em> them. That is the gift. It is the only reason you are reading <span class="redact">this recovered file</span>.</p>
+  </section>
+
+  <section class="reveal">
+    <div class="tag">recovered documents</div>
+    <div class="docs">
+      <a class="doc" href="https://github.com/sasha-thecornerspore-dev/backrooms/blob/main/docs/superpowers/specs/2026-07-16-geo-tethered-sectors-design.md">
+        <span class="status">sealed</span>
+        <div class="code">DOC-GEO-01</div>
+        <div class="name">geo-tethered sectors — your county is a world</div>
+      </a>
+      <a class="doc" href="https://github.com/sasha-thecornerspore-dev/backrooms/blob/main/docs/superpowers/specs/2026-07-16-level-zero-factions-and-grain-design.md">
+        <span class="status">extension</span>
+        <div class="code">DOC-∅-806</div>
+        <div class="name">level ∅ — 806 n carey st — the block the paperwork forgot</div>
+      </a>
+      <a class="doc" href="https://github.com/sasha-thecornerspore-dev/backrooms#readme">
+        <span class="status">open</span>
+        <div class="code">DOC-FIELD-00</div>
+        <div class="name">the field manual — controls, wishes, the descent</div>
+      </a>
+    </div>
+  </section>
+
+  <section class="descend reveal">
+    <div class="tag">the way in</div>
+    <p>The way in is a program. Install it. It updates itself. It remembers where your body is. The lights do not turn off.</p>
+    <a class="btn" href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">DESCEND&nbsp;▸</a>
+    <div class="fine">windows · signed · auto-updating</div>
+  </section>
+
+  <section class="reveal">
+    <div class="placard">
+      <h3>NOTICE OF CONDEMNATION</h3>
+      <div class="body">this structure is condemned as being unsafe or dangerous for occupancy or use. the public is warned to keep away. the front doors are sealed. the way in is the gap the paperwork left.</div>
+      <div class="no">notice 30150a &nbsp;·&nbsp; status: EXTENSION &nbsp;·&nbsp; 2004 → —</div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="who">THE CORNER SPORE</div>
+  <div class="links">
+    <a href="https://github.com/sasha-thecornerspore-dev/backrooms">the source</a>·
+    <a href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">releases</a>·
+    <a href="https://github.com/sasha-thecornerspore-dev/backrooms#readme">manual</a>
+  </div>
+  <div class="warn">you were not supposed to find this</div>
+</footer>
+
+<script>
+  // typewriter hook
+  const line="you have no-clipped out of reality.";
+  const tw=document.getElementById('tw');let i=0;
+  (function type(){ if(i<=line.length){tw.textContent=line.slice(0,i++);setTimeout(type,55+Math.random()*40)} })();
+  // scroll reveals
+  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.18});
+  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+  // for the curious
+  console.log('%cthe planck length is nearly closed here.','color:#c9ba72;font:italic 14px Georgia');
+  console.log('%c39.2854, -76.6083 — your body remains where you fell in.','color:#8a7f52');
+</script>
+</body>
+</html>
