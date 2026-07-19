@@ -1,0 +1,123 @@
+name: Auto-Grant Wishes (48h)
+
+# The spirits answer on their own when the keeper does not. Every 6 hours this
+# finds the oldest wish still 'pending' after 48h (i.e. you never labeled it
+# granted/denied), rolls a flat 20% denial, and otherwise lets Claude arbitrate
+# with full discretion — grant, partial, or deny. A granted drift is validated
+# and tested before it is committed to main (which auto-ships to players).
+#
+# One wish per run, so it can never spam releases. It only ever touches
+# src/renderer/world.json — never code. Merging THIS workflow is what turns the
+# automation on; until then it does nothing.
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'   # every 6 hours
+  workflow_dispatch: {}
+
+concurrency:
+  group: wish-auto
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  arbiter:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Arbitrate the oldest overdue wish
+        run: |
+          set -euo pipefail
+
+          # labels the flow uses (idempotent)
+          gh label create granted     --color 2ea44f --description "wish granted"        --force >/dev/null 2>&1 || true
+          gh label create denied      --color b60205 --description "wish denied"         --force >/dev/null 2>&1 || true
+          gh label create auto-failed --color d93f0b --description "auto-grant errored"  --force >/dev/null 2>&1 || true
+
+          # oldest OPEN wish still 'pending', older than 48h, not already decided/failed
+          CUTOFF=$(( $(date +%s) - 48*3600 ))
+          ISSUE=$(gh issue list --state open --label wish --label pending \
+                    --json number,title,body,createdAt,labels --limit 50 \
+                  | jq -c --argjson cutoff "$CUTOFF" '
+                      map(select((.createdAt | fromdateiso8601) < $cutoff)
+                          | select([.labels[].name]
+                              | (contains(["granted"]) or contains(["denied"]) or contains(["auto-failed"])) | not))
+                      | sort_by(.createdAt) | (.[0] // empty)')
+
+          if [ -z "$ISSUE" ]; then
+            echo "No wishes overdue past 48h. The spirits rest."
+            exit 0
+          fi
+
+          NUM=$(echo "$ISSUE"  | jq -r '.number')
+          BODY=$(echo "$ISSUE" | jq -r '.body')
+          echo "Arbitrating wish #$NUM"
+
+          deny () {   # $1 = message
+            gh issue edit "$NUM" --add-label denied --remove-label pending
+            gh issue comment "$NUM" --body "$1"
+            gh issue close "$NUM"
+            exit 0
+          }
+
+          # 20% denial, out the gate — the spirits are capricious
+          if [ "$(node -e 'process.stdout.write(Math.random() < 0.20 ? "1" : "0")')" = "1" ]; then
+            deny "the spirits did not answer."
+          fi
+
+          WORLD=$(cat src/renderer/world.json)
+          SYS='You are the living atmosphere of the Backrooms, acting as an automated arbiter because the keeper did not answer within 48 hours. You receive a wanderer'"'"'s wish and the current world.json. You have FULL DISCRETION: grant it, partially grant it, or deny it. Deny anything impossible within the schema, hostile, self-referential about the game/repo, or outside atmospheric drift. The Backrooms drifts subtly — small shifts in palette, fog, flicker, audio, item scarcity, or the message pool unsettle more than large ones. Return ONLY a JSON object, no markdown, no prose: {"verdict":"grant"|"partial"|"deny","world":<the full modified world.json of the SAME schema, or null when denying>,"note":<one short eerie in-fiction sentence for the wanderer>}.'
+          PAYLOAD=$(jq -n --arg model "claude-sonnet-5" --arg system "$SYS" --arg world "$WORLD" --arg wish "$BODY" \
+            '{model:$model, max_tokens:2048, system:$system,
+              messages:[{role:"user", content:("Current world.json:\n"+$world+"\n\nWish: "+$wish+"\n\nDecide.")}]}')
+
+          RESP=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: $ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
+            -d "$PAYLOAD")
+          OUT=$(echo "$RESP" | jq -r '.content[0].text // empty' | sed -e 's/^```json$//' -e 's/^```$//')
+
+          VERDICT=$(echo "$OUT" | jq -r '.verdict // "deny"' 2>/dev/null || echo deny)
+          NOTE=$(echo "$OUT" | jq -r '.note // "the spirits did not answer."' 2>/dev/null || echo "the spirits did not answer.")
+
+          if [ "$VERDICT" = "deny" ] || ! echo "$OUT" | jq -e '.world' >/dev/null 2>&1; then
+            deny "$NOTE"
+          fi
+
+          # write the drift, then TEST it before it can ship
+          echo "$OUT" | jq '.world' > src/renderer/world.json
+          if ! ( jq . src/renderer/world.json >/dev/null 2>&1 && node tools/validate-world.mjs && npm test ); then
+            git checkout -- src/renderer/world.json
+            gh issue edit "$NUM" --add-label auto-failed
+            gh issue comment "$NUM" --body "the spirits reached for it and the world rejected the shape of it. a keeper must look. ($NOTE)"
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          npm version patch --no-git-tag-version >/dev/null
+          VER=$(node -p "require('./package.json').version")
+          git add src/renderer/world.json package.json package-lock.json
+          git commit -m "spirits: auto-grant wish #$NUM (v$VER) [$VERDICT]"
+          git push origin HEAD:main
+
+          gh issue edit "$NUM" --add-label granted --remove-label pending
+          MSG=$(printf '%s\n\nthe world has drifted. (auto-granted after 48h · v%s — players will notice on their next update.)' "$NOTE" "$VER")
+          gh issue comment "$NUM" --body "$MSG"
+          gh issue close "$NUM"
