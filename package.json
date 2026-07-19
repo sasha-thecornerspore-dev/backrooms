@@ -13,7 +13,7 @@
     "release": "electron-builder --publish always"
   },
   "devDependencies": {
-    "electron": "^33.4.11",
+    "electron": "^39.8.5",
     "electron-builder": "^26.15.3",
     "vitest": "^4.1.10"
   },
