@@ -5,6 +5,12 @@ out/
 src/build-config.json
 *.pfx
 *.p12
+# local secret token files — never commit
+.backrooms-cf-token*
+*cf-token*
+*.token
+__pycache__/
+*.pyc
 _chattest.mjs
 .claude/
 .wrangler/
