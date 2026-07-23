@@ -34,48 +34,54 @@ function isBlockedV4(ip) {
   return false
 }
 
-// Classify the VALUE, not the spelling. `::ffff:a9fe:a9fe`, `::ffff:169.254.169.254`
-// and `0:0:0:0:0:ffff:a9fe:a9fe` are the same address; text matching catches one
-// and misses the rest. new URL() actively rewrites between these forms, so a
-// prefix/exact matcher is a hole, not a nit.
+// Classify the VALUE, not the spelling, and ALLOWLIST rather than blocklist.
+//
+// Two lessons are baked into the shape of this function. First: `::ffff:a9fe:a9fe`,
+// `::ffff:169.254.169.254` and `0:0:0:0:0:ffff:a9fe:a9fe` are the same address, and
+// new URL() actively rewrites between those forms — so text matching is a hole, not
+// a nit. Second: enumerating forbidden ranges loses by default, because every range
+// nobody thought of is permitted. Every globally-routable address IANA has allocated
+// lives in 2000::/3, so we permit that and refuse everything else. fe80::/10,
+// fc00::/7, ff00::/8, fec0::/10, the 64:ff9b::/32 gaps and every unassigned range
+// then need no rule of their own — they are simply not routable space.
+//
+// The only exceptions are address forms that CARRY an IPv4 address inside them.
+// Those must be decoded and judged on the embedded value, because a resolver can
+// legitimately hand us one pointing at a real public host.
 function isBlockedV6(ip) {
   const g = expandV6(ip)
   if (!g) return true                                        // unparseable → fail closed
 
-  // Global unicast is 2000::/3, so g[0..3] all zero means the address is inside
-  // ::/64 — entirely special-purpose space, none of it ordinary routable room.
+  // ::/64 — IPv4-bearing forms. (g[4], g[5]) of (0,0) covers ::, ::1 and
+  // IPv4-compatible; (0,0xffff) IPv4-mapped; (0xffff,0) IPv4-translated. Anything
+  // else in ::/64 is an unrecognized special-purpose form and fails closed.
   if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0) {
-    // (g[4], g[5]) identifies the known IPv4-bearing forms: (0,0) covers ::,
-    // ::1 and IPv4-compatible; (0,0xffff) IPv4-mapped; (0xffff,0) IPv4-translated.
-    // For those the low 32 bits ARE an IPv4 address, so let isBlockedV4 judge it —
-    // that keeps a public embedded address (::ffff:8.8.8.8) legitimately reachable.
     const known = (g[4] === 0 && (g[5] === 0 || g[5] === 0xffff)) ||
                   (g[4] === 0xffff && g[5] === 0)
-    if (!known) return true                                  // unrecognized ::/64 form → fail closed
+    if (!known) return true
     return isBlockedV4([g[6] >> 8, g[6] & 0xff, g[7] >> 8, g[7] & 0xff].join('.'))
   }
 
-  // NAT64 (RFC 6052). On a DNS64/NAT64 network — IPv6-only mobile carriers, some
-  // cloud setups — the resolver synthesizes EVERY IPv4 answer into one of these
-  // prefixes. Callers hand us those resolved addresses, so without this branch the
-  // entire IPv4 blocklist quietly stops applying on such a network.
-  if (g[0] === 0x0064 && g[1] === 0xff9b) {
-    // 64:ff9b:1::/48 (RFC 8215 local-use). RFC 6052 §2.2 spreads the embedded IPv4
-    // across bits 48-71 and 72-95 with the u-octet at 64-71 skipped; rather than
-    // guess at that layout, block the whole /48. It is local-use translation space,
-    // never an ordinary destination, so nothing legitimate is lost.
-    if (g[2] === 0x0001) return true
-    // 64:ff9b::/96 (well-known prefix): g[2..5] are zero and the embedded IPv4 sits
-    // in the low 32 bits. Judge it, so public traffic on these networks still works.
-    if (g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
-      return isBlockedV4([g[6] >> 8, g[6] & 0xff, g[7] >> 8, g[7] & 0xff].join('.'))
-    }
+  // 6to4 — 2002:AABB:CCDD::/48 carries AA.BB.CC.DD. This sits inside 2000::/3, so
+  // without decoding it the allowlist would wave through 2002:7f00:1::1 (127.0.0.1).
+  if (g[0] === 0x2002) {
+    return isBlockedV4([g[1] >> 8, g[1] & 0xff, g[2] >> 8, g[2] & 0xff].join('.'))
   }
 
-  if ((g[0] & 0xffc0) === 0xfe80) return true                // fe80::/10 link-local
-  if ((g[0] & 0xfe00) === 0xfc00) return true                // fc00::/7 unique-local
-  if ((g[0] & 0xff00) === 0xff00) return true                // ff00::/8 multicast
-  return false
+  // NAT64 well-known prefix 64:ff9b::/96 — g[2..5] zero, embedded IPv4 in the low
+  // 32 bits. On a DNS64/NAT64 network the resolver synthesizes EVERY IPv4 answer
+  // into this prefix, so it must be decoded rather than judged as a whole: blanket
+  // treatment here would make every IPv4 host either reachable or unreachable at
+  // once. 64:ff9b:1::/48 and the rest of 64:ff9b::/32 need no rule — they fall
+  // through to the allowlist below and are refused.
+  if (g[0] === 0x0064 && g[1] === 0xff9b &&
+      g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
+    return isBlockedV4([g[6] >> 8, g[6] & 0xff, g[7] >> 8, g[7] & 0xff].join('.'))
+  }
+
+  // Everything that reaches here is judged on the prefix alone: inside 2000::/3
+  // (global unicast) is permitted, everything else is refused.
+  return (g[0] & 0xe000) !== 0x2000
 }
 
 // Expand an IPv6 literal to eight 16-bit groups, or null if it will not expand.

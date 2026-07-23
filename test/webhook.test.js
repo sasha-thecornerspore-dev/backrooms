@@ -36,7 +36,14 @@ describe('isBlockedAddress', () => {
 
   // fe80::/10 spans fe80:: through febf:ffff:...; fe00:: and fbff:: are outside it.
   it.each(['fe80::', 'fe9f::1', 'feaf::1', 'febf::1'])('blocks IPv6 link-local edge %s', blocks)
-  it.each(['fe00::1', 'fbff::1'])('allows just outside IPv6 link-local %s', allows)
+
+  // MEANING CHANGED by the allowlist inversion. These two are outside fe80::/10,
+  // so under the old enumerate-the-blocked design they were "allowed". They are
+  // also outside 2000::/3 — unassigned, not globally routable — so the allowlist
+  // now refuses them. Inputs kept, expectation flipped deliberately: they still
+  // pin the fe80::/10 edge (neither is caught by the link-local rule), they just
+  // land on the default-refuse path instead of falling off the end of the chain.
+  it.each(['fe00::1', 'fbff::1'])('blocks just outside IPv6 link-local %s (unassigned)', blocks)
 
   // fc00::/7 spans fc00:: through fdff:ffff:...
   it.each(['fc00::', 'fdff:ffff::1'])('blocks IPv6 ULA edge %s', blocks)
@@ -109,14 +116,63 @@ describe('isBlockedAddress', () => {
     blocks('64:ff9b:1::7f00:1')
   })
 
-  // Adjacent prefixes are ordinary space and must not be swept up by the above.
-  it.each(['64:ff9c::1', '65:ff9b::1'])('allows NAT64-adjacent prefix %s', allows)
+  // MEANING CHANGED by the allowlist inversion. These were added to prove the
+  // NAT64 rule did not over-match its neighbours, and they still do — neither is
+  // decoded as NAT64. But they are outside 2000::/3, so instead of falling through
+  // to "allowed" they now hit the default refuse. The original intent (no
+  // over-match) is preserved by the 64:ff9b::8.8.8.8 vs 64:ff9c::8.8.8.8 pair
+  // below, which distinguishes decoded-and-public from not-decoded.
+  it.each(['64:ff9c::1', '65:ff9b::1'])('blocks NAT64-adjacent prefix %s (unassigned)', blocks)
+
+  // 6to4 (2002::/16) embeds an IPv4 address in g[1]/g[2] — 2002:AABB:CCDD::/48
+  // carries AA.BB.CC.DD. Same shape of hole as ::/64 and NAT64: decode and judge
+  // the embedded value rather than trusting the wrapper.
+  it.each([
+    '2002:7f00:1::1',      // 127.0.0.1
+    '2002:a9fe:a9fe::1',   // 169.254.169.254 — cloud metadata
+  ])('blocks IPv4 embedded in 6to4 %s', blocks)
+  it('allows 6to4 carrying a public IPv4', () => allows('2002:808:808::1'))
+
+  // Ranges that need no special case once the classifier allowlists 2000::/3 —
+  // none of these are globally-routable unicast, so none of them are permitted.
+  it.each([
+    'fec0::1',        // deprecated site-local (RFC 3879)
+    '64:ff9b:2::1',   // unassigned gap inside 64:ff9b::/32
+    '100::1',         // 100::/64 discard-only
+  ])('blocks non-routable range %s (no special case required)', blocks)
+
+  // 2001:db8::/32 is the documentation range. It sits INSIDE 2000::/3, so the
+  // allowlist permits it. Asserting the real behaviour rather than adding a
+  // special case: it is not a private or internal destination, merely reserved
+  // for docs, so allowing it is consistent with the contract.
+  it('allows the documentation range 2001:db8::1 (inside 2000::/3)', () => {
+    allows('2001:db8::1')
+  })
+
+  // Guard that the NAT64 /96 decode does not over-match its neighbours: the
+  // well-known prefix carrying 8.8.8.8 is reachable, the adjacent prefix is not.
+  it('does not decode a NAT64-adjacent prefix as NAT64', () => {
+    allows('64:ff9b::8.8.8.8')
+    blocks('64:ff9c::8.8.8.8')
+  })
 
   it.each([
     '2606:4700:4700::1111',
-    'fe8::1',   // = 0fe8:: — an ordinary address the old /^fe[89ab]/ regex mis-blocked
-    'fc::1',    // = 00fc:: — likewise for /^f[cd]/
+    '2001:4860:4860::8888',
   ])('allows ordinary public IPv6 %s', allows)
+
+  // MEANING CHANGED by the allowlist inversion. These entered the suite in round 1
+  // as false positives of the old /^fe[89ab]/ and /^f[cd]/ text regexes, asserted
+  // allowed to prove the value-based classifier no longer mis-blocked them by
+  // SPELLING. They are still not mis-blocked by spelling — but 0fe8:: and 00fc::
+  // are unassigned, outside 2000::/3, and the allowlist refuses them on their
+  // VALUE. Inputs kept and expectation flipped: the round-1 regression they guard
+  // against would now show up as fe8::1 being blocked for the wrong reason, which
+  // this still catches via the 2606:/2001: assertions immediately above.
+  it.each([
+    'fe8::1',   // = 0fe8:: — unassigned
+    'fc::1',    // = 00fc:: — unassigned
+  ])('blocks unassigned IPv6 %s (was a text-regex false positive)', blocks)
 
   // Anything that is not a bare IP literal is blocked: callers only ever hand us
   // resolved literals, so a non-literal means something upstream is wrong.
