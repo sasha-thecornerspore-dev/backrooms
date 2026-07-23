@@ -55,6 +55,23 @@ function isBlockedV6(ip) {
     return isBlockedV4([g[6] >> 8, g[6] & 0xff, g[7] >> 8, g[7] & 0xff].join('.'))
   }
 
+  // NAT64 (RFC 6052). On a DNS64/NAT64 network — IPv6-only mobile carriers, some
+  // cloud setups — the resolver synthesizes EVERY IPv4 answer into one of these
+  // prefixes. Callers hand us those resolved addresses, so without this branch the
+  // entire IPv4 blocklist quietly stops applying on such a network.
+  if (g[0] === 0x0064 && g[1] === 0xff9b) {
+    // 64:ff9b:1::/48 (RFC 8215 local-use). RFC 6052 §2.2 spreads the embedded IPv4
+    // across bits 48-71 and 72-95 with the u-octet at 64-71 skipped; rather than
+    // guess at that layout, block the whole /48. It is local-use translation space,
+    // never an ordinary destination, so nothing legitimate is lost.
+    if (g[2] === 0x0001) return true
+    // 64:ff9b::/96 (well-known prefix): g[2..5] are zero and the embedded IPv4 sits
+    // in the low 32 bits. Judge it, so public traffic on these networks still works.
+    if (g[2] === 0 && g[3] === 0 && g[4] === 0 && g[5] === 0) {
+      return isBlockedV4([g[6] >> 8, g[6] & 0xff, g[7] >> 8, g[7] & 0xff].join('.'))
+    }
+  }
+
   if ((g[0] & 0xffc0) === 0xfe80) return true                // fe80::/10 link-local
   if ((g[0] & 0xfe00) === 0xfc00) return true                // fc00::/7 unique-local
   if ((g[0] & 0xff00) === 0xff00) return true                // ff00::/8 multicast

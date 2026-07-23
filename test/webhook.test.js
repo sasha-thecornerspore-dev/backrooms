@@ -89,6 +89,29 @@ describe('isBlockedAddress', () => {
     '::ffff:0:8.8.8.8',   // IPv4-translated public
   ])('allows public IPv4 embedded in %s', allows)
 
+  // NAT64. On a DNS64/NAT64 network (IPv6-only carriers, some cloud setups)
+  // dns.lookup() synthesizes EVERY IPv4 answer as 64:ff9b::<v4>. If these are not
+  // decoded, the entire IPv4 blocklist silently stops applying on such a network.
+  it.each([
+    '64:ff9b::7f00:1',            // 127.0.0.1
+    '64:ff9b::a9fe:a9fe',         // 169.254.169.254 — cloud metadata
+    '64:ff9b::a00:1',             // 10.0.0.1
+    '64:ff9b::127.0.0.1',         // same, dotted spelling
+    '64:ff9b::169.254.169.254',   // same, dotted spelling
+  ])('blocks IPv4 embedded in NAT64 well-known prefix %s', blocks)
+
+  it.each([
+    '64:ff9b::8.8.8.8',   // dotted
+    '64:ff9b::808:808',   // hex — same address
+  ])('allows public IPv4 embedded in NAT64 prefix %s', allows)
+
+  it('blocks the RFC 8215 local-use NAT64 prefix 64:ff9b:1::/48', () => {
+    blocks('64:ff9b:1::7f00:1')
+  })
+
+  // Adjacent prefixes are ordinary space and must not be swept up by the above.
+  it.each(['64:ff9c::1', '65:ff9b::1'])('allows NAT64-adjacent prefix %s', allows)
+
   it.each([
     '2606:4700:4700::1111',
     'fe8::1',   // = 0fe8:: — an ordinary address the old /^fe[89ab]/ regex mis-blocked
