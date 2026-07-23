@@ -34,13 +34,62 @@ function isBlockedV4(ip) {
   return false
 }
 
+// Classify the VALUE, not the spelling. `::ffff:a9fe:a9fe`, `::ffff:169.254.169.254`
+// and `0:0:0:0:0:ffff:a9fe:a9fe` are the same address; text matching catches one
+// and misses the rest. new URL() actively rewrites between these forms, so a
+// prefix/exact matcher is a hole, not a nit.
 function isBlockedV6(ip) {
-  const s = ip.toLowerCase()
-  const mapped = s.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)   // IPv4-mapped → judge as v4
-  if (mapped) return isBlockedV4(mapped[1])
-  if (s === '::' || s === '::1') return true               // unspecified, loopback
-  if (/^fe[89ab]/.test(s)) return true                     // fe80::/10 link-local
-  if (/^f[cd]/.test(s)) return true                        // fc00::/7 unique-local
-  if (s.startsWith('ff')) return true                      // ff00::/8 multicast
+  const g = expandV6(ip)
+  if (!g) return true                                        // unparseable → fail closed
+
+  // g[0..4] zero with g[5] of 0xffff (IPv4-mapped) or 0 (IPv4-compatible) means
+  // the address IS an IPv4 value in its low 32 bits — judge it as one. This also
+  // covers :: (0.0.0.0) and ::1 (0.0.0.1), both of which isBlockedV4 blocks.
+  if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0 &&
+      (g[5] === 0xffff || g[5] === 0)) {
+    return isBlockedV4([g[6] >> 8, g[6] & 0xff, g[7] >> 8, g[7] & 0xff].join('.'))
+  }
+
+  if ((g[0] & 0xffc0) === 0xfe80) return true                // fe80::/10 link-local
+  if ((g[0] & 0xfe00) === 0xfc00) return true                // fc00::/7 unique-local
+  if ((g[0] & 0xff00) === 0xff00) return true                // ff00::/8 multicast
   return false
+}
+
+// Expand an IPv6 literal to eight 16-bit groups, or null if it will not expand.
+// Safe to be strict here: net.isIP() has already validated the literal, so a
+// rejection means something is off and the caller fails closed.
+function expandV6(literal) {
+  try {
+    let s = String(literal).toLowerCase().split('%')[0]      // drop any %zone suffix
+
+    // A trailing dotted quad occupies the final two groups — rewrite it as hex
+    // so the rest of the expansion only ever deals with 16-bit groups.
+    const cut = s.lastIndexOf(':') + 1
+    if (s.slice(cut).includes('.')) {
+      const q = s.slice(cut).split('.')
+      if (q.length !== 4 || q.some(d => !/^\d{1,3}$/.test(d) || Number(d) > 255)) return null
+      const hi = (Number(q[0]) << 8) | Number(q[1])
+      const lo = (Number(q[2]) << 8) | Number(q[3])
+      s = s.slice(0, cut) + hi.toString(16) + ':' + lo.toString(16)
+    }
+
+    const halves = s.split('::')
+    if (halves.length > 2) return null                       // at most one :: run
+    const head = halves[0] ? halves[0].split(':') : []
+    const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : []
+
+    let parts
+    if (halves.length === 1) {
+      parts = head                                           // uncompressed: must be all 8
+    } else {
+      const fill = 8 - head.length - tail.length
+      if (fill < 1) return null
+      parts = [...head, ...Array(fill).fill('0'), ...tail]
+    }
+    if (parts.length !== 8 || parts.some(h => !/^[0-9a-f]{1,4}$/.test(h))) return null
+    return parts.map(h => parseInt(h, 16))
+  } catch {
+    return null
+  }
 }
