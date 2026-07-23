@@ -260,6 +260,21 @@
       <label class="toggle-row"><span>Creatures <span class="set-hint">below level 0</span></span><input type="checkbox" id="set-creatures"/></label>
       <label class="toggle-row"><span>Can take damage <span class="set-hint">peaceful = off</span></span><input type="checkbox" id="set-damage"/></label>
 
+      <div class="set-section">SIGNAL / BEACON</div>
+      <label class="toggle-row">
+        <span>Beacon effect <span class="set-hint">B fires your own webhook</span></span>
+        <select id="set-beacon-effect">
+          <option value="off">off</option>
+          <option value="ntfy">ntfy.sh topic</option>
+          <option value="discord">discord webhook</option>
+          <option value="custom">custom https url</option>
+        </select>
+      </label>
+      <label class="toggle-row">
+        <span>Beacon target <span class="set-hint">topic or https url</span></span>
+        <input type="text" id="set-beacon-webhook" spellcheck="false" style="width:200px;"/>
+      </label>
+
       <div id="update-ready-msg" style="display:none;color:#c9ba72;font-family:monospace;font-size:13px;margin-top:12px;">
         update ready — <button id="btn-restart" style="background:none;border:none;color:#c9ba72;cursor:pointer;font-family:monospace;text-decoration:underline;">restart now</button>
       </div>
@@ -497,6 +512,8 @@
     prefRange('set-ambiencevol', 'ambienceVolume')
     prefChk('set-grain', 'grain');       prefChk('set-particles', 'particles');    prefChk('set-crosshair', 'crosshair');    prefChk('set-headbob', 'headBob')
     prefRange('set-sens', 'mouseSensitivity'); prefChk('set-creatures', 'creatures'); prefChk('set-damage', 'damage')
+    document.getElementById('set-beacon-effect').addEventListener('change', e => setPref('beaconEffect', e.target.value))
+    document.getElementById('set-beacon-webhook').addEventListener('input', e => setPref('beaconWebhook', e.target.value.slice(0, 300)))
     function loadPrefsIntoPanel() {
       const p = getPrefs()
       document.getElementById('set-music').checked      = p.music
@@ -510,6 +527,8 @@
       document.getElementById('set-sens').value         = p.mouseSensitivity
       document.getElementById('set-creatures').checked  = p.creatures
       document.getElementById('set-damage').checked     = p.damage
+      document.getElementById('set-beacon-effect').value  = p.beaconEffect
+      document.getElementById('set-beacon-webhook').value = p.beaconWebhook
     }
 
     document.getElementById('btn-settings').onclick = async () => {
