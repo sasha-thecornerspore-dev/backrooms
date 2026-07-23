@@ -160,8 +160,9 @@ app.whenReady().then(() => {
       logLine(`beacon: effect=${effect} ok=${r.ok} status=${r.status ?? '-'}${r.skipped ? ' (skipped)' : ''}`)
       return r
     } catch (e) {
-      logLine(`beacon failed: ${e.message}`)
-      return { ok: false, reason: e.message }
+      // node network errors embed the target host in .message; prefer the error code which is safe to log to disk
+      logLine(`beacon failed: ${e.code || e.message}`)
+      return { ok: false, reason: e.code || e.message }
     }
   })
   ipcMain.handle('start-local-server', async () => {
