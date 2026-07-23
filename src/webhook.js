@@ -121,3 +121,54 @@ function expandV6(literal) {
     return null
   }
 }
+
+const NTFY_TOPIC_RE = /^[A-Za-z0-9_-]{1,64}$/
+
+// Parse + gate an https webhook url. Literal-IP hosts are checked now; DNS
+// names get resolve-then-pin at fire time (resolveAndPin, Task 4).
+export function validateWebhookUrl(urlStr) {
+  let u
+  try { u = new URL(urlStr) } catch { throw new Error('not a valid url') }
+  if (u.protocol !== 'https:') throw new Error('https only')
+  if (u.port && u.port !== '443') throw new Error('port 443 only')
+  if (u.username || u.password) throw new Error('no credentials in url')
+  // new URL() keeps the brackets around an IPv6 host ('[::1]'), and
+  // net.isIP('[::1]') is 0 — so the literal-IP check must strip them first,
+  // or a bracketed loopback/metadata literal sails through unblocked.
+  const host = u.hostname.replace(/^\[|\]$/g, '')
+  if (net.isIP(host) && isBlockedAddress(host)) throw new Error('blocked address')
+  return u
+}
+
+// Shape the outbound request for the chosen effect. Never trusts the raw
+// target beyond what validateWebhookUrl / the ntfy regex permit.
+export function buildBeaconTarget(effect, webhook, { appVersion, now }) {
+  const target = String(webhook || '').trim()
+  if (effect === 'ntfy') {
+    if (!NTFY_TOPIC_RE.test(target)) throw new Error('ntfy topic: 1-64 of letters, digits, _ or -')
+    return {
+      url: `https://ntfy.sh/${target}`,
+      headers: { 'Content-Type': 'text/plain', 'Title': 'the backrooms', 'Tags': 'green_circle' },
+      body: 'a beacon was pushed.',
+    }
+  }
+  if (effect === 'discord') {
+    const u = validateWebhookUrl(target)
+    if (u.hostname !== 'discord.com' && !u.hostname.endsWith('.discord.com'))
+      throw new Error('not a discord webhook url')
+    return {
+      url: u.href,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: 'a beacon was pushed in the backrooms.' }),
+    }
+  }
+  if (effect === 'custom') {
+    const u = validateWebhookUrl(target)
+    return {
+      url: u.href,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: 'beacon', app: 'backrooms', version: appVersion, ts: new Date(now).toISOString() }),
+    }
+  }
+  throw new Error(`unknown beacon effect: ${effect}`)
+}

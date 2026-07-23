@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isBlockedAddress } from '../src/webhook.js'
+import { isBlockedAddress, validateWebhookUrl, buildBeaconTarget } from '../src/webhook.js'
 
 // Every assertion below names its own input, so a failure reports WHICH address
 // regressed rather than a bare "expected false to be true".
@@ -149,6 +149,14 @@ describe('isBlockedAddress', () => {
     allows('2001:db8::1')
   })
 
+  // Boundary of `(g[0] & 0xe000) !== 0x2000` — the single line the entire
+  // allowlist rests on. 1fff:: is the last address below 2000::/3, 4000:: is
+  // the first above it; 2000:: and 3fff:: are the first and last addresses
+  // inside it. Unasserted until now.
+  it.each(['1fff::1'])('blocks just below the 2000::/3 boundary %s', blocks)
+  it.each(['2000::1', '3fff::1'])('allows at the edges of the 2000::/3 boundary %s', allows)
+  it.each(['4000::1'])('blocks just above the 2000::/3 boundary %s', blocks)
+
   // Guard that the NAT64 /96 decode does not over-match its neighbours: the
   // well-known prefix carrying 8.8.8.8 is reachable, the adjacent prefix is not.
   it('does not decode a NAT64-adjacent prefix as NAT64', () => {
@@ -187,5 +195,52 @@ describe('isBlockedAddress', () => {
     ['undefined', undefined],
   ])('blocks non-IP input %s', (_label, ip) => {
     expect([_label, isBlockedAddress(ip)]).toEqual([_label, true])
+  })
+})
+
+describe('validateWebhookUrl', () => {
+  it('accepts a plain https url', () => {
+    expect(validateWebhookUrl('https://example.com/hook').hostname).toBe('example.com')
+  })
+  it('rejects http, non-443 ports, credentials, and blocked literal IPs', () => {
+    expect(() => validateWebhookUrl('http://example.com')).toThrow()
+    expect(() => validateWebhookUrl('https://example.com:8443/x')).toThrow()
+    expect(() => validateWebhookUrl('https://user:pw@example.com')).toThrow()
+    expect(() => validateWebhookUrl('https://127.0.0.1/x')).toThrow()
+    expect(() => validateWebhookUrl('not a url')).toThrow()
+  })
+
+  // CORRECTION 1 — new URL() keeps the square brackets around an IPv6 host
+  // (hostname === '[::1]'), and net.isIP('[::1]') is 0, so an unstripped guard
+  // never fires and a loopback literal passes validation. These pin that the
+  // brackets get stripped before the blocklist check runs.
+  it('rejects a bracketed IPv6 loopback literal', () => {
+    expect(() => validateWebhookUrl('https://[::1]/x')).toThrow()
+  })
+  it('rejects a bracketed IPv6 literal that decodes to cloud metadata', () => {
+    expect(() => validateWebhookUrl('https://[::ffff:169.254.169.254]/x')).toThrow()
+  })
+})
+
+describe('buildBeaconTarget', () => {
+  const ctx = { appVersion: '1.4.0', now: 0 }
+  it('builds an ntfy target from a sanitized topic', () => {
+    const t = buildBeaconTarget('ntfy', 'my-room_1', ctx)
+    expect(t.url).toBe('https://ntfy.sh/my-room_1')
+    expect(t.body).toContain('beacon')
+  })
+  it('rejects an ntfy topic with unsafe characters', () => {
+    expect(() => buildBeaconTarget('ntfy', 'a/b', ctx)).toThrow()
+    expect(() => buildBeaconTarget('ntfy', '', ctx)).toThrow()
+  })
+  it('requires a discord host for the discord effect', () => {
+    expect(buildBeaconTarget('discord', 'https://discord.com/api/webhooks/1/x', ctx).url)
+      .toContain('discord.com')
+    expect(() => buildBeaconTarget('discord', 'https://evil.example/x', ctx)).toThrow()
+  })
+  it('builds a custom json target and rejects unknown effects', () => {
+    const t = buildBeaconTarget('custom', 'https://example.com/hook', ctx)
+    expect(JSON.parse(t.body)).toMatchObject({ event: 'beacon', app: 'backrooms', version: '1.4.0' })
+    expect(() => buildBeaconTarget('nope', '', ctx)).toThrow()
   })
 })
