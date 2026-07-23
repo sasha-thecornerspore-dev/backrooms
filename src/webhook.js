@@ -42,11 +42,16 @@ function isBlockedV6(ip) {
   const g = expandV6(ip)
   if (!g) return true                                        // unparseable → fail closed
 
-  // g[0..4] zero with g[5] of 0xffff (IPv4-mapped) or 0 (IPv4-compatible) means
-  // the address IS an IPv4 value in its low 32 bits — judge it as one. This also
-  // covers :: (0.0.0.0) and ::1 (0.0.0.1), both of which isBlockedV4 blocks.
-  if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0 &&
-      (g[5] === 0xffff || g[5] === 0)) {
+  // Global unicast is 2000::/3, so g[0..3] all zero means the address is inside
+  // ::/64 — entirely special-purpose space, none of it ordinary routable room.
+  if (g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0) {
+    // (g[4], g[5]) identifies the known IPv4-bearing forms: (0,0) covers ::,
+    // ::1 and IPv4-compatible; (0,0xffff) IPv4-mapped; (0xffff,0) IPv4-translated.
+    // For those the low 32 bits ARE an IPv4 address, so let isBlockedV4 judge it —
+    // that keeps a public embedded address (::ffff:8.8.8.8) legitimately reachable.
+    const known = (g[4] === 0 && (g[5] === 0 || g[5] === 0xffff)) ||
+                  (g[4] === 0xffff && g[5] === 0)
+    if (!known) return true                                  // unrecognized ::/64 form → fail closed
     return isBlockedV4([g[6] >> 8, g[6] & 0xff, g[7] >> 8, g[7] & 0xff].join('.'))
   }
 

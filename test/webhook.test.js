@@ -66,6 +66,29 @@ describe('isBlockedAddress', () => {
     blocks(host)
   })
 
+  // Global unicast is 2000::/3, so ANY address whose first four groups are zero
+  // sits in ::/64 — entirely special-purpose space. None of it is ordinary
+  // routable address room, so an unrecognized form there must fail closed rather
+  // than fall through to "not blocked".
+  it.each([
+    '::ffff:0:127.0.0.1',        // IPv4-translated (::ffff:0:0/96) loopback
+    '::ffff:0:169.254.169.254',  // IPv4-translated cloud metadata
+    '::ffff:0:10.0.0.1',         // IPv4-translated private
+    '::ffff:0:7f00:1',           // same, hex-grouped
+    '::ffff:0:a9fe:a9fe',        // same, hex-grouped
+  ])('blocks IPv4-translated %s', blocks)
+
+  it('blocks an unrecognized ::/64 form rather than letting it through', () => {
+    blocks('::1234:5678:9abc')
+  })
+
+  // The ::/64 rule must not become a blanket block: a public IPv4 embedded in a
+  // mapped or translated address is legitimately reachable and stays allowed.
+  it.each([
+    '::ffff:8.8.8.8',     // IPv4-mapped public
+    '::ffff:0:8.8.8.8',   // IPv4-translated public
+  ])('allows public IPv4 embedded in %s', allows)
+
   it.each([
     '2606:4700:4700::1111',
     'fe8::1',   // = 0fe8:: — an ordinary address the old /^fe[89ab]/ regex mis-blocked
