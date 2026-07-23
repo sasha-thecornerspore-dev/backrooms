@@ -610,6 +610,22 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (K['KeyM']) { K['KeyM'] = false; const on = !getPref('music'); setPref('music', on); showMessage(on ? 'the music seeps back in.' : 'the music stops.') }
       if (K['KeyN']) { K['KeyN'] = false; cycleTrack() }
       if (K['KeyL']) { K['KeyL'] = false; flashlight = !flashlight; showMessage(flashlight ? 'flashlight on.' : 'flashlight off — the dark leans in.') }
+      if (K['KeyB']) {
+        K['KeyB'] = false
+        const effect = getPref('beaconEffect')
+        if (!effect || effect === 'off') {
+          showMessage('no beacon set. register one in settings.')
+        } else {
+          showMessage('you push the beacon into the dark...')
+          const p = window.backrooms?.fireBeacon?.({ effect, webhook: getPref('beaconWebhook') })
+          if (p) p.then(r => showMessage(
+                    r?.ok ? 'something answers.'
+                  : r?.reason === 'cooldown' ? 'the beacon is still warm.'
+                  : 'the beacon goes quiet.'))
+                 .catch(() => showMessage('the beacon goes quiet.'))
+          else showMessage('the beacon goes quiet.')
+        }
+      }
       for (let i = 0; i < 6; i++) {
         const code = `Digit${i + 1}`
         if (K[code]) { K[code] = false; itemSys.select(i); renderHotbar() }
