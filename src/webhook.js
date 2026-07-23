@@ -9,6 +9,8 @@
 // matching, or shared index of any kind lives here.
 
 import net from 'net'
+import https from 'https'
+import dns from 'dns'
 
 // True when a LITERAL ip must never be a webhook target. Anything that is not
 // a bare IP literal is blocked too — callers only ever pass resolved literals.
@@ -171,4 +173,79 @@ export function buildBeaconTarget(effect, webhook, { appVersion, now }) {
     }
   }
   throw new Error(`unknown beacon effect: ${effect}`)
+}
+
+function defaultLookup(hostname) {
+  return new Promise((resolve, reject) => {
+    dns.lookup(hostname, { all: true, verbatim: true }, (err, addresses) =>
+      err ? reject(err) : resolve(addresses))
+  })
+}
+
+// Resolve a hostname to a single pinned literal IP, rejecting if it (or any
+// of its resolved addresses) is blocked. A literal-IP host is judged
+// directly, without a DNS round trip.
+//
+// Brackets are stripped up front: new URL() keeps them around an IPv6 host
+// ('[::1]'), and net.isIP('[::1]') is 0 — an unstripped hostname would skip
+// this literal-IP check entirely and fall through to a DNS lookup of the
+// literal string "[::1]", which only happens to fail rather than being
+// judged on purpose. The stripped form is used for both the isBlockedAddress
+// check and the lookup() call.
+export async function resolveAndPin(hostname, lookup = defaultLookup) {
+  const host = String(hostname).replace(/^\[|\]$/g, '')
+  if (net.isIP(host)) {
+    if (isBlockedAddress(host)) throw new Error('blocked address')
+    return host
+  }
+  const addrs = await lookup(host)
+  if (!addrs || !addrs.length) throw new Error('host did not resolve')
+  for (const a of addrs) if (isBlockedAddress(a.address)) throw new Error('resolves to a blocked address')
+  return addrs[0].address
+}
+
+// Validate -> pin -> POST. https-only, port 443, no redirects (https.request
+// does not follow them and none is added here), response body dropped,
+// 5 s timeout, no retries. Connects to the PINNED ip rather than a
+// re-resolved hostname — this is what defeats DNS rebinding between the
+// resolveAndPin check above and the connect below.
+export async function fireBeacon(effect, webhook, opts = {}) {
+  const {
+    appVersion = '0.0.0', now = 0,
+    lookup = defaultLookup, request = https.request, timeoutMs = 5000,
+  } = opts
+  if (!effect || effect === 'off') return { ok: false, skipped: true }
+
+  const target = buildBeaconTarget(effect, webhook, { appVersion, now })
+  const u = new URL(target.url)
+  const pinnedIp = await resolveAndPin(u.hostname, lookup)
+
+  return new Promise((resolve, reject) => {
+    const req = request({
+      protocol: 'https:',
+      host: pinnedIp,                                    // connect to the pinned IP, not a re-resolved name
+      // servername is for TLS SNI + certificate hostname verification, so it
+      // must be the bracket-stripped host — the Host header below keeps the
+      // bracketed form instead, since RFC 7230 requires brackets there for an
+      // IPv6 literal. The two must NOT be set from the same string.
+      servername: u.hostname.replace(/^\[|\]$/g, ''),
+      port: 443,
+      path: u.pathname + u.search,
+      method: 'POST',
+      headers: {
+        ...target.headers,
+        'Host': u.hostname,                               // virtual-host routing at the pinned IP; bracketed form for IPv6
+        'Content-Length': Buffer.byteLength(target.body),
+        'User-Agent': `backrooms/${appVersion}`,
+      },
+      timeout: timeoutMs,
+    }, (res) => {
+      res.resume()                                        // drop the response body; no redirect handling
+      resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, status: res.statusCode })
+    })
+    req.on('error', reject)
+    req.on('timeout', () => req.destroy(new Error('beacon timed out')))
+    req.write(target.body)
+    req.end()
+  })
 }

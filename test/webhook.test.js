@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isBlockedAddress, validateWebhookUrl, buildBeaconTarget } from '../src/webhook.js'
+import { isBlockedAddress, validateWebhookUrl, buildBeaconTarget, resolveAndPin, fireBeacon } from '../src/webhook.js'
 
 // Every assertion below names its own input, so a failure reports WHICH address
 // regressed rather than a bare "expected false to be true".
@@ -242,5 +242,105 @@ describe('buildBeaconTarget', () => {
     const t = buildBeaconTarget('custom', 'https://example.com/hook', ctx)
     expect(JSON.parse(t.body)).toMatchObject({ event: 'beacon', app: 'backrooms', version: '1.4.0' })
     expect(() => buildBeaconTarget('nope', '', ctx)).toThrow()
+  })
+})
+
+const pub = (addr, family = 4) => async () => [{ address: addr, family }]
+
+describe('resolveAndPin', () => {
+  it('returns a public address and rejects a blocked one', async () => {
+    await expect(resolveAndPin('example.com', pub('93.184.216.34'))).resolves.toBe('93.184.216.34')
+    await expect(resolveAndPin('sneaky.internal', pub('169.254.169.254'))).rejects.toThrow()
+  })
+  it('rejects when ANY resolved address is blocked', async () => {
+    const mixed = async () => [{ address: '1.1.1.1', family: 4 }, { address: '10.0.0.1', family: 4 }]
+    await expect(resolveAndPin('mixed.example', mixed)).rejects.toThrow()
+  })
+
+  // CORRECTION 1 — new URL() keeps the brackets around an IPv6 host
+  // ('[::1]'), and net.isIP('[::1]') is 0, so an unstripped hostname would
+  // skip the literal-IP check and fall through to a DNS lookup of the
+  // literal string "[::1]" instead of being judged (and rejected) directly.
+  it('strips brackets from a bracketed IPv6 literal before judging it', async () => {
+    let called = false
+    const lookup = async () => { called = true; return [{ address: '1.1.1.1', family: 4 }] }
+    await expect(resolveAndPin('[::1]', lookup)).rejects.toThrow()
+    expect(called).toBe(false)
+  })
+  it('accepts a bracketed IPv6 literal that is not blocked', async () => {
+    let called = false
+    const lookup = async () => { called = true; return [{ address: '1.1.1.1', family: 4 }] }
+    await expect(resolveAndPin('[2606:4700:4700::1111]', lookup)).resolves.toBe('2606:4700:4700::1111')
+    expect(called).toBe(false)
+  })
+})
+
+describe('fireBeacon', () => {
+  it('skips when effect is off without touching the network', async () => {
+    let called = false
+    const request = () => { called = true }
+    const r = await fireBeacon('off', '', { request, lookup: pub('1.1.1.1') })
+    expect(r.skipped).toBe(true)
+    expect(called).toBe(false)
+  })
+
+  it('refuses to fire at a blocked target before any request', async () => {
+    let called = false
+    const request = () => { called = true }
+    await expect(fireBeacon('custom', 'https://x.example/h', {
+      request, lookup: pub('127.0.0.1'),
+    })).rejects.toThrow()
+    expect(called).toBe(false)
+  })
+
+  it('posts to a public target and reports a 2xx as ok', async () => {
+    const seen = {}
+    const fakeReq = (opts, cb) => {
+      seen.opts = opts
+      const res = { statusCode: 204, resume() {} }
+      queueMicrotask(() => cb(res))
+      return { on() {}, write() {}, end() {}, destroy() {} }
+    }
+    const r = await fireBeacon('custom', 'https://example.com/hook', {
+      appVersion: '1.4.0', now: 0, lookup: pub('93.184.216.34'), request: fakeReq,
+    })
+    expect(r).toEqual({ ok: true, status: 204 })
+    expect(seen.opts.host).toBe('93.184.216.34')   // connects to the pinned IP
+    expect(seen.opts.servername).toBe('example.com')
+    expect(seen.opts.headers.Host).toBe('example.com')
+    expect(seen.opts.port).toBe(443)
+  })
+
+  it('drops the response body and never follows redirects', async () => {
+    let resumed = false
+    const fakeReq = (opts, cb) => {
+      const res = { statusCode: 302, headers: { location: 'https://evil.example/' }, resume() { resumed = true } }
+      queueMicrotask(() => cb(res))
+      return { on() {}, write() {}, end() {}, destroy() {} }
+    }
+    const r = await fireBeacon('custom', 'https://example.com/hook', {
+      lookup: pub('93.184.216.34'), request: fakeReq,
+    })
+    expect(resumed).toBe(true)
+    expect(r).toEqual({ ok: false, status: 302 })
+  })
+
+  it('destroys the request on timeout', async () => {
+    let destroyed = null
+    const fakeReq = (opts) => {
+      const handlers = {}
+      const req = {
+        on(event, handler) { handlers[event] = handler; return req },
+        write() {}, end() {},
+        // Mirrors real Node: destroying with an error emits 'error' on the request.
+        destroy(err) { destroyed = err; if (err && handlers.error) queueMicrotask(() => handlers.error(err)) },
+      }
+      queueMicrotask(() => handlers.timeout && handlers.timeout())
+      return req
+    }
+    await expect(fireBeacon('custom', 'https://example.com/hook', {
+      lookup: pub('93.184.216.34'), request: fakeReq,
+    })).rejects.toThrow()
+    expect(destroyed).toBeInstanceOf(Error)
   })
 })
