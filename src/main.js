@@ -6,6 +6,7 @@ import https from 'https'
 import electronUpdater from 'electron-updater'
 const { autoUpdater } = electronUpdater
 import { readSettings, writeSettings } from './settings.js'
+import { fireBeacon } from './webhook.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -72,6 +73,7 @@ ipcMain.handle('submit-wish', async (_event, text) => {
 })
 
 let mainWindow = null
+let lastBeaconAt = 0
 
 function createWindowAndTrack() {
   mainWindow = new BrowserWindow({
@@ -145,6 +147,22 @@ app.whenReady().then(() => {
       return true
     }
     return false
+  })
+  // beacon (T0 solo): fire the player's OWN registered webhook. All validation
+  // and the SSRF-safe POST live in webhook.js; here we only rate-limit + log.
+  ipcMain.handle('fire-beacon', async (_e, payload) => {
+    const { effect, webhook } = payload || {}
+    const now = Date.now()
+    if (now - lastBeaconAt < 10_000) return { ok: false, reason: 'cooldown' }
+    lastBeaconAt = now
+    try {
+      const r = await fireBeacon(effect, webhook, { appVersion: app.getVersion(), now })
+      logLine(`beacon: effect=${effect} ok=${r.ok} status=${r.status ?? '-'}${r.skipped ? ' (skipped)' : ''}`)
+      return r
+    } catch (e) {
+      logLine(`beacon failed: ${e.message}`)
+      return { ok: false, reason: e.message }
+    }
   })
   ipcMain.handle('start-local-server', async () => {
     const { createServer } = await import('../server/index.js')
