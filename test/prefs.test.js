@@ -38,4 +38,9 @@ describe('prefs', () => {
     setPref('crosshair', true)    // unsubscribed → no notify
     expect(count).toBe(1)
   })
+
+  it('carries beacon defaults (off, empty target)', () => {
+    expect(PREF_DEFAULTS.beaconEffect).toBe('off')
+    expect(PREF_DEFAULTS.beaconWebhook).toBe('')
+  })
 })

@@ -24,6 +24,8 @@ export const PREF_DEFAULTS = {
   mouseSensitivity: 100,    // % — 100% == the classic 0.002 rad/px
   creatures:        true,   // do things spawn below level 0 at all
   damage:           true,   // can they hurt you (peaceful mode == false)
+  beaconEffect:     'off',  // 'off' | 'ntfy' | 'discord' | 'custom' — what B fires
+  beaconWebhook:    '',     // ntfy topic, or an https webhook url, per beaconEffect
 }
 
 let cache = null
