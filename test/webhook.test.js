@@ -311,6 +311,25 @@ describe('fireBeacon', () => {
     expect(seen.opts.port).toBe(443)
   })
 
+  // RFC 6066 forbids an IP address as an SNI server name, and Node emits a
+  // deprecation warning for it — so a raw-IP target must send no servername.
+  it('sends no servername when the target host is a raw IP literal', async () => {
+    const seen = {}
+    const fakeReq = (opts, cb) => {
+      seen.opts = opts
+      const res = { statusCode: 200, resume() {} }
+      queueMicrotask(() => cb(res))
+      return { on() {}, write() {}, end() {}, destroy() {} }
+    }
+    const r = await fireBeacon('custom', 'https://93.184.216.34/hook', {
+      appVersion: '1.4.0', now: 0, lookup: pub('93.184.216.34'), request: fakeReq,
+    })
+    expect(r).toEqual({ ok: true, status: 200 })
+    expect(seen.opts.host).toBe('93.184.216.34')
+    expect(seen.opts.servername).toBeUndefined()
+    expect(seen.opts.headers.Host).toBe('93.184.216.34')
+  })
+
   it('drops the response body and never follows redirects', async () => {
     let resumed = false
     const fakeReq = (opts, cb) => {

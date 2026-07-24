@@ -12,6 +12,12 @@ import net from 'net'
 import https from 'https'
 import dns from 'dns'
 
+// new URL() keeps the brackets around an IPv6 host ('[::1]'), and net.isIP('[::1]')
+// is 0 — every literal-IP check in this file needs the brackets stripped first, or a
+// bracketed loopback/metadata literal (or, for SNI, a bracketed public IP) sails
+// through unblocked / gets sent where RFC 6066 forbids it. One helper, three call sites.
+const stripBrackets = (h) => String(h).replace(/^\[|\]$/g, '')
+
 // True when a LITERAL ip must never be a webhook target. Anything that is not
 // a bare IP literal is blocked too — callers only ever pass resolved literals.
 export function isBlockedAddress(ip) {
@@ -137,7 +143,7 @@ export function validateWebhookUrl(urlStr) {
   // new URL() keeps the brackets around an IPv6 host ('[::1]'), and
   // net.isIP('[::1]') is 0 — so the literal-IP check must strip them first,
   // or a bracketed loopback/metadata literal sails through unblocked.
-  const host = u.hostname.replace(/^\[|\]$/g, '')
+  const host = stripBrackets(u.hostname)
   if (net.isIP(host) && isBlockedAddress(host)) throw new Error('blocked address')
   return u
 }
@@ -193,7 +199,7 @@ function defaultLookup(hostname) {
 // judged on purpose. The stripped form is used for both the isBlockedAddress
 // check and the lookup() call.
 export async function resolveAndPin(hostname, lookup = defaultLookup) {
-  const host = String(hostname).replace(/^\[|\]$/g, '')
+  const host = stripBrackets(hostname)
   if (net.isIP(host)) {
     if (isBlockedAddress(host)) throw new Error('blocked address')
     return host
@@ -219,6 +225,7 @@ export async function fireBeacon(effect, webhook, opts = {}) {
   const target = buildBeaconTarget(effect, webhook, { appVersion, now })
   const u = new URL(target.url)
   const pinnedIp = await resolveAndPin(u.hostname, lookup)
+  const strippedHost = stripBrackets(u.hostname)
 
   return new Promise((resolve, reject) => {
     const req = request({
@@ -227,8 +234,9 @@ export async function fireBeacon(effect, webhook, opts = {}) {
       // servername is for TLS SNI + certificate hostname verification, so it
       // must be the bracket-stripped host — the Host header below keeps the
       // bracketed form instead, since RFC 7230 requires brackets there for an
-      // IPv6 literal. The two must NOT be set from the same string.
-      servername: u.hostname.replace(/^\[|\]$/g, ''),
+      // IPv6 literal. The two must NOT be set from the same string. RFC 6066
+      // forbids an IP address as an SNI server name, so a raw-IP host sends none.
+      servername: net.isIP(strippedHost) ? undefined : strippedHost,
       port: 443,
       path: u.pathname + u.search,
       method: 'POST',
