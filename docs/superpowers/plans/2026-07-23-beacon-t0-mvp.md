@@ -13,7 +13,7 @@
 - **Renderer has zero outbound network access.** Every HTTP call goes through a narrow main-process IPC handler; the renderer only calls `window.backrooms.fireBeacon(...)`. (Matches the existing `submit-wish` / `open-external` pattern.)
 - **Outbound-safety rules, applied to every fire (verbatim, non-negotiable):** `https`-only scheme; **port 443 only**; **resolve-then-pin** DNS — reject every private / reserved / loopback / link-local / ULA / carrier-grade-NAT / cloud-metadata address; **no redirect following**; small fixed request body; **response body dropped**; short timeout (5000 ms); **no retries in T0**; a per-fire cooldown (10 s) in the main process.
 - **No new runtime dependencies.** Use Node builtins only (`https`, `dns`, `net`, `url`).
-- **Scope boundary (disclosure-critical):** T0 is a player firing *their own* webhook to *themselves*. It contains **no** co-presence, matching, recurrence address, keyed HMAC, epoch, population tuning, rendezvous, or bilateral actuation. Do **not** add, reference, or describe any of that here — it lives in the private design spec and is out of scope for every task below.
+- **Scope boundary:** T0 is a player firing *their own* webhook to *themselves*. Any behaviour involving a second participant is out of scope for every task below and must not be added here.
 - **Copy tone:** lowercase, terse, in-world — match the existing `showMessage(...)` strings in `src/renderer/game.js`.
 - **Module style:** small focused modules with named exports, mirroring `src/settings.js` and `src/renderer/anchor.js`.
 
@@ -702,7 +702,7 @@ git commit -m "feat(beacon): settings UI to register a beacon target"
 - https-only, port 443, resolve-then-pin, reject private/reserved/loopback/link-local/ULA/CGNAT/metadata, no redirects, dropped body, 5 s timeout, no retries → Tasks 2–4 (`isBlockedAddress`, `validateWebhookUrl`, `resolveAndPin`, `fireBeacon`). ✅
 - Per-fire cooldown → Task 5 (10 s). ✅
 - No new runtime dependencies → only `https`/`dns`/`net`/`url` builtins used. ✅
-- No co-presence / matching / recurrence mechanism anywhere → confirmed absent from every task. ✅
+- No behaviour involving a second participant → confirmed absent from every task. ✅
 - In-world lowercase copy → Task 7 messages match existing `showMessage` tone. ✅
 
 **Placeholder scan:** no TBD/TODO; every code and test step carries complete code; every command has an expected result. ✅

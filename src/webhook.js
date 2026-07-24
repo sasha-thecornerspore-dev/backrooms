@@ -5,8 +5,8 @@
 // process calls fireBeacon() here. This module is SSRF-hardened and pure
 // (Node builtins only, no Electron) so it can be unit-tested in isolation.
 //
-// SCOPE: T0 fires the player's OWN webhook to themselves. No co-presence,
-// matching, or shared index of any kind lives here.
+// SCOPE: T0 fires the player's OWN webhook to themselves. Anything involving
+// a second participant is out of scope for this module.
 
 import net from 'net'
 import https from 'https'
