@@ -92,6 +92,7 @@ the spirits decide. or rather, i do.
 | enter | chat (in online play) |
 | m | mute / unmute the music |
 | n | next track — cycle the ambient beds, or back to the floor's own song |
+| b | push the beacon — fires your registered webhook (set it up in settings ⚙) |
 | esc | unlock mouse / close dialog |
 
 your **hit points** sit under the level name, top-left. level 0 is safe; below it, the things in the fog will take them from you. bandages and time bring them back.
