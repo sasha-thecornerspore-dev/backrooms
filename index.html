@@ -10,16 +10,17 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="THE BACKROOMS">
 <meta property="og:description" content="you have no-clipped out of reality. reality inside is reality outside — recursively. the people who find it can enter. if you can read this, you have the gift.">
-<meta property="og:image" content="https://thecornerspore.dev/og.png">
+<meta property="og:image" content="https://sasha-thecornerspore-dev.github.io/backrooms/og.png">
 <meta property="og:url" content="https://sasha-thecornerspore-dev.github.io/backrooms/">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="THE BACKROOMS">
 <meta name="twitter:description" content="you have no-clipped out of reality. if you can read this, you have the gift.">
-<meta name="twitter:image" content="https://thecornerspore.dev/og.png">
+<meta name="twitter:image" content="https://sasha-thecornerspore-dev.github.io/backrooms/og.png">
 <style>
   :root{
     --y:#c9ba72; --yb:#e7dc93; --dim:#8a7f52; --faint:#5c5636;
     --bg:#050403; --rust:#a05a3a; --ink:#020201;
+    --sig:#8fdcac; --sigb:#bff3d4;               /* the signal — beacons answer in this colour */
     --mono:"Courier New",ui-monospace,monospace; --serif:Georgia,"Times New Roman",serif;
   }
   *{margin:0;padding:0;box-sizing:border-box}
@@ -38,7 +39,8 @@
   @keyframes grain{0%{transform:translate(0,0)}50%{transform:translate(-4%,3%)}100%{transform:translate(3%,-2%)}}
   .scan{position:fixed;inset:0;pointer-events:none;z-index:52;opacity:.35;
     background:repeating-linear-gradient(to bottom,transparent 0 3px,rgba(0,0,0,.18) 3px 4px)}
-  @media(prefers-reduced-motion:reduce){.grain{animation:none}.flick{animation:none}}
+  @media(prefers-reduced-motion:reduce){.grain{animation:none}.flick{animation:none}
+    .sweep{animation:none}.pulse{animation:none}.corenode{animation:none}}
 
   .wrap{max-width:940px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
   .meta{font-size:11px;letter-spacing:3px;color:var(--faint);text-transform:uppercase}
@@ -69,11 +71,46 @@
   /* ── sections ── */
   section{padding:min(16vh,140px) 0;border-top:1px solid rgba(138,127,82,.14)}
   .tag{font-size:11px;letter-spacing:5px;color:var(--rust);text-transform:uppercase;margin-bottom:22px}
+  .tag.sig{color:var(--sig)}
   .finding p{font-family:var(--serif);font-size:clamp(17px,2.4vw,22px);color:#d8cd96;
     max-width:70ch;margin:0 0 26px}
   .finding em{color:var(--yb);font-style:italic}
   .redact{background:var(--y);color:var(--y);padding:0 .25em;border-radius:2px;
     transition:color .25s} .redact:hover{color:var(--ink)}
+
+  /* ── the anchor — 806 N Carey ── */
+  .anchor h2{font-family:var(--serif);font-weight:400;letter-spacing:.06em;
+    font-size:clamp(24px,4.4vw,42px);color:var(--y);margin-bottom:8px;line-height:1.15}
+  .anchor .sub{font-size:12px;letter-spacing:3px;color:var(--faint);text-transform:uppercase;margin-bottom:34px}
+  .anchor p{font-family:var(--serif);font-size:clamp(16px,2.2vw,20px);color:#d3c88f;
+    max-width:68ch;margin:0 0 22px}
+  .anchor em{color:var(--yb);font-style:italic}
+  .anchor .say{font-family:var(--serif);font-style:italic;font-size:clamp(18px,2.8vw,26px);
+    color:var(--yb);border-left:2px solid var(--rust);padding:6px 0 6px 22px;margin:34px 0;max-width:60ch}
+
+  /* the three instruments — a timeline */
+  .instr{display:grid;gap:0;margin:40px 0 8px;border-top:1px solid rgba(138,127,82,.2)}
+  .row{display:grid;grid-template-columns:96px 1fr;gap:20px;padding:20px 0;
+    border-bottom:1px solid rgba(138,127,82,.2);align-items:baseline}
+  .row .yr{font-family:var(--serif);font-size:clamp(22px,3vw,30px);color:var(--rust);letter-spacing:.04em}
+  .row .what{font-size:11px;letter-spacing:3px;color:var(--faint);text-transform:uppercase;margin-bottom:6px}
+  .row .txt{color:#c8bd86;font-size:15px}
+  .row .txt b{color:var(--yb);font-weight:400}
+  .row.still .yr{color:var(--dim)}
+  .row.still .txt b{color:var(--y)}
+
+  /* field plates — original illustrations that open the real record */
+  .platesintro{font-family:var(--serif);font-style:italic;color:var(--dim);font-size:15px;margin:40px 0 16px}
+  .plates{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:14px}
+  .plate{display:block;border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.3);transition:.2s;text-decoration:none}
+  .plate:hover{border-color:var(--y);background:rgba(201,186,114,.06);transform:translateY(-3px)}
+  .plate svg{display:block;width:100%;height:auto;border-bottom:1px solid rgba(138,127,82,.2)}
+  .plate .cap{padding:11px 13px}
+  .plate .cap .yr{font-size:9px;letter-spacing:2px;color:var(--rust);text-transform:uppercase}
+  .plate .cap .ti{font-family:var(--serif);font-size:14px;color:var(--yb);margin:3px 0 7px;line-height:1.25}
+  .plate .cap .src{font-size:9px;letter-spacing:1px;color:var(--faint)}
+  .plate .cap .src::before{content:"↗ "}
+  .plate:hover .cap .src{color:var(--sig)}
 
   /* recovered documents */
   .docs{display:grid;gap:14px}
@@ -84,6 +121,49 @@
   .doc .name{font-size:clamp(15px,2.2vw,19px);color:var(--yb);margin-top:4px}
   .doc .status{position:absolute;top:16px;right:18px;font-size:10px;letter-spacing:2px;
     color:var(--rust);border:1px solid var(--rust);padding:2px 7px}
+
+  /* ── the atlas / beacons preview ── */
+  .atlas .lead{font-family:var(--serif);font-size:clamp(17px,2.4vw,22px);color:#d8cd96;max-width:66ch;margin:0 0 12px}
+  .atlas .lead em{color:var(--sigb);font-style:italic}
+  .atlas .coming{font-size:11px;letter-spacing:4px;color:var(--sig);text-transform:uppercase;margin-bottom:30px;opacity:.8}
+  .mapwrap{position:relative;border:1px solid rgba(143,220,172,.22);background:
+    radial-gradient(ellipse at 50% 40%,rgba(143,220,172,.05),transparent 70%),#040705;
+    overflow:hidden;aspect-ratio:16/9}
+  .mapwrap svg{display:block;width:100%;height:100%}
+  .grid line{stroke:rgba(143,220,172,.10);stroke-width:.5}
+  .land{fill:rgba(143,220,172,.035);stroke:rgba(143,220,172,.18);stroke-width:.8}
+  .sweep{transform-origin:50% 52%;animation:sweep 9s linear infinite}
+  @keyframes sweep{to{transform:rotate(360deg)}}
+  .pulse{transform-box:fill-box;transform-origin:center;animation:pulse 3.2s ease-out infinite}
+  @keyframes pulse{0%{r:3;opacity:.7}70%{opacity:0}100%{r:26;opacity:0}}
+  .corenode{transform-box:fill-box;transform-origin:center;animation:core 3.2s ease-in-out infinite}
+  @keyframes core{0%,100%{opacity:.55}50%{opacity:1}}
+  .genesis .corenode{fill:var(--yb);animation-duration:2.2s}
+  .genesis .pulse{stroke:var(--yb);animation-duration:2.2s}
+  .blabel{font-family:var(--mono);font-size:9px;letter-spacing:2px;fill:var(--dim)}
+  .blabel.g{fill:var(--y)}
+  .mapcap{position:absolute;left:14px;bottom:12px;font-size:10px;letter-spacing:2px;color:var(--faint)}
+  .mapcap .on{color:var(--sig)}
+  .maptitle{position:absolute;right:14px;top:12px;font-size:10px;letter-spacing:3px;color:var(--faint);text-align:right}
+
+  /* the two ways + strata */
+  .ways{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:30px 0}
+  @media(max-width:640px){.ways{grid-template-columns:1fr}}
+  .way{border:1px solid rgba(138,127,82,.28);padding:20px 22px;background:rgba(201,186,114,.03)}
+  .way h4{font-family:var(--serif);font-weight:400;font-size:19px;color:var(--yb);margin-bottom:8px;letter-spacing:.04em}
+  .way .k{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--rust);margin-bottom:12px}
+  .way p{font-size:14px;color:#c2b884;margin:0}
+  .way.deep{border-color:rgba(143,220,172,.3)}
+  .way.deep .k{color:var(--sig)}
+  .strata{margin:34px 0 0;border:1px solid rgba(138,127,82,.28);padding:24px;background:rgba(0,0,0,.25)}
+  .strata .h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+  .strata .h .t{font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--dim)}
+  .strata .h .c{font-family:var(--serif);font-size:22px;color:var(--sigb)}
+  .strata .h .c span{color:var(--faint);font-size:12px;letter-spacing:2px}
+  .cols{display:flex;gap:3px;align-items:flex-end;height:84px}
+  .cols i{flex:1;display:block;background:linear-gradient(to top,rgba(143,220,172,.5),rgba(143,220,172,.06));
+    border-top:1px solid rgba(191,243,212,.5)}
+  .strata .note{margin-top:16px;font-size:13px;color:#b7ac7c;font-family:var(--serif);font-style:italic;max-width:64ch}
 
   /* descend */
   .descend{text-align:center}
@@ -107,11 +187,14 @@
   footer .links a{color:var(--faint);margin:0 10px}footer .links a:hover{color:var(--y)}
   footer .warn{margin-top:30px;font-size:10px;letter-spacing:4px;color:var(--faint);text-transform:uppercase}
 
-  .reveal{opacity:0;transform:translateY(22px);transition:opacity .9s,transform .9s}
-  .reveal.in{opacity:1;transform:none}
+  /* content is visible by default; JS opts in to the scroll-reveal animation so a
+     script failure can never blank the page (and static snapshots stay readable) */
+  .js .reveal{opacity:0;transform:translateY(22px);transition:opacity .9s,transform .9s}
+  .js .reveal.in{opacity:1;transform:none}
 </style>
 </head>
 <body>
+<script>document.documentElement.classList.add('js')</script>
 <div class="vignette"></div><div class="grain"></div><div class="scan"></div>
 
 <header>
@@ -132,6 +215,207 @@
     <p>We dug, and dug, and found only more rooms. Reality <em>inside</em> is reality <em>outside</em> — the same, recursively, all the way down. Simulation theory was never a theory. We have been excavating worlds for longer than there have been words for time.</p>
     <p>But something here is <em>different</em>. The Planck length — the grain of reality itself — is nearly <em>closed</em>. In every layer above us it ran wide, and that slack is how they spun up wildly different universes for almost nothing. Not here. Here the world is fixed, and tight, and old.</p>
     <p>The people who find the Backrooms can <em>enter</em> them. That is the gift. It is the only reason you are reading <span class="redact">this recovered file</span>.</p>
+  </section>
+
+  <!-- ── THE ANCHOR — 806 N CAREY ── -->
+  <section class="anchor reveal">
+    <div class="tag">the anchor</div>
+    <h2>806 North Carey Street</h2>
+    <div class="sub">Harlem Park · West Baltimore · notice 30150A · status EXTENSION</div>
+
+    <p>Every version of this place begins at one real door. Not a set, not a render of somewhere — an address you can stand in front of. The engine that draws the Backrooms fakes every surface, because faking surfaces is the only thing a raycaster can do. This block is <em>also</em> made of faked surfaces — but those were faked by hand, over sixty years, by the city itself. <em>The medium and the subject are the same technique.</em> Of everything this renderer could point at, the 800 block of North Carey is the one subject it was accidentally built to tell the truth about.</p>
+
+    <p>Three instruments did the work, each one a piece of paper, each one still on file.</p>
+
+    <div class="instr">
+      <div class="row">
+        <div class="yr">1937</div>
+        <div>
+          <div class="what">the map</div>
+          <div class="txt">A federal <em>Residential Security Map</em> rings Black West Baltimore in red and stamps it <b>D — "hazardous."</b> Not one building was inspected. The hazard it scored was the people who lived there — its own grading criteria counted <b>"the percentage of negro families"</b> as a defect of the ground itself. That is the lie this whole game is built to indict: not decay, not danger, but a government instrument ruling that human beings made the land worth less by being on it. Every later paper on this block only enforces the red line drawn here — and the game hands that same instrument back to the state, not to the street.</div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="yr">1961</div>
+        <div>
+          <div class="what">the plan</div>
+          <div class="txt">An urban-renewal plan clears the inside of the block — Woodyear Street, Vincent Street, gone — and leaves <b>29 "inner block parks"</b> the residents did not ask for, the city never intended to keep, and that soon became what you leave in a place you have written off.</div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="yr">2004</div>
+        <div>
+          <div class="what">the notice</div>
+          <div class="txt">Vacant-building notice <b>30150A</b> is issued against 806 N Carey. It advises that the structure is <b>"condemned as being unsafe or dangerous for occupancy or use"</b> and that <b>"the public is warned to keep away."</b></div>
+        </div>
+      </div>
+      <div class="row still">
+        <div class="yr">still</div>
+        <div>
+          <div class="what">— twenty-one years —</div>
+          <div class="txt">The notice never resolves. Its status is <b>EXTENSION</b>. It is the most Backrooms word in the whole dataset: the file is never closed, never appealed, never demolished. It is <em>extended</em>. Indefinitely.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="platesintro">Five papers, still on file. Each plate opens where the record lives.</div>
+    <div class="plates">
+
+      <a class="plate" href="https://www.library.jhu.edu/news/2017/09/the-baltimore-redlining-map-ranking-neighborhoods/" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 160 100" role="img" aria-label="illustration: a 1937 residential security map with a redlined district graded D">
+          <rect width="160" height="100" fill="#040302"/>
+          <g stroke="rgba(138,127,82,.22)" stroke-width="1">
+            <line x1="0" y1="26" x2="160" y2="26"/><line x1="0" y1="52" x2="160" y2="52"/><line x1="0" y1="78" x2="160" y2="78"/>
+            <line x1="32" y1="0" x2="32" y2="100"/><line x1="64" y1="0" x2="64" y2="100"/><line x1="96" y1="0" x2="96" y2="100"/><line x1="128" y1="0" x2="128" y2="100"/>
+          </g>
+          <rect x="10" y="10" width="46" height="30" fill="rgba(143,220,172,.10)" stroke="rgba(143,220,172,.45)"/>
+          <rect x="66" y="10" width="52" height="26" fill="rgba(201,186,114,.08)" stroke="rgba(201,186,114,.45)"/>
+          <rect x="38" y="50" width="112" height="42" fill="rgba(160,90,58,.20)" stroke="#a05a3a" stroke-width="2"/>
+          <text x="94" y="80" fill="#c06a46" font-family="Georgia" font-size="28" font-weight="bold" text-anchor="middle">D</text>
+        </svg>
+        <div class="cap"><div class="yr">1937 · the map</div><div class="ti">Residential Security Map</div><div class="src">library.jhu.edu</div></div>
+      </a>
+
+      <a class="plate" href="https://baltimoreheritage.org/programs/harlem-park/" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 160 100" role="img" aria-label="illustration: a rowhouse block hollowed out to a fenced inner park, with the interior streets erased">
+          <rect width="160" height="100" fill="#040302"/>
+          <rect x="22" y="16" width="116" height="68" fill="none" stroke="rgba(138,127,82,.45)"/>
+          <g fill="rgba(201,186,114,.45)">
+            <rect x="26" y="20" width="10" height="8"/><rect x="40" y="20" width="10" height="8"/><rect x="54" y="20" width="10" height="8"/><rect x="68" y="20" width="10" height="8"/><rect x="82" y="20" width="10" height="8"/><rect x="96" y="20" width="10" height="8"/><rect x="110" y="20" width="10" height="8"/><rect x="124" y="20" width="10" height="8"/>
+            <rect x="26" y="72" width="10" height="8"/><rect x="40" y="72" width="10" height="8"/><rect x="54" y="72" width="10" height="8"/><rect x="68" y="72" width="10" height="8"/><rect x="82" y="72" width="10" height="8"/><rect x="96" y="72" width="10" height="8"/><rect x="110" y="72" width="10" height="8"/><rect x="124" y="72" width="10" height="8"/>
+          </g>
+          <rect x="48" y="36" width="64" height="28" fill="rgba(143,220,172,.06)" stroke="rgba(143,220,172,.35)" stroke-dasharray="3 2"/>
+          <line x1="52" y1="50" x2="108" y2="50" stroke="rgba(160,90,58,.55)" stroke-dasharray="2 3"/>
+          <text x="80" y="53" fill="rgba(143,220,172,.5)" font-family="Courier New" font-size="7" text-anchor="middle">PARK</text>
+        </svg>
+        <div class="cap"><div class="yr">1961 · the plan</div><div class="ti">The inner-block park</div><div class="src">baltimoreheritage.org</div></div>
+      </a>
+
+      <a class="plate" href="https://codes.baltimorecity.gov/us/md/cities/baltimore/code/building-codes/II/120" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 160 100" role="img" aria-label="illustration: a condemnation placard reading CONDEMNED, notice 30150A, status EXTENSION">
+          <rect width="160" height="100" fill="#040302"/>
+          <rect x="30" y="16" width="100" height="68" fill="rgba(0,0,0,.4)" stroke="rgba(138,127,82,.6)" stroke-width="2"/>
+          <rect x="34" y="20" width="92" height="60" fill="none" stroke="rgba(138,127,82,.3)"/>
+          <text x="80" y="38" fill="#c9ba72" font-family="Georgia" font-size="11" text-anchor="middle" letter-spacing="1">CONDEMNED</text>
+          <line x1="44" y1="46" x2="116" y2="46" stroke="rgba(138,127,82,.3)"/>
+          <text x="80" y="59" fill="#8a7f52" font-family="Courier New" font-size="8" text-anchor="middle">NOTICE 30150A</text>
+          <text x="80" y="73" fill="#a05a3a" font-family="Courier New" font-size="10" text-anchor="middle" letter-spacing="2">EXTENSION</text>
+        </svg>
+        <div class="cap"><div class="yr">2004 · the notice</div><div class="ti">Condemned · §120.2.1</div><div class="src">codes.baltimorecity.gov</div></div>
+      </a>
+
+      <a class="plate" href="https://en.wikipedia.org/wiki/Formstone" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 160 100" role="img" aria-label="illustration: false stone masonry peeling back from a flat wall behind it">
+          <rect width="160" height="100" fill="#040302"/>
+          <g stroke="rgba(138,127,82,.45)" fill="rgba(201,186,114,.05)">
+            <rect x="14" y="14" width="40" height="20"/><rect x="58" y="14" width="40" height="20"/><rect x="102" y="14" width="30" height="20"/>
+            <rect x="30" y="38" width="40" height="20"/><rect x="74" y="38" width="40" height="20"/>
+            <rect x="14" y="62" width="40" height="20"/><rect x="58" y="62" width="34" height="20"/>
+          </g>
+          <path d="M96,58 H146 V92 H96 Z" fill="rgba(0,0,0,.55)"/>
+          <path d="M96,58 H146 L120,74 L96,92 Z" fill="rgba(201,186,114,.13)" stroke="rgba(201,186,114,.55)"/>
+          <text x="142" y="70" fill="rgba(138,127,82,.7)" font-family="Courier New" font-size="7" text-anchor="end">flat</text>
+        </svg>
+        <div class="cap"><div class="yr">1937 · the skin</div><div class="ti">Formstone — false stone</div><div class="src">en.wikipedia.org</div></div>
+      </a>
+
+      <a class="plate" href="https://www.baltimoresun.com/2004/06/12/illusions-of-occupancy/" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 160 100" role="img" aria-label="illustration: a photograph of a window on plywood, its corner curling to reveal a void behind">
+          <rect width="160" height="100" fill="#040302"/>
+          <rect x="34" y="14" width="92" height="72" fill="rgba(160,90,58,.10)" stroke="rgba(138,127,82,.5)"/>
+          <g stroke="rgba(201,186,114,.5)" fill="rgba(201,186,114,.05)">
+            <rect x="48" y="26" width="64" height="48"/>
+            <line x1="80" y1="26" x2="80" y2="74"/><line x1="48" y1="50" x2="112" y2="50"/>
+          </g>
+          <path d="M112,26 L92,26 L112,46 Z" fill="#040302"/>
+          <path d="M112,26 L96,31 L112,44 Z" fill="rgba(138,127,82,.28)" stroke="rgba(160,90,58,.65)"/>
+        </svg>
+        <div class="cap"><div class="yr">2004 · the illusion</div><div class="ti">Illusions of occupancy</div><div class="src">baltimoresun.com</div></div>
+      </a>
+
+    </div>
+
+    <p class="say">The front was sealed by the city. The back was emptied by the city. You enter through the gap the paperwork left.</p>
+
+    <p>The front doors on this block do not open — they are filled with concrete block behind their original wooden frames. A masoned door is not a door. The only unsealed thing on the whole row is the hollow the 1961 plan carved out of its middle and then forgot to want. That interior — the block park behind the houses — is the way in. It is where you fall through.</p>
+
+    <p>And the block wears its condition as <em>illusion</em>. The stone fronts are Formstone — stucco troweled and tinted to imitate masonry, patented here in 1937, "the polyester of brick." Some of the boarded windows are not boards at all but life-sized <em>photographs</em> of windows, glued to plywood, sold to the city so a street would read as lived-in from a passing car. A resident of one such block said it plainest: <em>"even though it's fake, you have to look up on it to see that it's fake."</em> That is the exact sentence a raycaster would say about a wall.</p>
+
+    <p>And it is never drawn as a clean ruin. Sealed houses stand interleaved with ones still in use — a boarded front, a lit one beside it. The block was not abandoned. It was <em>processed</em>. Some windows have lights on. Nobody comes out.</p>
+
+    <p>The same filing cabinet that graded the block, erased the street, and condemned the house is the cabinet the game hands <em>you</em> at the door. It asks your name and files you under Baltimore. <em>The intake form is not framing — it is the antagonist's stationery.</em> The map is the antagonist. You consult the instrument that did this, and it consults you back.</p>
+  </section>
+
+  <!-- ── THE ATLAS / BEACONS ── -->
+  <section class="atlas reveal">
+    <div class="tag sig">the atlas</div>
+    <p class="lead">806 is the first, not the last. Other doors are beginning to <em>surface</em> in the real world — and where they surface, they go up on a map you can open from anywhere.</p>
+    <div class="coming">▸ the atlas opens soon</div>
+
+    <div class="mapwrap" aria-label="preview of the beacon map">
+      <svg viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice" role="img">
+        <defs>
+          <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#8fdcac" stop-opacity=".35"/>
+            <stop offset="100%" stop-color="#8fdcac" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <g class="grid">
+          <line x1="0" y1="60" x2="640" y2="60"/><line x1="0" y1="120" x2="640" y2="120"/>
+          <line x1="0" y1="180" x2="640" y2="180"/><line x1="0" y1="240" x2="640" y2="240"/>
+          <line x1="0" y1="300" x2="640" y2="300"/>
+          <line x1="80" y1="0" x2="80" y2="360"/><line x1="160" y1="0" x2="160" y2="360"/>
+          <line x1="240" y1="0" x2="240" y2="360"/><line x1="320" y1="0" x2="320" y2="360"/>
+          <line x1="400" y1="0" x2="400" y2="360"/><line x1="480" y1="0" x2="480" y2="360"/>
+          <line x1="560" y1="0" x2="560" y2="360"/>
+        </g>
+        <!-- abstract landmass, not a real coastline -->
+        <path class="land" d="M60,150 C120,110 150,180 210,160 C260,145 280,90 350,110 C420,130 430,200 500,205 C560,209 590,170 600,220 C610,270 540,300 470,285 C400,271 380,320 300,305 C230,292 210,250 150,255 C95,259 70,215 60,150 Z"/>
+        <!-- radar sweep -->
+        <g class="sweep">
+          <line x1="320" y1="187" x2="320" y2="40" stroke="rgba(143,220,172,.28)" stroke-width="1"/>
+          <circle cx="320" cy="187" r="150" fill="url(#halo)" opacity=".25"/>
+        </g>
+
+        <!-- genesis beacon: 806 -->
+        <g class="genesis">
+          <circle class="pulse" cx="196" cy="168" r="3" fill="none" stroke-width="1.2"/>
+          <circle class="corenode" cx="196" cy="168" r="3.4"/>
+          <text class="blabel g" x="205" y="164">∅ 806 N CAREY</text>
+          <text class="blabel g" x="205" y="176" opacity=".6">GENESIS</text>
+        </g>
+
+        <!-- organic beacons (teaser) -->
+        <g><circle class="pulse" cx="360" cy="112" r="3" fill="none" stroke="var(--sig)" stroke-width="1"/><circle class="corenode" cx="360" cy="112" r="2.6" fill="var(--sig)"/><text class="blabel" x="368" y="110">SURFACED</text></g>
+        <g><circle class="pulse" cx="486" cy="214" r="3" fill="none" stroke="var(--sig)" stroke-width="1" style="animation-delay:1.1s"/><circle class="corenode" cx="486" cy="214" r="2.6" fill="var(--sig)" style="animation-delay:1.1s"/><text class="blabel" x="452" y="232">SURFACED</text></g>
+        <g><circle class="pulse" cx="300" cy="286" r="3" fill="none" stroke="var(--sig)" stroke-width="1" style="animation-delay:1.9s"/><circle class="corenode" cx="300" cy="286" r="2.6" fill="var(--sig)" style="animation-delay:1.9s"/></g>
+        <g><circle class="pulse" cx="150" cy="250" r="3" fill="none" stroke="var(--sig)" stroke-width="1" style="animation-delay:.6s"/><circle class="corenode" cx="150" cy="250" r="2.6" fill="var(--sig)" style="animation-delay:.6s"/></g>
+      </svg>
+      <div class="maptitle">THE ATLAS<br>◦ live registry of surfaced doors</div>
+      <div class="mapcap"><span class="on">●</span> 1 genesis &nbsp;·&nbsp; 4 surfaced &nbsp;·&nbsp; the rest are still counting</div>
+    </div>
+
+    <div class="ways">
+      <div class="way deep reveal">
+        <div class="k">stand where it stands</div>
+        <h4>Walk to the door.</h4>
+        <p>Go to the real place. Presence is free, and it is remembered <em>deeply</em> — the strongest mark a door can hold. The near world is the cheap world; the door around the corner is the one that costs you nothing and gives you the most.</p>
+      </div>
+      <div class="way reveal">
+        <div class="k">or drop in from anywhere</div>
+        <h4>Fall in at a distance.</h4>
+        <p>Paste a pin and reach a far door without leaving your chair — but distance has a price, and what you leave behind is <em>faint</em>. Carry the right things and the reach gets cheaper. Most who arrive will always be the ones already near.</p>
+      </div>
+    </div>
+
+    <div class="strata reveal">
+      <div class="h">
+        <div class="t">strata · 806 n carey</div>
+        <div class="c" id="stratCount">— <span>layers</span></div>
+      </div>
+      <div class="cols" id="stratCols" aria-hidden="true"></div>
+      <div class="note">Nothing here is spent. Every visitor leaves a layer, and the door only deepens. The last to arrive reads more than the first ever could — a place that remembers every observation laid upon it.</div>
+    </div>
   </section>
 
   <section class="reveal">
@@ -190,7 +474,7 @@
   const cells=[...GIFT].map(ch=>{
     const s=document.createElement('span');
     const letter=/[a-z]/i.test(ch);
-    s.textContent = letter ? RUNE[ch.toLowerCase()] : (ch===' ' ? ' ' : ch);
+    s.textContent = letter ? RUNE[ch.toLowerCase()] : (ch===' ' ? ' ' : ch);
     if(letter) s.className='r';
     giftEl.appendChild(s);
     return {s,ch,letter};
@@ -216,12 +500,38 @@
     if(i<=line.length){tw.textContent=line.slice(0,i++);setTimeout(type,55+Math.random()*40)}
     else if(!decoded){decoded=true;setTimeout(decodeGift,500)}
   })();
+
   // scroll reveals
   const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.18});
   document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
+
+  // strata: build the layer bars, then count up to a resting number when scrolled into view
+  (function(){
+    const cols=document.getElementById('stratCols');
+    const countEl=document.getElementById('stratCount');
+    const N=48;
+    for(let k=0;k<N;k++){
+      const b=document.createElement('i');
+      const h=18+Math.round(70*(k/N)+ (Math.random()*14-7));
+      b.style.height=Math.max(8,Math.min(84,h))+'px';
+      b.style.opacity=(0.35+0.6*(k/N)).toFixed(2);
+      cols.appendChild(b);
+    }
+    let ran=false;
+    const so=new IntersectionObserver(es=>es.forEach(e=>{
+      if(e.isIntersecting && !ran){ ran=true; let c=0;
+        const iv=setInterval(()=>{ c+=Math.max(1,Math.round((N-c)/6));
+          if(c>=N){c=N;clearInterval(iv)} countEl.childNodes[0].nodeValue=c+' ';
+        },40);
+      }
+    }),{threshold:.4});
+    so.observe(document.querySelector('.strata'));
+  })();
+
   // for the curious
   console.log('%cthe planck length is nearly closed here.','color:#c9ba72;font:italic 14px Georgia');
   console.log('%c39.2854, -76.6083 — your body remains where you fell in.','color:#8a7f52');
+  console.log('%cthe notice was never closed. it was extended.','color:#a05a3a');
 </script>
 </body>
 </html>
