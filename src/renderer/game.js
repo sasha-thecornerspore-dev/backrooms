@@ -193,7 +193,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── input ──
   const K = Object.create(null)
   let locked = false
-  window.addEventListener('keydown', e => { if (e.code === 'Space') e.preventDefault(); K[e.code] = true })
+  // settings panel has text fields (e.g. the beacon target URL) — without this guard,
+  // typing a webhook into them feeds every character into the game's key map and plays the game
+  window.addEventListener('keydown', e => {
+    const t = e.target
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+    if (e.code === 'Space') e.preventDefault()
+    K[e.code] = true
+  })
   window.addEventListener('keyup',   e => { K[e.code] = false })
   canvas.addEventListener('click', () => canvas.requestPointerLock())
   document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas })
