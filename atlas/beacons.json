@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "beacons": [
+    {
+      "id": "806-n-carey",
+      "kind": "genesis",
+      "sealed": true,
+      "name": "806 N Carey Street",
+      "subtitle": "Harlem Park · notice 30150A · EXTENSION",
+      "lat": 39.2966,
+      "lng": -76.6414,
+      "blurb": "the first door. sealed by the city with concrete block behind its original frame — a masoned door does not open. you do not enter here. you enter through the gap the paperwork left.",
+      "strata": [
+        { "tier": "faint", "ts": "2025-11-08T00:00:00Z", "fragment": "still — EXTENSION. twenty-one years. the notice never resolves. it is extended, indefinitely." },
+        { "tier": "deep",  "ts": "2004-11-08T00:00:00Z", "fragment": "2004 — the notice. 30150A: condemned as unsafe for occupancy; the public is warned to keep away." },
+        { "tier": "deep",  "ts": "1961-01-01T00:00:00Z", "fragment": "1961 — the plan. the inside of the block is cleared; woodyear and vincent streets erased, leaving inner-block parks no one asked to keep." },
+        { "tier": "deep",  "ts": "1937-01-01T00:00:00Z", "fragment": "1937 — the map. a federal residential security map rings black west baltimore in red and stamps it D, 'hazardous.' not one building was inspected. the hazard it scored was the people." }
+      ]
+    }
+  ]
+}

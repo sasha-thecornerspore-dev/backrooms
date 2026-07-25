@@ -53,6 +53,10 @@ check('stratum label', stratumLabel({ tier: 'deep', ts: '2026-07-25T12:00:00Z', 
 // the real shipped data validates
 const doc = JSON.parse(readFileSync(join(HERE, 'beacons.json'), 'utf8'))
 check('beacons.json validates', validateBeaconSet(doc).ok)
+check('beacons.json has 806 sealed genesis',
+  doc.beacons.some(b => b.id === '806-n-carey' && b.sealed === true && b.kind === 'genesis'))
+check('beacons.json every sealed beacon has strata',
+  doc.beacons.filter(b => b.sealed).every(b => Array.isArray(b.strata) && b.strata.length > 0))
 
 console.log(`\n${pass}/${pass + fail} passed`)
 process.exit(fail ? 1 : 0)
