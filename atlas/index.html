@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>THE ATLAS — surfaced doors</title>
+<meta name="description" content="A live registry of doors that have surfaced in the world.">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23c9ba72'/%3E%3Crect x='38' y='20' width='24' height='6' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+  :root{ --y:#c9ba72; --yb:#e7dc93; --dim:#8a7f52; --faint:#5c5636; --bg:#050403;
+    --rust:#a05a3a; --sig:#8fdcac; --sigb:#bff3d4; --ink:#020201;
+    --mono:"Courier New",ui-monospace,monospace; --serif:Georgia,"Times New Roman",serif; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--y);font-family:var(--mono);overflow:hidden}
+  #map{position:absolute;inset:0;background:#040302;z-index:1}
+  .leaflet-container{background:#040302}
+  .vignette{position:fixed;inset:0;pointer-events:none;z-index:400;
+    background:radial-gradient(ellipse at 50% 42%,transparent 45%,rgba(0,0,0,.5) 100%)}
+  .scan{position:fixed;inset:0;pointer-events:none;z-index:401;opacity:.25;
+    background:repeating-linear-gradient(to bottom,transparent 0 3px,rgba(0,0,0,.18) 3px 4px)}
+  .topbar{position:fixed;top:0;left:0;right:0;z-index:410;display:flex;justify-content:space-between;
+    align-items:center;padding:14px 20px;background:linear-gradient(to bottom,rgba(4,3,2,.9),transparent);
+    font-size:10px;letter-spacing:2px;color:var(--faint);text-transform:uppercase}
+  .topbar .home{color:var(--dim)} .topbar .home:hover{color:var(--y)}
+  .title{font-family:var(--serif);letter-spacing:.3em;color:var(--y);font-size:15px}
+  .legend{position:fixed;left:20px;bottom:18px;z-index:410;font-size:10px;letter-spacing:1px;
+    color:var(--faint);line-height:1.9}
+  .legend .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  a{color:var(--yb);text-decoration:none}
+  .err{position:fixed;inset:0;z-index:420;display:none;place-items:center;text-align:center;
+    background:rgba(4,3,2,.85);color:var(--rust);font-size:13px;letter-spacing:2px;padding:24px}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="vignette"></div><div class="scan"></div>
+<div class="topbar">
+  <a class="home" href="../">◂ THE BACKROOMS</a>
+  <span class="title">THE ATLAS</span>
+  <span id="count">—</span>
+</div>
+<div class="legend">
+  <div><span class="dot" style="background:#c9ba72"></span>genesis</div>
+  <div><span class="dot" style="background:#8fdcac"></span>surfaced</div>
+  <div><span class="dot" style="background:#a05a3a"></span>sealed — lore, not a way in</div>
+</div>
+<div class="err" id="err">the atlas could not be read.</div>
+
+<script src="vendor/leaflet.js"></script>
+<script type="module">
+  import { validateBeaconSet, beaconStyle } from './atlas-core.mjs'
+
+  const map = L.map('map', { zoomControl: true, attributionControl: true }).setView([39.2966, -76.6414], 14)
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap contributors © CARTO', maxZoom: 19, subdomains: 'abcd',
+  }).addTo(map)
+
+  try {
+    const doc = await (await fetch('beacons.json', { cache: 'no-store' })).json()
+    const res = validateBeaconSet(doc)
+    if (!res.ok) throw new Error(res.error)
+    document.getElementById('count').textContent = `${res.count} door${res.count === 1 ? '' : 's'}`
+    const pts = []
+    for (const b of doc.beacons) {
+      const st = beaconStyle(b)
+      const m = L.circleMarker([b.lat, b.lng], {
+        radius: 7, color: st.color, weight: 2, fillColor: st.color, fillOpacity: 0.35,
+      }).addTo(map)
+      m.beacon = b            // Task 4 reads this on click
+      pts.push([b.lat, b.lng])
+    }
+    if (pts.length > 1) map.fitBounds(pts, { padding: [60, 60] })
+  } catch (e) {
+    document.getElementById('err').style.display = 'grid'
+    console.error('atlas:', e)
+  }
+</script>
+</body>
+</html>
