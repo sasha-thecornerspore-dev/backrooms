@@ -67,3 +67,12 @@ export function stratumLabel(stratum, indexFromTop) {
   const n = String(indexFromTop + 1).padStart(3, '0')
   return `layer ${n} · ${stratum.tier} · ${stratum.ts.slice(0, 10)}`
 }
+
+// Parse a URL hash ("#806-n-carey") into a beacon id, or null. Only the id
+// charset we mint (lowercase letters, digits, hyphen) is allowed, so a crafted
+// hash cannot select anything unexpected or inject into a lookup.
+export function beaconIdFromHash(hash) {
+  if (typeof hash !== 'string') return null
+  const id = hash.replace(/^#/, '')
+  return /^[a-z0-9-]{1,64}$/.test(id) ? id : null
+}

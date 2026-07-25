@@ -81,12 +81,14 @@
 
 <script src="vendor/leaflet.js"></script>
 <script type="module">
-  import { validateBeaconSet, beaconStyle, orderStrata, stratumLabel } from './atlas-core.mjs'
+  import { validateBeaconSet, beaconStyle, orderStrata, stratumLabel, beaconIdFromHash } from './atlas-core.mjs'
 
   const map = L.map('map', { zoomControl: true, attributionControl: true }).setView([39.2966, -76.6414], 14)
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '© OpenStreetMap contributors © CARTO', maxZoom: 19, subdomains: 'abcd',
   }).addTo(map)
+
+  const byId = new Map()
 
   try {
     const doc = await (await fetch('beacons.json', { cache: 'no-store' })).json()
@@ -101,6 +103,7 @@
       }).addTo(map)
       m.beacon = b            // Task 4 reads this on click
       m.on('click', () => openPanel(b))
+      byId.set(b.id, b)
       pts.push([b.lat, b.lng])
     }
     if (pts.length > 1) map.fitBounds(pts, { padding: [60, 60] })
@@ -128,10 +131,25 @@
       li.append(lab, frag); ol.appendChild(li)
     })
     panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false')
+    history.replaceState(null, '', '#' + b.id)
   }
-  function closePanel() { panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true') }
+  function closePanel() {
+    panel.classList.remove('open'); panel.setAttribute('aria-hidden', 'true')
+    history.replaceState(null, '', location.pathname + location.search)
+  }
   document.getElementById('panel-x').addEventListener('click', closePanel)
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel() })
+
+  // shareable doors: open the beacon named in the URL hash, and keep the hash in
+  // sync so a specific door can be linked. replaceState never fires hashchange,
+  // so the panel's own updates can't loop; hashchange only fires on real navigation.
+  function onHash() {
+    const id = beaconIdFromHash(location.hash)
+    const b = id ? byId.get(id) : null
+    if (b) openPanel(b); else closePanel()
+  }
+  window.addEventListener('hashchange', onHash)
+  onHash()
 </script>
 </body>
 </html>

@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import {
   validateStratum, validateBeacon, validateBeaconSet,
-  orderStrata, beaconStyle, stratumLabel,
+  orderStrata, beaconStyle, stratumLabel, beaconIdFromHash,
 } from './atlas-core.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -49,6 +49,14 @@ check('style sealed rust',   beaconStyle({ kind: 'genesis', sealed: true }).colo
 // stratumLabel
 check('stratum label', stratumLabel({ tier: 'deep', ts: '2026-07-25T12:00:00Z', fragment: 'x' }, 0)
                         === 'layer 001 · deep · 2026-07-25')
+
+// beaconIdFromHash — shareable-link parsing, injection-safe
+check('hash id ok',      beaconIdFromHash('#806-n-carey') === '806-n-carey')
+check('hash no prefix',  beaconIdFromHash('806-n-carey') === '806-n-carey')
+check('hash empty null', beaconIdFromHash('#') === null)
+check('hash bad chars',  beaconIdFromHash('#a/b') === null)
+check('hash uppercase',  beaconIdFromHash('#ABC') === null)
+check('hash non-string', beaconIdFromHash(null) === null)
 
 // the real shipped data validates
 const doc = JSON.parse(readFileSync(join(HERE, 'beacons.json'), 'utf8'))
