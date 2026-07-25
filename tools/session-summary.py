@@ -28,8 +28,12 @@ Two rules hold the guarantee up:
      non-zero exit means DO NOT PUBLISH.
 
 Usage:
-    python session-summary.py SESSION.jsonl -o out.md
-    python session-summary.py SESSION.jsonl --check     # verify only, no output
+    python session-summary.py SESSION.jsonl --check                  # verify only
+    python session-summary.py SESSION.jsonl -o "$TEMP/digest.md"     # write it
+
+Write the digest OUTSIDE any git checkout. It is derived, redacted and verified,
+but it is not public, and this repository is. `--out` refuses a destination
+inside a worktree that has an `origin` remote for exactly that reason.
 """
 
 from __future__ import annotations
@@ -39,6 +43,7 @@ import importlib.util
 import inspect
 import json
 import re
+import subprocess
 import sys
 from collections import Counter
 from collections.abc import Iterable
@@ -86,6 +91,14 @@ MAX_SEGMENTS_PER_COMMAND = 4
 # never enough to reconstruct the operator's home directory.
 OUT_OF_TREE_SEGMENTS = 2
 
+# ...with one exception the tail rule cannot express on its own. A file written
+# directly in a home directory truncates to `.../<username>/<file>` -- which
+# names the operator's account outright, on every published page, and no
+# redaction layer catches it: a bare username is not secret-shaped, carries no
+# credential context, and scores nowhere near any threshold. Home-relative paths
+# are therefore rewritten to `~/...` and the account segment is dropped.
+HOME_PARENT_SEGMENTS = ("users", "home")
+
 # A transcript file is not always one session. Resuming, forking and `--continue`
 # all append to a file named for only one of the sessions inside it, and a session
 # that moved between projects carries more than one cwd. Taking the FIRST value
@@ -112,7 +125,7 @@ def load_redactor(here: Path) -> ModuleType:
         raise SystemExit(f"could not load redaction module: {target}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    for attr in ("load_known_secrets", "redact", "verify"):
+    for attr in ("load_known_secrets", "redact", "verify", "uuid_context_survivors"):
         if not hasattr(module, attr):
             raise SystemExit(f"redaction module is missing {attr}(); refusing to publish")
     return module
@@ -142,6 +155,19 @@ class Redactor:
 
     def verify(self, text: str) -> list[str]:
         return self._module.verify(text)
+
+    def uuid_context_survivors(self, text: str) -> int:
+        """UUID-shaped values that kept credential context and survived anyway.
+
+        Exposed here because SESSIONS.md §5 and RUNBOOK.md §1.1 both tell the
+        operator to read this count before publishing -- and until now it was
+        computed only inside `session-redact.py`'s own `main()`, so the publish
+        path, the one the docs are actually about, never printed it. The
+        documented backstop for the weakest case the docs call out (third-party
+        UUID-shaped credentials, which rely entirely on the known-value layer)
+        could not fire.
+        """
+        return self._module.uuid_context_survivors(text)
 
 
 def parse_ts(raw: object) -> datetime | None:
@@ -211,6 +237,11 @@ def display_path(path: str, roots: Iterable[str]) -> str:
     token character, so a long absolute path matches as one high-entropy blob
     and is struck whole -- a correct-but-useless outcome that this avoids by not
     handing it a long path in the first place.
+
+    Home directories are a special case of "out of tree", handled below: the
+    last-two-segments rule alone turns `C:/Users/alice/keys.txt` into
+    `.../alice/keys.txt`, which publishes the operator's account name on every
+    page that touched a file in their home. Those become `~/keys.txt`.
     """
     norm_path = path.replace("\\", "/")
     best: str | None = None
@@ -224,7 +255,31 @@ def display_path(path: str, roots: Iterable[str]) -> str:
                 best = candidate
     if best:
         return best
-    tail = [seg for seg in norm_path.split("/") if seg][-OUT_OF_TREE_SEGMENTS:]
+
+    segments = [seg for seg in norm_path.split("/") if seg]
+
+    # A path under a home directory keeps its shape but loses the account name.
+    # Two forms are recognised: an actual prefix match against this machine's
+    # home, and the structural `.../Users/<name>/...` or `/home/<name>/...` that
+    # names someone else's. Both become `~/<tail>`, so a file written straight
+    # into a home directory reads as `~/keys.txt` rather than as an account name.
+    try:
+        home_parts = [p for p in str(Path.home()).replace("\\", "/").split("/") if p]
+    except (OSError, RuntimeError):  # pragma: no cover - Path.home() is total in practice
+        home_parts = []
+    lowered = [s.lower() for s in segments]
+    if home_parts and lowered[: len(home_parts)] == [p.lower() for p in home_parts]:
+        rest = segments[len(home_parts) :]
+        return "~/" + "/".join(rest[-OUT_OF_TREE_SEGMENTS:]) if rest else "~"
+    # Only at the top of the path -- `/home/<name>/...` or `C:/Users/<name>/...`.
+    # Anchored deliberately: a `home` directory buried mid-path (`/var/lib/home/`)
+    # is a directory called home, not somebody's account.
+    for index in (0, 1):
+        if len(lowered) > index + 1 and lowered[index] in HOME_PARENT_SEGMENTS:
+            rest = segments[index + 2 :]  # drop both `Users` and the account name
+            return "~/" + "/".join(rest[-OUT_OF_TREE_SEGMENTS:]) if rest else "~"
+
+    tail = segments[-OUT_OF_TREE_SEGMENTS:]
     return ".../" + "/".join(tail) if tail else "(unknown path)"
 
 
@@ -495,6 +550,42 @@ def render(digest: Digest, source: Path, safe) -> tuple[str, dict[str, int]]:
     return "\n".join(out) + "\n", sections
 
 
+def repo_with_origin(destination: Path) -> tuple[Path, str] | None:
+    """The git worktree containing `destination` IF it has an `origin` remote.
+
+    A digest is publishable-shaped, not public-shaped: it is meant to land in a
+    private portal repo after a human has read it. The easiest way to get that
+    wrong is to write it into a checkout that has a push destination -- the public
+    game repo is a sibling directory with a near-identical name, its `.gitignore`
+    has no rule that would catch a stray `.md`, and one `git add -A` publishes it
+    permanently.
+
+    Returns (worktree root, origin url), or None when the destination is outside
+    any git worktree or the worktree has no `origin`. A git that will not answer
+    is treated as "no origin": this is a guard against an easy mistake, not a
+    security boundary, and it must not stop the tool working on machines without
+    git installed.
+    """
+    parent = destination.expanduser().resolve().parent
+    try:
+        top = subprocess.run(
+            ["git", "-C", str(parent), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+        )
+        if top.returncode != 0:
+            return None
+        root = Path(top.stdout.strip())
+        origin = subprocess.run(
+            ["git", "-C", str(root), "remote", "get-url", "origin"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
+        )
+        if origin.returncode != 0 or not origin.stdout.strip():
+            return None
+        return root, origin.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Build a curated, publish-safe summary of a Claude Code session."
@@ -502,11 +593,44 @@ def main() -> int:
     ap.add_argument("session", type=Path, help="path to the session .jsonl")
     ap.add_argument("-o", "--out", type=Path, help="write the markdown digest here")
     ap.add_argument("--check", action="store_true", help="verify only; write nothing")
+    ap.add_argument(
+        "--out-may-be-pushed",
+        action="store_true",
+        help="allow --out inside a git worktree that has an origin remote (you checked it is private)",
+    )
     args = ap.parse_args()
 
     if not args.session.is_file():
         print(f"no such session file: {args.session}", file=sys.stderr)
         return 2
+
+    # Refuse the destination BEFORE doing any work, so the refusal is the first
+    # thing on screen rather than a footnote after a successful-looking run.
+    if args.out and not args.check and not args.out_may_be_pushed:
+        pushable = repo_with_origin(args.out)
+        if pushable:
+            root, origin = pushable
+            print(
+                f"refusing to write a session digest into a pushable checkout.\n"
+                f"\n"
+                f"  destination : {args.out}\n"
+                f"  worktree    : {root}\n"
+                f"  origin      : {origin}\n"
+                f"\n"
+                "A digest is derived, redacted and verified -- it is not public. This\n"
+                "worktree has a push destination, and one `git add -A` there makes the\n"
+                "digest permanent and world-readable if that remote is public.\n"
+                "\n"
+                "Write it somewhere that is not a repository at all, review it there, and\n"
+                "only then copy it into the private portal:\n"
+                "\n"
+                '    python tools/session-summary.py "<SESSION>.jsonl" -o "$TEMP/session-digest.md"\n'
+                "\n"
+                "If this destination really is a private repo you have personally checked\n"
+                "in the host's UI, pass --out-may-be-pushed.",
+                file=sys.stderr,
+            )
+            return 2
 
     redactor = Redactor(load_redactor(Path(__file__).resolve()))
     digest = scan(args.session)
@@ -532,6 +656,15 @@ def main() -> int:
         print("garbled:")
         for label in sorted(redactor.garbles):
             print(f"  {label:<16} {redactor.garbles[label]}")
+
+    # The documented backstop for UUID-shaped third-party credentials. Counted,
+    # never fatal -- a session id legitimately sits next to the word "key" all the
+    # time -- but it has to be PRINTED on the path that publishes, or the
+    # instruction to look at them is an instruction nobody can follow.
+    survivors = redactor.uuid_context_survivors(text)
+    print(f"uuid-shaped w/ credential context survived : {survivors}")
+    if survivors:
+        print("  ^ look at these by hand before publishing (SESSIONS.md section 5).")
 
     leaks = redactor.verify(text)
     if leaks:

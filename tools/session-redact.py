@@ -8,8 +8,12 @@ gate every publish path goes through.
 Detection has four layers, because none is sufficient alone:
 
   1. Known-value redaction. Exact secret values are read at RUNTIME from the
-     environment and local token files, never hardcoded here, and struck from the
-     text. This is the high-confidence layer -- it scores 1.0 by definition.
+     environment, from local token files, and from any EXTRA SECRET FILES the
+     operator names (BACKROOMS_EXTRA_SECRET_FILES / --extra-secrets); never
+     hardcoded here, and struck from the text. This is the high-confidence layer
+     -- it scores 1.0 by definition. It is also the ONLY layer that can reach a
+     short, low-diversity value sitting bare in prose, because an exact match
+     needs neither a length floor nor a nearby keyword.
   2. Named patterns. Vendor prefixes (sk-ant-, ghp_, AKIA, JWT, PEM blocks) plus
      STRUCTURAL shapes where credential-ness comes from the position rather than
      the value: the userinfo field of a URI, `password=`/`api_key:` assignments,
@@ -78,16 +82,38 @@ survived.
     shape is a false positive.
   * A bare secret with no structural marker, no credential keyword anywhere near
     it, fewer than 16 characters, and only one or two character classes is
-    invisible. `hunter2` on a line by itself cannot be distinguished from any other
-    seven-character word, and no threshold setting changes that.
+    invisible TO THE HEURISTIC LAYERS. `hunter2` on a line by itself cannot be
+    distinguished from any other seven-character word, and no threshold setting
+    changes that -- the entropy net genuinely cannot solve this case.
+    The known-value layer can, because exact match works at any length in any
+    context. That is a fix for LISTED VALUES ONLY: the ones reachable through
+    SECRET_ENV_VARS, SECRET_FILES, SECRET_JSON_FILES, or a file the operator
+    points BACKROOMS_EXTRA_SECRET_FILES / --extra-secrets at. It is NOT a general
+    fix and must not be read as one. A short bare secret nobody listed still
+    survives, exactly as before, and the tool has no way to discover it. LISTING
+    THEM IS THE OPERATOR'S JOB. Entries shorter than EXTRA_SECRET_MIN_LEN are
+    refused outright -- a two-character "secret" would strike every occurrence of
+    those two characters and leave a document of markers -- and the refusal is
+    counted and printed so the operator can see the entry did nothing.
+  * Personally identifying data is covered only where it is structural: EMAIL,
+    SSN, CARD_NUMBER, PHONE (punctuated NANP forms and `+NN` international
+    forms), and a LABELLED date of birth (`dob:`, `date of birth`, `birthday`).
+    Deliberately absent, and still uncovered: a general date matcher, which would
+    shred ordinary prose; postal addresses; and personal names. An unlabelled
+    birth date is indistinguishable from any other date and is left alone. A
+    phone number written with no punctuation at all (`2404900053`) is
+    indistinguishable from a ten-digit id or a unix timestamp and is left alone
+    too. For those, the known-value layer is again the only answer.
   * Only single-step encodings are undone. Double percent-encoding, base64 of
     base64, gzip+base64, and encodings we do not model still hide a credential from
     every layer.
   * Context is line-scoped, plus a single carry-over from a label line immediately
     above. A keyword three lines up from its value does not bump anything.
-  * Known-value redaction covers the env vars and token files listed below and
-    nothing else. Third-party credentials that are shaped like identifiers (UUID
-    form especially) rely entirely on structural context; main() prints a warning
+  * Known-value redaction covers the env vars, token files and JSON credential
+    stores listed below, plus whatever the operator points
+    BACKROOMS_EXTRA_SECRET_FILES / --extra-secrets at, and nothing else.
+    Third-party credentials that are shaped like identifiers (UUID form
+    especially) rely entirely on structural context; main() prints a warning
     count when UUID-shaped values with credential context survive so a human can
     look.
 
@@ -95,6 +121,12 @@ Usage:
     python session-redact.py SESSION.jsonl -o out.md
     python session-redact.py SESSION.jsonl --check      # verify only, no output
     python session-redact.py SESSION.jsonl --redact-threshold 0.7
+    python session-redact.py SESSION.jsonl --extra-secrets PATH [--extra-secrets PATH]
+
+Environment:
+    BACKROOMS_EXTRA_SECRET_FILES   os.pathsep-separated list of files whose lines
+                                   are secret values; same effect as repeating
+                                   --extra-secrets. Holds PATHS, never values.
 """
 
 from __future__ import annotations
@@ -110,6 +142,7 @@ import os
 import re
 import secrets
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 # Env vars whose *values* are secrets. Read at runtime so no secret is stored here.
@@ -132,6 +165,69 @@ SECRET_FILES = ("~/.backrooms-cf-token",)
 SECRET_JSON_FILES = {
     "~/.claude/.credentials.json": ("accessToken", "refreshToken"),
 }
+
+# ---------------------------------------------------------------------------
+# Operator-supplied secret files.
+#
+# The gap this closes, reproduced on a real transcript: an 11-character password,
+# a date of birth and a phone number, each sitting bare in a sentence with no
+# credential keyword anywhere near them, survived every layer. They are below the
+# entropy net's length floor and carry too little character-class diversity to
+# score, and no pattern frames them. The entropy net cannot fix that -- see
+# LIMITATIONS. Exact match can, at any length and in any context, so the operator
+# is given a way to declare those values.
+#
+# NO PATH AND NO VALUE IS HARDCODED HERE, and none ever should be: this file is
+# in version control. The env var holds an os.pathsep-separated list of PATHS,
+# read at runtime; --extra-secrets adds more. A path that is missing or
+# unreadable is skipped, counted and reported -- a redactor that crashes on a
+# stale config line is a redactor that gets commented out of the publish path.
+EXTRA_SECRET_FILES_ENV = "BACKROOMS_EXTRA_SECRET_FILES"
+
+# Label carried by an operator-listed value. Generic on purpose: the marker left
+# in the transcript should not disclose which file the value came from.
+EXTRA_SECRET_LABEL = "EXTRA_SECRET"
+
+# Length floor for an operator-listed value, and the reason there is one: exact
+# match has no minimum, which is exactly the danger. A one- or two-character
+# entry -- a stray line, an editor artefact, a lone `x` -- would strike every
+# occurrence of those characters and hand back a document made of markers.
+# Refused entries are counted so the operator can see the line did nothing
+# rather than assuming it worked.
+EXTRA_SECRET_MIN_LEN = 6
+
+# Comment forms tolerated in an extra-secrets file, so the operator can annotate
+# what a value is for without the annotation becoming a redaction rule.
+#
+# The marker must be FOLLOWED BY WHITESPACE (or stand alone) to count. This is not
+# fussiness -- it is the whole safety argument for this file. A generated password
+# beginning `#` is entirely ordinary, and under a bare `\A(?:#|//|;)` rule it parses
+# as a comment, loads nothing, and leaks in silence while every other line in the
+# same file is struck. That exact case was observed on real data: the one value in
+# the file that mattered was the one that survived.
+#
+# The two failure directions are not symmetric. Reading a comment as a secret costs
+# an over-redaction nobody is harmed by; reading a secret as a comment costs the
+# secret. In a file that exists solely to hold secrets, fail toward loading.
+_EXTRA_COMMENT = re.compile(r"\A(?:#|//|;)(?:\s|\Z)")
+
+# `key=value` / `key: value`. Operators keep these files in the shape of the
+# config they were copied from, and the transcript contains the VALUE, not the
+# whole line -- so both are taken. The key is required to be key-shaped so that a
+# password containing a colon is not silently split into a useless fragment.
+_EXTRA_KV = re.compile(
+    r"\A(?P<key>[A-Za-z_][A-Za-z0-9 _.\-]{0,63})\s*[=:]\s*(?P<value>\S.*?)\s*\Z"
+)
+
+# Stat keys reported by load_known_secrets(); pre-seeded so main() can print them
+# unconditionally without worrying about which branches ran.
+EXTRA_SECRET_STAT_KEYS = (
+    "extra_files_listed",
+    "extra_files_read",
+    "extra_files_missing",
+    "extra_values",
+    "extra_too_short",
+)
 
 # ---------------------------------------------------------------------------
 # Confidence scale. Everything downstream is a number in [0, 1].
@@ -200,6 +296,33 @@ def _luhn(digits: str) -> bool:
     return total % 10 == 0
 
 
+NANP_LEADING = "23456789"  # NANP area and exchange codes never begin 0 or 1
+
+
+def _phone_number(v: str) -> bool:
+    """Digit count plus the NANP numbering rule, to keep non-phones out.
+
+    The shape alone is weak: ten digits is also a unix timestamp, three
+    dot-separated groups is also a version string, four is also an address. So
+    the SEPARATORS carry the evidence (see PHONE_RX -- an unpunctuated digit run
+    never matches) and this validator carries the rest. Total digits must sit in
+    the E.164 range; and a number with no `+` country prefix must be a NANP
+    number whose area and exchange codes obey the real rule that neither begins
+    0 or 1. That one rule discards `100-200-3000`, `1.2.3`-style version runs
+    that squeezed through, and the `000-000-0000` placeholder class, at no cost
+    to any dialable number.
+    """
+    digits = re.sub(r"\D", "", v)
+    if not (7 <= len(digits) <= 15):
+        return False
+    if v.startswith("+"):
+        return True
+    national = digits[1:] if len(digits) == 11 and digits[0] == "1" else digits
+    if len(national) != 10:
+        return False
+    return national[0] in NANP_LEADING and national[3] in NANP_LEADING
+
+
 CARD_IINS = "3456"  # Amex/Diners/JCB, Visa, Mastercard, Discover/UnionPay
 
 
@@ -237,6 +360,64 @@ SECRET_WORD = (
     r"|app[_\-]?key|consumer[_\-]?secret)"
 )
 
+# Phone numbers. PII, and until now nothing here matched one. Punctuation is the
+# whole of the evidence, because the digits alone are ambiguous with things a
+# transcript is full of: `2404900053` is also a ten-digit id and a unix second
+# count, `1.2.3` is a version, `172.16.1.1` is an address. So:
+#
+#   * a `+` country prefix is explicit E.164 notation and stands on its own;
+#   * parentheses around a three-digit group are unambiguous NANP notation;
+#   * otherwise the number must be NNN-NNN-NNNN or NNN.NNN.NNNN with a
+#     CONSISTENT separator (the backreference). Space-separated `250 300 1000` is
+#     deliberately NOT matched: a row of a numeric table is indistinguishable
+#     from a phone number written that way, and eating table rows out of a
+#     transcript is worse than missing an unpunctuated number.
+#
+# The optional leading country `1` is accepted only hyphenated (`1-240-490-0053`).
+# A DOTTED one is not, because `1.240.490.0053` is also how a four-part version
+# string looks, and version strings are far commoner in a session transcript than
+# dot-written long-distance numbers. `+1.240.490.0053` still matches via the `+`
+# branch, where the `+` removes the ambiguity.
+#
+# The lookarounds keep the match off the inside of a longer run: not preceded by
+# a word character or by `digit.` (version strings, dotted quads), and not
+# followed by a word character or by `.digit`. A trailing sentence period is
+# allowed through, because "call 240-490-0053." is the common case.
+PHONE_RX = re.compile(
+    r"(?<![\w+\-])(?<!\d\.)(?:"
+    r"\+\d{1,3}(?:[ .\-]?\(?\d{1,5}\)?){1,6}"                    # +1 240 490 0053, +44 20 7946 0958
+    r"|(?:1[ .\-]?)?\(\d{3}\)[ .\-]?\d{3}[ .\-]?\d{4}"           # (240) 490-0053
+    r"|(?:1-)?\d{3}(?P<psep>[.\-])\d{3}(?P=psep)\d{4}"           # 240-490-0053, 240.490.0053, 1-240-490-0053
+    r")(?![\w\-]|\.\d)"
+)
+
+# Date of birth. There is deliberately no general date rule and there should not
+# be one: a bare date is indistinguishable from every other date in a transcript,
+# and a matcher for it would shred ordinary prose. A LABELLED date, though, is
+# structural in exactly the way DSN_PASSWORD and ASSIGNED_SECRET are -- the label
+# announces what the following token IS, and the label is the evidence. Only the
+# date is struck; the label survives, so the reader can still see that a birth
+# date was there and that it is gone.
+DOB_LABEL = (
+    r"(?:date\s+of\s+birth|birth\s*date|birthdate|birthday"
+    r"|d\s*[.\-]\s*o\s*[.\-]\s*b\s*[.\-]?|dob)"
+)
+
+# What may sit between the label and the date: punctuation, and at most a few of
+# the connector words that appear when the label is written as prose ("my
+# birthday is 14 March 1985"). Any OTHER word breaks the link, so "birthday party
+# on 12/25/2024" is not a date of birth and is left alone.
+DOB_GAP = r"\W{0,8}(?:(?:is|was|on|of|the)\W{1,8}){0,3}"
+
+DOB_DATE = (
+    r"(?:\d{4}[-/.]\d{1,2}[-/.]\d{1,2}"                          # 1985-03-14
+    r"|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}"                          # 03/14/1985, 14.03.85
+    r"|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+"
+    r"\d{1,2}(?:st|nd|rd|th)?\s*,?\s*\d{4}"                      # March 14, 1985
+    r"|\d{1,2}(?:st|nd|rd|th)?\s+"
+    r"(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*,?\s*\d{4})"  # 14 March 1985
+)
+
 PATTERNS = (
     ("PRIVATE_KEY", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S), 0, None),
     ("ANTHROPIC_KEY", re.compile(r"sk-ant-[A-Za-z0-9_\-]{16,}"), 0, None),
@@ -268,9 +449,13 @@ PATTERNS = (
         r"\s*[\"']?(?P<secret>[^\s\"']{6,})"), "secret", _cli_value),
     ("PIN_CODE", re.compile(r"(?i)\b(?:pin|cvv|cvc|passcode|otp)\b[^\d\n]{0,12}(?P<secret>\d{3,8})\b"), "secret", None),
 
+    # Structural PII: the label says what the value is, so only the value goes.
+    ("DOB", re.compile(r"(?i)\b" + DOB_LABEL + DOB_GAP + r"(?P<secret>" + DOB_DATE + r")"), "secret", None),
+
     # Regulated identifiers. Privacy classes, like EMAIL/PRIVATE_IP below.
     ("SSN", re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), 0, None),
     ("CARD_NUMBER", re.compile(r"\b(?:\d[ \-]?){12,18}\d\b"), 0, _card_number),
+    ("PHONE", PHONE_RX, 0, _phone_number),
 
     ("EMAIL", re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"), 0, None),
     ("PRIVATE_IP", re.compile(r"\b(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b"), 0, None),
@@ -282,8 +467,10 @@ PATTERNS = (
 # Base confidence per named pattern. The credential prefixes are issued by one
 # vendor each and are not produced by accident, so they sit above the redact
 # threshold on shape alone. The structural patterns clear it too: the frame, not
-# the value, is the evidence. EMAIL/PRIVATE_IP/SSN/CARD_NUMBER are privacy classes
-# rather than credentials but we still want them gone.
+# the value, is the evidence. EMAIL/PRIVATE_IP/SSN/CARD_NUMBER/PHONE/DOB are
+# privacy classes rather than credentials but we still want them gone. PHONE sits
+# a notch lower than SSN because its evidence is punctuation rather than a
+# regulated format -- still comfortably above the redact threshold.
 PATTERN_CONFIDENCE = {
     "PRIVATE_KEY": 1.00,
     "ANTHROPIC_KEY": 0.99,
@@ -300,6 +487,8 @@ PATTERN_CONFIDENCE = {
     "CLI_SECRET": 0.95,
     "SSN": 0.95,
     "CARD_NUMBER": 0.95,
+    "DOB": 0.95,
+    "PHONE": 0.90,
     "MNEMONIC": 0.98,
     "RECOVERY_CODE": 0.95,
     "PIN_CODE": 0.90,
@@ -640,9 +829,87 @@ def score_candidate(text: str, start: int, end: int, ctx: ContextIndex) -> float
     return min(clamp01(score), CONTEXT_BUMP_CEILING)
 
 
-def load_known_secrets() -> list[tuple[str, str]]:
-    """Collect exact secret values from the environment and local token stores."""
+def _extra_secret_paths(extra: Sequence[str] = ()) -> list[str]:
+    """Paths from --extra-secrets and the env var, de-duplicated, order preserved.
+
+    Both sources accept os.pathsep-separated lists so a single flag and a single
+    exported variable behave the same way. Nothing is expanded or read here.
+    """
+    raw: list[str] = []
+    for item in extra or ():
+        raw.extend(item.split(os.pathsep))
+    raw.extend(os.environ.get(EXTRA_SECRET_FILES_ENV, "").split(os.pathsep))
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        item = item.strip().strip('"')
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
+def _extra_secret_values(path: str, stats: dict[str, int]) -> list[str]:
+    """Every secret value declared by one operator file.
+
+    Each non-empty, non-comment line yields the WHOLE line, and -- when the line
+    is `key=value` or `key: value` -- the value on its own as well, because the
+    transcript will contain the value without the key it was copied from.
+    Anything shorter than EXTRA_SECRET_MIN_LEN is refused and counted; see the
+    constant for why a short entry is destructive rather than merely useless.
+    """
+    p = Path(os.path.expanduser(path))
+    if not p.is_file():
+        stats["extra_files_missing"] += 1
+        return []
+    try:
+        body = p.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        stats["extra_files_missing"] += 1
+        return []
+    stats["extra_files_read"] += 1
+
+    values: list[str] = []
+    for line in body.splitlines():
+        line = line.strip()
+        if not line or _EXTRA_COMMENT.match(line):
+            continue
+        candidates = [line]
+        m = _EXTRA_KV.match(line)
+        if m:
+            value = m.group("value").strip().strip("\"'")
+            # `https://host/path` parses as key `https`; its "value" is not one.
+            if value and not value.startswith("//"):
+                candidates.append(value)
+        for cand in candidates:
+            if len(cand) < EXTRA_SECRET_MIN_LEN:
+                stats["extra_too_short"] += 1
+                continue
+            values.append(cand)
+    return values
+
+
+def load_known_secrets(
+    extra_files: Sequence[str] = (),
+    stats: dict[str, int] | None = None,
+) -> list[tuple[str, str]]:
+    """Collect exact secret values from the environment and local token stores.
+
+    `extra_files` are operator-supplied paths (from --extra-secrets); the env var
+    EXTRA_SECRET_FILES_ENV is always consulted as well. `stats`, if given, is
+    filled in with the counts main() reports -- how many files were listed, read
+    and missed, how many values were taken, and how many entries were refused for
+    being shorter than EXTRA_SECRET_MIN_LEN. Both arguments are optional so that
+    existing callers (session-summary.py loads this module and calls it with no
+    arguments) keep working unchanged.
+    """
     found: list[tuple[str, str]] = []
+    if stats is None:
+        stats = {}
+    for key in EXTRA_SECRET_STAT_KEYS:
+        stats.setdefault(key, 0)
 
     for name in SECRET_ENV_VARS:
         val = os.environ.get(name)
@@ -676,7 +943,19 @@ def load_known_secrets() -> list[tuple[str, str]]:
             elif isinstance(node, list):
                 stack.extend(node)
 
-    # Longest first, so a secret that contains another is struck whole.
+    seen_extra: set[str] = set()
+    for path in _extra_secret_paths(extra_files):
+        stats["extra_files_listed"] += 1
+        for value in _extra_secret_values(path, stats):
+            if value in seen_extra:
+                continue
+            seen_extra.add(value)
+            found.append((EXTRA_SECRET_LABEL, value))
+            stats["extra_values"] += 1
+
+    # Longest first, so a secret that contains another is struck whole. This is
+    # what makes the whole-line and value-only forms of an operator entry safe to
+    # hold at the same time: `dob: 1985-03-14` is tried before `1985-03-14`.
     found.sort(key=lambda kv: len(kv[1]), reverse=True)
     return found
 
@@ -1176,6 +1455,17 @@ def main() -> int:
         default=DEFAULT_GARBLE_THRESHOLD,
         help="score at or above which a value is garbled rather than kept (default %(default)s)",
     )
+    ap.add_argument(
+        "--extra-secrets",
+        action="append",
+        metavar="PATH",
+        default=[],
+        help=(
+            "file whose non-comment lines are exact secret values to strike "
+            f"(repeatable; also read from ${EXTRA_SECRET_FILES_ENV}). Entries "
+            f"shorter than {EXTRA_SECRET_MIN_LEN} characters are refused"
+        ),
+    )
     args = ap.parse_args()
 
     if not args.session.is_file():
@@ -1185,7 +1475,8 @@ def main() -> int:
         print("thresholds must satisfy 0 <= garble <= redact <= 1", file=sys.stderr)
         return 2
 
-    known = load_known_secrets()
+    stats: dict[str, int] = {}
+    known = load_known_secrets(args.extra_secrets, stats)
     counts: dict[str, int] = {}
     garbles: dict[str, int] = {}
     text = render(
@@ -1193,6 +1484,24 @@ def main() -> int:
     )
 
     print(f"known secret values loaded : {len(known)}")
+    # Reported unconditionally, including the "none configured" case: an operator
+    # who believes a short bare secret is covered needs to see when it is not.
+    if stats["extra_files_listed"]:
+        print(
+            f"extra secret files         : {stats['extra_files_listed']} listed, "
+            f"{stats['extra_files_read']} read, "
+            f"{stats['extra_files_missing']} missing/unreadable"
+        )
+        print(
+            f"extra secret values        : {stats['extra_values']} loaded, "
+            f"{stats['extra_too_short']} refused "
+            f"(shorter than {EXTRA_SECRET_MIN_LEN} chars)"
+        )
+    else:
+        print(
+            "extra secret files         : none configured "
+            f"(--extra-secrets / ${EXTRA_SECRET_FILES_ENV})"
+        )
     print(f"thresholds                 : redact >= {args.redact_threshold}, "
           f"garble >= {args.garble_threshold}")
     print("redactions:")

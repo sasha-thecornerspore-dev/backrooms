@@ -9,6 +9,14 @@ src/build-config.json
 .backrooms-cf-token*
 *cf-token*
 *.token
+
+# Session digests. This repo is PUBLIC; a digest is derived and redacted but is
+# not public, and it belongs in the private portal repo. tools/session-summary.py
+# refuses an --out inside a worktree with an origin remote, but a net under the
+# guard costs nothing: nobody should ever be writing one of these here.
+out.md
+*session-digest*.md
+*session-summary*.md
 __pycache__/
 *.pyc
 _chattest.mjs
