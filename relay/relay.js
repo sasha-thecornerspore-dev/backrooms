@@ -11,6 +11,8 @@
 // socket's attachment, so it survives hibernation between bursts of traffic.
 import { DurableObject } from 'cloudflare:workers'
 import { roomSeed } from './seed.js'
+import SEED from './atlas-seed.js'
+import { parseAtlasPath, authorize, readAtlas, upsertBeacon, appendStratum } from './atlas.js'
 
 export class Room extends DurableObject {
   async fetch(request) {
@@ -89,9 +91,61 @@ export class Room extends DurableObject {
   }
 }
 
+const CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET,PUT,POST,OPTIONS',
+  'access-control-allow-headers': 'authorization,content-type',
+}
+function atlasJson(status, obj) {
+  return new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json', ...CORS } })
+}
+
+// A single global store of beacons + strata. Reads are open (CORS); writes need
+// the admin bearer secret. All logic is the pure module atlas.js; this shell just
+// loads the store, calls it, and persists. Seeded from atlas-seed.js on first use.
+export class Atlas extends DurableObject {
+  async fetch(request) {
+    const url = new URL(request.url)
+    const route = parseAtlasPath(url.pathname)
+    if (!route) return atlasJson(404, { error: 'not found' })
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
+
+    let store = await this.ctx.storage.get('store')
+    if (!store) { store = SEED; await this.ctx.storage.put('store', store) }
+
+    if (request.method === 'GET') {
+      const r = readAtlas(store, route)
+      return atlasJson(r.status, r.json)
+    }
+
+    // writes require the admin key
+    if (!authorize(request.headers.get('authorization'), this.env.ATLAS_ADMIN_KEY)) {
+      return atlasJson(401, { error: 'unauthorized' })
+    }
+    const body = await request.json().catch(() => null)
+    if (body == null) return atlasJson(400, { error: 'body must be json' })
+
+    if (request.method === 'PUT' && route.resource === 'beacon') {
+      const r = upsertBeacon(store, route.id, body)
+      if (r.store) await this.ctx.storage.put('store', r.store)
+      return atlasJson(r.status, r.json)
+    }
+    if (request.method === 'POST' && route.resource === 'strata') {
+      const r = appendStratum(store, route.id, body)
+      if (r.store) await this.ctx.storage.put('store', r.store)
+      return atlasJson(r.status, r.json)
+    }
+    return atlasJson(405, { error: 'method not allowed' })
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
+    if (url.pathname.startsWith('/atlas')) {
+      const stub = env.ATLAS.get(env.ATLAS.idFromName('global'))
+      return stub.fetch(request)
+    }
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('the backrooms relay is running.\nconnect a websocket: wss://<this-host>/?room=CODE', {
         status: 200, headers: { 'content-type': 'text/plain' },
