@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   beaconIdOk, validateStratum, validateBeacon, authorize,
   parseAtlasPath, readAtlas, upsertBeacon, appendStratum, emptyStore,
+  haversineMeters, checkin,
 } from '../relay/atlas.js'
 import SEED from '../relay/atlas-seed.js'
 
@@ -102,5 +103,48 @@ describe('atlas-seed', () => {
   })
   it('contains 806 N Carey as a sealed genesis beacon', () => {
     expect(SEED.beacons.some(b => b.id === '806-n-carey' && b.sealed === true && b.kind === 'genesis')).toBe(true)
+  })
+})
+
+describe('haversineMeters', () => {
+  it('is ~0 for the same point and ~111km for 1 degree of latitude', () => {
+    expect(haversineMeters(39.3, -76.6, 39.3, -76.6)).toBeLessThan(1)
+    const d = haversineMeters(39.0, -76.6, 40.0, -76.6)
+    expect(d).toBeGreaterThan(110000); expect(d).toBeLessThan(112000)
+  })
+})
+
+describe('parseAtlasPath checkin', () => {
+  it('routes /atlas/beacons/:id/checkin', () => {
+    expect(parseAtlasPath('/atlas/beacons/x/checkin')).toEqual({ resource: 'checkin', id: 'x' })
+  })
+})
+
+describe('checkin', () => {
+  const near = { lat: 39.3001, lng: -76.6001 }
+  const far = { lat: 39.9, lng: -76.6 }
+  const base = () => ({ version: 1, beacons: [
+    { id: 'open', kind: 'genesis', name: 'O', lat: 39.3, lng: -76.6, strata: [] },
+    { id: 'shut', kind: 'genesis', sealed: true, name: 'S', lat: 39.3, lng: -76.6, strata: [] },
+  ]})
+  const NOW = 1_000_000_000_000
+  it('appends a faint stratum when near, discarding coords', () => {
+    const r = checkin(base(), {}, 'open', near, 'k1', NOW)
+    expect(r.status).toBe(201)
+    expect(r.store.beacons[0].strata.length).toBe(1)
+    expect(r.store.beacons[0].strata[0].tier).toBe('faint')
+    expect(JSON.stringify(r.store)).not.toContain('39.3001')
+  })
+  it('rejects too-far (403), sealed (403), bad coords (400), unknown (404)', () => {
+    expect(checkin(base(), {}, 'open', far, 'k1', NOW).status).toBe(403)
+    expect(checkin(base(), {}, 'shut', near, 'k1', NOW).status).toBe(403)
+    expect(checkin(base(), {}, 'open', { lat: 999, lng: 0 }, 'k1', NOW).status).toBe(400)
+    expect(checkin(base(), {}, 'zzz', near, 'k1', NOW).status).toBe(404)
+  })
+  it('dedups the same device within cooldown, allows after it', () => {
+    const first = checkin(base(), {}, 'open', near, 'k1', NOW)
+    expect(checkin(base(), first.dedup, 'open', near, 'k1', NOW + 1000).status).toBe(429)
+    expect(checkin(base(), first.dedup, 'open', near, 'k1', NOW + 7 * 3600 * 1000).status).toBe(201)
+    expect(checkin(base(), first.dedup, 'open', near, 'k2', NOW + 1000).status).toBe(201)
   })
 })

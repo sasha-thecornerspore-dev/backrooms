@@ -12,7 +12,14 @@
 import { DurableObject } from 'cloudflare:workers'
 import { roomSeed } from './seed.js'
 import SEED from './atlas-seed.js'
-import { parseAtlasPath, authorize, readAtlas, upsertBeacon, appendStratum } from './atlas.js'
+import { parseAtlasPath, authorize, readAtlas, upsertBeacon, appendStratum, checkin } from './atlas.js'
+
+// sha256 hex — salts the per-device check-in dedup key with the beacon id so the
+// same device is never correlatable across beacons, even in DO storage.
+async function sha256Hex(s) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('')
+}
 
 export class Room extends DurableObject {
   async fetch(request) {
@@ -115,6 +122,21 @@ export class Atlas extends DurableObject {
 
     if (request.method === 'GET') {
       const r = readAtlas(store, route)
+      return atlasJson(r.status, r.json)
+    }
+
+    // presence-proved check-in — NO admin key; geolocation proximity is the gate.
+    // Coords are used only to verify distance, then discarded (never stored).
+    if (request.method === 'POST' && route.resource === 'checkin') {
+      const body = await request.json().catch(() => null)
+      if (!body || typeof body !== 'object') return atlasJson(400, { error: 'body must be json' })
+      const visitor = typeof body.visitor === 'string' ? body.visitor.slice(0, 100) : ''
+      const key = visitor ? await sha256Hex(route.id + ':' + visitor) : ''
+      const dedupKey = 'dedup:' + route.id
+      const dedup = (await this.ctx.storage.get(dedupKey)) || {}
+      const r = checkin(store, dedup, route.id, { lat: body.lat, lng: body.lng }, key, Date.now())
+      if (r.store) await this.ctx.storage.put('store', r.store)
+      if (r.dedup) await this.ctx.storage.put(dedupKey, r.dedup)
       return atlasJson(r.status, r.json)
     }
 

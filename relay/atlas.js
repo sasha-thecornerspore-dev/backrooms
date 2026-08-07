@@ -59,6 +59,7 @@ export function parseAtlasPath(pathname) {
   if (parts.length === 2) return { resource: 'beacons' }
   if (parts.length === 3) return { resource: 'beacon', id: parts[2] }
   if (parts.length === 4 && parts[3] === 'strata') return { resource: 'strata', id: parts[2] }
+  if (parts.length === 4 && parts[3] === 'checkin') return { resource: 'checkin', id: parts[2] }
   return null
 }
 
@@ -94,4 +95,41 @@ export function appendStratum(store, id, stratum) {
   const nb = { ...b, strata: [...(b.strata ?? []), layer] }
   const beacons = store.beacons.map(x => (x.id === id ? nb : x))
   return { status: 201, json: nb, store: { ...store, beacons } }
+}
+
+// Great-circle distance in metres (haversine).
+export function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000, toRad = d => d * Math.PI / 180
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)))
+}
+
+const CHECKIN_RADIUS_M = 120
+const CHECKIN_COOLDOWN_MS = 6 * 3600 * 1000
+
+// A presence-proved check-in. Verifies proximity to a non-sealed beacon, dedups
+// per device (visitorHash is opaque + beacon-salted by the caller), appends a
+// faint server-authored stratum, and NEVER stores the coordinates. Pure.
+export function checkin(store, dedup, id, coords, visitorHash, now, opts = {}) {
+  const radius = opts.radiusM ?? CHECKIN_RADIUS_M
+  const cooldown = opts.cooldownMs ?? CHECKIN_COOLDOWN_MS
+  const b = store.beacons.find(x => x.id === id)
+  if (!b) return { status: 404, json: { error: 'no such beacon' } }
+  if (b.sealed) return { status: 403, json: { error: 'this door is sealed — not a way in' } }
+  const lat = coords && coords.lat, lng = coords && coords.lng
+  if (typeof lat !== 'number' || typeof lng !== 'number' || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return { status: 400, json: { error: 'bad coordinates' } }
+  }
+  if (haversineMeters(lat, lng, b.lat, b.lng) > radius) {
+    return { status: 403, json: { error: 'too far from the door' } }
+  }
+  const pruned = {}
+  for (const [k, ts] of Object.entries(dedup || {})) if (now - ts < cooldown) pruned[k] = ts
+  if (visitorHash && pruned[visitorHash] != null) return { status: 429, json: { error: 'you were here recently' } }
+  if (visitorHash) pruned[visitorHash] = now
+  const layer = { tier: 'faint', ts: new Date(now).toISOString(), fragment: 'someone stood at the door.' }
+  const nb = { ...b, strata: [...(b.strata ?? []), layer] }
+  const beacons = store.beacons.map(x => (x.id === id ? nb : x))
+  return { status: 201, json: nb, store: { ...store, beacons }, dedup: pruned }
 }
