@@ -83,6 +83,24 @@
 <script type="module">
   import { validateBeaconSet, beaconStyle, orderStrata, stratumLabel, beaconIdFromHash } from './atlas-core.mjs'
 
+  // The live registry (the relay's Atlas durable object). Read it first; fall
+  // back to the bundled beacons.json on ANY failure — network, CORS, bad status,
+  // unparseable body, or invalid data — so the map always renders something.
+  const ATLAS_API = 'https://backrooms-relay.jeff-schatz112.workers.dev/atlas'
+  async function loadBeacons() {
+    try {
+      const ctrl = new AbortController()
+      const timer = setTimeout(() => ctrl.abort(), 5000)
+      const r = await fetch(`${ATLAS_API}/beacons`, { signal: ctrl.signal, cache: 'no-store' })
+      clearTimeout(timer)
+      if (r.ok) {
+        const doc = await r.json()
+        if (validateBeaconSet(doc).ok) return doc
+      }
+    } catch { /* live registry unreachable — use the bundled snapshot below */ }
+    return (await fetch('beacons.json', { cache: 'no-store' })).json()
+  }
+
   const map = L.map('map', { zoomControl: true, attributionControl: true }).setView([39.2966, -76.6414], 14)
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
     attribution: '© OpenStreetMap contributors © CARTO', maxZoom: 19, subdomains: 'abcd',
@@ -91,7 +109,7 @@
   const byId = new Map()
 
   try {
-    const doc = await (await fetch('beacons.json', { cache: 'no-store' })).json()
+    const doc = await loadBeacons()
     const res = validateBeaconSet(doc)
     if (!res.ok) throw new Error(res.error)
     document.getElementById('count').textContent = `${res.count} door${res.count === 1 ? '' : 's'}`
