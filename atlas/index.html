@@ -52,6 +52,13 @@
   .panel-strata li.faint{border-left-color:rgba(160,90,58,.5)}
   .panel-strata .lab{font-size:9px;letter-spacing:2px;color:var(--faint);text-transform:uppercase}
   .panel-strata .frag{font-family:var(--serif);font-size:13px;color:#c8bd86;margin-top:3px;line-height:1.5}
+  .panel-checkin{display:none;margin-top:18px;border-top:1px solid rgba(138,127,82,.3);padding-top:14px}
+  .panel-checkin.show{display:block}
+  #checkin-btn{background:none;border:1px solid var(--sig);color:var(--sigb);font-family:var(--mono);
+    font-size:12px;letter-spacing:2px;padding:9px 14px;cursor:pointer;width:100%}
+  #checkin-btn:hover{background:rgba(143,220,172,.08)}
+  #checkin-btn:disabled{opacity:.5;cursor:default}
+  .checkin-msg{font-family:var(--serif);font-style:italic;font-size:13px;color:#b7ac7c;margin-top:10px;min-height:1.2em}
 </style>
 </head>
 <body>
@@ -77,6 +84,10 @@
   <div class="panel-sealed" id="p-sealed">sealed — shown for its record. not a way in.</div>
   <div class="panel-strata-h">strata · read down</div>
   <ol class="panel-strata" id="p-strata"></ol>
+  <div class="panel-checkin" id="p-checkin">
+    <button id="checkin-btn">◎ check in — leave a mark</button>
+    <div class="checkin-msg" id="checkin-msg"></div>
+  </div>
 </aside>
 
 <script src="vendor/leaflet.js"></script>
@@ -107,6 +118,10 @@
   }).addTo(map)
 
   const byId = new Map()
+
+  let visitor = localStorage.getItem('atlas:visitor')
+  if (!visitor) { visitor = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)); localStorage.setItem('atlas:visitor', visitor) }
+  const checkinMsg = t => { const el = document.getElementById('checkin-msg'); if (el) el.textContent = t }
 
   try {
     const doc = await loadBeacons()
@@ -148,6 +163,10 @@
       const frag = document.createElement('div'); frag.className = 'frag'; frag.textContent = s.fragment
       li.append(lab, frag); ol.appendChild(li)
     })
+    const ci = document.getElementById('p-checkin')
+    ci.classList.toggle('show', !b.sealed)
+    checkinMsg('')
+    document.getElementById('checkin-btn').onclick = () => doCheckin(b)
     panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false')
     history.replaceState(null, '', '#' + b.id)
   }
@@ -157,6 +176,29 @@
   }
   document.getElementById('panel-x').addEventListener('click', closePanel)
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel() })
+
+  // geolocation check-in: prove you're at the door, leave a faint mark. The relay
+  // uses the coords only to verify proximity, then discards them.
+  function doCheckin(b) {
+    if (!navigator.geolocation) { checkinMsg('your device can’t share location.'); return }
+    const btn = document.getElementById('checkin-btn'); btn.disabled = true
+    checkinMsg('proving you’re at the door…')
+    navigator.geolocation.getCurrentPosition(async pos => {
+      try {
+        const r = await fetch(`${ATLAS_API}/beacons/${encodeURIComponent(b.id)}/checkin`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, visitor }),
+        })
+        const j = await r.json().catch(() => ({}))
+        if (r.status === 201) { checkinMsg('you left a mark. the door remembers.'); openPanel(j) }
+        else if (r.status === 429) checkinMsg('you were just here.')
+        else if (r.status === 403) checkinMsg('you’re not close enough — stand at the door.')
+        else checkinMsg('the door stayed quiet.')
+      } catch { checkinMsg('the door stayed quiet.') }
+      finally { const bb = document.getElementById('checkin-btn'); if (bb) bb.disabled = false }
+    }, () => { checkinMsg('location denied — the door can’t know you’re here.'); btn.disabled = false },
+       { enableHighAccuracy: true, timeout: 10000 })
+  }
 
   // shareable doors: open the beacon named in the URL hash, and keep the hash in
   // sync so a specific door can be linked. replaceState never fires hashchange,
