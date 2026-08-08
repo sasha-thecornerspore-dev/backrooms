@@ -55,11 +55,13 @@ export function authorize(authHeader, secret) {
 // "/atlas/beacons" | "/atlas/beacons/:id" | "/atlas/beacons/:id/strata" -> route, else null.
 export function parseAtlasPath(pathname) {
   const parts = String(pathname).replace(/^\/+|\/+$/g, '').split('/')
+  if (parts[0] === 'atlas' && parts[1] === 'passage' && parts.length === 2) return { resource: 'passage' }
   if (parts[0] !== 'atlas' || parts[1] !== 'beacons') return null
   if (parts.length === 2) return { resource: 'beacons' }
   if (parts.length === 3) return { resource: 'beacon', id: parts[2] }
   if (parts.length === 4 && parts[3] === 'strata') return { resource: 'strata', id: parts[2] }
   if (parts.length === 4 && parts[3] === 'checkin') return { resource: 'checkin', id: parts[2] }
+  if (parts.length === 4 && parts[3] === 'dropin') return { resource: 'dropin', id: parts[2] }
   return null
 }
 
@@ -132,4 +134,41 @@ export function checkin(store, dedup, id, coords, visitorHash, now, opts = {}) {
   const nb = { ...b, strata: [...(b.strata ?? []), layer] }
   const beacons = store.beacons.map(x => (x.id === id ? nb : x))
   return { status: 201, json: nb, store: { ...store, beacons }, dedup: pruned }
+}
+
+// ── passage: the drop-in economy. A per-visitor balance that regenerates over
+// time; reaching a far beacon spends it, scaled by distance. Anonymous (the
+// caller keys storage by a hash of the device token). ──
+const PASSAGE_CAP = 1000, PASSAGE_REGEN_PER_HR = 100, PASSAGE_COST_PER_KM = 5, PASSAGE_MIN_COST = 1
+
+export function regenBalance(rec, now, opts = {}) {
+  const cap = opts.cap ?? PASSAGE_CAP, perHr = opts.regenPerHr ?? PASSAGE_REGEN_PER_HR
+  if (!rec) return cap
+  const hrs = Math.max(0, (now - (rec.ts ?? now)) / 3600000)
+  return Math.min(cap, (rec.balance ?? cap) + hrs * perHr)
+}
+
+export function passageCost(distanceM, opts = {}) {
+  const perKm = opts.costPerKm ?? PASSAGE_COST_PER_KM
+  return Math.max(opts.minCost ?? PASSAGE_MIN_COST, Math.ceil((distanceM / 1000) * perKm))
+}
+
+// Drop in on a far (non-sealed) beacon: charge distance-scaled passage from the
+// regenerated balance, append a faint stratum, and discard the coordinates. Pure.
+export function dropin(store, passageRec, id, coords, now, opts = {}) {
+  const b = store.beacons.find(x => x.id === id)
+  if (!b) return { status: 404, json: { error: 'no such beacon' } }
+  if (b.sealed) return { status: 403, json: { error: 'this door is sealed — not a way in' } }
+  const lat = coords && coords.lat, lng = coords && coords.lng
+  if (typeof lat !== 'number' || typeof lng !== 'number' || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return { status: 400, json: { error: 'bad coordinates' } }
+  }
+  const cost = passageCost(haversineMeters(lat, lng, b.lat, b.lng), opts)
+  const balance = regenBalance(passageRec, now, opts)
+  if (balance < cost) return { status: 402, json: { error: 'not enough passage', passage: Math.floor(balance), cost } }
+  const layer = { tier: 'faint', ts: new Date(now).toISOString(), fragment: 'someone reached the door from far off.' }
+  const nb = { ...b, strata: [...(b.strata ?? []), layer] }
+  const beacons = store.beacons.map(x => (x.id === id ? nb : x))
+  return { status: 201, json: { beacon: nb, passage: Math.floor(balance - cost), cost },
+           store: { ...store, beacons }, passage: { balance: balance - cost, ts: now } }
 }

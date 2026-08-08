@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   beaconIdOk, validateStratum, validateBeacon, authorize,
   parseAtlasPath, readAtlas, upsertBeacon, appendStratum, emptyStore,
-  haversineMeters, checkin,
+  haversineMeters, checkin, regenBalance, passageCost, dropin,
 } from '../relay/atlas.js'
 import SEED from '../relay/atlas-seed.js'
 
@@ -146,5 +146,44 @@ describe('checkin', () => {
     expect(checkin(base(), first.dedup, 'open', near, 'k1', NOW + 1000).status).toBe(429)
     expect(checkin(base(), first.dedup, 'open', near, 'k1', NOW + 7 * 3600 * 1000).status).toBe(201)
     expect(checkin(base(), first.dedup, 'open', near, 'k2', NOW + 1000).status).toBe(201)
+  })
+})
+
+describe('regenBalance / passageCost', () => {
+  it('new visitor starts at cap; grows over time; caps', () => {
+    expect(regenBalance(null, 0)).toBe(1000)
+    expect(regenBalance({ balance: 500, ts: 0 }, 3600000)).toBe(600)
+    expect(regenBalance({ balance: 990, ts: 0 }, 3600000)).toBe(1000)
+  })
+  it('cost floors at 1 and scales with distance', () => {
+    expect(passageCost(0)).toBe(1)
+    expect(passageCost(100000)).toBe(500)
+  })
+})
+
+describe('dropin', () => {
+  const base = () => ({ version: 1, beacons: [
+    { id: 'open', kind: 'genesis', name: 'O', lat: 39.3, lng: -76.6, strata: [] },
+    { id: 'shut', kind: 'genesis', sealed: true, name: 'S', lat: 39.3, lng: -76.6, strata: [] },
+  ]})
+  const from = { lat: 40.0, lng: -76.6 }
+  const NOW = 1_000_000_000_000
+  it('charges passage, appends a faint stratum, stores no coords', () => {
+    const r = dropin(base(), null, 'open', from, NOW)
+    expect(r.status).toBe(201)
+    expect(r.json.cost).toBeGreaterThan(1)
+    expect(r.json.passage).toBe(1000 - r.json.cost)
+    expect(r.passage.balance).toBe(1000 - r.json.cost)
+    const s = r.store.beacons[0].strata[0]
+    expect(s.tier).toBe('faint')
+    expect(Object.keys(s).sort()).toEqual(['fragment', 'tier', 'ts'])
+  })
+  it('402 when the balance is too low', () => {
+    expect(dropin(base(), { balance: 5, ts: NOW }, 'open', from, NOW).status).toBe(402)
+  })
+  it('403 sealed, 400 bad coords, 404 unknown', () => {
+    expect(dropin(base(), null, 'shut', from, NOW).status).toBe(403)
+    expect(dropin(base(), null, 'open', { lat: 999, lng: 0 }, NOW).status).toBe(400)
+    expect(dropin(base(), null, 'zzz', from, NOW).status).toBe(404)
   })
 })
