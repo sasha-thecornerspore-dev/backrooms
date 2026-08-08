@@ -59,6 +59,11 @@
   #checkin-btn:hover{background:rgba(143,220,172,.08)}
   #checkin-btn:disabled{opacity:.5;cursor:default}
   .checkin-msg{font-family:var(--serif);font-style:italic;font-size:13px;color:#b7ac7c;margin-top:10px;min-height:1.2em}
+  #dropin-btn{background:none;border:1px solid var(--rust);color:#c98a6a;font-family:var(--mono);
+    font-size:12px;letter-spacing:2px;padding:9px 14px;cursor:pointer;width:100%;margin-top:8px}
+  #dropin-btn:hover{background:rgba(160,90,58,.1)}
+  #dropin-btn:disabled{opacity:.5;cursor:default}
+  .passage-line{font-size:10px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;margin-bottom:10px;min-height:1em}
 </style>
 </head>
 <body>
@@ -85,7 +90,9 @@
   <div class="panel-strata-h">strata · read down</div>
   <ol class="panel-strata" id="p-strata"></ol>
   <div class="panel-checkin" id="p-checkin">
+    <div class="passage-line" id="passage-line"></div>
     <button id="checkin-btn">◎ check in — leave a mark</button>
+    <button id="dropin-btn">➹ drop in from afar — spend passage</button>
     <div class="checkin-msg" id="checkin-msg"></div>
   </div>
 </aside>
@@ -167,6 +174,9 @@
     ci.classList.toggle('show', !b.sealed)
     checkinMsg('')
     document.getElementById('checkin-btn').onclick = () => doCheckin(b)
+    document.getElementById('dropin-btn').onclick = () => doDropin(b)
+    document.getElementById('passage-line').textContent = ''
+    if (!b.sealed) refreshPassage()
     panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false')
     history.replaceState(null, '', '#' + b.id)
   }
@@ -197,6 +207,37 @@
       } catch { checkinMsg('the door stayed quiet.') }
       finally { const bb = document.getElementById('checkin-btn'); if (bb) bb.disabled = false }
     }, () => { checkinMsg('location denied — the door can’t know you’re here.'); btn.disabled = false },
+       { enableHighAccuracy: true, timeout: 10000 })
+  }
+
+  async function refreshPassage() {
+    try {
+      const r = await fetch(`${ATLAS_API}/passage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ visitor }) })
+      const j = await r.json().catch(() => ({}))
+      const el = document.getElementById('passage-line')
+      if (el && typeof j.passage === 'number') el.textContent = `passage: ${j.passage}`
+    } catch { /* offline — leave blank */ }
+  }
+  // drop in on a far door: passage is charged by how far you're reaching. The relay
+  // uses your location only to measure distance, then discards it.
+  function doDropin(b) {
+    if (!navigator.geolocation) { checkinMsg('your device can’t share location.'); return }
+    const btn = document.getElementById('dropin-btn'); btn.disabled = true
+    checkinMsg('reaching for the door…')
+    navigator.geolocation.getCurrentPosition(async pos => {
+      try {
+        const r = await fetch(`${ATLAS_API}/beacons/${encodeURIComponent(b.id)}/dropin`, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, visitor }),
+        })
+        const j = await r.json().catch(() => ({}))
+        if (r.status === 201) { checkinMsg(`you reached it. ${j.cost} passage spent.`); refreshPassage(); openPanel(j.beacon) }
+        else if (r.status === 402) checkinMsg(`not enough passage — have ${j.passage}, need ${j.cost}.`)
+        else if (r.status === 403) checkinMsg('this door does not open.')
+        else checkinMsg('the door stayed quiet.')
+      } catch { checkinMsg('the door stayed quiet.') }
+      finally { const bb = document.getElementById('dropin-btn'); if (bb) bb.disabled = false }
+    }, () => { checkinMsg('location denied — passage is measured from where you stand.'); btn.disabled = false },
        { enableHighAccuracy: true, timeout: 10000 })
   }
 
