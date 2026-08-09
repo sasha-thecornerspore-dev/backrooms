@@ -109,6 +109,28 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
 
 const CHECKIN_RADIUS_M = 120
 const CHECKIN_COOLDOWN_MS = 6 * 3600 * 1000
+// Bounds that keep an unauthenticated flood from growing the single store value
+// (or a per-beacon dedup map) without limit — see the pre-deploy review. Presence
+// layers are the accumulating archive but are ring-buffered; authored strata
+// (deep/genesis, or any stratum without src:'presence') are never dropped.
+const MAX_PRESENCE_STRATA = 50
+const MAX_DEDUP_ENTRIES = 500
+
+const isPresence = s => s != null && s.src === 'presence'
+
+// Keep every authored stratum plus the most-recent `max` presence strata, in
+// original order (presence layers are appended at the end, so this drops the
+// oldest presence layers first). Pure; returns the same array if within cap.
+export function capPresenceStrata(strata, max = MAX_PRESENCE_STRATA) {
+  let over = strata.filter(isPresence).length - max
+  if (over <= 0) return strata
+  const out = []
+  for (const s of strata) {
+    if (over > 0 && isPresence(s)) { over--; continue }
+    out.push(s)
+  }
+  return out
+}
 
 // A presence-proved check-in. Verifies proximity to a non-sealed beacon, dedups
 // per device (visitorHash is opaque + beacon-salted by the caller), appends a
@@ -130,10 +152,18 @@ export function checkin(store, dedup, id, coords, visitorHash, now, opts = {}) {
   for (const [k, ts] of Object.entries(dedup || {})) if (now - ts < cooldown) pruned[k] = ts
   if (visitorHash && pruned[visitorHash] != null) return { status: 429, json: { error: 'you were here recently' } }
   if (visitorHash) pruned[visitorHash] = now
-  const layer = { tier: 'faint', ts: new Date(now).toISOString(), fragment: 'someone stood at the door.' }
-  const nb = { ...b, strata: [...(b.strata ?? []), layer] }
+  // bound the dedup map so a flood of distinct tokens within the cooldown window
+  // cannot grow it without limit — keep the most-recent entries.
+  let dedupOut = pruned
+  if (Object.keys(pruned).length > MAX_DEDUP_ENTRIES) {
+    dedupOut = Object.fromEntries(
+      Object.entries(pruned).sort((a, b) => b[1] - a[1]).slice(0, MAX_DEDUP_ENTRIES)
+    )
+  }
+  const layer = { tier: 'faint', ts: new Date(now).toISOString(), fragment: 'someone stood at the door.', src: 'presence' }
+  const nb = { ...b, strata: capPresenceStrata([...(b.strata ?? []), layer]) }
   const beacons = store.beacons.map(x => (x.id === id ? nb : x))
-  return { status: 201, json: nb, store: { ...store, beacons }, dedup: pruned }
+  return { status: 201, json: nb, store: { ...store, beacons }, dedup: dedupOut }
 }
 
 // ── passage: the drop-in economy. A per-visitor balance that regenerates over
@@ -166,8 +196,8 @@ export function dropin(store, passageRec, id, coords, now, opts = {}) {
   const cost = passageCost(haversineMeters(lat, lng, b.lat, b.lng), opts)
   const balance = regenBalance(passageRec, now, opts)
   if (balance < cost) return { status: 402, json: { error: 'not enough passage', passage: Math.floor(balance), cost } }
-  const layer = { tier: 'faint', ts: new Date(now).toISOString(), fragment: 'someone reached the door from far off.' }
-  const nb = { ...b, strata: [...(b.strata ?? []), layer] }
+  const layer = { tier: 'faint', ts: new Date(now).toISOString(), fragment: 'someone reached the door from far off.', src: 'presence' }
+  const nb = { ...b, strata: capPresenceStrata([...(b.strata ?? []), layer]) }
   const beacons = store.beacons.map(x => (x.id === id ? nb : x))
   return { status: 201, json: { beacon: nb, passage: Math.floor(balance - cost), cost },
            store: { ...store, beacons }, passage: { balance: balance - cost, ts: now } }

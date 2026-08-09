@@ -131,12 +131,15 @@ export class Atlas extends DurableObject {
       const body = await request.json().catch(() => null)
       if (!body || typeof body !== 'object') return atlasJson(400, { error: 'body must be json' })
       const visitor = typeof body.visitor === 'string' ? body.visitor.slice(0, 100) : ''
-      const key = visitor ? await sha256Hex(route.id + ':' + visitor) : ''
+      if (!visitor) return atlasJson(400, { error: 'visitor required' })
+      const key = await sha256Hex(route.id + ':' + visitor)
       const dedupKey = 'dedup:' + route.id
       const dedup = (await this.ctx.storage.get(dedupKey)) || {}
       const r = checkin(store, dedup, route.id, { lat: body.lat, lng: body.lng }, key, Date.now())
-      if (r.store) await this.ctx.storage.put('store', r.store)
-      if (r.dedup) await this.ctx.storage.put(dedupKey, r.dedup)
+      try {
+        if (r.store) await this.ctx.storage.put('store', r.store)
+        if (r.dedup) await this.ctx.storage.put(dedupKey, r.dedup)
+      } catch { return atlasJson(503, { error: 'atlas write failed' }) }
       return atlasJson(r.status, r.json)
     }
 
@@ -158,8 +161,10 @@ export class Atlas extends DurableObject {
       const pKey = 'passage:' + await sha256Hex(visitor)
       const rec = await this.ctx.storage.get(pKey)
       const r = dropin(store, rec, route.id, { lat: body.lat, lng: body.lng }, Date.now())
-      if (r.store) await this.ctx.storage.put('store', r.store)
-      if (r.passage) await this.ctx.storage.put(pKey, r.passage)
+      try {
+        if (r.store) await this.ctx.storage.put('store', r.store)
+        if (r.passage) await this.ctx.storage.put(pKey, r.passage)
+      } catch { return atlasJson(503, { error: 'atlas write failed' }) }
       return atlasJson(r.status, r.json)
     }
 
@@ -172,12 +177,14 @@ export class Atlas extends DurableObject {
 
     if (request.method === 'PUT' && route.resource === 'beacon') {
       const r = upsertBeacon(store, route.id, body)
-      if (r.store) await this.ctx.storage.put('store', r.store)
+      try { if (r.store) await this.ctx.storage.put('store', r.store) }
+      catch { return atlasJson(503, { error: 'atlas write failed' }) }
       return atlasJson(r.status, r.json)
     }
     if (request.method === 'POST' && route.resource === 'strata') {
       const r = appendStratum(store, route.id, body)
-      if (r.store) await this.ctx.storage.put('store', r.store)
+      try { if (r.store) await this.ctx.storage.put('store', r.store) }
+      catch { return atlasJson(503, { error: 'atlas write failed' }) }
       return atlasJson(r.status, r.json)
     }
     return atlasJson(405, { error: 'method not allowed' })

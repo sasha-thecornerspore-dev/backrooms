@@ -176,7 +176,7 @@ describe('dropin', () => {
     expect(r.passage.balance).toBe(1000 - r.json.cost)
     const s = r.store.beacons[0].strata[0]
     expect(s.tier).toBe('faint')
-    expect(Object.keys(s).sort()).toEqual(['fragment', 'tier', 'ts'])
+    expect(Object.keys(s).sort()).toEqual(['fragment', 'src', 'tier', 'ts'])
   })
   it('402 when the balance is too low', () => {
     expect(dropin(base(), { balance: 5, ts: NOW }, 'open', from, NOW).status).toBe(402)
@@ -185,5 +185,62 @@ describe('dropin', () => {
     expect(dropin(base(), null, 'shut', from, NOW).status).toBe(403)
     expect(dropin(base(), null, 'open', { lat: 999, lng: 0 }, NOW).status).toBe(400)
     expect(dropin(base(), null, 'zzz', from, NOW).status).toBe(404)
+  })
+})
+
+// ── Abuse-resistance: presence strata are the accumulating archive, but an
+// unauthenticated flood must not grow the single store value without bound.
+// Presence layers are ring-buffered; authored (deep/genesis) strata are never
+// dropped. Mirrors the pre-deploy review's blocker on unbounded store growth.
+describe('presence strata cap', () => {
+  const openBeacon = () => ({ version: 1, beacons: [
+    { id: 'open', kind: 'genesis', name: 'O', lat: 39.3, lng: -76.6, strata: [
+      { tier: 'deep', ts: '2020-01-01T00:00:00Z', fragment: 'authored lore' },
+    ] },
+  ] })
+  const near = { lat: 39.3001, lng: -76.6001 }
+  const from = { lat: 40.0, lng: -76.6 }
+  const NOW = 1_000_000_000_000
+
+  it('marks check-in and drop-in strata as presence-sourced', () => {
+    const c = checkin(openBeacon(), {}, 'open', near, 'k1', NOW)
+    expect(c.store.beacons[0].strata.at(-1).src).toBe('presence')
+    const d = dropin(openBeacon(), null, 'open', from, NOW)
+    expect(d.store.beacons[0].strata.at(-1).src).toBe('presence')
+  })
+
+  it('drop-in caps presence strata at 50 (oldest dropped) and never drops authored strata', () => {
+    let store = openBeacon()
+    for (let i = 0; i < 60; i++) store = dropin(store, null, 'open', from, NOW + i).store
+    const strata = store.beacons[0].strata
+    expect(strata.filter(s => s.src === 'presence').length).toBe(50)
+    const authored = strata.filter(s => s.src !== 'presence')
+    expect(authored.length).toBe(1)
+    expect(authored[0].fragment).toBe('authored lore')
+  })
+
+  it('check-in also caps its presence strata at 50', () => {
+    let store = openBeacon(); let dedup = {}
+    for (let i = 0; i < 60; i++) {
+      const r = checkin(store, dedup, 'open', near, 'k' + i, NOW + i)
+      store = r.store; dedup = r.dedup
+    }
+    expect(store.beacons[0].strata.filter(s => s.src === 'presence').length).toBe(50)
+  })
+})
+
+describe('dedup map cap', () => {
+  const openBeacon = () => ({ version: 1, beacons: [
+    { id: 'open', kind: 'genesis', name: 'O', lat: 39.3, lng: -76.6, strata: [] },
+  ] })
+  const near = { lat: 39.3001, lng: -76.6001 }
+  const NOW = 1_000_000_000_000
+  it('bounds the per-beacon dedup map to 500 most-recent entries', () => {
+    let store = openBeacon(); let dedup = {}
+    for (let i = 0; i < 600; i++) {
+      const r = checkin(store, dedup, 'open', near, 'dev' + i, NOW + i)
+      store = r.store; dedup = r.dedup
+    }
+    expect(Object.keys(dedup).length).toBeLessThanOrEqual(500)
   })
 })
