@@ -9,6 +9,7 @@ import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVol
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { writeSave } from './save.js'
 import { formatAnchor, driftMeters } from './anchor.js'
+import { initTouchControls, isTouchDevice } from './touch.js'
 
 // Presence: 1 in 12 chunks has a spirit at its midpoint
 function chunkHasPresence(cx, cy) {
@@ -195,9 +196,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let locked = false
   window.addEventListener('keydown', e => { if (e.code === 'Space') e.preventDefault(); K[e.code] = true })
   window.addEventListener('keyup',   e => { K[e.code] = false })
-  canvas.addEventListener('click', () => canvas.requestPointerLock())
+  // Pointer-lock mouse-look is desktop only; on touch the on-screen controls
+  // drive movement + look instead (initTouchControls, below).
+  if (!isTouchDevice()) canvas.addEventListener('click', () => canvas.requestPointerLock())
   document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas })
   document.addEventListener('mousemove', e => { if (locked) player.angle += e.movementX * 0.002 * (getPref('mouseSensitivity') / 100) })
+
+  // ── touch controls (phones / ChromeOS tablets) — feeds K + player.angle;
+  //    a no-op on desktop, so keyboard play is unchanged ──
+  initTouchControls({ canvas, K, player, getPref })
 
   // ── wish dialog ──
   let dialogOpen = false
