@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>The Backrooms</title>
+  <!-- PWA (active when served over http(s); inert under Electron file://) -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#c9ba72">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+    canvas { display: block; }
+
+    #start {
+      position: fixed; inset: 0;
+      background: #c9ba72;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 24px; z-index: 100;
+    }
+    #start h1, .title {
+      font-size: clamp(28px, 5vw, 60px);
+      color: #2a1e00; letter-spacing: 10px;
+      text-shadow: 3px 3px 0 #a09040;
+      font-family: 'Courier New', monospace;
+    }
+    #start p, .sub {
+      color: #4a3800; max-width: 380px; text-align: center;
+      line-height: 1.9; font-size: 13px; opacity: 0.85;
+    }
+    #start button {
+      background: #2a1e00; color: #c9ba72;
+      border: 2px solid #5a4810;
+      padding: 14px 44px; font: 15px 'Courier New', monospace;
+      letter-spacing: 6px; cursor: pointer;
+    }
+    #start button:hover { background: #5a4810; }
+    .btns { display:flex; gap:24px; justify-content:center; margin-top:40px; }
+    .btns button { background:none; border:1px solid #8a7a3a; color:#c9ba72; font-family:monospace; font-size:18px; padding:10px 28px; cursor:pointer; letter-spacing:2px; }
+    .btns button:hover { background:#8a7a3a22; }
+    #join-modal { position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;z-index:100; }
+    .modal-box { background:#1a1508;border:1px solid #8a7a3a;padding:40px;min-width:360px;max-height:88vh;overflow-y:auto; }
+    .modal-title { color:#c9ba72;font-family:monospace;font-size:20px;letter-spacing:4px;margin-bottom:24px; }
+    .modal-box input { display:block;width:100%;box-sizing:border-box;background:#0a0a05;border:1px solid #4a3a1a;color:#c9ba72;font-family:monospace;font-size:14px;padding:8px;margin-bottom:12px; }
+    .modal-btns { display:flex;gap:12px;margin-top:16px; }
+    .modal-btns button { background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:14px;padding:8px 20px;cursor:pointer; }
+    #join-status { color:#a09060;font-family:monospace;font-size:13px;margin-top:12px;min-height:20px; }
+
+    #hud {
+      position: fixed; top: 12px; left: 14px;
+      color: #14110a; font-size: 12px; font-weight: bold;
+      line-height: 1.7; pointer-events: none; white-space: pre;
+      text-shadow: 0 0 5px rgba(255,255,255,0.55);
+    }
+    /* hit points */
+    #hp-wrap {
+      position: fixed; top: 34px; left: 14px;
+      display: flex; align-items: center; gap: 8px; pointer-events: none;
+    }
+    #hp-label { color: #14110a; font-size: 10px; letter-spacing: 2px; font-weight: bold;
+      text-shadow: 0 0 5px rgba(255,255,255,0.55); }
+    #hp-bar {
+      width: 150px; height: 8px; background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(0,0,0,0.5); box-shadow: 0 0 4px rgba(255,255,255,0.35);
+    }
+    #hp-fill { height: 100%; width: 100%; background: rgba(60,150,70,0.85); transition: width 0.2s, background 0.4s; }
+    #hp-label, #san-label { min-width: 32px; display: inline-block; }
+    #san-wrap {
+      position: fixed; top: 52px; left: 14px;
+      display: flex; align-items: center; gap: 8px; pointer-events: none;
+    }
+    #san-label { color: #14110a; font-size: 10px; letter-spacing: 2px; font-weight: bold;
+      text-shadow: 0 0 5px rgba(255,255,255,0.55); }
+    #san-bar { width: 150px; height: 8px; background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(0,0,0,0.5); box-shadow: 0 0 4px rgba(255,255,255,0.35); }
+    #san-fill { height: 100%; width: 100%; background: rgba(120,112,185,0.82); transition: width 0.2s, background 0.4s; }
+    #insanity {
+      position: fixed; inset: 0; opacity: 0; pointer-events: none; z-index: 40;
+      background: radial-gradient(ellipse at center, rgba(40,0,42,0) 28%, rgba(28,0,40,0.88) 100%);
+      transition: opacity 0.6s;
+    }
+    #exit-compass {
+      position: fixed; top: 74px; left: 14px;
+      color: #14110a; font-size: 12px; font-weight: bold; letter-spacing: 1px;
+      pointer-events: none; opacity: 0; transition: opacity 0.4s;
+      text-shadow: 0 0 5px rgba(255,255,255,0.6);
+    }
+    #player-name {
+      background: rgba(20,16,6,0.6); border: 1px solid #6a5a2a; color: #e8d9a0;
+      font: 14px 'Courier New', monospace; padding: 10px 14px; width: 260px;
+      text-align: center; letter-spacing: 1px; margin-bottom: 6px; outline: none;
+    }
+    #player-name:focus { border-color: #c9ba72; }
+    #chat-log {
+      position: fixed; left: 16px; bottom: 96px; max-width: 46vw;
+      font: 13px 'Courier New', monospace; pointer-events: none; opacity: 0;
+      transition: opacity 0.4s; text-shadow: 0 1px 3px rgba(0,0,0,0.95); z-index: 55;
+    }
+    #chat-log .chat-line { color: #eef2fa; margin: 3px 0; line-height: 1.35; }
+    #chat-log .chat-line b { font-weight: bold; margin-right: 6px; }
+    #chat-log .chat-me  { font-style: italic; margin: 3px 0; }
+    #chat-log .chat-sys { color: #b7ad86; font-style: italic; margin: 3px 0; opacity: 0.8; }
+    #chat-typing {
+      position: fixed; left: 16px; bottom: 74px; z-index: 56;
+      color: #9fd0ff; font: italic 12px 'Courier New', monospace; opacity: 0;
+      transition: opacity 0.3s; text-shadow: 0 1px 3px rgba(0,0,0,0.9); pointer-events: none;
+    }
+    #chat-input {
+      position: fixed; left: 16px; bottom: 66px; width: 44vw;
+      background: rgba(10,12,18,0.9); border: 1px solid #6a7a9a; color: #eef2fa;
+      font: 14px 'Courier New', monospace; padding: 9px 13px; outline: none; z-index: 60;
+      box-shadow: 0 0 18px rgba(80,140,220,0.25);
+    }
+    #chat-input:focus { border-color: #9fd0ff; }
+    #msg {
+      position: fixed; top: 38%; left: 50%; transform: translateX(-50%);
+      color: #14110a; font-size: 14px; font-weight: bold; opacity: 0;
+      text-align: center; pointer-events: none;
+      line-height: 1.9; letter-spacing: 2px; white-space: pre;
+      text-shadow: 0 0 8px rgba(255,255,255,0.7), 0 1px 2px rgba(255,255,255,0.5);
+      transition: opacity 1.5s;
+    }
+    #hint {
+      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+      color: #14110a; font-size: 10px; font-weight: bold;
+      letter-spacing: 2px; pointer-events: none;
+      text-shadow: 0 0 5px rgba(255,255,255,0.55);
+      animation: hintfade 15s ease-in forwards;
+    }
+    @keyframes hintfade { 0%,55% { opacity: 0.85; } 100% { opacity: 0; } }
+    #wish-dialog {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 50;
+    }
+    #wish-inner {
+      background: #1a1500; border: 1px solid #5a4810;
+      padding: 32px; max-width: 420px; width: 90%;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    #wish-prompt { color: #c9ba72; font-size: 13px; letter-spacing: 2px; }
+    #wish-text {
+      background: #0a0900; color: #c9ba72; border: 1px solid #3a2a00;
+      font: 13px 'Courier New', monospace; padding: 10px; resize: none;
+      letter-spacing: 1px; line-height: 1.7;
+    }
+    #wish-text:focus { outline: none; border-color: #c9ba72; }
+    #wish-actions { display: flex; gap: 12px; }
+    #wish-actions button {
+      background: #2a1e00; color: #c9ba72; border: 1px solid #5a4810;
+      padding: 8px 20px; font: 12px 'Courier New', monospace;
+      letter-spacing: 4px; cursor: pointer;
+    }
+    #wish-actions button:hover { background: #5a4810; }
+    #wish-response { color: rgba(180,160,60,0.6); font-size: 11px; letter-spacing: 2px; min-height: 18px; }
+    #presence-hint {
+      position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+      color: #14110a; font-size: 11px; font-weight: bold;
+      letter-spacing: 4px; pointer-events: none;
+      text-shadow: 0 0 5px rgba(255,255,255,0.55);
+      transition: opacity 0.5s;
+    }
+    #btn-settings { position:fixed;top:16px;right:16px;background:none;border:none;color:#6a5a2a;font-size:22px;cursor:pointer;z-index:10; }
+    #btn-settings:hover { color:#c9ba72; }
+    .toggle-row { display:flex;align-items:center;justify-content:space-between;color:#c9ba72;font-family:monospace;font-size:15px;margin:8px 0;gap:16px; }
+    .toggle-row input[type=range] { width:150px; accent-color:#c9ba72; }
+    .toggle-row input[type=checkbox] { accent-color:#c9ba72; width:16px; height:16px; cursor:pointer; }
+    .set-section { border-top:1px solid #3a2f14; margin:16px 0 4px; padding-top:12px; color:#8a7a3a; font-family:monospace; font-size:11px; letter-spacing:3px; }
+    .set-hint { font-size:10px; opacity:0.5; letter-spacing:1px; }
+    #anchor-wrap { display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px; }
+    #anchor-input {
+      width: 340px; background:#00000018; border:1px solid #8a7a3a; color:#2a1e00;
+      font: 12px 'Courier New', monospace; padding:8px 10px; letter-spacing:1px;
+    }
+    #anchor-input::placeholder { color:#4a380099; }
+    #anchor-input:focus { outline:none; border-color:#2a1e00; }
+    #anchor-status { color:#4a3800; font-size:11px; letter-spacing:2px; min-height:14px; opacity:0.8; }
+    #hotbar {
+      position: fixed; bottom: 44px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 6px; align-items: center; pointer-events: none;
+    }
+    #hotbar .slot {
+      width: 64px; height: 30px; border: 1px solid rgba(0,0,0,0.4);
+      color: #14110a; font: bold 10px 'Courier New', monospace;
+      display: flex; align-items: center; justify-content: center; gap: 4px;
+      letter-spacing: 1px; background: rgba(228,222,200,0.55); cursor: pointer;
+      pointer-events: auto;
+    }
+    #hotbar .slot.sel { border-color: #14110a; background: rgba(240,236,214,0.85); box-shadow: 0 0 6px rgba(255,255,255,0.4); }
+    #hotbar .slot .num { font-size: 8px; opacity: 0.55; }
+    #btn-discard {
+      position: fixed; bottom: 44px; left: 50%; transform: translateX(218px);
+      pointer-events: auto; cursor: pointer;
+      background: rgba(205,55,45,0.2); border: 1px solid rgba(150,40,35,0.75);
+      color: #3a0d0a; font: bold 10px 'Courier New', monospace; letter-spacing: 2px;
+      height: 30px; padding: 0 12px;
+    }
+    #btn-discard:hover { background: rgba(205,55,45,0.34); }
+    #item-hint {
+      position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%);
+      color: #14110a; font-size: 12px; font-weight: bold;
+      letter-spacing: 3px; pointer-events: none;
+      text-shadow: 0 0 6px rgba(255,255,255,0.6);
+      transition: opacity 0.4s;
+    }
+    /* combat + transition overlays */
+    #hurt {
+      position: fixed; inset: 0; opacity: 0; pointer-events: none; z-index: 38;
+      background: radial-gradient(ellipse at center, rgba(140,0,0,0) 45%, rgba(150,0,0,0.75) 100%);
+      transition: opacity 0.25s;
+    }
+    #fade {
+      position: fixed; inset: 0; background: #000; opacity: 0;
+      pointer-events: none; z-index: 45; transition: opacity 0.55s;
+    }
+    #stamina-wrap {
+      position: fixed; bottom: 18px; left: 14px; width: 120px; height: 4px;
+      background: rgba(0,0,0,0.4); border: 1px solid rgba(138,122,58,0.3);
+      opacity: 0; transition: opacity 0.6s; pointer-events: none;
+    }
+    #stamina-fill { height: 100%; width: 100%; background: rgba(200,185,110,0.55); }
+    #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 40; }
+  </style>
+  <script>
+    // Early renderer-error capture → main log (before modules load), so any
+    // uncaught error or promise rejection that could freeze the game is recorded.
+    window.addEventListener('error', function (e) {
+      try { window.backrooms && window.backrooms.logError &&
+        window.backrooms.logError('error: ' + (e.message || '') + ' @ ' + (e.filename || '') + ':' + (e.lineno || 0) + ':' + (e.colno || 0) + ' ' + ((e.error && e.error.stack) || '')); } catch (_) {}
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      try { var r = e.reason; window.backrooms && window.backrooms.logError &&
+        window.backrooms.logError('reject: ' + ((r && r.stack) || r)); } catch (_) {}
+    });
+  </script>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <button id="btn-settings" title="settings">⚙</button>
+
+  <div id="settings-modal" style="display:none;position:fixed;inset:0;background:#0008;align-items:center;justify-content:center;z-index:200;">
+    <div class="modal-box">
+      <div class="modal-title">SETTINGS</div>
+      <label class="toggle-row">
+        <span>Auto-update</span>
+        <input type="checkbox" id="chk-autoupdate" checked/>
+      </label>
+      <label class="toggle-row">
+        <span>Software rendering<br><span style="font-size:11px;opacity:0.6;">fixes freezing on some GPUs · restart to apply</span></span>
+        <input type="checkbox" id="chk-software"/>
+      </label>
+
+      <div class="set-section">GAMEPLAY &amp; FEEL</div>
+      <label class="toggle-row"><span>Music <span class="set-hint">generative</span></span><input type="checkbox" id="set-music"/></label>
+      <label class="toggle-row"><span>Music volume</span><input type="range" id="set-musicvol" min="0" max="150" step="5"/></label>
+      <label class="toggle-row"><span>Ambience <span class="set-hint">hum &amp; drone</span></span><input type="checkbox" id="set-ambience"/></label>
+      <label class="toggle-row"><span>Ambience volume</span><input type="range" id="set-ambiencevol" min="0" max="150" step="5"/></label>
+      <label class="toggle-row"><span>Film grain</span><input type="checkbox" id="set-grain"/></label>
+      <label class="toggle-row"><span>Particles <span class="set-hint">dust / steam / sparks</span></span><input type="checkbox" id="set-particles"/></label>
+      <label class="toggle-row"><span>Crosshair</span><input type="checkbox" id="set-crosshair"/></label>
+      <label class="toggle-row"><span>Head-bob</span><input type="checkbox" id="set-headbob"/></label>
+      <label class="toggle-row"><span>Mouse sensitivity</span><input type="range" id="set-sens" min="25" max="250" step="5"/></label>
+      <label class="toggle-row"><span>Creatures <span class="set-hint">below level 0</span></span><input type="checkbox" id="set-creatures"/></label>
+      <label class="toggle-row"><span>Can take damage <span class="set-hint">peaceful = off</span></span><input type="checkbox" id="set-damage"/></label>
+
+      <div class="set-section">SIGNAL / BEACON</div>
+      <label class="toggle-row">
+        <span>Beacon effect <span class="set-hint">B fires your own webhook</span></span>
+        <select id="set-beacon-effect">
+          <option value="off">off</option>
+          <option value="ntfy">ntfy.sh topic</option>
+          <option value="discord">discord webhook</option>
+          <option value="custom">custom https url</option>
+        </select>
+      </label>
+      <label class="toggle-row">
+        <span>Beacon target <span class="set-hint">topic or https url</span></span>
+        <input type="text" id="set-beacon-webhook" spellcheck="false" style="width:200px;"/>
+      </label>
+
+      <div id="update-ready-msg" style="display:none;color:#c9ba72;font-family:monospace;font-size:13px;margin-top:12px;">
+        update ready — <button id="btn-restart" style="background:none;border:none;color:#c9ba72;cursor:pointer;font-family:monospace;text-decoration:underline;">restart now</button>
+      </div>
+      <div id="locate-row" style="display:none;margin-top:12px;">
+        <button id="btn-locate" style="background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:13px;padding:8px 16px;cursor:pointer;letter-spacing:2px;">locate your body ⌖</button>
+      </div>
+      <div class="modal-btns" style="margin-top:24px;">
+        <button id="settings-close">CLOSE</button>
+      </div>
+      <div id="version-line" style="color:#6a5a2a;font-family:monospace;font-size:11px;margin-top:16px;letter-spacing:2px;"></div>
+    </div>
+  </div>
+
+  <div id="start">
+    <div class="title">THE BACKROOMS</div>
+    <div class="sub">level 0. somewhere. you are here.</div>
+    <input id="player-name" type="text" placeholder="your name" maxlength="24" spellcheck="false"/>
+    <div class="btns">
+      <button id="btn-continue" style="display:none">CONTINUE ▶</button>
+      <button id="btn-solo">SOLO ▶</button>
+      <button id="btn-online">PLAY ONLINE ⬡</button>
+      <button id="btn-join">JOIN LAN</button>
+      <button id="btn-host">HOST LAN</button>
+    </div>
+    <div id="anchor-wrap">
+      <input id="anchor-input" type="text" placeholder="anchor — paste a google maps link or lat,lng (optional)" spellcheck="false"/>
+      <div id="anchor-status"></div>
+    </div>
+    <div id="start-status" style="color:#a09060;font-family:monospace;font-size:13px;margin-top:16px;min-height:20px;text-align:center;"></div>
+  </div>
+
+  <div id="join-modal" style="display:none">
+    <div class="modal-box">
+      <div class="modal-title">CONNECT</div>
+      <input id="join-url" type="text" value="ws://localhost:8765" placeholder="server url" spellcheck="false"/>
+      <input id="join-room" type="text" value="backrooms" placeholder="room code" spellcheck="false"/>
+      <div class="modal-btns">
+        <button id="join-cancel">CANCEL</button>
+        <button id="join-connect">ENTER ▶</button>
+      </div>
+      <div id="join-status"></div>
+    </div>
+  </div>
+
+  <div id="online-modal" style="display:none">
+    <div class="modal-box">
+      <div class="modal-title">PLAY ONLINE</div>
+      <div style="color:#a09060;font-family:monospace;font-size:12px;margin-bottom:12px;max-width:340px;line-height:1.5;">
+        pick a room code and share it with your friend. you'll both fall into the same world — anywhere, no setup.
+      </div>
+      <input id="online-room" type="text" value="" placeholder="room code (e.g. jeff-and-maddie)" spellcheck="false"/>
+      <div class="modal-btns">
+        <button id="online-cancel">CANCEL</button>
+        <button id="online-connect">ENTER ▶</button>
+      </div>
+      <div id="online-status"></div>
+    </div>
+  </div>
+
+  <div id="hud"></div>
+  <div id="chat-log"></div>
+  <div id="chat-typing"></div>
+  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote)" spellcheck="false" style="display:none"/>
+  <div id="hp-wrap"><span id="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div></div></div>
+  <div id="san-wrap"><span id="san-label">SAN</span><div id="san-bar"><div id="san-fill"></div></div></div>
+  <div id="exit-compass"></div>
+  <div id="msg"></div>
+  <div id="hint">wasd move · shift run · mouse look · f take / no-clip · q use · x drop · 1-6 slots · e speak · enter chat · l light · m music · b beacon</div>
+  <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
+  <div id="item-hint" style="opacity:0"></div>
+  <div id="hotbar"></div>
+  <button id="btn-discard" title="drop the selected item (x)">✕ discard</button>
+  <div id="stamina-wrap"><div id="stamina-fill"></div></div>
+  <div id="insanity"></div>
+  <div id="hurt"></div>
+  <div id="fade"></div>
+  <div id="flash"></div>
+  <div id="wish-dialog" style="display:none">
+    <div id="wish-inner">
+      <p id="wish-prompt">state your request.</p>
+      <textarea id="wish-text" maxlength="280" rows="3" placeholder="speak."></textarea>
+      <div id="wish-actions">
+        <button id="wish-submit">submit</button>
+        <button id="wish-cancel">cancel</button>
+      </div>
+      <p id="wish-response"></p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initGame } from './game.js'
+    import { createMultiplayerClient } from './client.js'
+    import { parseAnchor, anchorSeed, formatAnchor, bodyUrl } from './anchor.js'
+    import { getPrefs, setPref } from './prefs.js'
+    import { readSave } from './save.js'
+    const RELAY_URL = 'wss://backrooms-relay.jeff-schatz112.workers.dev'
+
+    const startEl = document.getElementById('start')
+    const joinModal = document.getElementById('join-modal')
+    const joinStatus = document.getElementById('join-status')
+    const startStatus = document.getElementById('start-status')
+    const canvas = document.getElementById('c')
+
+    // ── anchor — no-clip from a real place ──
+    const anchorInput = document.getElementById('anchor-input')
+    const anchorStatus = document.getElementById('anchor-status')
+    let currentAnchor = null
+
+    anchorInput.addEventListener('input', () => {
+      const a = parseAnchor(anchorInput.value)
+      if (anchorInput.value.trim() === '') {
+        anchorStatus.textContent = ''
+      } else if (a) {
+        anchorStatus.textContent = `anchored — you will fall through ${formatAnchor(a)}`
+      } else {
+        anchorStatus.textContent = 'that place cannot be found'
+      }
+    })
+
+    // The single place currentAnchor and the locate row are set. Called from
+    // all three start paths — solo, online, continue — so a resumed run gets a
+    // working "locate your body" button instead of a dead one. index.html has
+    // no test coverage, so this risk lives in one function, not three copies.
+    function applyIdentity({ anchor }) {
+      currentAnchor = anchor || null
+      const locateRow = document.getElementById('locate-row')
+      if (locateRow) locateRow.style.display = currentAnchor ? 'block' : 'none'
+      return currentAnchor
+    }
+
+    function takeAnchor() {
+      return applyIdentity({ anchor: parseAnchor(anchorInput.value) })
+    }
+
+    async function startSolo() {
+      const anchor = takeAnchor()
+      startEl.style.display = 'none'
+      await initGame(canvas, anchor
+        ? { worldSeed: anchorSeed(anchor.lat, anchor.lng), anchor }
+        : {})
+    }
+
+    // player name (persisted)
+    const nameInput = document.getElementById('player-name')
+    nameInput.value = getPrefs().playerName || ''
+    nameInput.addEventListener('input', () => setPref('playerName', nameInput.value.slice(0, 24)))
+    const getName = () => (nameInput.value.trim() || 'wanderer').slice(0, 24)
+
+    async function startMultiplayer(serverUrl, roomId, statusEl) {
+      const st = statusEl || joinStatus
+      st.textContent = 'connecting...'
+      try {
+        const anchor = takeAnchor()
+        const requestedSeed = anchor ? anchorSeed(anchor.lat, anchor.lng) : null
+        const mpClient = createMultiplayerClient(serverUrl)
+        // first joiner's seed wins; later joiners inherit the room's world
+        const { worldSeed } = await mpClient.connect(roomId, requestedSeed, getName())
+        joinModal.style.display = 'none'
+        document.getElementById('online-modal').style.display = 'none'
+        startEl.style.display = 'none'
+        await initGame(canvas, { worldSeed, mpClient, anchor })
+      } catch (e) {
+        st.textContent = `failed: ${e.message || 'could not connect'}`
+      }
+    }
+
+    document.getElementById('btn-solo').onclick = () => {
+      startStatus.textContent = ''
+      startSolo()
+    }
+
+    document.getElementById('btn-join').onclick = () => {
+      startStatus.textContent = ''
+      joinModal.style.display = 'flex'
+    }
+
+    document.getElementById('btn-host').onclick = async () => {
+      startStatus.textContent = 'starting local server...'
+      try {
+        const port = await window.backrooms?.startLocalServer?.() ?? 8765
+        await startMultiplayer(`ws://localhost:${port}`, 'local')
+      } catch (e) {
+        startStatus.textContent = `host failed: ${e.message}`
+      }
+    }
+
+    document.getElementById('join-cancel').onclick = () => {
+      joinModal.style.display = 'none'
+      joinStatus.textContent = ''
+    }
+
+    document.getElementById('join-connect').onclick = () => {
+      const url = document.getElementById('join-url').value.trim()
+      const room = document.getElementById('join-room').value.trim() || 'backrooms'
+      startMultiplayer(url, room)
+    }
+
+    // ── play online (Cloudflare relay — one public URL, no host, no setup) ──
+    document.getElementById('btn-online').onclick = () => {
+      startStatus.textContent = ''
+      const room = document.getElementById('online-room')
+      if (!room.value.trim()) room.value = `room-${Math.random().toString(36).slice(2, 7)}`
+      document.getElementById('online-modal').style.display = 'flex'
+    }
+    document.getElementById('online-cancel').onclick = () => {
+      document.getElementById('online-modal').style.display = 'none'
+    }
+    document.getElementById('online-connect').onclick = () => {
+      const code = (document.getElementById('online-room').value.trim() || 'default').slice(0, 32)
+      startMultiplayer(`${RELAY_URL}/?room=${encodeURIComponent(code)}`, code, document.getElementById('online-status'))
+    }
+
+    // ── continue a saved run ──
+    const savedRun = readSave()
+    if (savedRun) {
+      const cont = document.getElementById('btn-continue')
+      cont.style.display = ''
+      cont.onclick = async () => {
+        startStatus.textContent = ''
+        // Restore the identity, not just the world: currentAnchor was never set
+        // on this path, so a resumed anchored run had a working drift HUD but a
+        // hidden, dead "locate your body" button.
+        const anchor = applyIdentity({ anchor: savedRun.anchor ?? null })
+        startEl.style.display = 'none'
+        await initGame(canvas, { worldSeed: savedRun.worldSeed ?? null, anchor, resume: savedRun })
+      }
+    }
+
+    const settingsMod = document.getElementById('settings-modal')
+
+    // ── gameplay & feel prefs (persisted via prefs.js → localStorage) ──
+    const prefChk   = (id, key) => document.getElementById(id).addEventListener('change', e => setPref(key, e.target.checked))
+    const prefRange = (id, key) => document.getElementById(id).addEventListener('input',  e => setPref(key, +e.target.value))
+    prefChk('set-music', 'music');       prefRange('set-musicvol', 'musicVolume'); prefChk('set-ambience', 'ambience')
+    prefRange('set-ambiencevol', 'ambienceVolume')
+    prefChk('set-grain', 'grain');       prefChk('set-particles', 'particles');    prefChk('set-crosshair', 'crosshair');    prefChk('set-headbob', 'headBob')
+    prefRange('set-sens', 'mouseSensitivity'); prefChk('set-creatures', 'creatures'); prefChk('set-damage', 'damage')
+    document.getElementById('set-beacon-effect').addEventListener('change', e => setPref('beaconEffect', e.target.value))
+    document.getElementById('set-beacon-webhook').addEventListener('input', e => setPref('beaconWebhook', e.target.value.slice(0, 300)))
+    function loadPrefsIntoPanel() {
+      const p = getPrefs()
+      document.getElementById('set-music').checked      = p.music
+      document.getElementById('set-musicvol').value     = p.musicVolume
+      document.getElementById('set-ambiencevol').value  = p.ambienceVolume
+      document.getElementById('set-ambience').checked   = p.ambience
+      document.getElementById('set-grain').checked      = p.grain
+      document.getElementById('set-particles').checked  = p.particles
+      document.getElementById('set-crosshair').checked  = p.crosshair
+      document.getElementById('set-headbob').checked    = p.headBob
+      document.getElementById('set-sens').value         = p.mouseSensitivity
+      document.getElementById('set-creatures').checked  = p.creatures
+      document.getElementById('set-damage').checked     = p.damage
+      document.getElementById('set-beacon-effect').value  = p.beaconEffect
+      document.getElementById('set-beacon-webhook').value = p.beaconWebhook
+    }
+
+    document.getElementById('btn-settings').onclick = async () => {
+      const s = await window.backrooms?.getSettings?.() ?? { autoUpdate: true, softwareRender: false }
+      document.getElementById('chk-autoupdate').checked = s.autoUpdate
+      document.getElementById('chk-software').checked = !!s.softwareRender
+      loadPrefsIntoPanel()
+      try {
+        const v = await window.backrooms?.getVersion?.()
+        if (v) document.getElementById('version-line').textContent = `the backrooms v${v}`
+      } catch { /* dev mode */ }
+      settingsMod.style.display = 'flex'
+    }
+    document.getElementById('btn-locate').onclick = () => {
+      if (currentAnchor) window.backrooms?.openExternal?.(bodyUrl(currentAnchor))
+    }
+    document.getElementById('settings-close').onclick = async () => {
+      const autoUpdate = document.getElementById('chk-autoupdate').checked
+      const softwareRender = document.getElementById('chk-software').checked
+      await window.backrooms?.saveSettings?.({ autoUpdate, softwareRender })
+      settingsMod.style.display = 'none'
+    }
+    document.getElementById('btn-restart')?.addEventListener('click', () => {
+      window.backrooms?.restartNow?.()
+    })
+    // listen for update-ready from main
+    window.backrooms?.onUpdateReady?.(() => {
+      document.getElementById('update-ready-msg').style.display = 'block'
+    })
+  </script>
+
+  <script>
+    // Register the PWA service worker — only over http(s). Under Electron the
+    // page loads from file://, where service workers are unsupported, so this
+    // is skipped and the desktop build is unaffected.
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch((e) => console.warn('sw register failed', e))
+      })
+    }
+  </script>
+</body>
+</html>
