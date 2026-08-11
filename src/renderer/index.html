@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>The Backrooms</title>
+  <!-- PWA (active when served over http(s); inert under Electron file://) -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#c9ba72">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
@@ -539,6 +544,17 @@
     window.backrooms?.onUpdateReady?.(() => {
       document.getElementById('update-ready-msg').style.display = 'block'
     })
+  </script>
+
+  <script>
+    // Register the PWA service worker — only over http(s). Under Electron the
+    // page loads from file://, where service workers are unsupported, so this
+    // is skipped and the desktop build is unaffected.
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('sw register failed', e))
+      })
+    }
   </script>
 </body>
 </html>
