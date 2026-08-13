@@ -9,6 +9,7 @@
 // Mirrors items.js's scan/evict lifecycle. Reconfigured per level via
 // enterLevel(); nothing here is ever picked up, so there is no "taken" set.
 import { CHUNK_SIZE } from './world.js'
+import { fragmentAt } from './scraps.js'
 
 // The third channel `c` is the world seed. Math.imul(0, K) === 0 and X ^ 0 === X,
 // so with seed 0 this hash is byte-identical to the original — the unseeded world
@@ -31,6 +32,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
   let exitDenom = Math.max(1, config.exit?.denom ?? 6)
   let exitTarget = config.exit?.target ?? 0
   let npcDenom  = Math.max(1, config.npc?.denom ?? 16)
+  let scrapDenom = Math.max(0, config.scraps?.denom ?? 7)   // 0 disables (e.g. Level ∅)
   let salt      = config.maze?.salt | 0
   const seed    = worldSeed | 0   // null / undefined → 0 → the unseeded world
   // Fixed-map levels (Level ∅) place ONE exit at an authored point instead of
@@ -40,6 +42,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
   const props   = new Map()   // "cx,cy" → [{key,x,y,type,rot}]
   const exits    = new Map()  // "cx,cy" → {key,x,y,target}
   const npcs     = new Map()  // "cx,cy" → {key,x,y}  (a lost soul)
+  const scraps   = new Map()  // "cx,cy" → {key,x,y,frag}  (a note left behind)
   const scanned  = new Set()
 
   function openCell(cx, cy, rng, pcx, pcy) {
@@ -81,6 +84,16 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
       const spot = openCell(cx, cy, nrng, pcx, pcy)
       if (spot) npcs.set(key, { key, x: spot.wx, y: spot.wy })
     }
+
+    // a scrap — a note or scratched message from someone before you. FRESH hash
+    // channels (4801/9403 gate, 829/457 rng, distinct from props/exits/npcs) and
+    // its OWN srng, appended last, so adding scraps never perturbs the existing
+    // deterministic placement of anything above.
+    if (scrapDenom > 0 && hash(cx + 4801 + salt, cy + 9403 + salt, seed) % scrapDenom === 0) {
+      const srng = rngFrom(cx * 829 + salt + 53, cy * 457 + salt + 67, seed)
+      const spot = openCell(cx, cy, srng, pcx, pcy)
+      if (spot) scraps.set(key, { key, x: spot.wx, y: spot.wy, frag: fragmentAt(cx, cy, seed, salt) })
+    }
   }
 
   function update(pcx, pcy) {
@@ -92,6 +105,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
         props.delete(k)
         exits.delete(k)
         npcs.delete(k)
+        scraps.delete(k)
       }
     }
     for (let dy = -r; dy <= r; dy++) {
@@ -146,19 +160,31 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
     return best
   }
 
+  function getScraps() { return [...scraps.values()] }
+  function nearestScrap(px, py, maxDist = 1.8) {
+    let best = null, bestD = maxDist * maxDist
+    for (const s of scraps.values()) {
+      const d = (s.x - px) ** 2 + (s.y - py) ** 2
+      if (d < bestD) { bestD = d; best = s }
+    }
+    return best
+  }
+
   function enterLevel(cfg) {
     propTypes = cfg.props?.types?.length ? cfg.props.types : propTypes
     propDens  = cfg.props?.density ?? propDens
     exitDenom = Math.max(1, cfg.exit?.denom ?? exitDenom)
     exitTarget = cfg.exit?.target ?? exitTarget
     npcDenom  = Math.max(1, cfg.npc?.denom ?? npcDenom)
+    scrapDenom = Math.max(0, cfg.scraps?.denom ?? scrapDenom)
     salt      = cfg.maze?.salt | 0
     fixedExit = cfg.exitAt || null
     props.clear()
     exits.clear()
     npcs.clear()
+    scraps.clear()
     scanned.clear()
   }
 
-  return { update, getProps, getExits, nearestExit, nearestExitAny, getNpcs, nearestNpc, enterLevel }
+  return { update, getProps, getExits, nearestExit, nearestExitAny, getNpcs, nearestNpc, getScraps, nearestScrap, enterLevel }
 }

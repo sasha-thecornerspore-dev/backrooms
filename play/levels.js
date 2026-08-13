@@ -33,6 +33,7 @@ export const LEVELS = [
       entities: { enabled: false },
       items: { density: 5, types: ['almond-water', 'glowstick', 'polaroid', 'radio'] },
       props: { density: 3, types: ['chair', 'cabinet', 'box', 'cone', 'papers', 'plant'] },
+      scraps: { denom: 5 },   // the lobby — the most-trodden floor, the most notes
       exit:  { target: 1, denom: 4, label: 'no-clip deeper',
                hint: 'the walls are thin here — no-clip through a torn corner and you fall out of the lobby.' },
       messages: [
@@ -102,6 +103,7 @@ export const LEVELS = [
                   stalkerVariants: ['lurker', 'hound'], wandererVariants: ['crawler'] },
       items: { density: 4, types: ['almond-water', 'glowstick', 'bandage', 'radio'] },
       props: { density: 5, types: ['pipe', 'valve', 'drum', 'toolbox', 'vent', 'crate'] },
+      scraps: { denom: 9 },   // fewer make it this deep, and fewer stop to write
       exit:  { target: 3, denom: 5, label: 'descend',
                hint: 'follow the pipes to a service hatch, then drop into the dark below.' },
       messages: [
@@ -135,6 +137,7 @@ export const LEVELS = [
                   stalkerVariants: ['tesla', 'smiler'], wandererVariants: ['watcher'] },
       items: { density: 4, types: ['almond-water', 'glowstick', 'bandage', 'bandage', 'radio'] },
       props: { density: 5, types: ['transformer', 'cabinet-e', 'spool', 'sign', 'drum'] },
+      scraps: { denom: 9 },
       exit:  { target: 0, denom: 5, label: 'climb out',
                hint: 'a door humming with current — through it, the lobby waits again.' },
       messages: [
@@ -185,6 +188,7 @@ export const LEVELS = [
       entities: { enabled: false },                             // the monster here is a municipal filing system
       items: { density: 40, types: ['polaroid'] },              // sparse — a camera, for evidence
       props: { density: 0.4, types: ['trash', 'tire', 'weeds', 'box'] },  // the dumping-ground yard
+      scraps: { denom: 0 },   // no office-wanderer notes here — this is a real place
       exit:  { target: 0, denom: 1, label: 'no-clip out',
                hint: 'the front doors are sealed with block. the only way out is the gap the paperwork left.' },
       messages: [
@@ -217,6 +221,7 @@ export function levelConfig(base, index) {
     entities: { ...(c.entities ?? {}) },   // level fully owns entity rules
     items:    merge('items'),
     props:    merge('props'),
+    scraps:   merge('scraps'),
     exit:     { ...(c.exit ?? {}) },
     // level messages replace the base atmospheric set
     messages: c.messages ?? base?.messages ?? [],
