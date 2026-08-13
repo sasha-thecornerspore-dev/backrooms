@@ -414,6 +414,8 @@ export function createRenderer(canvas, config, renderOpts = {}, worldHooks = {})
           drawProp(ent, screenX, entDist, fogT, HH, H, W)
         } else if (ent.kind === 'exit') {
           drawExit(ent, screenX, entDist, fogT, HH, H, W)
+        } else if (ent.kind === 'note') {
+          drawNote(ent, screenX, entDist, fogT, HH, H, W)
         } else if (ent.kind === 'player' || ent.kind === 'npc') {
           drawPlayer(ent, screenX, entDist, fogT, HH, H, W, namePlates)
         } else {
@@ -710,6 +712,56 @@ export function createRenderer(canvas, config, renderOpts = {}, worldHooks = {})
     wctx.stroke()
 
     wctx.restore()
+  }
+
+  // A found scrap: a torn pale page held at chest height. Unread pages carry a
+  // soft WARM glow so they pop against the yellow dark and draw you over; once
+  // read the glow dies (you have been here). Deliberately small and warm so it
+  // never reads as the cold blue descent beam of drawExit.
+  function drawNote(ent, screenX, entDist, fogT, HH, H, W) {
+    if (screenX < 0 || screenX >= W || zbuffer[screenX] <= entDist) return
+    const unit = H / entDist
+    const floorY = HH + unit / 2
+    const nh = 0.6 * unit
+    const nw = 0.42 * unit
+    const cy = floorY - unit * 0.85          // chest height
+    const top = cy - nh / 2
+    const alpha = (1 - fogT)
+    if (alpha < 0.04 || nw < 1) return
+    const cx = screenX
+    const L = cx - nw / 2
+    const pulse = 0.6 + 0.4 * Math.sin(frame * 0.06)
+    const shade = 1 - fogT * 0.5
+
+    wctx.save()
+    if (!ent.read) {
+      const g = wctx.createRadialGradient(cx, cy, 1, cx, cy, nw * 1.7)
+      g.addColorStop(0, `rgba(255,224,150,${(alpha * (0.20 + 0.16 * pulse)).toFixed(3)})`)
+      g.addColorStop(1, 'rgba(0,0,0,0)')
+      wctx.fillStyle = g
+      wctx.fillRect(cx - nw * 1.7, cy - nh, nw * 3.4, nh * 2.2)
+    }
+
+    const pa = alpha * (ent.read ? 0.6 : 0.96)
+    wctx.globalAlpha = pa
+    wctx.fillStyle = `rgba(${(228 * shade) | 0},${(220 * shade) | 0},${(196 * shade) | 0},1)`
+    wctx.beginPath()                          // a page with one torn top corner
+    wctx.moveTo(L, top)
+    wctx.lineTo(L + nw * 0.82, top)
+    wctx.lineTo(L + nw, top + nh * 0.16)
+    wctx.lineTo(L + nw, top + nh)
+    wctx.lineTo(L, top + nh)
+    wctx.closePath()
+    wctx.fill()
+    wctx.globalAlpha = pa * 0.5               // faint ruled lines
+    wctx.strokeStyle = `rgba(${(120 * shade) | 0},${(110 * shade) | 0},${(92 * shade) | 0},1)`
+    wctx.lineWidth = 1
+    for (let i = 1; i <= 4; i++) {
+      const yy = top + nh * (0.22 + i * 0.16)
+      wctx.beginPath(); wctx.moveTo(L + nw * 0.14, yy); wctx.lineTo(L + nw * 0.86, yy); wctx.stroke()
+    }
+    wctx.restore()
+    contactShadow(cx, floorY, nw * 0.7, alpha * 0.22)
   }
 
   // A cloaked standing figure: a rounded hood widening to a skirt, with faint

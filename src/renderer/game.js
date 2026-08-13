@@ -10,6 +10,7 @@ import { getPref, setPref, onPrefChange } from './prefs.js'
 import { writeSave } from './save.js'
 import { formatAnchor, driftMeters } from './anchor.js'
 import { initTouchControls, isTouchDevice } from './touch.js'
+import { SCRAPS } from './scraps.js'
 
 // Presence: 1 in 12 chunks has a spirit at its midpoint
 function chunkHasPresence(cx, cy) {
@@ -233,6 +234,24 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }, 3000)
   })
 
+  // ── found scraps: notes left by earlier wanderers, read on a paper card ──
+  const readSet = new Set()          // distinct frag indices the player has read
+  let noteOpen = false
+  const noteCardEl = document.getElementById('note-card')
+  const noteTextEl = document.getElementById('note-text')
+  const noteFootEl = document.getElementById('note-foot')
+  function openNoteCard(scrap) {
+    if (noteOpen || !scrap || !noteCardEl) return   // no card element → never freeze invisibly
+    noteOpen = true
+    document.exitPointerLock()
+    if (!readSet.has(scrap.frag)) { readSet.add(scrap.frag); sanity = Math.min(100, sanity + 6) }   // not alone, for a moment
+    noteTextEl.textContent = SCRAPS[scrap.frag] ?? ''
+    noteFootEl.textContent = `${readSet.size} of ${SCRAPS.length} pages found`
+    noteCardEl.style.display = 'flex'
+  }
+  function closeNoteCard() { noteOpen = false; if (noteCardEl) noteCardEl.style.display = 'none' }
+  noteCardEl?.addEventListener('pointerdown', closeNoteCard)   // tap / click the card to put it back
+
   // ── resize ──
   function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight }
   window.addEventListener('resize', resize)
@@ -433,6 +452,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       hp: player.hp, maxHp: player.maxHp,
       inventory: itemSys.inventory.map(i => ({ type: i.type, ...(i.on ? { on: true } : {}) })),
       selected: itemSys.selected,
+      pagesRead: [...readSet],
       worldSeed, anchor,
     }
   }
@@ -449,6 +469,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     player.angle = resume.angle ?? 0
     player.maxHp = resume.maxHp ?? 100
     player.hp = resume.hp ?? player.maxHp
+    if (Array.isArray(resume.pagesRead)) for (const f of resume.pagesRead) if (Number.isInteger(f) && f >= 0 && f < SCRAPS.length) readSet.add(f)
     if (Array.isArray(resume.inventory)) {
       itemSys.inventory.length = 0
       for (const it of resume.inventory) itemSys.inventory.push({ type: it.type, ...(it.on ? { on: true } : {}) })
@@ -505,7 +526,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     // ── movement (frozen during a transition fade or while typing in chat) ──
     let moved = false
-    if (!transitioning && !chatOpen) {
+    if (!transitioning && !chatOpen && !noteOpen) {
       const wantSprint = (K['ShiftLeft'] || K['ShiftRight']) && stamina > 0
       const mult = wantSprint ? 1.8 : 1
       const sp = SPEED * dt * 60 * mult
@@ -564,6 +585,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // ── exits: descent prompt (wider grab range) ──
     const nearExit = level.decor.nearestExit(player.x, player.y, 1.6)
     const nearNpc  = level.decor.nearestNpc(player.x, player.y, 1.8)
+    const nearScrap = level.decor.nearestScrap(player.x, player.y, 1.8)
 
     const itemHintEl = document.getElementById('item-hint')
     if (itemHintEl) {
@@ -572,6 +594,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.style.opacity = '1'
       } else if (nearExit) {
         itemHintEl.textContent = `f · ${cfg.exit?.label ?? 'descend'}`
+        itemHintEl.style.opacity = '1'
+      } else if (nearScrap) {
+        itemHintEl.textContent = 'e · read the scrap'
         itemHintEl.style.opacity = '1'
       } else if (nearNpc) {
         itemHintEl.textContent = 'e · speak to the lost soul'
@@ -594,12 +619,19 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       }
     }
 
+    // reading a scrap freezes play; any action key or Esc puts it back (works
+    // for touch too — the SPEAK/ACT/WARD buttons set these keys)
+    if (noteOpen && (K['Escape'] || K['KeyE'] || K['KeyF'] || K['Space'] || K['Enter'] || K['NumpadEnter'])) {
+      K['Escape'] = K['KeyE'] = K['KeyF'] = K['Space'] = K['Enter'] = K['NumpadEnter'] = false
+      closeNoteCard()
+    }
+
     // Enter opens chat when connected to others
-    if (mpClient && !chatOpen && !dialogOpen && (K['Enter'] || K['NumpadEnter'])) {
+    if (mpClient && !chatOpen && !dialogOpen && !noteOpen && (K['Enter'] || K['NumpadEnter'])) {
       K['Enter'] = false; K['NumpadEnter'] = false; openChat()
     }
 
-    if (!transitioning && !dialogOpen && !chatOpen) {
+    if (!transitioning && !dialogOpen && !chatOpen && !noteOpen) {
       // F — item first, else exit
       if (K['KeyF']) {
         K['KeyF'] = false
@@ -624,6 +656,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (K['KeyE']) {
         K['KeyE'] = false
         if (nearPresence) openDialog()
+        else if (nearScrap) openNoteCard(nearScrap)
         else if (nearNpc) showMessage(NPC_LINES[Math.floor(Math.random() * NPC_LINES.length)])
       }
       // Space — the ward: a shove of will and light. Knocks the things back and
@@ -713,10 +746,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const exitEntities = level.decor.getExits().map(e => ({ x: e.x, y: e.y, kind: 'exit' }))
     const npcEntities  = level.decor.getNpcs().map(n => ({ x: n.x, y: n.y, kind: 'npc', name: 'a lost soul' }))
     const itemEntities = itemSys.getWorldItems().map(it => ({ x: it.x, y: it.y, kind: 'item', itemType: it.type }))
+    const scrapEntities = level.decor.getScraps().map(s => ({ x: s.x, y: s.y, kind: 'note', read: readSet.has(s.frag) }))
     const enemyEntities = creaturesOn ? level.entitySys.getEntities() : []
     const allEntities = [
       ...enemyEntities, ...remoteEntities, ...npcEntities,
-      ...propEntities, ...exitEntities, ...itemEntities,
+      ...propEntities, ...exitEntities, ...itemEntities, ...scrapEntities,
     ]
 
     level.gfx.render(player, (wx, wy) => level.cache.isWall(wx, wy, pcx, pcy), flicker, allEntities, fogMul,

@@ -155,6 +155,19 @@
     }
     #wish-actions button:hover { background: #5a4810; }
     #wish-response { color: rgba(180,160,60,0.6); font-size: 11px; letter-spacing: 2px; min-height: 18px; }
+    /* found-scrap reading card — aged paper */
+    #note-card { position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+      display: flex; align-items: center; justify-content: center; z-index: 55; }
+    #note-inner {
+      background: #e6ddc4; color: #241c0c; border: 1px solid #b8a878;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6), inset 0 0 60px rgba(150,130,80,0.22);
+      padding: 34px 30px 20px; max-width: 460px; width: 86%;
+      font: 15px/1.85 'Courier New', monospace; letter-spacing: 0.3px;
+      transform: rotate(-0.6deg); cursor: pointer;
+    }
+    #note-text { white-space: pre-wrap; }
+    #note-foot { margin-top: 20px; font-size: 11px; letter-spacing: 2px; color: #6a5a30; }
+    #note-hint { margin-top: 6px; font-size: 10px; letter-spacing: 2px; color: #8a7a4a; opacity: 0.7; }
     #presence-hint {
       position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
       color: #14110a; font-size: 11px; font-weight: bold;
@@ -351,6 +364,14 @@
         <button id="wish-cancel">cancel</button>
       </div>
       <p id="wish-response"></p>
+    </div>
+  </div>
+
+  <div id="note-card" style="display:none">
+    <div id="note-inner">
+      <p id="note-text"></p>
+      <p id="note-foot"></p>
+      <div id="note-hint">tap · e · esc — put it back</div>
     </div>
   </div>
 
