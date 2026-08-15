@@ -5,12 +5,13 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { writeSave } from './save.js'
 import { formatAnchor, driftMeters } from './anchor.js'
 import { initTouchControls, isTouchDevice } from './touch.js'
 import { SCRAPS } from './scraps.js'
+import { createEventScheduler } from './events.js'
 
 // Presence: 1 in 12 chunks has a spirit at its midpoint
 function chunkHasPresence(cx, cy) {
@@ -81,6 +82,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let sanWhisperT = 0
   let heartT     = 0
   let shake      = 0    // screen-shake magnitude, decays each frame
+
+  // ── Living Atmosphere — occasional ambient dread events ──
+  const eventSched = createEventScheduler()
+  const ephemera   = []   // transient event-spawned apparitions (render-only, no collision)
 
   // Flicker state (persists; retuned per level via level.cfg.flicker)
   let flicker    = 1.0
@@ -451,6 +456,44 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     renderHotbar()
   }
 
+  // ── ambient events (Living Atmosphere): the scheduler in events.js decides
+  //    WHEN and WHICH; these are the side effects, hooked into the existing
+  //    flicker / audio / message / apparition systems. ──
+  function spawnCrosser() {
+    const ahead = 7 + Math.random() * 4                        // out in the fog ahead
+    const bx = player.x + Math.cos(player.angle) * ahead
+    const by = player.y + Math.sin(player.angle) * ahead
+    const perp = player.angle + Math.PI / 2                     // crossing your line of sight
+    const dir = Math.random() < 0.5 ? 1 : -1
+    const sp = 2.6, span = 1.7
+    ephemera.push({
+      x: bx - Math.cos(perp) * dir * span, y: by - Math.sin(perp) * dir * span,
+      vx: Math.cos(perp) * dir * sp, vy: Math.sin(perp) * dir * sp,
+      ttl: (span * 2) / sp + 0.2, variant: Math.random() < 0.5 ? 'shade' : 'lurker',
+    })
+  }
+  function fireEvent(id) {
+    if (id === 'lights-cascade') {
+      flickTgt = 0.14; flickTimer = 0.7                        // a wave of dark, held, then the loop recovers it
+      showMessage('the lights go out ahead of you, one by one. then, slowly, they come back.')
+    } else if (id === 'door-slam') {
+      doorSlam(); shake = Math.max(shake, 0.35)
+      showMessage('somewhere behind you, a door slams shut.')
+    } else if (id === 'hum-stops') {
+      humDuck(2.6)
+      showMessage('the hum stops. the silence has a shape. then it resumes, as if something had been listening.')
+    } else if (id === 'cold-spot') {
+      sanity = Math.max(0, sanity - 4); whisper()
+      showMessage('a cold spot. your breath fogs where there is nothing cold enough to fog it.')
+    } else if (id === 'footsteps') {
+      footfall()
+      showMessage('footsteps. not yours. they keep your pace, and stop when you stop.')
+    } else if (id === 'crosser') {
+      spawnCrosser(); footfall(3); heartbeat(0.7)
+      showMessage('far down the hall, something crosses the intersection. the hall is empty when you look again.')
+    }
+  }
+
   // ── snapshot + persistence (solo progress & inventory — the "save game") ──
   function snapshot() {
     return {
@@ -561,6 +604,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       msgNext  = base.messageInterval[0] + Math.random() * (base.messageInterval[1] - base.messageInterval[0])
       showMessage(level.messages[Math.floor(Math.random() * level.messages.length)])
     }
+
+    // ── Living Atmosphere: occasional ambient dread events (procedural floors only) ──
+    const evCanFire = !transitioning && !dialogOpen && !chatOpen && !noteOpen && level.index >= 0 && level.index <= 3
+    const evId = eventSched.tick(dt, { level: level.index, sanity, canFire: evCanFire })
+    if (evId) fireEvent(evId)
+
     updateHud(); updateHp(); updateStamina()
     saveTimer += dt
     if (saveTimer > 8) { saveTimer = 0; persist() }
@@ -770,10 +819,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const npcEntities  = level.decor.getNpcs().map(n => ({ x: n.x, y: n.y, kind: 'npc', name: 'a lost soul' }))
     const itemEntities = itemSys.getWorldItems().map(it => ({ x: it.x, y: it.y, kind: 'item', itemType: it.type }))
     const scrapEntities = level.decor.getScraps().map(s => ({ x: s.x, y: s.y, kind: 'note', read: readSet.has(s.frag) }))
+    // advance any event apparitions (render-only; no collision or damage)
+    for (let i = ephemera.length - 1; i >= 0; i--) {
+      const a = ephemera[i]; a.x += a.vx * dt; a.y += a.vy * dt; a.ttl -= dt
+      if (a.ttl <= 0) ephemera.splice(i, 1)
+    }
+    const apparitionEntities = ephemera.map(a => ({ x: a.x, y: a.y, variant: a.variant }))
     const enemyEntities = creaturesOn ? level.entitySys.getEntities() : []
     const allEntities = [
       ...enemyEntities, ...remoteEntities, ...npcEntities,
-      ...propEntities, ...exitEntities, ...itemEntities, ...scrapEntities,
+      ...propEntities, ...exitEntities, ...itemEntities, ...scrapEntities, ...apparitionEntities,
     ]
 
     level.gfx.render(player, (wx, wy) => level.cache.isWall(wx, wy, pcx, pcy), flicker, allEntities, fogMul,

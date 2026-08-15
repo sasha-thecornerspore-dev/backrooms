@@ -435,3 +435,63 @@ export function wardPulse() {
     o.start(t); o.stop(t + 0.36)
   } catch { /* ignore */ }
 }
+
+// ── ambient-event sounds (Living Atmosphere) — routed through the ambience bus
+//    so they respect the environmental volume/toggle ──
+
+// A far door slamming: a low thud plus a short wooden crack.
+export function doorSlam() {
+  if (!actx) return
+  try {
+    const dest = ambienceGain || actx.destination
+    const t = actx.currentTime
+    const o = actx.createOscillator(), g = actx.createGain()
+    o.type = 'sine'
+    o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(44, t + 0.12)
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.13, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0004, t + 0.3)
+    o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.32)
+    const len = Math.floor(actx.sampleRate * 0.12)
+    const buf = actx.createBuffer(1, len, actx.sampleRate); const d = buf.getChannelData(0)
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3)
+    const src = actx.createBufferSource(); src.buffer = buf
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 0.8
+    const ng = actx.createGain(); ng.gain.setValueAtTime(0.09, t); ng.gain.exponentialRampToValueAtTime(0.0004, t + 0.12)
+    src.connect(bp); bp.connect(ng); ng.connect(dest); src.start(t); src.stop(t + 0.13)
+  } catch { /* ignore */ }
+}
+
+// Muffled footfalls that aren't yours — a handful of soft low thumps, receding.
+export function footfall(steps = 4) {
+  if (!actx) return
+  try {
+    const dest = ambienceGain || actx.destination
+    for (let i = 0; i < steps; i++) {
+      const t = actx.currentTime + i * (0.32 + Math.random() * 0.06)
+      const o = actx.createOscillator(), g = actx.createGain()
+      o.type = 'sine'
+      o.frequency.setValueAtTime(58 + Math.random() * 10, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.07)
+      const peak = 0.05 * (1 - i / (steps + 1))
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0004, t + 0.12)
+      o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.14)
+    }
+  } catch { /* ignore */ }
+}
+
+// The hum stops: duck the whole sound bed (ambience + music) to silence for a
+// beat, then restore each to whatever level the player's settings had it at.
+export function humDuck(seconds = 2.6) {
+  if (!actx) return
+  try {
+    if (ambienceGain) ambienceGain.gain.setTargetAtTime(0.0001, actx.currentTime, 0.04)
+    if (music && music.master) music.master.gain.setTargetAtTime(0.0001, actx.currentTime, 0.04)
+    setTimeout(() => {
+      try {
+        applyAmbience()
+        if (music && music.master) {
+          const vol = music.enabled ? (music.mood?.volume ?? 0.06) * music.volScale : 0
+          music.master.gain.setTargetAtTime(vol, actx.currentTime, 0.6)
+        }
+      } catch { /* ignore */ }
+    }, seconds * 1000)
+  } catch { /* ignore */ }
+}
