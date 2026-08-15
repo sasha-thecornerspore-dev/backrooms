@@ -3,10 +3,10 @@
 // any browser. Cross-origin requests (the Cloudflare multiplayer relay) are
 // never intercepted, so online play is unaffected. This file is only ever
 // registered over http(s); under Electron's file:// it is never loaded.
-const CACHE = 'backrooms-pwa-v3'
+const CACHE = 'backrooms-pwa-v4'
 const SHELL = [
   '/renderer/index.html',
-  '/renderer/game.js', '/renderer/touch.js', '/renderer/scraps.js', '/renderer/anchor.js', '/renderer/items.js', '/renderer/save.js',
+  '/renderer/game.js', '/renderer/touch.js', '/renderer/scraps.js', '/renderer/events.js', '/renderer/anchor.js', '/renderer/items.js', '/renderer/save.js',
   '/renderer/world.js', '/renderer/decor.js', '/renderer/fixedmap.js', '/renderer/level-null-map.js',
   '/renderer/levels.js', '/renderer/raycaster.js', '/renderer/renderer.js', '/renderer/entities.js',
   '/renderer/audio.js', '/renderer/prefs.js',
