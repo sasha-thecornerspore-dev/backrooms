@@ -827,6 +827,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const itemEntities = itemSys.getWorldItems().map(it => ({ x: it.x, y: it.y, kind: 'item', itemType: it.type }))
     const scrapEntities = level.decor.getScraps().map(s => ({ x: s.x, y: s.y, kind: 'note', read: readSet.has(s.frag) }))
     const machineEntities = level.decor.getMachines().map(m => ({ x: m.x, y: m.y, kind: 'machine', vended: vendedSet.has(m.key) }))
+    const sightEntities = level.decor.getSights().map(s => ({ x: s.x, y: s.y, kind: 'sight', sightType: s.type }))
     // advance any event apparitions (render-only; no collision or damage)
     for (let i = ephemera.length - 1; i >= 0; i--) {
       const a = ephemera[i]; a.x += a.vx * dt; a.y += a.vy * dt; a.ttl -= dt
@@ -836,7 +837,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const enemyEntities = creaturesOn ? level.entitySys.getEntities() : []
     const allEntities = [
       ...enemyEntities, ...remoteEntities, ...npcEntities,
-      ...propEntities, ...exitEntities, ...itemEntities, ...scrapEntities, ...machineEntities, ...apparitionEntities,
+      ...propEntities, ...exitEntities, ...itemEntities, ...scrapEntities, ...machineEntities, ...sightEntities, ...apparitionEntities,
     ]
 
     level.gfx.render(player, (wx, wy) => level.cache.isWall(wx, wy, pcx, pcy), flicker, allEntities, fogMul,

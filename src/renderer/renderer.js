@@ -418,6 +418,8 @@ export function createRenderer(canvas, config, renderOpts = {}, worldHooks = {})
           drawNote(ent, screenX, entDist, fogT, HH, H, W)
         } else if (ent.kind === 'machine') {
           drawMachine(ent, screenX, entDist, fogT, HH, H, W)
+        } else if (ent.kind === 'sight') {
+          drawSight(ent, screenX, entDist, fogT, HH, H, W)
         } else if (ent.kind === 'player' || ent.kind === 'npc') {
           drawPlayer(ent, screenX, entDist, fogT, HH, H, W, namePlates)
         } else {
@@ -815,6 +817,81 @@ export function createRenderer(canvas, config, renderOpts = {}, worldHooks = {})
     // dispense tray — a dark slot near the floor
     wctx.fillStyle = `rgba(10,10,12,${alpha})`
     wctx.fillRect(L + mw * 0.14, floorY - mh * 0.18, mw * 0.5, mh * 0.11)
+    wctx.restore()
+  }
+
+  // A landmark sight — a rare, memorable set-piece that breaks the corridors:
+  // a heap of chairs, a wall of static-filled TVs, a lone payphone, a still
+  // mannequin. Big billboards, floor-anchored, non-interactive.
+  function drawSight(ent, screenX, entDist, fogT, HH, H, W) {
+    if (screenX < 0 || screenX >= W || zbuffer[screenX] <= entDist) return
+    const unit = H / entDist
+    const floorY = HH + unit / 2
+    const alpha = (1 - fogT) * 0.97
+    if (alpha < 0.05) return
+    const cx = screenX
+    const shade = 1 - fogT * 0.6
+    const t = ent.sightType
+    wctx.save()
+    wctx.globalAlpha = alpha
+
+    if (t === 'tvwall') {
+      const w = 1.5 * unit, h = 1.7 * unit, top = floorY - h, L = cx - w / 2
+      if (w < 2) { wctx.restore(); return }
+      contactShadow(cx, floorY, w, alpha * 0.5)
+      wctx.fillStyle = `rgba(${(40 * shade) | 0},${(38 * shade) | 0},${(36 * shade) | 0},1)`; wctx.fillRect(L, top, w, h)
+      const gap = w * 0.045, cols = 3, rows = 3
+      const sw = (w - gap * (cols + 1)) / cols, sh = (h - gap * (rows + 1)) / rows
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        const sx = L + gap + c * (sw + gap), sy = top + gap + r * (sh + gap)
+        const fl = 0.32 + 0.5 * Math.abs(Math.sin(frame * 0.3 + r * 2.1 + c * 1.7))   // per-screen static flicker
+        wctx.fillStyle = `rgba(${(150 * fl) | 0},${(172 * fl) | 0},${(188 * fl) | 0},1)`; wctx.fillRect(sx, sy, sw, sh)
+        wctx.fillStyle = 'rgba(0,0,0,0.32)'; wctx.fillRect(sx, sy + sh * 0.48, sw, Math.max(1, sh * 0.07))   // scanline
+      }
+      wctx.globalAlpha = 1
+      const g = wctx.createRadialGradient(cx, top + h * 0.4, 1, cx, top + h * 0.4, w * 0.95)
+      g.addColorStop(0, `rgba(150,176,196,${(alpha * 0.16).toFixed(3)})`); g.addColorStop(1, 'rgba(0,0,0,0)')
+      wctx.fillStyle = g; wctx.fillRect(L - w * 0.4, top - h * 0.2, w * 1.8, h * 1.4)
+    } else if (t === 'chairpile') {
+      const w = 1.7 * unit, h = 1.3 * unit, L = cx - w / 2
+      if (w < 2) { wctx.restore(); return }
+      contactShadow(cx, floorY, w, alpha * 0.5)
+      wctx.fillStyle = `rgba(${(34 * shade) | 0},${(30 * shade) | 0},${(24 * shade) | 0},${alpha.toFixed(3)})`
+      for (let i = 0; i < 7; i++) {   // a tangle of chair silhouettes (deterministic layout)
+        const ix = L + w * (0.12 + 0.72 * ((i * 0.37) % 1))
+        const iy = floorY - h * (0.12 + 0.62 * ((i * 0.53) % 1))
+        const s = h * 0.36
+        wctx.fillRect(ix, iy, s * 0.7, s * 0.16)               // seat
+        wctx.fillRect(ix, iy - s * 0.5, s * 0.16, s * 0.55)    // back
+        wctx.fillRect(ix + s * 0.1, iy + s * 0.16, s * 0.08, s * 0.4)   // legs
+        wctx.fillRect(ix + s * 0.5, iy + s * 0.16, s * 0.08, s * 0.4)
+      }
+    } else if (t === 'payphone') {
+      const w = 0.55 * unit, h = 1.0 * unit, mid = floorY - unit * 0.72, top = mid - h / 2, L = cx - w / 2
+      if (w < 2) { wctx.restore(); return }
+      contactShadow(cx, floorY, w * 0.6, alpha * 0.2)
+      wctx.fillStyle = `rgba(${(30 * shade) | 0},${(34 * shade) | 0},${(38 * shade) | 0},${alpha.toFixed(3)})`; wctx.fillRect(L, top, w, h)
+      wctx.strokeStyle = `rgba(${(62 * shade) | 0},${(66 * shade) | 0},${(70 * shade) | 0},${alpha.toFixed(3)})`; wctx.lineWidth = Math.max(1, w * 0.05); wctx.strokeRect(L, top, w, h)
+      wctx.fillStyle = `rgba(${(18 * shade) | 0},${(18 * shade) | 0},${(20 * shade) | 0},${alpha.toFixed(3)})`; wctx.fillRect(L - w * 0.06, top + h * 0.1, w * 0.14, h * 0.5)   // handset
+      wctx.fillStyle = `rgba(${(92 * shade) | 0},${(92 * shade) | 0},${(88 * shade) | 0},${alpha.toFixed(3)})`
+      for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) wctx.fillRect(L + w * (0.34 + c * 0.18), top + h * (0.3 + r * 0.12), w * 0.09, h * 0.07)   // keypad
+      wctx.fillStyle = `rgba(180,160,90,${(alpha * 0.6).toFixed(3)})`; wctx.fillRect(L + w * 0.42, top + h * 0.16, w * 0.18, h * 0.03)   // coin slot
+    } else { // mannequin — pale, faceless, still
+      const h = 1.7 * unit, w = 0.42 * unit, top = floorY - h, L = cx - w / 2
+      if (w < 2) { wctx.restore(); return }
+      contactShadow(cx, floorY, w, alpha * 0.4)
+      const pale = `rgba(${(196 * shade) | 0},${(190 * shade) | 0},${(178 * shade) | 0},${alpha.toFixed(3)})`
+      const paleDk = `rgba(${(150 * shade) | 0},${(144 * shade) | 0},${(134 * shade) | 0},${alpha.toFixed(3)})`
+      wctx.fillStyle = pale
+      wctx.fillRect(L + w * 0.22, top + h * 0.55, w * 0.2, h * 0.45)   // legs
+      wctx.fillRect(L + w * 0.58, top + h * 0.55, w * 0.2, h * 0.45)
+      wctx.fillRect(L + w * 0.2, top + h * 0.24, w * 0.6, h * 0.34)    // torso
+      wctx.fillStyle = paleDk
+      wctx.fillRect(L + w * 0.04, top + h * 0.26, w * 0.14, h * 0.3)   // arms
+      wctx.fillRect(L + w * 0.82, top + h * 0.26, w * 0.14, h * 0.3)
+      wctx.fillStyle = pale
+      wctx.beginPath(); wctx.ellipse(cx, top + h * 0.13, w * 0.24, h * 0.11, 0, 0, Math.PI * 2); wctx.fill()   // blank head
+    }
     wctx.restore()
   }
 
