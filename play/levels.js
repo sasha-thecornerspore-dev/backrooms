@@ -191,6 +191,7 @@ export const LEVELS = [
       props: { density: 0.4, types: ['trash', 'tire', 'weeds', 'box'] },  // the dumping-ground yard
       scraps: { denom: 0 },   // no office-wanderer notes here — this is a real place
       machines: { denom: 0 },
+      sights: { denom: 0 },
       exit:  { target: 0, denom: 1, label: 'no-clip out',
                hint: 'the front doors are sealed with block. the only way out is the gap the paperwork left.' },
       messages: [
@@ -225,6 +226,7 @@ export function levelConfig(base, index) {
     props:    merge('props'),
     scraps:   merge('scraps'),
     machines: merge('machines'),
+    sights:   merge('sights'),
     exit:     { ...(c.exit ?? {}) },
     // level messages replace the base atmospheric set
     messages: c.messages ?? base?.messages ?? [],

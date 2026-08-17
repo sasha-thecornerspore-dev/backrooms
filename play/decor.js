@@ -26,6 +26,10 @@ function rngFrom(a, b, seed = 0) {
   return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 0xffffffff }
 }
 
+// Rare landmark set-pieces — memorable sights that break the uniform corridors
+// and give you something to orient by. Non-interactive; drawn big in renderer.js.
+export const SIGHT_TYPES = ['chairpile', 'tvwall', 'payphone', 'mannequin']
+
 export function createDecorSystem(config, isWallFn, worldSeed = 0) {
   let propTypes = config.props?.types?.length ? config.props.types : ['box']
   let propDens  = config.props?.density ?? 3
@@ -34,6 +38,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
   let npcDenom  = Math.max(1, config.npc?.denom ?? 16)
   let scrapDenom = Math.max(0, config.scraps?.denom ?? 7)   // 0 disables (e.g. Level ∅)
   let machineDenom = Math.max(0, config.machines?.denom ?? 20)   // vending machines — rarer; 0 disables
+  let sightDenom = Math.max(0, config.sights?.denom ?? 28)       // landmark set-pieces — rarest; 0 disables
   let salt      = config.maze?.salt | 0
   const seed    = worldSeed | 0   // null / undefined → 0 → the unseeded world
   // Fixed-map levels (Level ∅) place ONE exit at an authored point instead of
@@ -45,6 +50,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
   const npcs     = new Map()  // "cx,cy" → {key,x,y}  (a lost soul)
   const scraps   = new Map()  // "cx,cy" → {key,x,y,frag}  (a note left behind)
   const machines = new Map()  // "cx,cy" → {key,x,y}       (a vending machine)
+  const sights   = new Map()  // "cx,cy" → {key,x,y,type}  (a landmark set-piece)
   const scanned  = new Set()
 
   function openCell(cx, cy, rng, pcx, pcy) {
@@ -104,6 +110,17 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
       const spot = openCell(cx, cy, mrng, pcx, pcy)
       if (spot) machines.set(key, { key, x: spot.wx, y: spot.wy })
     }
+
+    // a landmark sight — rarest of all, its own fresh channels (3701/5903 gate,
+    // 683/419 rng, 271/613 type), appended last so nothing above is perturbed.
+    if (sightDenom > 0 && hash(cx + 3701 + salt, cy + 5903 + salt, seed) % sightDenom === 0) {
+      const grng = rngFrom(cx * 683 + salt + 37, cy * 419 + salt + 71, seed)
+      const spot = openCell(cx, cy, grng, pcx, pcy)
+      if (spot) {
+        const type = SIGHT_TYPES[hash(cx + 271 + salt, cy + 613 + salt, seed) % SIGHT_TYPES.length]
+        sights.set(key, { key, x: spot.wx, y: spot.wy, type })
+      }
+    }
   }
 
   function update(pcx, pcy) {
@@ -117,6 +134,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
         npcs.delete(k)
         scraps.delete(k)
         machines.delete(k)
+        sights.delete(k)
       }
     }
     for (let dy = -r; dy <= r; dy++) {
@@ -191,6 +209,8 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
     return best
   }
 
+  function getSights() { return [...sights.values()] }
+
   function enterLevel(cfg) {
     propTypes = cfg.props?.types?.length ? cfg.props.types : propTypes
     propDens  = cfg.props?.density ?? propDens
@@ -199,6 +219,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
     npcDenom  = Math.max(1, cfg.npc?.denom ?? npcDenom)
     scrapDenom = Math.max(0, cfg.scraps?.denom ?? scrapDenom)
     machineDenom = Math.max(0, cfg.machines?.denom ?? machineDenom)
+    sightDenom = Math.max(0, cfg.sights?.denom ?? sightDenom)
     salt      = cfg.maze?.salt | 0
     fixedExit = cfg.exitAt || null
     props.clear()
@@ -206,8 +227,9 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
     npcs.clear()
     scraps.clear()
     machines.clear()
+    sights.clear()
     scanned.clear()
   }
 
-  return { update, getProps, getExits, nearestExit, nearestExitAny, getNpcs, nearestNpc, getScraps, nearestScrap, getMachines, nearestMachine, enterLevel }
+  return { update, getProps, getExits, nearestExit, nearestExitAny, getNpcs, nearestNpc, getScraps, nearestScrap, getMachines, nearestMachine, getSights, enterLevel }
 }

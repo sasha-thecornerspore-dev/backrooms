@@ -31,6 +31,8 @@ export const DEFAULT_CONFIG = {
   scraps: { denom: 7 },
   // vending machines — rarer than notes; 1-in-`denom` chunks holds one
   machines: { denom: 20 },
+  // landmark set-pieces — the rarest; a memorable sight to orient by
+  sights: { denom: 28 },
   particles: { count: 45, color: [235, 228, 190], size: 1.4, sway: 0.35, speed: 0.25 },
 }
 
