@@ -29,6 +29,8 @@ export const DEFAULT_CONFIG = {
   props: { density: 3, types: ['chair', 'cabinet', 'box', 'cone', 'papers', 'plant'] },
   // found notes left by earlier wanderers — 1-in-`denom` chunks holds a scrap
   scraps: { denom: 7 },
+  // vending machines — rarer than notes; 1-in-`denom` chunks holds one
+  machines: { denom: 20 },
   particles: { count: 45, color: [235, 228, 190], size: 1.4, sway: 0.35, speed: 0.25 },
 }
 

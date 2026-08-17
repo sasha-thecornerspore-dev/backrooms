@@ -34,6 +34,7 @@ export const LEVELS = [
       items: { density: 5, types: ['almond-water', 'glowstick', 'polaroid', 'radio'] },
       props: { density: 3, types: ['chair', 'cabinet', 'box', 'cone', 'papers', 'plant'] },
       scraps: { denom: 5 },   // the lobby — the most-trodden floor, the most notes
+      machines: { denom: 16 },   // a little more civilization near the surface
       exit:  { target: 1, denom: 4, label: 'no-clip deeper',
                hint: 'the walls are thin here — no-clip through a torn corner and you fall out of the lobby.' },
       messages: [
@@ -189,6 +190,7 @@ export const LEVELS = [
       items: { density: 40, types: ['polaroid'] },              // sparse — a camera, for evidence
       props: { density: 0.4, types: ['trash', 'tire', 'weeds', 'box'] },  // the dumping-ground yard
       scraps: { denom: 0 },   // no office-wanderer notes here — this is a real place
+      machines: { denom: 0 },
       exit:  { target: 0, denom: 1, label: 'no-clip out',
                hint: 'the front doors are sealed with block. the only way out is the gap the paperwork left.' },
       messages: [
@@ -222,6 +224,7 @@ export function levelConfig(base, index) {
     items:    merge('items'),
     props:    merge('props'),
     scraps:   merge('scraps'),
+    machines: merge('machines'),
     exit:     { ...(c.exit ?? {}) },
     // level messages replace the base atmospheric set
     messages: c.messages ?? base?.messages ?? [],

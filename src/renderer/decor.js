@@ -33,6 +33,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
   let exitTarget = config.exit?.target ?? 0
   let npcDenom  = Math.max(1, config.npc?.denom ?? 16)
   let scrapDenom = Math.max(0, config.scraps?.denom ?? 7)   // 0 disables (e.g. Level ∅)
+  let machineDenom = Math.max(0, config.machines?.denom ?? 20)   // vending machines — rarer; 0 disables
   let salt      = config.maze?.salt | 0
   const seed    = worldSeed | 0   // null / undefined → 0 → the unseeded world
   // Fixed-map levels (Level ∅) place ONE exit at an authored point instead of
@@ -43,6 +44,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
   const exits    = new Map()  // "cx,cy" → {key,x,y,target}
   const npcs     = new Map()  // "cx,cy" → {key,x,y}  (a lost soul)
   const scraps   = new Map()  // "cx,cy" → {key,x,y,frag}  (a note left behind)
+  const machines = new Map()  // "cx,cy" → {key,x,y}       (a vending machine)
   const scanned  = new Set()
 
   function openCell(cx, cy, rng, pcx, pcy) {
@@ -94,6 +96,14 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
       const spot = openCell(cx, cy, srng, pcx, pcy)
       if (spot) scraps.set(key, { key, x: spot.wx, y: spot.wy, frag: fragmentAt(cx, cy, seed, salt) })
     }
+
+    // a vending machine — rare, a scrap of civilization. Its own fresh channels
+    // (6101/2027 gate, 541/907 rng), appended last, so it perturbs nothing above.
+    if (machineDenom > 0 && hash(cx + 6101 + salt, cy + 2027 + salt, seed) % machineDenom === 0) {
+      const mrng = rngFrom(cx * 541 + salt + 29, cy * 907 + salt + 83, seed)
+      const spot = openCell(cx, cy, mrng, pcx, pcy)
+      if (spot) machines.set(key, { key, x: spot.wx, y: spot.wy })
+    }
   }
 
   function update(pcx, pcy) {
@@ -106,6 +116,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
         exits.delete(k)
         npcs.delete(k)
         scraps.delete(k)
+        machines.delete(k)
       }
     }
     for (let dy = -r; dy <= r; dy++) {
@@ -170,6 +181,16 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
     return best
   }
 
+  function getMachines() { return [...machines.values()] }
+  function nearestMachine(px, py, maxDist = 1.6) {
+    let best = null, bestD = maxDist * maxDist
+    for (const m of machines.values()) {
+      const d = (m.x - px) ** 2 + (m.y - py) ** 2
+      if (d < bestD) { bestD = d; best = m }
+    }
+    return best
+  }
+
   function enterLevel(cfg) {
     propTypes = cfg.props?.types?.length ? cfg.props.types : propTypes
     propDens  = cfg.props?.density ?? propDens
@@ -177,14 +198,16 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
     exitTarget = cfg.exit?.target ?? exitTarget
     npcDenom  = Math.max(1, cfg.npc?.denom ?? npcDenom)
     scrapDenom = Math.max(0, cfg.scraps?.denom ?? scrapDenom)
+    machineDenom = Math.max(0, cfg.machines?.denom ?? machineDenom)
     salt      = cfg.maze?.salt | 0
     fixedExit = cfg.exitAt || null
     props.clear()
     exits.clear()
     npcs.clear()
     scraps.clear()
+    machines.clear()
     scanned.clear()
   }
 
-  return { update, getProps, getExits, nearestExit, nearestExitAny, getNpcs, nearestNpc, getScraps, nearestScrap, enterLevel }
+  return { update, getProps, getExits, nearestExit, nearestExitAny, getNpcs, nearestNpc, getScraps, nearestScrap, getMachines, nearestMachine, enterLevel }
 }

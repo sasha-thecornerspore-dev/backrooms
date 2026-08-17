@@ -87,6 +87,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const eventSched = createEventScheduler()
   const ephemera   = []   // transient event-spawned apparitions (render-only, no collision)
 
+  // vending machines dispense once; keys of spent machines (mirrors items.js
+  // `taken` — survives chunk eviction, cleared per level so a floor re-stocks).
+  const vendedSet = new Set()
+
   // Flicker state (persists; retuned per level via level.cfg.flicker)
   let flicker    = 1.0
   let flickTgt   = 1.0
@@ -136,6 +140,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const gfx       = createRenderer(canvas, cfg, renderOpts,
       cfg.map ? { materialAt: (wx, wy) => cache.materialAt(wx, wy) } : {})
     itemSys.enterLevel(cfg)
+    vendedSet.clear()               // a re-entered floor re-stocks its machines
 
     // fixed maps spawn at their authored point; procedural at the origin room (carved open)
     if (cfg.spawn) { player.x = cfg.spawn.x; player.y = cfg.spawn.y }
@@ -433,8 +438,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function applyItemEffect(eff) {
     if (!eff) return
     if (eff.type === 'almond-water') {
-      stamina = 100; calmTimer = 20; sanity = Math.min(100, sanity + 35)
-      showMessage('the water is sweet. the lights steady, and so does your mind.')
+      if (eff.sour) {
+        sanity = Math.max(0, sanity - 8); whisper()
+        showMessage('the water is sour on your tongue. it takes something from you, and gives nothing back.')
+      } else {
+        stamina = 100; calmTimer = 20; sanity = Math.min(100, sanity + 35)
+        showMessage('the water is sweet. the lights steady, and so does your mind.')
+      }
     } else if (eff.type === 'glowstick') {
       fogTimer = 45
       showMessage('green light pushes at the dark.')
@@ -485,6 +495,20 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       spawnCrosser(); footfall(3); heartbeat(0.7)
       showMessage('far down the hall, something crosses the intersection. the hall is empty when you look again.')
     }
+  }
+
+  // ── vending machine: draw one item, once. Deep down the almond water it gives
+  //    may be sour — the lost soul's warning, made real. ──
+  function dispenseFromMachine(m) {
+    if (!m || vendedSet.has(m.key)) return
+    const pool = ['almond-water', 'almond-water', 'glowstick', 'bandage']
+    const type = pool[Math.floor(Math.random() * pool.length)]
+    const sour = type === 'almond-water' && (level?.index ?? 0) >= 2 && Math.random() < 0.4
+    const res = itemSys.grant(type, sour ? { sour: true } : {})
+    if (!res.ok) { showMessage('the machine whirs, but your hands are already full.'); return }
+    vendedSet.add(m.key)
+    renderHotbar(); blip()
+    showMessage(`the machine clunks, and a ${ITEM_NAMES[type] ?? type} drops into the tray.`)
   }
 
   // ── snapshot + persistence (solo progress & inventory — the "save game") ──
@@ -635,11 +659,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const nearExit = level.decor.nearestExit(player.x, player.y, 1.6)
     const nearNpc  = level.decor.nearestNpc(player.x, player.y, 1.8)
     const nearScrap = level.decor.nearestScrap(player.x, player.y, 1.8)
+    const nearMachine = level.decor.nearestMachine(player.x, player.y, 1.6)
 
     const itemHintEl = document.getElementById('item-hint')
     if (itemHintEl) {
       if (nearItem) {
         itemHintEl.textContent = `f · take the ${ITEM_NAMES[nearItem.type] ?? nearItem.type}`
+        itemHintEl.style.opacity = '1'
+      } else if (nearMachine && !vendedSet.has(nearMachine.key)) {
+        itemHintEl.textContent = 'f · draw from the machine'
         itemHintEl.style.opacity = '1'
       } else if (nearExit) {
         itemHintEl.textContent = `f · ${cfg.exit?.label ?? 'descend'}`
@@ -689,6 +717,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
           if (res.ok) showMessage(`you take the ${ITEM_NAMES[res.item.type] ?? res.item.type}.`)
           else if (res.reason === 'full') showMessage('your hands are full.')
           renderHotbar()
+        } else if (nearMachine && !vendedSet.has(nearMachine.key)) {
+          dispenseFromMachine(nearMachine)
         } else if (nearExit) {
           descend(nearExit.target, cfg.exit?.label)
         }
@@ -796,6 +826,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const npcEntities  = level.decor.getNpcs().map(n => ({ x: n.x, y: n.y, kind: 'npc', name: 'a lost soul' }))
     const itemEntities = itemSys.getWorldItems().map(it => ({ x: it.x, y: it.y, kind: 'item', itemType: it.type }))
     const scrapEntities = level.decor.getScraps().map(s => ({ x: s.x, y: s.y, kind: 'note', read: readSet.has(s.frag) }))
+    const machineEntities = level.decor.getMachines().map(m => ({ x: m.x, y: m.y, kind: 'machine', vended: vendedSet.has(m.key) }))
     // advance any event apparitions (render-only; no collision or damage)
     for (let i = ephemera.length - 1; i >= 0; i--) {
       const a = ephemera[i]; a.x += a.vx * dt; a.y += a.vy * dt; a.ttl -= dt
@@ -805,7 +836,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const enemyEntities = creaturesOn ? level.entitySys.getEntities() : []
     const allEntities = [
       ...enemyEntities, ...remoteEntities, ...npcEntities,
-      ...propEntities, ...exitEntities, ...itemEntities, ...scrapEntities, ...apparitionEntities,
+      ...propEntities, ...exitEntities, ...itemEntities, ...scrapEntities, ...machineEntities, ...apparitionEntities,
     ]
 
     level.gfx.render(player, (wx, wy) => level.cache.isWall(wx, wy, pcx, pcy), flicker, allEntities, fogMul,
