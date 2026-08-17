@@ -1,7 +1,7 @@
 // The Backrooms — PWA service worker (self-contained /play/ build).
 // Precaches the whole game so it installs and runs offline. Cross-origin
 // requests (the Cloudflare multiplayer relay) are never intercepted.
-const CACHE = 'backrooms-play-v4'
+const CACHE = 'backrooms-play-v5'
 const SHELL = [
   './', 'index.html',
   'game.js', 'touch.js', 'scraps.js', 'events.js', 'anchor.js', 'items.js', 'save.js', 'world.js', 'decor.js',

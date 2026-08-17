@@ -416,6 +416,8 @@ export function createRenderer(canvas, config, renderOpts = {}, worldHooks = {})
           drawExit(ent, screenX, entDist, fogT, HH, H, W)
         } else if (ent.kind === 'note') {
           drawNote(ent, screenX, entDist, fogT, HH, H, W)
+        } else if (ent.kind === 'machine') {
+          drawMachine(ent, screenX, entDist, fogT, HH, H, W)
         } else if (ent.kind === 'player' || ent.kind === 'npc') {
           drawPlayer(ent, screenX, entDist, fogT, HH, H, W, namePlates)
         } else {
@@ -762,6 +764,58 @@ export function createRenderer(canvas, config, renderOpts = {}, worldHooks = {})
     }
     wctx.restore()
     contactShadow(cx, floorY, nw * 0.7, alpha * 0.22)
+  }
+
+  // A vending machine — a mundane, unbranded drinks machine humming in the void,
+  // straight out of the backrooms canon (the almond-water machines). Cold
+  // fluorescent glass front full of label-less pale bottles against the warm
+  // yellow rooms. When ent.vended, the interior light is dead and a bottle is
+  // gone — it reads as spent from across the fog.
+  function drawMachine(ent, screenX, entDist, fogT, HH, H, W) {
+    if (screenX < 0 || screenX >= W || zbuffer[screenX] <= entDist) return
+    const unit = H / entDist
+    const floorY = HH + unit / 2
+    const mh = 1.9 * unit, mw = 0.85 * unit
+    const top = floorY - mh
+    const alpha = (1 - fogT) * 0.97
+    if (alpha < 0.05 || mw < 1) return
+    const cx = screenX, L = cx - mw / 2
+    const shade = 1 - fogT * 0.6
+    const lit = !ent.vended
+    contactShadow(cx, floorY, mw, alpha * 0.5)
+    wctx.save()
+    wctx.globalAlpha = alpha
+    const body = (m = 1) => `rgba(${(178 * shade * m) | 0},${(174 * shade * m) | 0},${(162 * shade * m) | 0},1)`
+    wctx.fillStyle = body(1); wctx.fillRect(L, top, mw, mh)
+    wctx.strokeStyle = body(0.66); wctx.lineWidth = Math.max(1, mw * 0.04); wctx.strokeRect(L, top, mw, mh)
+    // glass front — dark, with a cold interior wash when lit
+    const gx = L + mw * 0.1, gy = top + mh * 0.07, gw = mw * 0.62, gh = mh * 0.56
+    wctx.fillStyle = lit ? `rgba(28,38,42,${alpha})` : `rgba(13,15,17,${alpha})`
+    wctx.fillRect(gx, gy, gw, gh)
+    if (lit) {
+      const glow = wctx.createLinearGradient(0, gy, 0, gy + gh)
+      glow.addColorStop(0, `rgba(202,226,232,${(alpha * 0.5).toFixed(3)})`)
+      glow.addColorStop(1, `rgba(150,182,192,${(alpha * 0.14).toFixed(3)})`)
+      wctx.fillStyle = glow; wctx.fillRect(gx, gy, gw, gh)
+    }
+    // rows of pale, unbranded bottles
+    wctx.fillStyle = lit ? `rgba(216,226,230,${(alpha * 0.85).toFixed(3)})` : `rgba(118,126,128,${(alpha * 0.5).toFixed(3)})`
+    for (let c = 0; c < 3; c++) {
+      const bx = gx + gw * (0.16 + c * 0.3)
+      for (let r = 0; r < 3; r++) {
+        if (ent.vended && r === 0 && c === 1) continue     // one bottle taken
+        wctx.fillRect(bx, gy + gh * (0.12 + r * 0.3), gw * 0.11, gh * 0.2)
+      }
+    }
+    // control column — buttons + a ready light (amber when stocked, dead when spent)
+    const px = L + mw * 0.8
+    wctx.fillStyle = body(0.52); wctx.fillRect(px, top + mh * 0.1, mw * 0.12, mh * 0.5)
+    wctx.fillStyle = lit ? `rgba(232,182,64,${alpha})` : `rgba(84,66,30,${alpha})`
+    wctx.fillRect(px + mw * 0.02, top + mh * 0.12, mw * 0.07, mh * 0.045)
+    // dispense tray — a dark slot near the floor
+    wctx.fillStyle = `rgba(10,10,12,${alpha})`
+    wctx.fillRect(L + mw * 0.14, floorY - mh * 0.18, mw * 0.5, mh * 0.11)
+    wctx.restore()
   }
 
   // A cloaked standing figure: a rounded hood widening to a skirt, with faint
