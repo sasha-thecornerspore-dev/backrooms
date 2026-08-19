@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>THE FIELD MANUAL — recovered · Corner Spore</title>
+<meta name="description" content="Recovered field manual, document DOC-FIELD-00. What the Backrooms are, how to descend, how to keep your light, how to send a signal back. If you can read this, you have the gift.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23c9ba72'/%3E%3Crect x='38' y='20' width='24' height='6' fill='%23fff'/%3E%3C/svg%3E">
+<meta property="og:title" content="THE FIELD MANUAL — recovered">
+<meta property="og:description" content="What the Backrooms are, how to descend, how to keep your light, how to send a signal back.">
+<meta property="og:type" content="article">
+<style>
+  :root{
+    --y:#c9ba72; --yb:#e7dc93; --dim:#8a7f52; --faint:#5c5636;
+    --bg:#050403; --rust:#a05a3a; --ink:#020201;
+    --sig:#8fdcac; --sigb:#bff3d4;
+    --mono:"Courier New",ui-monospace,monospace; --serif:Georgia,"Times New Roman",serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--y);font-family:var(--mono);line-height:1.7;
+    overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  a{color:var(--yb);text-decoration:none}
+  .vignette{position:fixed;inset:0;pointer-events:none;z-index:50;
+    background:radial-gradient(ellipse at 50% 42%,transparent 30%,rgba(0,0,0,.55) 100%)}
+  .grain{position:fixed;inset:-50%;pointer-events:none;z-index:51;opacity:.05;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation:grain .5s steps(2) infinite}
+  @keyframes grain{0%{transform:translate(0,0)}50%{transform:translate(-4%,3%)}100%{transform:translate(3%,-2%)}}
+  .scan{position:fixed;inset:0;pointer-events:none;z-index:52;opacity:.30;
+    background:repeating-linear-gradient(to bottom,transparent 0 3px,rgba(0,0,0,.18) 3px 4px)}
+  @media(prefers-reduced-motion:reduce){.grain{animation:none}.flick{animation:none}.blink{animation:none}.beam{animation:none}}
+
+  .wrap{max-width:820px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+  .meta{font-size:11px;letter-spacing:3px;color:var(--faint);text-transform:uppercase}
+
+  /* masthead */
+  header{padding:74px 0 22px;text-align:center;position:relative;
+    background:radial-gradient(ellipse at 50% 0%,rgba(201,186,114,.08),transparent 60%)}
+  .stamp{position:absolute;top:30px;right:0;font-size:10px;letter-spacing:2px;color:var(--rust);
+    border:1px solid var(--rust);padding:4px 9px;transform:rotate(3deg)}
+  .kase{font-size:11px;letter-spacing:4px;color:var(--faint);text-transform:uppercase;margin-bottom:18px}
+  h1{font-family:var(--serif);font-weight:400;letter-spacing:.14em;
+    font-size:clamp(30px,7vw,64px);color:var(--y);
+    text-shadow:0 0 18px rgba(201,186,114,.5),0 0 60px rgba(201,186,114,.22)}
+  h1 .flick{animation:flick 7s infinite}
+  @keyframes flick{0%,17%,19%,23%,80%,100%{opacity:1}18%,22%{opacity:.4}81%{opacity:.55}}
+  .sub{font-family:var(--serif);font-style:italic;font-size:clamp(15px,2.4vw,20px);color:var(--yb);margin-top:12px}
+  .crumb{margin-top:24px;font-size:11px;letter-spacing:2px}
+  .crumb a{color:var(--faint);border-bottom:1px solid rgba(138,127,82,.4)}
+  .crumb a:hover{color:var(--y)}
+
+  /* index of contents */
+  .toc{margin:34px 0 8px;border:1px solid rgba(138,127,82,.28);padding:18px 22px;background:rgba(0,0,0,.25)}
+  .toc .t{font-size:10px;letter-spacing:4px;color:var(--dim);text-transform:uppercase;margin-bottom:12px}
+  .toc ol{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:6px 22px;counter-reset:c}
+  .toc li{counter-increment:c;font-size:13px;color:#c2b884}
+  .toc li::before{content:counter(c,decimal-leading-zero) " ";color:var(--rust);letter-spacing:1px}
+  .toc a{color:#c2b884}.toc a:hover{color:var(--yb)}
+
+  section{padding:46px 0;border-top:1px solid rgba(138,127,82,.14)}
+  .tag{font-size:11px;letter-spacing:5px;color:var(--rust);text-transform:uppercase;margin-bottom:8px}
+  .tag.sig{color:var(--sig)}
+  h2{font-family:var(--serif);font-weight:400;letter-spacing:.05em;font-size:clamp(22px,4vw,34px);
+    color:var(--y);margin-bottom:20px;line-height:1.15}
+  p{font-family:var(--serif);font-size:clamp(15px,2.1vw,18px);color:#d3c88f;max-width:66ch;margin:0 0 18px}
+  em{color:var(--yb);font-style:italic}
+  b{color:var(--yb);font-weight:400}
+  .say{font-family:var(--serif);font-style:italic;font-size:clamp(16px,2.6vw,22px);color:var(--yb);
+    border-left:2px solid var(--rust);padding:6px 0 6px 20px;margin:26px 0;max-width:58ch}
+
+  /* controls board */
+  .keys{display:grid;grid-template-columns:1fr;gap:0;margin:8px 0;border-top:1px solid rgba(138,127,82,.2)}
+  .krow{display:grid;grid-template-columns:120px 1fr;gap:20px;padding:13px 0;
+    border-bottom:1px solid rgba(138,127,82,.16);align-items:baseline}
+  @media(max-width:560px){.krow{grid-template-columns:92px 1fr;gap:14px}}
+  .cap{font-family:var(--mono);font-size:12px;letter-spacing:1px}
+  .cap kbd{display:inline-block;background:rgba(201,186,114,.10);border:1px solid rgba(201,186,114,.4);
+    border-bottom-width:2px;border-radius:3px;padding:2px 7px;color:var(--yb);font-size:11px;margin:1px 2px 1px 0}
+  .kdesc{color:#c8bd86;font-size:14.5px}
+  .kdesc b{color:var(--yb)}
+
+  .fig{display:block;margin:26px auto;border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.3);max-width:100%}
+  .fig svg{display:block;width:100%;height:auto}
+  figcaption{font-size:10px;letter-spacing:2px;color:var(--faint);text-transform:uppercase;
+    text-align:center;padding:9px 0 0}
+  .blink{animation:blink 1.4s steps(1) infinite}@keyframes blink{50%{opacity:.25}}
+
+  /* callout cards */
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0}
+  @media(max-width:600px){.cards{grid-template-columns:1fr}}
+  .card{border:1px solid rgba(138,127,82,.28);padding:16px 18px;background:rgba(201,186,114,.03)}
+  .card.sig{border-color:rgba(143,220,172,.3)}
+  .card .h{font-family:var(--serif);font-size:17px;color:var(--yb);margin-bottom:6px}
+  .card.sig .h{color:var(--sigb)}
+  .card p{font-size:13.5px;margin:0;color:#c2b884}
+
+  .warn{border:1px dashed rgba(160,90,58,.55);padding:14px 18px;margin:22px 0;background:rgba(160,90,58,.05)}
+  .warn .h{font-size:11px;letter-spacing:3px;color:var(--rust);text-transform:uppercase;margin-bottom:6px}
+  .warn p{font-size:14px;margin:0;color:#d0b49a}
+
+  .go{display:inline-block;font-family:var(--serif);font-size:16px;letter-spacing:.14em;color:var(--sigb);
+    border:1px solid rgba(143,220,172,.4);padding:11px 22px;margin-top:8px;transition:.2s}
+  .go:hover{background:rgba(143,220,172,.08);border-color:var(--sig)}
+  .go.y{color:var(--bg);background:var(--y);border:none;box-shadow:0 0 24px rgba(201,186,114,.3)}
+  .go.y:hover{background:var(--yb);box-shadow:0 0 46px rgba(201,186,114,.55)}
+
+  footer{padding:60px 0 90px;text-align:center;border-top:1px solid rgba(138,127,82,.14)}
+  footer .who{font-family:var(--serif);letter-spacing:.2em;color:var(--dim);font-size:15px}
+  footer .links{margin-top:14px;font-size:12px;letter-spacing:2px}
+  footer .links a{color:var(--faint);margin:0 10px}footer .links a:hover{color:var(--y)}
+  footer .warnline{margin-top:26px;font-size:10px;letter-spacing:4px;color:var(--faint);text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="vignette"></div><div class="grain"></div><div class="scan"></div>
+
+<div class="wrap">
+<header>
+  <div class="stamp">DO NOT DISTRIBUTE</div>
+  <div class="kase">document DOC-FIELD-00 · recovered · corner spore</div>
+  <h1>THE&nbsp;<span class="flick">FIELD</span>&nbsp;MANUAL</h1>
+  <div class="sub">for the ones who found the way in and mean to come back up</div>
+  <div class="crumb"><a href="../">◂ back to the finding</a> &nbsp;·&nbsp; <a href="../codex/">the record ▸</a></div>
+
+  <div class="toc">
+    <div class="t">what is written here</div>
+    <ol>
+      <li><a href="#gift">the gift</a></li>
+      <li><a href="#descent">the descent</a></li>
+      <li><a href="#hands">your hands — controls</a></li>
+      <li><a href="#light">the dark &amp; your light</a></li>
+      <li><a href="#things">the things &amp; the ward</a></li>
+      <li><a href="#provisions">provisions &amp; almond water</a></li>
+      <li><a href="#wish">the wish</a></li>
+      <li><a href="#beacon">the beacon</a></li>
+      <li><a href="#atlas">the atlas</a></li>
+      <li><a href="#wanderers">wanderers before you</a></li>
+      <li><a href="#comfort">comfort &amp; consent</a></li>
+      <li><a href="#descend">how to descend</a></li>
+    </ol>
+  </div>
+</header>
+
+<section id="gift">
+  <div class="tag">§ 01 — the gift</div>
+  <h2>You would not be reading this if you could not enter.</h2>
+  <p>The Backrooms are not a place you build. They are a place you <em>fall through</em> — a seam in a wall that a moment ago was solid. Most people walk past the seam their whole lives and never see it. A few can. That is the gift, and it is the only prerequisite. If the runes on the front page resolved into words for you, you already have it.</p>
+  <p>What waits on the other side is an endless interior: humming light, damp carpet, walls that go on being walls in every direction. It is quiet in the way an office is quiet after everyone has gone home and forgotten to turn off the lights. You are not the first down here. You will not be the last. This manual is what earlier wanderers wished someone had handed <em>them</em>.</p>
+  <p class="say">Reality inside is reality outside — the same, recursively, all the way down. You have not left the world. You have gone one layer deeper into it.</p>
+</section>
+
+<section id="descent">
+  <div class="tag">§ 02 — the descent</div>
+  <h2>Down is the only direction that means anything.</h2>
+  <p>The maze is layered. You begin near the surface, where the light is steady and nothing hunts. Each layer below is a little older, a little tighter, a little less interested in your comfort. You go down by finding a <b>seam</b> — a place the geometry doesn't quite close — and <b>no-clipping</b> through it. Stand at the seam and press the take key; if there is a way through, you fall.</p>
+  <p>There is one layer that is not like the others. <b>Level&nbsp;∅</b> is not procedural. It is a single real address, rendered honestly, and it does not play by the rest of the maze's rules — nothing spawns to hunt you there, and nothing you do carries a score. It is the anchor the whole descent hangs from. What it is, and why it is a real street in West Baltimore, is the subject of <a href="../codex/">the record</a>.</p>
+
+  <figure class="fig">
+    <svg viewBox="0 0 700 210" role="img" aria-label="diagram: stacked layers of the maze descending from a bright surface to Level Zero at the bottom">
+      <rect width="700" height="210" fill="#040302"/>
+      <g font-family="Courier New" font-size="11" letter-spacing="1">
+        <rect x="70" y="18"  width="560" height="30" fill="rgba(201,186,114,.14)" stroke="rgba(201,186,114,.4)"/>
+        <text x="86" y="38" fill="#e7dc93">LEVEL 1 · the hum · steady light · nothing hunts</text>
+        <rect x="90" y="56"  width="520" height="30" fill="rgba(201,186,114,.10)" stroke="rgba(201,186,114,.3)"/>
+        <text x="106" y="76" fill="#c9ba72">LEVEL 2 · the light stutters · the almond water sours</text>
+        <rect x="110" y="94" width="480" height="30" fill="rgba(160,90,58,.14)" stroke="rgba(160,90,58,.4)"/>
+        <text x="126" y="114" fill="#c78a6a">LEVEL 3 · below zero · the things wake</text>
+        <rect x="130" y="132" width="440" height="30" fill="rgba(0,0,0,.5)" stroke="rgba(138,127,82,.3)"/>
+        <text x="146" y="152" fill="#8a7f52">▼ deeper · older · tighter · —</text>
+        <rect x="150" y="170" width="400" height="30" fill="rgba(201,186,114,.06)" stroke="#c9ba72" stroke-dasharray="4 3"/>
+        <text x="166" y="190" fill="#e7dc93">LEVEL ∅ · 806 N CAREY · the one real door · no score, no hunt</text>
+      </g>
+    </svg>
+    <figcaption>the descent — not a difficulty ladder but a sinking</figcaption>
+  </figure>
+</section>
+
+<section id="hands">
+  <div class="tag">§ 03 — your hands</div>
+  <h2>Everything you can do, and the key that does it.</h2>
+  <p>Play at a keyboard, or on a touchscreen — the on-screen stick and buttons feed the same actions. This is the whole vocabulary:</p>
+  <div class="keys">
+    <div class="krow"><div class="cap"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div><div class="kdesc"><b>Move.</b> Forward, back, and strafe. The carpet is soft; your footsteps aren't.</div></div>
+    <div class="krow"><div class="cap"><kbd>SHIFT</kbd></div><div class="kdesc"><b>Run.</b> Faster, but it spends your legs — the same stamina a ward costs. Sprint dry and you walk until it comes back.</div></div>
+    <div class="krow"><div class="cap"><kbd>MOUSE</kbd> · <kbd>◂ ▸</kbd></div><div class="kdesc"><b>Look.</b> Mouse or the arrow keys. Sensitivity is yours to set.</div></div>
+    <div class="krow"><div class="cap"><kbd>F</kbd></div><div class="kdesc"><b>Take / no-clip.</b> Pick up what's in front of you — or, standing at a seam, fall through it to the layer below.</div></div>
+    <div class="krow"><div class="cap"><kbd>Q</kbd></div><div class="kdesc"><b>Use</b> whatever is in your hand.</div></div>
+    <div class="krow"><div class="cap"><kbd>1</kbd>–<kbd>6</kbd> · <kbd>X</kbd></div><div class="kdesc"><b>Choose &amp; drop.</b> Number keys pick the held item; X sets it down.</div></div>
+    <div class="krow"><div class="cap"><kbd>E</kbd></div><div class="kdesc"><b>Speak.</b> To a wanderer, to a note on the wall — and, to a <em>presence</em> in the dark, to state a request. See <a href="#wish">the wish</a>.</div></div>
+    <div class="krow"><div class="cap"><kbd>SPACE</kbd></div><div class="kdesc"><b>Ward.</b> A shove of will and light. It knocks the things back and leaves them reeling; ward one enough and it comes apart. Costs your legs. See <a href="#things">the ward</a>.</div></div>
+    <div class="krow"><div class="cap"><kbd>L</kbd></div><div class="kdesc"><b>Light.</b> Flashlight on or off. With it off, <em>the dark leans in</em> — and takes your sanity with it.</div></div>
+    <div class="krow"><div class="cap"><kbd>B</kbd></div><div class="kdesc"><b>Beacon.</b> Push a signal out of the maze and into the real world. See <a href="#beacon">the beacon</a>.</div></div>
+    <div class="krow"><div class="cap"><kbd>ENTER</kbd> · <kbd>M</kbd></div><div class="kdesc"><b>Chat &amp; music.</b> Enter to speak to others who are down here with you; M toggles the score.</div></div>
+  </div>
+</section>
+
+<section id="light">
+  <div class="tag">§ 04 — the dark &amp; your light</div>
+  <h2>Sanity is the resource you did not know you were spending.</h2>
+  <p>There is no health bar that matters more than your <b>mind</b>. The dark eats at it. Being hunted eats at it. Watch it long enough on a low floor and the screen itself begins to wash and stain — that is not a bug, that is you, coming apart at the edges.</p>
+  <p>Three things put it back. <b>Light</b> — keep the flashlight on; the beam is a wall the dark won't cross. <b>Almond water</b> — a swallow steadies the lights and the head both. And <b>other people</b> — a wanderer's note, a stranger met in the same hall. Solitude in here has a cost, and company is the cheapest medicine there is.</p>
+  <figure class="fig">
+    <svg viewBox="0 0 700 150" role="img" aria-label="illustration: a cone of flashlight beam holding back the surrounding dark">
+      <rect width="700" height="150" fill="#040302"/>
+      <rect width="700" height="150" fill="rgba(0,0,0,.55)"/>
+      <g class="beam">
+        <path d="M60,75 L640,20 L640,130 Z" fill="rgba(201,186,114,.14)"/>
+        <path d="M60,75 L640,45 L640,105 Z" fill="rgba(231,220,147,.10)"/>
+      </g>
+      <circle cx="60" cy="75" r="6" fill="#e7dc93"/>
+      <text x="70" y="60" font-family="Courier New" font-size="11" fill="#8a7f52">you</text>
+      <text x="470" y="140" font-family="Courier New" font-size="11" fill="#5c5636" letter-spacing="2">the dark does not cross the beam</text>
+    </svg>
+    <figcaption>light is not for seeing — it is for keeping</figcaption>
+  </figure>
+</section>
+
+<section id="things">
+  <div class="tag">§ 05 — the things &amp; the ward</div>
+  <h2>Below zero, you are not alone, and not everything is a wanderer.</h2>
+  <p>On the deep floors, things move that are not people and were never people. They hunt by nearness. When one reaches you it takes something — your body if damage is on, your mind either way. You cannot outrun all of them forever.</p>
+  <p>So you <b>ward</b>. Press space and throw a shove of will and light: it staggers whatever is closest, knocks it back, buys you the second you needed. A thing that is reeling cannot reach you. Ward the same one enough times and it doesn't just retreat — it <em>comes apart</em>. The ward spends the same legs a sprint does, so you cannot do it forever either. Warding and running are the same budget; spend it well.</p>
+  <div class="warn">
+    <div class="h">⚠ if you would rather not be hunted</div>
+    <p>You can turn the creatures off, and you can turn damage off, in settings — see <a href="#comfort">comfort &amp; consent</a>. Nothing about the deeper story requires you to be afraid for your body.</p>
+  </div>
+</section>
+
+<section id="provisions">
+  <div class="tag">§ 06 — provisions</div>
+  <h2>Almond water, and the reason not to trust it.</h2>
+  <p>The one provision the maze reliably offers is <b>almond water</b> — a swallow restores your body and steadies your mind, and for a while afterward the lights hold calm. You will find it on shelves, and sometimes a cold, unbranded machine will vend you one if you ask it. Carry glowsticks and bandages when you can; a held light and a stopped wound both buy time.</p>
+  <div class="warn">
+    <div class="h">⚠ don't trust the almond water on the deeper floors</div>
+    <p>Below the second layer the water can turn. It looks the same. It tastes almost the same. But a <em>sour</em> bottle heals nothing and takes a bite out of your mind instead — the maze offering you a hand and closing it. The wanderers wrote this warning on the walls long before you got here. Believe them.</p>
+  </div>
+</section>
+
+<section id="wish">
+  <div class="tag">§ 07 — the wish</div>
+  <h2>Sometimes the dark will let you ask for something.</h2>
+  <p>Now and then, near a <em>presence</em> — a listening quiet, not a thing that hunts — pressing speak opens a different kind of prompt. It asks you to <b>state your request</b>. You may ask for anything, in your own words.</p>
+  <p>Understand what this is. Your request is <em>received</em>. Whether it is <em>heard</em> is another matter, and not one the maze promises to settle in your favor. A wish is a door you knock on, not a lever you pull. Ask plainly. Ask for what you actually want. Then keep walking, because the answer, if it comes, comes on its own schedule.</p>
+  <p class="say">Your request has been received. Whether it is heard is another matter.</p>
+</section>
+
+<section id="beacon">
+  <div class="tag sig">§ 08 — the beacon</div>
+  <h2>The one thing in here that reaches out there.</h2>
+  <p>Everything else you do stays in the maze. The <b>beacon</b> does not. Press B and you push a signal out through the seam and into the real world — a message that arrives on a channel <em>you</em> chose, on a device that is not this one. It is the maze's single honest window: proof, to someone outside, that you were down here and pushing back.</p>
+  <p>You arm it in settings, under <b>SIGNAL / BEACON</b>. Point it at a topic or a web address you control, pick what it should do when it fires, and from then on B is a hand reaching up out of the floor. It runs warm — fire it and it needs a moment before it will fire again. Nothing else in the Backrooms leaves the Backrooms. This does.</p>
+  <div class="cards">
+    <div class="card sig"><div class="h">arm it</div><p>Settings → SIGNAL / BEACON → set a target (a topic, or an https URL you own) and an effect.</p></div>
+    <div class="card sig"><div class="h">fire it</div><p>Press <b>B</b> in the maze. The signal leaves. Somewhere outside, something you set up answers.</p></div>
+  </div>
+</section>
+
+<section id="atlas">
+  <div class="tag sig">§ 09 — the atlas</div>
+  <h2>806 is the first door. It is not the last.</h2>
+  <p>Other doors are beginning to surface in the real world, and where they surface they go up on a shared map — <b>the atlas</b> — that anyone with the gift can open. There are two ways to reach a door. <b>Stand where it stands:</b> walk to the real place; presence is free and it is remembered most deeply. Or <b>drop in from anywhere:</b> paste a pin and reach a far door from your chair — but distance has a price, and what you leave behind is faint.</p>
+  <p>Nothing on the atlas is ever spent. Every visitor leaves a layer, and the door only deepens — the last to arrive reads more than the first ever could.</p>
+  <a class="go" href="../atlas/">▸ open the atlas</a>
+</section>
+
+<section id="wanderers">
+  <div class="tag">§ 10 — wanderers before you</div>
+  <h2>You are reading a paper trail that never quite ends.</h2>
+  <p>Scattered through the halls are <b>scraps</b> — notes, a page torn from a journal, a line scratched into the drywall by someone who came through before you. Walk up and press speak to read one. They are out of order, because the person who left them was out of order too, and together they tell a story you assemble by wandering. Finding them steadies you a little — proof you are not the only one who was ever here.</p>
+  <p>The longest thread belongs to a wanderer who signs only <em>m.</em> Read enough of it and you will start to suspect m. never found the way back up. Read all of it and you will know why this manual exists.</p>
+</section>
+
+<section id="comfort">
+  <div class="tag">§ 11 — comfort &amp; consent</div>
+  <h2>You set the terms of your own descent.</h2>
+  <p>This is meant to unsettle, not to harm. Everything that could frighten you is yours to turn down. In settings you can switch off the <b>creatures</b> entirely, switch off <b>damage</b> so nothing can hurt your body (peaceful), soften the <b>film grain</b>, quiet the <b>ambience</b> and <b>music</b>, and tune <b>mouse sensitivity</b> and <b>head-bob</b> until it sits right. None of it changes the story. All of it changes how hard the story leans on you.</p>
+  <div class="cards">
+    <div class="card"><div class="h">peaceful</div><p>Damage off, creatures off. Walk the whole maze as a place, not a threat.</p></div>
+    <div class="card"><div class="h">comfort</div><p>Grain down, motion down, sensitivity to taste. The dread is optional; the record is not.</p></div>
+  </div>
+</section>
+
+<section id="descend">
+  <div class="tag">§ 12 — how to descend</div>
+  <h2>The way in is a program. It remembers where your body is.</h2>
+  <p>Install it and it updates itself. It keeps its own record of where, in the real world, you fell in — because the atlas needs to know where the doors are, and the deepest door is always the one nearest you. The lights do not turn off. When you are ready:</p>
+  <p style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-top:26px">
+    <a class="go y" href="../play/">▸ play in your browser</a>
+    <a class="go" href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">download for desktop</a>
+  </p>
+</section>
+</div>
+
+<footer>
+  <div class="who">THE CORNER SPORE</div>
+  <div class="links">
+    <a href="../">the finding</a>·
+    <a href="../codex/">the record</a>·
+    <a href="../atlas/">the atlas</a>·
+    <a href="../play/">play</a>
+  </div>
+  <div class="warnline">you were not supposed to find this</div>
+</footer>
+
+<script>
+  // for the curious — same channel as the finding
+  console.log('%cthe beacon is the only thing in here that reaches out there.','color:#8fdcac;font:italic 14px Georgia');
+  console.log('%cward and run are the same budget. spend it well.','color:#a05a3a');
+</script>
+</body>
+</html>

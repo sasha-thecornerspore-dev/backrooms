@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>THE RECORD — 806 N Carey · Corner Spore</title>
+<meta name="description" content="The recovered record behind Level ∅. Why the one real door in the Backrooms is a sealed rowhouse in West Baltimore, and the four paper instruments — 1937, 1961, 2004, and the loans that came back — that made it.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23c9ba72'/%3E%3Crect x='38' y='20' width='24' height='6' fill='%23fff'/%3E%3C/svg%3E">
+<meta property="og:title" content="THE RECORD — 806 N Carey">
+<meta property="og:description" content="Why the one real door in the Backrooms is a sealed rowhouse in West Baltimore — and the four paper instruments that made it.">
+<meta property="og:type" content="article">
+<style>
+  :root{
+    --y:#c9ba72; --yb:#e7dc93; --dim:#8a7f52; --faint:#5c5636;
+    --bg:#050403; --rust:#a05a3a; --rustb:#c47a54; --ink:#020201;
+    --sig:#8fdcac; --sigb:#bff3d4;
+    --mono:"Courier New",ui-monospace,monospace; --serif:Georgia,"Times New Roman",serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--y);font-family:var(--mono);line-height:1.7;
+    overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  a{color:var(--yb);text-decoration:none}
+  .vignette{position:fixed;inset:0;pointer-events:none;z-index:50;
+    background:radial-gradient(ellipse at 50% 42%,transparent 30%,rgba(0,0,0,.55) 100%)}
+  .grain{position:fixed;inset:-50%;pointer-events:none;z-index:51;opacity:.05;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation:grain .5s steps(2) infinite}
+  @keyframes grain{0%{transform:translate(0,0)}50%{transform:translate(-4%,3%)}100%{transform:translate(3%,-2%)}}
+  .scan{position:fixed;inset:0;pointer-events:none;z-index:52;opacity:.28;
+    background:repeating-linear-gradient(to bottom,transparent 0 3px,rgba(0,0,0,.18) 3px 4px)}
+  @media(prefers-reduced-motion:reduce){.grain{animation:none}.flick{animation:none}
+    .draw,.pulse,.stampin,.reveal{animation:none!important}
+    .reveal{opacity:1!important;transform:none!important}}
+
+  .wrap{max-width:860px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+
+  /* masthead */
+  header{padding:78px 0 20px;text-align:center;position:relative;
+    background:radial-gradient(ellipse at 50% 0%,rgba(160,90,58,.09),transparent 60%)}
+  .stamp{position:absolute;top:30px;right:0;font-size:10px;letter-spacing:2px;color:var(--rust);
+    border:1px solid var(--rust);padding:4px 9px;transform:rotate(2.5deg)}
+  .kase{font-size:11px;letter-spacing:4px;color:var(--faint);text-transform:uppercase;margin-bottom:18px}
+  h1{font-family:var(--serif);font-weight:400;letter-spacing:.1em;
+    font-size:clamp(30px,7.5vw,66px);color:var(--y);
+    text-shadow:0 0 18px rgba(201,186,114,.5),0 0 60px rgba(201,186,114,.2)}
+  .flick{animation:flick 7s infinite}
+  @keyframes flick{0%,17%,19%,23%,80%,100%{opacity:1}18%,22%{opacity:.4}81%{opacity:.55}}
+  .sub{font-family:var(--serif);font-style:italic;font-size:clamp(15px,2.4vw,20px);color:var(--yb);margin-top:12px;max-width:60ch;margin-left:auto;margin-right:auto}
+  .addr{font-size:12px;letter-spacing:3px;color:var(--faint);text-transform:uppercase;margin-top:18px}
+  .crumb{margin-top:24px;font-size:11px;letter-spacing:2px}
+  .crumb a{color:var(--faint);border-bottom:1px solid rgba(138,127,82,.4)}
+  .crumb a:hover{color:var(--y)}
+
+  .toc{margin:34px 0 8px;border:1px solid rgba(138,127,82,.28);padding:18px 22px;background:rgba(0,0,0,.25);text-align:left}
+  .toc .t{font-size:10px;letter-spacing:4px;color:var(--dim);text-transform:uppercase;margin-bottom:12px}
+  .toc ol{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px 22px;counter-reset:c}
+  .toc li{counter-increment:c;font-size:13px;color:#c2b884}
+  .toc li::before{content:counter(c,decimal-leading-zero) " ";color:var(--rust);letter-spacing:1px}
+  .toc a{color:#c2b884}.toc a:hover{color:var(--yb)}
+
+  section{padding:52px 0;border-top:1px solid rgba(138,127,82,.14)}
+  .tag{font-size:11px;letter-spacing:5px;color:var(--rust);text-transform:uppercase;margin-bottom:10px}
+  .tag.sig{color:var(--sig)}
+  h2{font-family:var(--serif);font-weight:400;letter-spacing:.04em;font-size:clamp(23px,4.4vw,38px);
+    color:var(--y);margin-bottom:8px;line-height:1.14}
+  .yr{font-family:var(--serif);font-size:clamp(30px,7vw,64px);color:var(--rust);letter-spacing:.02em;line-height:1;margin-bottom:6px}
+  p{font-family:var(--serif);font-size:clamp(16px,2.2vw,19px);color:#d3c88f;max-width:68ch;margin:0 0 20px}
+  em{color:var(--yb);font-style:italic}
+  b{color:var(--yb);font-weight:400}
+  .lead{font-size:clamp(17px,2.6vw,22px);color:#d8cd96}
+  .say{font-family:var(--serif);font-style:italic;font-size:clamp(17px,2.8vw,24px);color:var(--yb);
+    border-left:2px solid var(--rust);padding:8px 0 8px 22px;margin:30px 0;max-width:58ch}
+
+  figure{margin:30px 0}
+  .fig{display:block;border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.32);max-width:100%}
+  .fig svg{display:block;width:100%;height:auto}
+  figcaption{font-size:10px;letter-spacing:2px;color:var(--faint);text-transform:uppercase;padding:9px 2px 0}
+  figcaption a{color:var(--dim);border-bottom:1px solid rgba(138,127,82,.4)}
+  figcaption a::before{content:"↗ "}
+  figcaption a:hover{color:var(--sig)}
+
+  /* scroll reveal for figures/quotes */
+  .js .reveal{opacity:0;transform:translateY(20px);transition:opacity .9s,transform .9s}
+  .js .reveal.in{opacity:1;transform:none}
+
+  /* animated map line */
+  .redline{fill:none;stroke:var(--rust);stroke-width:3;
+    stroke-dasharray:1400;stroke-dashoffset:1400}
+  .in .redline{animation:draw 2.6s ease-out forwards}
+  @keyframes draw{to{stroke-dashoffset:0}}
+  .gradeD{opacity:0}.in .gradeD{animation:fadein 1s ease-out .9s forwards}
+  @keyframes fadein{to{opacity:1}}
+
+  /* condemnation stamp */
+  .stampin{opacity:0;transform:rotate(-14deg) scale(1.5)}
+  .in .stampin{animation:stampin .5s cubic-bezier(.2,1.4,.4,1) .5s forwards}
+  @keyframes stampin{to{opacity:1;transform:rotate(-6deg) scale(1)}}
+
+  .pulse{transform-box:fill-box;transform-origin:center;animation:pulse 3s ease-out infinite}
+  @keyframes pulse{0%{r:3;opacity:.7}70%{opacity:0}100%{r:30;opacity:0}}
+
+  .diptych{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid rgba(138,127,82,.3)}
+  @media(max-width:600px){.diptych{grid-template-columns:1fr}}
+  .diptych svg{display:block;width:100%;height:auto}
+  .diptych .half{position:relative}
+  .diptych .half+.half{border-left:1px solid rgba(138,127,82,.3)}
+  @media(max-width:600px){.diptych .half+.half{border-left:none;border-top:1px solid rgba(138,127,82,.3)}}
+  .diptych .lab{position:absolute;left:10px;bottom:8px;font-size:9px;letter-spacing:2px;color:var(--faint);text-transform:uppercase}
+
+  /* scrap fragments */
+  .scrap{border-left:2px solid rgba(138,127,82,.4);padding:4px 0 4px 20px;margin:20px 0;
+    font-family:var(--mono);font-size:14px;color:#bdb180;max-width:60ch;white-space:pre-wrap}
+  .scrap .sig-m{color:var(--faint);font-style:italic}
+
+  /* sources */
+  .src-list{display:grid;gap:12px;margin-top:8px}
+  .src-item{border:1px solid rgba(138,127,82,.28);padding:15px 18px;background:rgba(201,186,114,.03);transition:.2s;display:block}
+  .src-item:hover{background:rgba(201,186,114,.08);border-color:var(--y);transform:translateX(4px)}
+  .src-item .n{font-family:var(--serif);font-size:16px;color:var(--yb);margin-bottom:3px}
+  .src-item .u{font-size:10px;letter-spacing:1px;color:var(--faint)}
+  .src-item .u::before{content:"↗ "}
+  .src-item:hover .u{color:var(--sig)}
+
+  .go{display:inline-block;font-family:var(--serif);font-size:16px;letter-spacing:.14em;color:var(--sigb);
+    border:1px solid rgba(143,220,172,.4);padding:11px 22px;margin-top:8px;transition:.2s}
+  .go:hover{background:rgba(143,220,172,.08);border-color:var(--sig)}
+
+  footer{padding:60px 0 90px;text-align:center;border-top:1px solid rgba(138,127,82,.14)}
+  footer .who{font-family:var(--serif);letter-spacing:.2em;color:var(--dim);font-size:15px}
+  footer .links{margin-top:14px;font-size:12px;letter-spacing:2px}
+  footer .links a{color:var(--faint);margin:0 10px}footer .links a:hover{color:var(--y)}
+  footer .warnline{margin-top:26px;font-size:10px;letter-spacing:4px;color:var(--faint);text-transform:uppercase}
+  .note{font-size:12px;color:var(--faint);font-style:italic;max-width:66ch;margin-top:22px}
+</style>
+</head>
+<body>
+<div class="vignette"></div><div class="grain"></div><div class="scan"></div>
+
+<div class="wrap">
+<header>
+  <div class="stamp">SEALED · EXTENSION</div>
+  <div class="kase">document DOC-∅-806 + DOC-GEO-01 · the record</div>
+  <h1>THE&nbsp;<span class="flick">RECORD</span></h1>
+  <div class="sub">Why the one real door in the Backrooms is a sealed rowhouse in West Baltimore — and the paper that made it a door.</div>
+  <div class="addr">806 North Carey Street · Harlem Park · notice 30150A · status EXTENSION</div>
+  <div class="crumb"><a href="../">◂ the finding</a> &nbsp;·&nbsp; <a href="../manual/">the field manual ▸</a></div>
+
+  <div class="toc">
+    <div class="t">the record contains</div>
+    <ol>
+      <li><a href="#tether">the tether — your county is a world</a></li>
+      <li><a href="#door">the one real door</a></li>
+      <li><a href="#map">1937 — the map</a></li>
+      <li><a href="#plan">1961 — the plan</a></li>
+      <li><a href="#notice">2004 — the notice</a></li>
+      <li><a href="#loans">— the loans came back</a></li>
+      <li><a href="#skin">the skin — false stone, false windows</a></li>
+      <li><a href="#wanderers">the wanderers</a></li>
+      <li><a href="#sources">where the record lives</a></li>
+    </ol>
+  </div>
+</header>
+
+<!-- 01 THE TETHER -->
+<section id="tether">
+  <div class="tag sig">§ 01 — the tether · DOC-GEO-01</div>
+  <h2>Your county is a world.</h2>
+  <p class="lead">The Backrooms are not somewhere else. They are <em>here</em>, one layer down, and the maze knows exactly where your body is standing when you fall in.</p>
+  <p>Every descent is tethered to real ground. The seam you drop through opens beneath the actual place you were — so the walls you walk are drawn from the county you are in, and the door nearest you in the real world is always the <em>deepest</em> one available to you in the maze. Presence is the whole physics of it. Walk to a real place and the layer under it remembers you deeply; reach for a far one from your chair and what you leave behind is faint. Distance costs. Nearness is free.</p>
+  <p>This is why the way in asks where you are, and keeps asking. It is not tracking you for anyone's benefit but the map's — it needs to know where the doors are, because the doors are real coordinates and the atlas is the registry of every one that has surfaced. The game hands the same instrument that has always sorted people by their ground back to <em>you</em>: a map, and the standing to read it.</p>
+  <figure class="reveal">
+    <svg class="fig" viewBox="0 0 700 240" role="img" aria-label="diagram: a real address on the surface, with a seam opening directly beneath it into the layer below">
+      <rect width="700" height="240" fill="#040302"/>
+      <line x1="0" y1="96" x2="700" y2="96" stroke="rgba(201,186,114,.35)" stroke-width="1"/>
+      <text x="20" y="30" font-family="Courier New" font-size="11" fill="#8a7f52" letter-spacing="2">THE SURFACE — where your body is</text>
+      <g font-family="Courier New" font-size="10" fill="#5c5636">
+        <rect x="300" y="52" width="30" height="34" fill="none" stroke="rgba(201,186,114,.5)"/>
+        <rect x="330" y="52" width="30" height="34" fill="rgba(201,186,114,.10)" stroke="rgba(201,186,114,.6)"/>
+        <rect x="360" y="52" width="30" height="34" fill="none" stroke="rgba(201,186,114,.5)"/>
+        <text x="345" y="46" fill="#e7dc93" text-anchor="middle" font-size="9">you</text>
+      </g>
+      <circle class="pulse" cx="345" cy="96" r="3" fill="none" stroke="#8fdcac" stroke-width="1.4"/>
+      <line x1="345" y1="96" x2="345" y2="150" stroke="rgba(143,220,172,.4)" stroke-dasharray="3 3"/>
+      <text x="20" y="140" font-family="Courier New" font-size="11" fill="#8a7f52" letter-spacing="2">ONE LAYER DOWN — drawn from your ground</text>
+      <g stroke="rgba(143,220,172,.16)">
+        <line x1="0" y1="170" x2="700" y2="170"/><line x1="0" y1="200" x2="700" y2="200"/>
+        <line x1="120" y1="150" x2="120" y2="240"/><line x1="240" y1="150" x2="240" y2="240"/>
+        <line x1="345" y1="150" x2="345" y2="240"/><line x1="470" y1="150" x2="470" y2="240"/><line x1="590" y1="150" x2="590" y2="240"/>
+      </g>
+      <circle cx="345" cy="200" r="4" fill="#8fdcac"/>
+      <text x="355" y="204" font-family="Courier New" font-size="10" fill="#8fdcac">the door nearest you — the deepest one</text>
+    </svg>
+    <figcaption>the seam opens beneath the real coordinate — nearness is free, distance is faint</figcaption>
+  </figure>
+</section>
+
+<!-- 02 THE DOOR -->
+<section id="door">
+  <div class="tag">§ 02 — the one real door</div>
+  <h2>Of everything a renderer could point at, it was built to tell the truth about this block.</h2>
+  <p>Every version of the Backrooms begins at one real address. Not a set. Not a render of somewhere. A door you could stand in front of. The engine that draws the maze <em>fakes every surface</em>, because faking surfaces is the only thing a raycaster can do. And the 800 block of North Carey is <em>also</em> made of faked surfaces — but those were faked by hand, over sixty years, by the city itself.</p>
+  <p class="say">The medium and the subject are the same technique. Of everything this renderer could have pointed at, the one subject it was accidentally built to tell the truth about is a block that was made out of illusions.</p>
+  <p>Four instruments did the work. Each one is a piece of paper. Each one is still on file. Read in order, they are not four events — they are one continuous sentence, and it has never reached a period.</p>
+</section>
+
+<!-- 03 THE MAP -->
+<section id="map">
+  <div class="tag">§ 03 — the map</div>
+  <div class="yr">1937</div>
+  <h2>A federal map rings the block in red and grades the ground <em>hazardous</em>.</h2>
+  <p>The Home Owners' Loan Corporation — a New Deal agency — drew <b>Residential Security Maps</b> of American cities to tell lenders where mortgages were safe. Baltimore's map sorts every neighborhood A through D and colors it: green for "best," down to <b>red for "hazardous," grade&nbsp;D</b>. Black West Baltimore is ringed in red.</p>
+  <p>Not one building was inspected to earn that grade. The hazard the surveyors scored was the <em>people</em> — the appraisal forms recorded the racial makeup of a neighborhood as a defect of the land itself, an "infiltration" that lowered the value of the ground. That is the lie the whole game is built to indict: not decay, not danger, but a government instrument ruling that human beings made land worth less by living on it. Every later paper on this block only enforces the red line drawn here.</p>
+  <figure class="reveal">
+    <svg class="fig" viewBox="0 0 700 300" role="img" aria-label="illustration: a 1937 residential security map, its district being outlined in red and stamped grade D hazardous">
+      <rect width="700" height="300" fill="#04120a"/>
+      <!-- graded districts -->
+      <rect x="40" y="30" width="150" height="110" fill="rgba(120,180,120,.12)" stroke="rgba(120,180,120,.4)"/>
+      <text x="52" y="50" font-family="Courier New" font-size="12" fill="rgba(150,200,150,.7)">A</text>
+      <rect x="200" y="30" width="150" height="110" fill="rgba(120,150,200,.10)" stroke="rgba(120,150,200,.4)"/>
+      <text x="212" y="50" font-family="Courier New" font-size="12" fill="rgba(150,180,220,.7)">B</text>
+      <rect x="40" y="150" width="150" height="120" fill="rgba(201,186,114,.10)" stroke="rgba(201,186,114,.4)"/>
+      <text x="52" y="170" font-family="Courier New" font-size="12" fill="rgba(220,200,120,.7)">C</text>
+      <!-- the redlined district -->
+      <rect x="210" y="150" width="450" height="120" fill="rgba(160,90,58,.16)"/>
+      <path class="redline" d="M212,152 L658,152 L658,268 L212,268 Z"/>
+      <g class="gradeD" font-family="Georgia">
+        <text x="435" y="220" fill="#c47a54" font-size="64" font-weight="bold" text-anchor="middle">D</text>
+        <text x="435" y="248" fill="#a05a3a" font-size="13" letter-spacing="4" text-anchor="middle">"HAZARDOUS"</text>
+      </g>
+      <text x="20" y="290" font-family="Courier New" font-size="10" fill="#5c5636" letter-spacing="1">HOLC RESIDENTIAL SECURITY MAP · BALTIMORE · 1937 — the block is inside the red</text>
+    </svg>
+    <figcaption><a href="https://dsl.richmond.edu/panorama/redlining/" target="_blank" rel="noopener noreferrer">the map lives at Mapping Inequality — University of Richmond</a></figcaption>
+  </figure>
+</section>
+
+<!-- 04 THE PLAN -->
+<section id="plan">
+  <div class="tag">§ 04 — the plan</div>
+  <div class="yr">1961</div>
+  <h2>Urban renewal clears the <em>inside</em> of the block and leaves parks no one asked for.</h2>
+  <p>A generation after the red line, the city came back with a plan. In Harlem Park, "urban renewal" meant hollowing out the <em>interiors</em> of the residential blocks — demolishing the alley houses and back structures crowded inside each square of rowhouses — to open the middle into fenced green <b>inner-block parks</b>. The plan, adopted in 1961, envisioned twenty-nine of them.</p>
+  <p>The residents did not ask for the parks. The city did not fully intend to keep them. Cut off from the street, hard to see and harder to maintain, many became exactly what you leave in a place you have already decided to write off. The plan that promised to open the block up is the plan that hollowed it out — and the hollow it left is, sixty years later, the only unsealed way in.</p>
+  <figure class="reveal">
+    <svg class="fig" viewBox="0 0 700 240" role="img" aria-label="illustration: a rowhouse block hollowed at its centre into a fenced inner-block park, the interior alley houses erased">
+      <rect width="700" height="240" fill="#040302"/>
+      <rect x="120" y="30" width="460" height="180" fill="none" stroke="rgba(138,127,82,.5)"/>
+      <!-- perimeter rowhouses -->
+      <g fill="rgba(201,186,114,.4)">
+        <!-- top row -->
+        <rect x="128" y="36" width="20" height="16"/><rect x="152" y="36" width="20" height="16"/><rect x="176" y="36" width="20" height="16"/><rect x="200" y="36" width="20" height="16"/><rect x="224" y="36" width="20" height="16"/><rect x="248" y="36" width="20" height="16"/><rect x="272" y="36" width="20" height="16"/><rect x="296" y="36" width="20" height="16"/><rect x="320" y="36" width="20" height="16"/><rect x="344" y="36" width="20" height="16"/><rect x="368" y="36" width="20" height="16"/><rect x="392" y="36" width="20" height="16"/><rect x="416" y="36" width="20" height="16"/><rect x="440" y="36" width="20" height="16"/><rect x="464" y="36" width="20" height="16"/><rect x="488" y="36" width="20" height="16"/><rect x="512" y="36" width="20" height="16"/><rect x="536" y="36" width="20" height="16"/><rect x="560" y="36" width="12" height="16"/>
+        <!-- bottom row -->
+        <rect x="128" y="188" width="20" height="16"/><rect x="152" y="188" width="20" height="16"/><rect x="176" y="188" width="20" height="16"/><rect x="200" y="188" width="20" height="16"/><rect x="224" y="188" width="20" height="16"/><rect x="248" y="188" width="20" height="16"/><rect x="272" y="188" width="20" height="16"/><rect x="296" y="188" width="20" height="16"/><rect x="320" y="188" width="20" height="16"/><rect x="344" y="188" width="20" height="16"/><rect x="368" y="188" width="20" height="16"/><rect x="392" y="188" width="20" height="16"/><rect x="416" y="188" width="20" height="16"/><rect x="440" y="188" width="20" height="16"/><rect x="464" y="188" width="20" height="16"/><rect x="488" y="188" width="20" height="16"/><rect x="512" y="188" width="20" height="16"/><rect x="536" y="188" width="20" height="16"/><rect x="560" y="188" width="12" height="16"/>
+      </g>
+      <!-- the hollow -->
+      <rect x="210" y="72" width="280" height="96" fill="rgba(143,220,172,.05)" stroke="rgba(143,220,172,.35)" stroke-dasharray="4 3"/>
+      <!-- erased interior streets -->
+      <line x1="230" y1="120" x2="470" y2="120" stroke="rgba(160,90,58,.5)" stroke-dasharray="2 4"/>
+      <line x1="350" y1="80" x2="350" y2="160" stroke="rgba(160,90,58,.5)" stroke-dasharray="2 4"/>
+      <text x="350" y="116" font-family="Courier New" font-size="10" fill="rgba(143,220,172,.6)" text-anchor="middle">INNER-BLOCK PARK</text>
+      <text x="350" y="132" font-family="Courier New" font-size="8" fill="rgba(160,90,58,.7)" text-anchor="middle">interior demolished — the way in</text>
+    </svg>
+    <figcaption><a href="https://baltimoreheritage.org/programs/harlem-park/" target="_blank" rel="noopener noreferrer">the inner-block parks — Baltimore Heritage, Harlem Park</a></figcaption>
+  </figure>
+</section>
+
+<!-- 05 THE NOTICE -->
+<section id="notice">
+  <div class="tag">§ 05 — the notice</div>
+  <div class="yr">2004</div>
+  <h2>Notice 30150A. The file is opened. It is never closed.</h2>
+  <p>In 2004 a vacant-building notice — <b>30150A</b> — is issued against 806 N Carey. It advises that the structure is <b>"condemned as being unsafe or dangerous for occupancy or use,"</b> and that <b>"the public is warned to keep away."</b> A front door made of paper closes over a front door made of concrete block.</p>
+  <p>And then nothing resolves. The notice is never appealed, never demolished, never lifted. Its status is <b>EXTENSION</b> — extended, and extended, and extended again, for more than twenty years. It is the most Backrooms word in the whole dataset. A file that is never closed is a room you can never leave. That is the door you fall through.</p>
+  <figure class="reveal">
+    <svg class="fig" viewBox="0 0 700 260" role="img" aria-label="illustration: a condemnation placard stamped CONDEMNED, notice 30150A, status EXTENSION">
+      <rect width="700" height="260" fill="#040302"/>
+      <rect x="180" y="34" width="340" height="200" fill="rgba(0,0,0,.45)" stroke="rgba(138,127,82,.55)" stroke-width="2"/>
+      <rect x="190" y="44" width="320" height="180" fill="none" stroke="rgba(138,127,82,.3)"/>
+      <text x="350" y="92" font-family="Georgia" font-size="26" fill="#c9ba72" text-anchor="middle" letter-spacing="3">CONDEMNED</text>
+      <line x1="230" y1="112" x2="470" y2="112" stroke="rgba(138,127,82,.35)"/>
+      <text x="350" y="138" font-family="Courier New" font-size="13" fill="#8a7f52" text-anchor="middle" letter-spacing="1">unsafe or dangerous for occupancy or use</text>
+      <text x="350" y="160" font-family="Courier New" font-size="13" fill="#8a7f52" text-anchor="middle" letter-spacing="1">the public is warned to keep away</text>
+      <text x="350" y="200" font-family="Courier New" font-size="12" fill="#5c5636" text-anchor="middle" letter-spacing="2">NOTICE 30150A · 2004 → —</text>
+      <g class="stampin"><text x="500" y="215" font-family="Courier New" font-size="26" fill="#a05a3a" text-anchor="middle" letter-spacing="3" style="opacity:.9">EXTENSION</text>
+      <rect x="410" y="190" width="180" height="36" fill="none" stroke="#a05a3a" stroke-width="2"/></g>
+    </svg>
+    <figcaption><a href="https://codes.baltimorecity.gov/us/md/cities/baltimore/code/building-codes/II/120" target="_blank" rel="noopener noreferrer">condemnation §120 — Baltimore City building code</a></figcaption>
+  </figure>
+</section>
+
+<!-- 06 THE LOANS -->
+<section id="loans">
+  <div class="tag">§ 06 — the fourth instrument</div>
+  <div class="yr">the map came back</div>
+  <h2>First they drew the line to keep the money out. Then they used the same line to aim money designed to fail.</h2>
+  <p>For fifty years redlining meant <em>starvation</em>: the red district on the 1937 map was where loans would not go, so the block was denied the ordinary mortgage credit that lets people repair and hold a home. Then, in the 2000s, the instrument inverted. The lending finally arrived in West Baltimore — but it arrived as <b>reverse redlining</b>: predatory subprime mortgages steered <em>into</em> the exact neighborhoods the old map had condemned, aimed at Black borrowers, structured to fail. The same red outline. First a wall against money, then a funnel for it. Both times, dispossession.</p>
+  <p><b>The City of Baltimore sued Wells Fargo in 2008</b>, alleging the bank targeted Black neighborhoods with high-cost subprime loans that ended in a wave of foreclosures the city then had to absorb. Former loan officers swore affidavits in the case describing, in their own accounts, the language the trade allegedly used inside its own offices for those loans and the borrowers it aimed them at — language ugly enough that it reached the national papers. Four years later, in 2012, the U.S. Department of Justice reached a separate <b>$175&nbsp;million</b> settlement with the bank over the same pattern of discriminatory lending against Black and Hispanic borrowers — then one of the largest fair-lending settlements in the department's history. The bank admitted no wrongdoing. Baltimore's own case was resolved around the same time.</p>
+  <p>And the machine did not stop being careless once the lawsuits ended. Years later the same bank disclosed that a <em>software error</em> in the system that decided who could keep their home had wrongly denied families the mortgage modification that would have saved them — and had foreclosed on many of them anyway. A calculation. A glitch. A house. The instrument that starves a place and the instrument that drowns it turn out to be the same instrument, and it is still running.</p>
+  <figure class="reveal">
+    <div class="diptych" role="img" aria-label="diptych: the same block outline, first as a wall keeping money out in 1937, then as a funnel aiming predatory loans in during the 2000s">
+      <div class="half">
+        <svg viewBox="0 0 320 220"><rect width="320" height="220" fill="#040302"/>
+          <rect x="70" y="50" width="180" height="120" fill="rgba(160,90,58,.12)" stroke="#a05a3a" stroke-width="3"/>
+          <g stroke="rgba(201,186,114,.5)" stroke-width="2">
+            <line x1="20" y1="40" x2="66" y2="66"/><line x1="20" y1="110" x2="66" y2="110"/><line x1="20" y1="180" x2="66" y2="154"/>
+          </g>
+          <text x="30" y="30" font-family="Courier New" font-size="9" fill="#8a7f52">$ kept out</text>
+          <text x="160" y="115" font-family="Georgia" font-size="30" fill="#c47a54" text-anchor="middle" font-weight="bold">D</text>
+        </svg>
+        <div class="lab">1937 · a wall — starvation</div>
+      </div>
+      <div class="half">
+        <svg viewBox="0 0 320 220"><rect width="320" height="220" fill="#040302"/>
+          <rect x="70" y="50" width="180" height="120" fill="rgba(160,90,58,.12)" stroke="#a05a3a" stroke-width="3" stroke-dasharray="6 4"/>
+          <g stroke="rgba(160,90,58,.7)" stroke-width="2">
+            <line x1="20" y1="40" x2="150" y2="105"/><line x1="20" y1="110" x2="150" y2="110"/><line x1="20" y1="180" x2="150" y2="115"/>
+          </g>
+          <text x="26" y="30" font-family="Courier New" font-size="9" fill="#a05a3a">$ aimed in</text>
+          <text x="160" y="118" font-family="Courier New" font-size="10" fill="#c47a54" text-anchor="middle">designed to fail</text>
+        </svg>
+        <div class="lab">2000s · a funnel — foreclosure</div>
+      </div>
+    </div>
+    <figcaption>the same outline, used twice — <a href="https://www.justice.gov/archives/opa/pr/justice-department-reaches-settlement-wells-fargo-resulting-more-175-million-relief" target="_blank" rel="noopener noreferrer">DOJ · Wells Fargo fair-lending settlement</a></figcaption>
+  </figure>
+  <p class="note">This chapter is grounded in the documented public record — court filings, the U.S. Department of Justice, and contemporaneous reporting. Every claim above is sourced in <a href="#sources">where the record lives</a>.</p>
+</section>
+
+<!-- 07 THE SKIN -->
+<section id="skin">
+  <div class="tag">§ 07 — the skin</div>
+  <h2>The block wears its condition as <em>illusion</em>. That is the exact thing a raycaster does.</h2>
+  <p>Stand on the row and almost nothing you see is what it claims to be. The stone fronts are <b>Formstone</b> — a stucco troweled and tinted to imitate cut masonry, patented in Baltimore in 1937 and slathered across the city's rowhouses. John Waters called it <em>"the polyester of brick."</em> A stone wall that is not stone.</p>
+  <p>And some of the boarded windows are not boards. To make a written-off block read as <em>lived-in</em> from a passing car, the city and private owners have spent decades dressing the vacants to look occupied — painting scenes onto the plywood, hanging curtains inside boarded frames, and, in one Baltimore effort, gluing life-sized <b>photographs of windows</b> over the boards. A resident quoted at the time said it plainest: <em>"even though it's fake, you have to look up on it to see that it's fake."</em> That is, word for word, what a raycaster does to you — a flat surface, painted to read as depth, that only gives itself away if you get close enough to test it.</p>
+  <p class="say">A false-stone wall over a real one. A photograph of a window where a window used to be. The block was not abandoned. It was <em>processed</em> — and dressed, afterward, to look occupied.</p>
+  <figure class="reveal">
+    <svg class="fig" viewBox="0 0 700 200" role="img" aria-label="illustration: formstone peeling from a flat wall on the left, a fake photographic window on plywood on the right">
+      <rect width="700" height="200" fill="#040302"/>
+      <!-- formstone peeling -->
+      <g stroke="rgba(138,127,82,.45)" fill="rgba(201,186,114,.05)">
+        <rect x="30" y="30" width="70" height="34"/><rect x="104" y="30" width="70" height="34"/>
+        <rect x="30" y="68" width="70" height="34"/><rect x="104" y="68" width="70" height="34"/>
+        <rect x="30" y="106" width="70" height="34"/><rect x="104" y="106" width="70" height="34"/>
+      </g>
+      <path d="M150,110 L200,100 L205,160 L150,150 Z" fill="rgba(0,0,0,.6)"/>
+      <path d="M150,110 L200,100 L175,130 L150,150 Z" fill="rgba(201,186,114,.13)" stroke="rgba(201,186,114,.5)"/>
+      <text x="70" y="180" font-family="Courier New" font-size="10" fill="#5c5636">FORMSTONE — false stone, peeling to the flat wall behind</text>
+      <!-- fake photographic window -->
+      <rect x="430" y="26" width="150" height="118" fill="rgba(160,90,58,.10)" stroke="rgba(138,127,82,.5)"/>
+      <g stroke="rgba(201,186,114,.5)" fill="rgba(201,186,114,.06)">
+        <rect x="452" y="44" width="106" height="82"/>
+        <line x1="505" y1="44" x2="505" y2="126"/><line x1="452" y1="85" x2="558" y2="85"/>
+      </g>
+      <path d="M558,44 L520,44 L558,82 Z" fill="#040302"/>
+      <path d="M558,44 L530,52 L558,78 Z" fill="rgba(138,127,82,.3)" stroke="rgba(160,90,58,.7)"/>
+      <text x="505" y="180" font-family="Courier New" font-size="10" fill="#5c5636" text-anchor="middle">A PHOTOGRAPH OF A WINDOW — curling at the corner</text>
+    </svg>
+    <figcaption><a href="https://en.wikipedia.org/wiki/Formstone" target="_blank" rel="noopener noreferrer">Formstone</a> &nbsp;·&nbsp; <a href="https://www.baltimoresun.com/2004/06/12/illusions-of-occupancy/" target="_blank" rel="noopener noreferrer">"Illusions of Occupancy" — Baltimore Sun</a></figcaption>
+  </figure>
+</section>
+
+<!-- 08 THE WANDERERS -->
+<section id="wanderers">
+  <div class="tag">§ 08 — the wanderers</div>
+  <h2>Someone was here before you, and left the walls talking.</h2>
+  <p>The record is not only paper the state filed. It is also paper <em>people</em> left — the scraps you find scratched and taped through the halls, out of order, in the hand of a wanderer who signs only <b>m.</b> Down here they read like the last layer of the same story: a person processed by the same instruments, telling you what the files never will.</p>
+  <div class="scrap">the front is filled with block. i checked with my knuckles.
+a door that answers like a wall is not a door.
+<span class="sig-m">— m.</span></div>
+  <div class="scrap">the water helps. the water on the low floors does not help.
+i wrote this twice so you would find it once.
+<span class="sig-m">— m.</span></div>
+  <div class="scrap">they didn't leave. the lights are on in 804.
+nobody comes out. that is not the same as gone.
+<span class="sig-m">— m.</span></div>
+  <p>Find them in the maze and you steady, a little — proof you are not the only one who was ever here. Read enough of m.'s thread and you will start to suspect m. never found the way back up. Read all of it and you will know why the field manual exists.</p>
+  <a class="go" href="../manual/#wanderers">▸ how to read them, in the field manual</a>
+</section>
+
+<!-- 09 SOURCES -->
+<section id="sources">
+  <div class="tag">§ 09 — where the record lives</div>
+  <h2>None of the paper is invented. Here is where each instrument is on file.</h2>
+  <p>The Backrooms is fiction. The block is not. Every historical instrument the record leans on is public and citable — the maps, the plans, the notices, the court filings. Go read the real thing:</p>
+  <div class="src-list">
+    <a class="src-item" href="https://dsl.richmond.edu/panorama/redlining/" target="_blank" rel="noopener noreferrer">
+      <div class="n">Mapping Inequality: Redlining in New Deal America</div>
+      <div class="u">dsl.richmond.edu — the 1937 HOLC maps and area descriptions, scanned</div>
+    </a>
+    <a class="src-item" href="https://www.library.jhu.edu/news/2017/09/the-baltimore-redlining-map-ranking-neighborhoods/" target="_blank" rel="noopener noreferrer">
+      <div class="n">The Baltimore redlining map — Johns Hopkins</div>
+      <div class="u">library.jhu.edu — how the city was graded, and what it did</div>
+    </a>
+    <a class="src-item" href="https://baltimoreheritage.org/programs/harlem-park/" target="_blank" rel="noopener noreferrer">
+      <div class="n">Harlem Park &amp; the inner-block parks — Baltimore Heritage</div>
+      <div class="u">baltimoreheritage.org — the 1960s clearance of the block interiors</div>
+    </a>
+    <a class="src-item" href="https://codes.baltimorecity.gov/us/md/cities/baltimore/code/building-codes/II/120" target="_blank" rel="noopener noreferrer">
+      <div class="n">Condemnation — Baltimore City building code §120</div>
+      <div class="u">codes.baltimorecity.gov — the notice, and what "keep away" means in law</div>
+    </a>
+    <a class="src-item" href="https://www.justice.gov/archives/opa/pr/justice-department-reaches-settlement-wells-fargo-resulting-more-175-million-relief" target="_blank" rel="noopener noreferrer">
+      <div class="n">U.S. DOJ — Wells Fargo fair-lending settlement</div>
+      <div class="u">justice.gov — the federal record of the discriminatory-lending case</div>
+    </a>
+    <a class="src-item" href="https://en.wikipedia.org/wiki/Formstone" target="_blank" rel="noopener noreferrer">
+      <div class="n">Formstone — the false-stone skin of Baltimore</div>
+      <div class="u">en.wikipedia.org — "the polyester of brick"</div>
+    </a>
+    <a class="src-item" href="https://www.baltimoresun.com/2004/06/12/illusions-of-occupancy/" target="_blank" rel="noopener noreferrer">
+      <div class="n">"Illusions of Occupancy" — The Baltimore Sun</div>
+      <div class="u">baltimoresun.com — the fake windows glued over the vacants</div>
+    </a>
+  </div>
+</section>
+</div>
+
+<footer>
+  <div class="who">THE CORNER SPORE</div>
+  <div class="links">
+    <a href="../">the finding</a>·
+    <a href="../manual/">the field manual</a>·
+    <a href="../atlas/">the atlas</a>·
+    <a href="../play/">play</a>
+  </div>
+  <div class="warnline">the notice was never closed · it was extended</div>
+</footer>
+
+<script>
+  document.documentElement.classList.add('js');
+  // reveal figures/quotes as they enter — animations key off .in
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){
+    if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.25});
+  document.querySelectorAll('.reveal').forEach(function(el){io.observe(el)});
+
+  console.log('%cfirst a wall against the money. then a funnel for it. the same red outline.','color:#a05a3a;font:italic 14px Georgia');
+  console.log('%cthe block was not abandoned. it was processed.','color:#8a7f52');
+</script>
+</body>
+</html>
