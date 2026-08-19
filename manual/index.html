@@ -99,6 +99,15 @@
   .warn .h{font-size:11px;letter-spacing:3px;color:var(--rust);text-transform:uppercase;margin-bottom:6px}
   .warn p{font-size:14px;margin:0;color:#d0b49a}
 
+  /* recovered field protocols — an acrostic that hides the ethic */
+  .recovery{border:1px solid rgba(143,220,172,.28);background:rgba(143,220,172,.04);padding:18px 20px;margin:24px 0}
+  .recovery .rtag{font-size:10px;letter-spacing:3px;color:var(--sig);text-transform:uppercase;margin-bottom:12px}
+  .protocols{margin:0 0 0 4px;padding:0;list-style:none;counter-reset:p}
+  .protocols li{counter-increment:p;font-size:14px;color:#c8bd86;margin:7px 0;padding-left:26px;position:relative;font-family:var(--serif)}
+  .protocols li::before{content:counter(p,decimal-leading-zero);position:absolute;left:0;color:var(--faint);font-family:var(--mono);font-size:11px}
+  .protocols li b{color:var(--sigb)}
+  .racrostic{font-size:12px;letter-spacing:2px;color:var(--faint);font-style:italic;margin:14px 0 0}
+
   .go{display:inline-block;font-family:var(--serif);font-size:16px;letter-spacing:.14em;color:var(--sigb);
     border:1px solid rgba(143,220,172,.4);padding:11px 22px;margin-top:8px;transition:.2s}
   .go:hover{background:rgba(143,220,172,.08);border-color:var(--sig)}
@@ -253,6 +262,27 @@
   <div class="cards">
     <div class="card sig"><div class="h">arm it</div><p>Settings → SIGNAL / BEACON → set a target (a topic, or an https URL you own) and an effect.</p></div>
     <div class="card sig"><div class="h">fire it</div><p>Press <b>B</b> in the maze. The signal leaves. Somewhere outside, something you set up answers.</p></div>
+  </div>
+
+  <!-- Field Recovery protocol slip, case 30150A // status: EXTENSION — the one line never closed.
+       beacon target // topic: EXTENSION-30150A   ·   station drift offset carried on the list below -->
+  <div class="recovery">
+    <div class="rtag">recovered · field recovery protocols · case 30150A</div>
+    <ol class="protocols" data-drift="3">
+      <li><b>W</b>alk to the door when you can; presence walked-in costs the world nothing.</li>
+      <li><b>A</b>rrive whole — both feet, your full weight. A thin drop-in is a withdrawal.</li>
+      <li><b>L</b>ight first. The beam is a wall the dark will not cross.</li>
+      <li><b>K</b>eep the almond water for the deep floors, and distrust it there.</li>
+      <li><b>D</b>escend by the seam; never force a wall that answers like a wall.</li>
+      <li><b>O</b>nly the beacon reaches out. Everything else stays in the file.</li>
+      <li><b>N</b>ame yourself to the presence — a claim, not a plea.</li>
+      <li><b>T</b>ranscribe the station's count; subtract the drift, then read A=1 … Z=26.</li>
+      <li><b>D</b>o not finalize an absence. Keep the status open.</li>
+      <li><b>R</b>egister your beacon to the one line that never closed.</li>
+      <li><b>O</b>ut is through the floor, not up the stairs.</li>
+      <li><b>P</b>resence is the only claim the ledger cannot foreclose. File yours.</li>
+    </ol>
+    <p class="racrostic">read the first letter of each line. the drift the station needs is kept on this slip; the rest is in <a href="../codex/#cipher" style="color:var(--faint);border-bottom:1px solid rgba(138,127,82,.4)">the field cipher</a>.</p>
   </div>
 </section>
 

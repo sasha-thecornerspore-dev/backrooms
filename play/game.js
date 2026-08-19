@@ -21,12 +21,22 @@ function chunkHasPresence(cx, cy) {
 }
 
 const ITEM_NAMES = {
-  'almond-water': 'almond water',
-  'glowstick':    'glowstick',
-  'bandage':      'bandage',
-  'polaroid':     'polaroid camera',
-  'radio':        'radio',
+  'almond-water':   'almond water',
+  'glowstick':      'glowstick',
+  'bandage':        'bandage',
+  'polaroid':       'polaroid camera',
+  'radio':          'radio',
+  'plumb':          'survey plumb',
+  'ballast':        'ballast',
+  'extension-slip': 'extension slip',
 }
+
+// The numbers station in the deep stacks reads the ledger aloud — the count that
+// decodes (subtract the drift 3, then A=1..Z=26) to the counter-claim you type at
+// the presence. Delivered as readable groups so it can be transcribed, not blips.
+const RADIO_GROUPS = ['12 26 04 22 11 08', '21 08 19 24 23 12', '23 12 17 23 11 08', '09 12 15 08']
+// the counter-claim, typed at the presence: normalise and look for "i was here".
+const isClaim = (t) => /iwashere/.test(String(t).toLowerCase().replace(/[^a-z]/g, ''))
 
 // Things a lost soul might tell you — lore, warnings, and the odd real hint.
 const NPC_LINES = [
@@ -82,6 +92,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let sanWhisperT = 0
   let heartT     = 0
   let shake      = 0    // screen-shake magnitude, decays each frame
+
+  // ── the numbers station + the counter-claim (the reality-tunneling arc) ──
+  let stationIdx  = 0     // which group of the ledger-count the radio reads next
+  let photoIdx    = 0     // the polaroid develops one glyph of the claim per clean shot
+  let claimFiled  = false // the wish was typed as a claim ("i was here")
+  let beaconFired = false // the beacon was fired carrying the EXTENSION-30150A claim
+  let seamHeld    = false // the counter-claim resolved — fire the finale only once
 
   // ── Living Atmosphere — occasional ambient dread events ──
   const eventSched = createEventScheduler()
@@ -240,10 +257,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   document.getElementById('wish-submit')?.addEventListener('click', async () => {
     const text = wishText?.value.trim()
     if (!text) return
-    if (wishResp) wishResp.textContent = 'your request has been received. whether it is heard is another matter.'
+    const claim = isClaim(text)
+    if (wishResp) wishResp.textContent = claim
+      ? 'you did not ask. you asserted. the file has no column to deny a claim made. received.'
+      : 'your request has been received. whether it is heard is another matter.'
     wishText.disabled = true
     document.getElementById('wish-submit').disabled = true
     try { if (window.backrooms?.submitWish) await window.backrooms.submitWish(text) } catch (e) { /* silent */ }
+    if (claim) { claimFiled = true; tryFinale() }
     setTimeout(() => {
       wishText.disabled = false
       document.getElementById('wish-submit').disabled = false
@@ -433,35 +454,102 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       flashEl.style.transition = 'none'; flashEl.style.opacity = '0.9'
       requestAnimationFrame(() => { flashEl.style.transition = 'opacity 1.2s'; flashEl.style.opacity = '0' })
     }
-    if (dataUrl && window.backrooms?.savePhoto) {
-      window.backrooms.savePhoto(dataUrl)
-        .then(p => showMessage(p ? 'evidence captured.' : 'the film is blank.'))
-        .catch(() => showMessage('the film is blank.'))
+    // the caption develops from the LIVE frame, so it works in the browser too
+    // (no save bridge). A capture is a small counter-claim — it steadies you.
+    const thinNear = ephemera.some(a => a.variant === 'thin' && (a.x - player.x) ** 2 + (a.y - player.y) ** 2 < 16)
+    const finalizing = sanity < 40 || (level?.index ?? 0) >= 3
+    sanity = Math.min(100, sanity + 8); wardPulse()
+    let cap
+    if (thinNear) {
+      cap = 'the film shows someone who was not in the room. you can see the wall through them.'
+    } else if (finalizing) {
+      cap = 'the film shows the hall as it will finalize: darker, one door fewer.'
     } else {
-      showMessage('the film is blank.')
+      const g = 'iwashere'[photoIdx % 8]; photoIdx++
+      cap = `the film develops one letter that was not in the room: "${g}". transcribe it.`
     }
+    // still save the real evidence file on desktop; the caption shows regardless
+    if (dataUrl && window.backrooms?.savePhoto) window.backrooms.savePhoto(dataUrl).catch(() => {})
+    showMessage(cap)
+  }
+
+  // The radio: cosmetic hum near the surface; in the deep stacks (floors 2–3) it
+  // reads the ledger aloud, one number group at a time — not talking to you,
+  // reading a list, counting DOWN to your line.
+  function readRadio(on) {
+    const dfloor = level?.index ?? 0
+    const deep = dfloor === 2 || dfloor === 3
+    if (on && deep) {
+      const last = stationIdx === RADIO_GROUPS.length - 1
+      showMessage(`the station counts, slow and patient: ${RADIO_GROUPS[stationIdx]}${last ? '' : ' …'}   [${stationIdx + 1}/${RADIO_GROUPS.length}]`)
+      blip()
+      if (last) { heartbeat(); setTimeout(() => showMessage('it reads the last group, then stops. that one was yours.'), 1900) }
+      stationIdx = (stationIdx + 1) % RADIO_GROUPS.length
+    } else {
+      showMessage(on ? 'the radio crackles to life.' : 'the radio falls silent.')
+    }
+  }
+
+  // The counter-claim: fires ONCE, when the player has both typed the claim at a
+  // presence AND fired the beacon registered to EXTENSION-30150A. Renderer-side,
+  // so it resolves in the browser build too (no Electron bridge required).
+  function tryFinale() {
+    if (seamHeld || !claimFiled || !beaconFired) return
+    seamHeld = true
+    wardPulse(); calmTimer = 600; flickTgt = 1; flickTimer = 1.2; sanity = Math.min(100, sanity + 30)
+    itemSys.grant('ballast'); renderHotbar()
+    showMessage('the seam holds. the lights do not stutter. an extension that, for once, stays an extension.')
+    setTimeout(() => showMessage('something answers on your channel — one voice, then the sense of others behind it. the roll call was always the living, counting themselves.'), 2600)
+    setTimeout(() => showMessage("m., last page: 'walk in. do not drop in. hold the seam for the rest of us, and write your name where the dark can read it.'"), 5600)
   }
 
   function applyItemEffect(eff) {
     if (!eff) return
+    const dfloor = level?.index ?? 0
     if (eff.type === 'almond-water') {
       if (eff.sour) {
-        sanity = Math.max(0, sanity - 8); whisper()
-        showMessage('the water is sour on your tongue. it takes something from you, and gives nothing back.')
+        if (dfloor === 3) {
+          sanity = Math.max(0, sanity - 14); doorSlam()
+          showMessage('the water is sour, and something reads the withdrawal. a line moves in a ledger you cannot see.')
+        } else {
+          sanity = Math.max(0, sanity - 8); whisper(); flickTgt = 0.5; flickTimer = 0.3
+          showMessage('the water is sour on your tongue. it takes something from you, and gives nothing back.')
+        }
       } else {
-        stamina = 100; calmTimer = 20; sanity = Math.min(100, sanity + 35)
+        stamina = 100; calmTimer = 20; sanity = Math.min(100, sanity + 35); wardPulse()
         showMessage('the water is sweet. the lights steady, and so does your mind.')
       }
     } else if (eff.type === 'glowstick') {
-      fogTimer = 45
-      showMessage('green light pushes at the dark.')
+      fogTimer = Math.max(18, 45 - Math.min(dfloor, 3) * 6); calmTimer = Math.max(calmTimer, 8); blip()
+      showMessage('green light pushes at the dark — less than it used to. the crack it opens is shorter down here.')
     } else if (eff.type === 'bandage') {
-      player.hp = Math.min(player.maxHp, player.hp + 40)
-      showMessage('you patch yourself up. it holds, for now.')
+      if (dfloor === 2 || dfloor === 3) {
+        player.hp = Math.min(player.maxHp, player.hp + 60); calmTimer = Math.max(calmTimer, 6)
+        showMessage('down here the grit under your nails is true, so the mend is true too. it holds.')
+      } else {
+        player.hp = Math.min(player.maxHp, player.hp + 40)
+        showMessage('you patch yourself up. it holds, for now.')
+      }
     } else if (eff.type === 'polaroid') {
       firePolaroid()
     } else if (eff.type === 'radio') {
-      showMessage(eff.on ? 'the radio crackles to life.' : 'the radio falls silent.')
+      readRadio(eff.on)
+    } else if (eff.type === 'plumb') {
+      // the strain gauge: a grain reading that tightens with depth. A tool — it is
+      // read on every press and never consumed (items.js useSelected).
+      blip(); calmTimer = Math.max(calmTimer, 8)
+      const grain = Math.max(0, 100 - Math.min(dfloor, 4) * 17)
+      if (dfloor >= 2) { whisper(); showMessage(`the plumb reads grain ${grain}. the needle will not sit. the world is tighter here, and older.`) }
+      else showMessage(`the plumb reads grain ${grain}. slack, still. it holds.`)
+    } else if (eff.type === 'ballast') {
+      // true floor, made present: the drop-in-thinness antidote. Never sours.
+      calmTimer = 30; stamina = 100; flickTgt = 1; flickTimer = 1.2
+      showMessage('you set both feet and mean it. your whole weight arrives. the dark cannot read a thing this here.')
+    } else if (eff.type === 'extension-slip') {
+      // 30150A — the one line the system never closed. Hands the concept, not the
+      // literal claim: the phrase itself is earned from the numbers station.
+      sanity = Math.min(100, sanity + 20); wardPulse()
+      showMessage('notice 30150A. status: EXTENSION — the one line the system never closed. a door left ajar it cannot foreclose. make your claim where the presence waits.')
     }
     renderHotbar()
   }
@@ -470,16 +558,20 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    WHEN and WHICH; these are the side effects, hooked into the existing
   //    flicker / audio / message / apparition systems. ──
   function spawnCrosser() {
+    const dfloor = level?.index ?? 0
+    // on the deep stacks, sometimes it is not a thing but a faint drop-in — a
+    // person minted thin from far away, drifting slow enough to photograph.
+    const thin = (dfloor === 2 || dfloor === 3) && Math.random() < 0.3
     const ahead = 7 + Math.random() * 4                        // out in the fog ahead
     const bx = player.x + Math.cos(player.angle) * ahead
     const by = player.y + Math.sin(player.angle) * ahead
     const perp = player.angle + Math.PI / 2                     // crossing your line of sight
     const dir = Math.random() < 0.5 ? 1 : -1
-    const sp = 2.6, span = 1.7
+    const sp = thin ? 1.1 : 2.6, span = 1.7
     ephemera.push({
       x: bx - Math.cos(perp) * dir * span, y: by - Math.sin(perp) * dir * span,
       vx: Math.cos(perp) * dir * sp, vy: Math.sin(perp) * dir * sp,
-      ttl: (span * 2) / sp + 0.2, variant: Math.random() < 0.5 ? 'shade' : 'lurker',
+      ttl: (span * 2) / sp + 0.2, variant: thin ? 'thin' : (Math.random() < 0.5 ? 'shade' : 'lurker'),
     })
   }
   function fireEvent(id) {
@@ -508,10 +600,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    may be sour — the lost soul's warning, made real. ──
   function dispenseFromMachine(m) {
     if (!m || vendedSet.has(m.key)) return
+    const dfloor = level?.index ?? 0
     const pool = ['almond-water', 'almond-water', 'glowstick', 'bandage']
+    // Field Recovery caches surface in the deep stacks — a strain gauge, ballast, an exhibit
+    if (dfloor === 2 || dfloor === 3) pool.push('plumb', 'ballast', 'extension-slip')
     const type = pool[Math.floor(Math.random() * pool.length)]
-    const sour = type === 'almond-water' && (level?.index ?? 0) >= 2 && Math.random() < 0.4
-    const res = itemSys.grant(type, sour ? { sour: true } : {})
+    const sour = type === 'almond-water' && dfloor >= 2 && Math.random() < 0.4
+    const extra = type === 'plumb' ? { tool: true } : (sour ? { sour: true } : {})
+    const res = itemSys.grant(type, extra)
     if (!res.ok) { showMessage('the machine whirs, but your hands are already full.'); return }
     vendedSet.add(m.key)
     renderHotbar(); blip()
@@ -738,17 +834,23 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (K['KeyB']) {
         K['KeyB'] = false
         const effect = getPref('beaconEffect')
+        const target = (getPref('beaconWebhook') || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+        const counterClaim = target.includes('extension30150a')
         if (!effect || effect === 'off') {
           showMessage('no beacon set. register one in settings.')
         } else {
-          showMessage('you push the beacon into the dark...')
+          showMessage(counterClaim
+            ? 'you fire the beacon — not a cry for help. a claim. i was here. put it in the file.'
+            : 'you push the beacon into the dark...')
+          // fire the real webhook on desktop; the counter-claim resolves renderer-side either way
           const p = window.backrooms?.fireBeacon?.({ effect, webhook: getPref('beaconWebhook') })
           if (p) p.then(r => showMessage(
                     r?.ok ? 'something answers.'
                   : r?.reason === 'cooldown' ? 'the beacon is still warm.'
                   : 'the beacon goes quiet.'))
                  .catch(() => showMessage('the beacon goes quiet.'))
-          else showMessage('the beacon goes quiet.')
+          else if (!counterClaim) showMessage('the beacon goes quiet.')
+          if (counterClaim) { beaconFired = true; tryFinale() }
         }
       }
       for (let i = 0; i < 6; i++) {

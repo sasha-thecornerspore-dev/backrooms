@@ -909,6 +909,9 @@ export function createRenderer(canvas, config, renderOpts = {}, worldHooks = {})
     crawler: { w: 0.9,  h: 0.42, tint: [16, 14, 12], low: true },
     lurker:  { w: 0.3,  h: 1.25, tint: [10, 12, 14], low: false, eyes: true },
     tesla:   { w: 0.42, h: 1.05, tint: [16, 22, 32], low: false, electric: true, eyes: true },
+    // a faint drop-in — someone who fell in from far away, minted thin: you can
+    // see the wall through them, and they do not know they are translucent.
+    thin:    { w: 0.34, h: 1.05, tint: [150, 158, 168], low: false, thin: true },
   }
   function drawFigure(ent, screenX, entDist, fogT, HH, H, W) {
     const s = FIG[ent.variant] || FIG.shade
@@ -920,6 +923,7 @@ export function createRenderer(canvas, config, renderOpts = {}, worldHooks = {})
     const topBase = bottom - spriteH
     const alpha = (1 - fogT) * 0.95
     if (alpha < 0.04) return
+    const bodyA = s.thin ? alpha * 0.3 : alpha   // a thin drop-in is see-through
     const half = spriteW / 2
     const hood = s.low ? 0.12 : 0.34
 
@@ -932,7 +936,7 @@ export function createRenderer(canvas, config, renderOpts = {}, worldHooks = {})
       const hgt = bottom - top
       if (hgt <= 0) continue
       const sh = 1 - Math.abs(u) * 0.32
-      wctx.fillStyle = `rgba(${(s.tint[0] * sh) | 0},${(s.tint[1] * sh) | 0},${(s.tint[2] * sh) | 0},${alpha.toFixed(3)})`
+      wctx.fillStyle = `rgba(${(s.tint[0] * sh) | 0},${(s.tint[1] * sh) | 0},${(s.tint[2] * sh) | 0},${bodyA.toFixed(3)})`
       wctx.fillRect(col, top | 0, 1, hgt | 0)
     }
 

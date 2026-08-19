@@ -116,6 +116,8 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
       item.on = !item.on
       return { type: 'radio', on: item.on }
     }
+    // tools (e.g. the plumb) take a reading on every press and are never consumed
+    if (item.tool) return { type: item.type, tool: true }
     inventory.splice(selected, 1)
     if (selected >= inventory.length && selected > 0) selected = inventory.length - 1
     return { type: item.type, ...(item.sour ? { sour: true } : {}) }

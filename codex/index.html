@@ -113,6 +113,25 @@
     font-family:var(--mono);font-size:14px;color:#bdb180;max-width:60ch;white-space:pre-wrap}
   .scrap .sig-m{color:var(--faint);font-style:italic}
 
+  /* the arithmetic — a drift curve closing on a date */
+  .curve{fill:none;stroke:var(--sig);stroke-width:2;stroke-dasharray:1000;stroke-dashoffset:1000}
+  .in .curve{animation:draw 2.6s ease-out forwards}
+  .zero{opacity:0}.in .zero{animation:fadein 1s ease-out 1.6s forwards}
+
+  /* the field cipher — codebook surfaces */
+  .runes{display:grid;grid-template-columns:repeat(auto-fit,minmax(50px,1fr));gap:6px;margin:18px 0}
+  .rune{border:1px solid rgba(138,127,82,.3);padding:8px 4px;text-align:center;background:rgba(0,0,0,.25)}
+  .rune .g{font-size:19px;color:var(--yb);line-height:1;font-family:"Segoe UI Symbol","Noto Sans Runic","Noto Sans",var(--serif)}
+  .rune .l{font-size:11px;letter-spacing:2px;color:var(--dim);margin-top:5px;text-transform:uppercase}
+  .keyword{font-size:clamp(22px,5vw,40px);letter-spacing:.3em;color:var(--sigb);text-align:center;margin:10px 0 4px;
+    font-family:"Segoe UI Symbol","Noto Sans Runic","Noto Sans",var(--serif)}
+  .xmit{border:1px solid rgba(143,220,172,.3);background:rgba(143,220,172,.05);padding:14px 16px;margin:18px 0;
+    font-family:var(--mono);font-size:13px;color:var(--sigb);word-break:break-all;line-height:1.9}
+  .xmit .lbl{display:block;font-size:10px;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:8px}
+  .cipherbox{border:1px solid rgba(138,127,82,.3);background:rgba(201,186,114,.03);padding:16px 18px;margin:18px 0}
+  .cipherbox .k{font-size:11px;letter-spacing:3px;color:var(--rust);text-transform:uppercase;margin-bottom:10px}
+  .cipherbox code,p code{font-family:var(--mono);color:var(--yb);background:rgba(201,186,114,.09);padding:1px 5px;border-radius:2px}
+
   /* sources */
   .src-list{display:grid;gap:12px;margin-top:8px}
   .src-item{border:1px solid rgba(138,127,82,.28);padding:15px 18px;background:rgba(201,186,114,.03);transition:.2s;display:block}
@@ -157,6 +176,9 @@
       <li><a href="#loans">— the loans came back</a></li>
       <li><a href="#skin">the skin — false stone, false windows</a></li>
       <li><a href="#wanderers">the wanderers</a></li>
+      <li><a href="#arithmetic">the arithmetic — the turn</a></li>
+      <li><a href="#counterclaim">the counter-claim</a></li>
+      <li><a href="#cipher">the field cipher</a></li>
       <li><a href="#sources">where the record lives</a></li>
     </ol>
   </div>
@@ -377,9 +399,100 @@ nobody comes out. that is not the same as gone.
   <a class="go" href="../manual/#wanderers">▸ how to read them, in the field manual</a>
 </section>
 
-<!-- 09 SOURCES -->
+<!-- 09 THE ARITHMETIC -->
+<section id="arithmetic">
+  <div class="tag sig">§ 09 — the arithmetic · the turn</div>
+  <h2>The grain is not settling like an old house. Someone is spending it.</h2>
+  <p class="lead">This is the page m. worked out three times because they did not want it to be right. It is the page that turns a haunted rowhouse into a countdown.</p>
+  <p>Recall the doctrine: the Planck grain — the resolution of reality itself — ran <em>wide</em> in the layers above, wide enough to spin up wildly different universes for almost nothing, and here near the floor it is nearly <em>closed</em>. The easy reading is that it is old, and old things settle. The easy reading is wrong. Excavation was never free. Every world ever dug cost grain from the layer beneath it, and we are the deepest cut — the fine print at the bottom of the stack, with nothing below us left to mine. So the only thing still drawing the reserve down toward zero is <b>us</b>. Every careless drop-in from a couch a thousand miles away mints a faint copy of a person out of the last grain there is. The clock is not weather. <em>The clock is the crowd.</em></p>
+  <p>And it is a clock you can read. Field Recovery never had a map of the maze — they had the <b>beacon</b>, the one signal that costs no grain and reaches <em>out</em> instead of pulling presence in. Fire it on a schedule and its return timing drifts by a hair each week as the grain tightens around it. Plot the drift, fit the curve, and the curve names a date: the day the grain welds shut and every seam between inside and outside welds with it. Case ∅ is not the investigation of a haunted address. It is arithmetic somebody did and could not un-know.</p>
+  <figure class="reveal">
+    <svg class="fig" viewBox="0 0 700 260" role="img" aria-label="a strain-gauge curve of the closing grain, drifting downward and closing to zero at a marked date">
+      <rect width="700" height="260" fill="#040705"/>
+      <g stroke="rgba(143,220,172,.12)"><line x1="60" y1="30" x2="60" y2="220"/><line x1="60" y1="220" x2="660" y2="220"/>
+        <line x1="60" y1="80" x2="660" y2="80"/><line x1="60" y1="130" x2="660" y2="130"/><line x1="60" y1="180" x2="660" y2="180"/></g>
+      <text x="16" y="46" font-family="Courier New" font-size="10" fill="#5c5636">GRAIN</text>
+      <text x="600" y="238" font-family="Courier New" font-size="10" fill="#5c5636">TIME →</text>
+      <path class="curve" d="M60,58 C200,70 300,96 400,130 C480,158 540,190 600,214 L640,224"/>
+      <g class="zero">
+        <line x1="640" y1="30" x2="640" y2="224" stroke="#a05a3a" stroke-dasharray="4 3"/>
+        <circle cx="640" cy="224" r="4" fill="#c47a54"/>
+        <text x="632" y="248" font-family="Courier New" font-size="11" fill="#c47a54" text-anchor="end">grain → 0 · the seam welds · ∅</text>
+      </g>
+    </svg>
+    <figcaption>the beacon as strain gauge — the drift is the clock, and the clock is the crowd</figcaption>
+  </figure>
+  <p>The thing doing the foreclosing is not a monster. It is a <b>System</b> — an indifferent clerk the size of physics, the process that administers a reality too old to be created anymore. It does not chase. It <em>itemizes</em>. It reads a ledger in the walls and waits to reach your line. The grain closing is simply an old form left to run its course — the same municipal machinery that quietly foreclosed one real city block, scaled up to the render itself. It has no malice because it has no attention. And it has exactly one blind spot, which is the entire reason there is anything left to do.</p>
+  <p class="say">Case ∅ carries no serial. ∅ is not a number. ∅ is a <em>status</em> — and if you decoded the rune line and found your way here, it is quietly, already, <em>yours</em>.</p>
+  <p>Read that way, m.'s last two findings stop being comfort and become measurement. <em>"Further in is not always worse"</em> — because finer grain is <b>more</b> real, not less; the deepest layer is the most detailed, most fixed, most true place in existence. And <em>"out."</em>, with its little arrow, was never a plea to climb stairs that do not exist. Out is through the <em>floor</em>, past the last grain, into whatever the excavation was always digging toward.</p>
+</section>
+
+<!-- 10 THE COUNTER-CLAIM -->
+<section id="counterclaim">
+  <div class="tag sig">§ 10 — the counter-claim</div>
+  <h2>The one thing a ledger cannot foreclose is a claim someone is still making.</h2>
+  <p>The System can foreclose an <em>absence</em>. A status left to lapse. A body that only ever dropped in from far away and was never really there. But its forms have no field for <b>presence</b>, and a person genuinely, deeply <em>here</em> — both feet, whole weight — is the one claim it cannot deny in absentia. That is not a loophole. It is the only physics left that runs in our favour.</p>
+  <p>So the move is not to escape. There is no up. The move is to <b>assert</b>. Two acts, and the whole arc turns on them being the same act:</p>
+  <div class="cards" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:22px 0">
+    <div class="cipherbox"><div class="k">walk in — do not drop in</div><p style="margin:0;font-size:14px">Go on foot. Body committed to the coordinate, presence deep and real — the substrate spends nothing, and remembers you deeply. Drop in from afar and you mint a thin copy from the last grain there is. Nearness is free. Distance is a withdrawal.</p></div>
+    <div class="cipherbox" style="border-color:rgba(143,220,172,.3)"><div class="k" style="color:var(--sig)">fire the beacon as a claim</div><p style="margin:0;font-size:14px">Not an SOS. A counter-claim, filed outward along the wire: <em>i was here. put it in the file.</em> Notice 30150A's <b>EXTENSION</b> — never closed — is the whole move in miniature: the one status the System never foreclosed, the door left ajar.</p></div>
+  </div>
+  <p>And here is the image the whole record resolves on. A single beacon looks like a solitary lifeline. Pointed at every <em>other</em> marked channel, it is a <b>network</b> — the marked counting themselves. The individual SOS was always a roll call of the living. Silence finalizes ∅. Answered — kept answering — the roll call is the one thing holding the seams open.</p>
+  <p class="say">Nothing reopens the grain. That clock never stops. But a claim made, and made again, is an extension that for once stays an extension.</p>
+  <p>You can do exactly this inside the maze. Descend to the deep stacks, find the radio, and let it read you the ledger. Then walk — do not drop — to a presence, register your beacon to the one status that never closed, and file your claim. The next section is how the files open for you.</p>
+  <a class="go" href="../manual/#beacon">▸ the beacon, in the field manual</a>
+</section>
+
+<!-- 11 THE FIELD CIPHER -->
+<section id="cipher">
+  <div class="tag sig">§ 11 — the field cipher · for the gifted</div>
+  <h2>Field Recovery encrypts its own files. If you have the gift, they open.</h2>
+  <p>Everything below is a decoder, not a secret. The maze will hand you numbers and runes; these are the tables that turn them into words. Bring what you find on the front page and in the field manual here, and follow the wire into the game.</p>
+
+  <h2 style="font-size:clamp(18px,3vw,24px);margin-top:34px">i · the runes → letters</h2>
+  <p>The front-page line that greets the gifted is Elder Futhark. This is the key to it — and to the one word everything else is keyed by.</p>
+  <div class="runes" aria-label="Elder Futhark to Latin table">
+    <div class="rune"><div class="g">ᚨ</div><div class="l">a</div></div>
+    <div class="rune"><div class="g">ᛒ</div><div class="l">b</div></div>
+    <div class="rune"><div class="g">ᚲ</div><div class="l">c/k</div></div>
+    <div class="rune"><div class="g">ᛞ</div><div class="l">d</div></div>
+    <div class="rune"><div class="g">ᛖ</div><div class="l">e</div></div>
+    <div class="rune"><div class="g">ᚠ</div><div class="l">f</div></div>
+    <div class="rune"><div class="g">ᚷ</div><div class="l">g</div></div>
+    <div class="rune"><div class="g">ᚺ</div><div class="l">h</div></div>
+    <div class="rune"><div class="g">ᛁ</div><div class="l">i</div></div>
+    <div class="rune"><div class="g">ᛃ</div><div class="l">j/y</div></div>
+    <div class="rune"><div class="g">ᛚ</div><div class="l">l</div></div>
+    <div class="rune"><div class="g">ᛗ</div><div class="l">m</div></div>
+    <div class="rune"><div class="g">ᚾ</div><div class="l">n</div></div>
+    <div class="rune"><div class="g">ᛟ</div><div class="l">o</div></div>
+    <div class="rune"><div class="g">ᛈ</div><div class="l">p</div></div>
+    <div class="rune"><div class="g">ᚱ</div><div class="l">r</div></div>
+    <div class="rune"><div class="g">ᛊ</div><div class="l">s</div></div>
+    <div class="rune"><div class="g">ᛏ</div><div class="l">t</div></div>
+    <div class="rune"><div class="g">ᚢ</div><div class="l">u</div></div>
+    <div class="rune"><div class="g">ᚹ</div><div class="l">v/w</div></div>
+    <div class="rune"><div class="g">ᛉ</div><div class="l">z</div></div>
+  </div>
+
+  <h2 style="font-size:clamp(18px,3vw,24px);margin-top:34px">ii · the word that keys everything</h2>
+  <p>Recovered on its own slip, marked "the gift's own word." Decode it with the table above:</p>
+  <div class="keyword">ᛈ ᚱ ᛖ ᛊ ᛖ ᚾ ᚲ ᛖ</div>
+  <p style="text-align:center;color:var(--dim);font-size:13px;letter-spacing:2px">— the one thing the ledger has no column for —</p>
+
+  <h2 style="font-size:clamp(18px,3vw,24px);margin-top:34px">iii · the transmission, keyed by the gift</h2>
+  <p>A transmission was left buried in the front page's own source — open the browser console on <a href="../">the finding</a> and you will see it, labelled <code>wardline</code>. It is a <b>Vigenère</b> cipher, keyed by the word above (repeat the key across the letters; each plaintext letter is the ciphertext letter minus the key letter, wrapping A–Z). Decode it:</p>
+  <div class="xmit"><span class="lbl">recovered transmission · wardline</span>IYIJEQKS GVEVWGJI AVHYIEKR SVBLLRES JEX</div>
+  <p>It resolves to an instruction, not an answer — a pointer to the one instrument inside the maze that reads the ledger aloud. Follow it: descend to the <b>deep stacks</b> (levels 2–3), carry a <b>radio</b>, and tune it. It will not talk to you. It will read a list, in slow numbers, counting down.</p>
+
+  <h2 style="font-size:clamp(18px,3vw,24px);margin-top:34px">iv · turning the count into a claim</h2>
+  <p>The station's numbers are a simple cipher, but they are <em>drifted</em> — the grain's weekly creep, offset into the count. The <a href="../manual/">field manual</a> keeps the drift, and the operation: <b>subtract the drift, then read A=1 … Z=26</b>. What you get is the claim itself — the exact words to type at a presence (press E), while your beacon is registered to the one status that never closed (<code>EXTENSION-30150A</code>). Walk in, file it, and hold the seam.</p>
+  <a class="go" href="../play/">▸ into the maze — find the radio</a>
+</section>
+
+<!-- 12 SOURCES -->
 <section id="sources">
-  <div class="tag">§ 09 — where the record lives</div>
+  <div class="tag">§ 12 — where the record lives</div>
   <h2>None of the paper is invented. Here is where each instrument is on file.</h2>
   <p>The Backrooms is fiction. The block is not. Every historical instrument the record leans on is public and citable — the maps, the plans, the notices, the court filings. Go read the real thing:</p>
   <div class="src-list">
