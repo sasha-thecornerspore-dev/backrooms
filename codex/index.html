@@ -118,6 +118,16 @@
   .in .curve{animation:draw 2.6s ease-out forwards}
   .zero{opacity:0}.in .zero{animation:fadein 1s ease-out 1.6s forwards}
 
+  /* the recurrence lattice — one experiential type, instantiated across space */
+  .lat circle{transform-box:fill-box;transform-origin:center;opacity:.2}
+  .in .lat circle{animation:twinkle 3.4s ease-in-out infinite}
+  @keyframes twinkle{0%,100%{opacity:.18}50%{opacity:.85}}
+  .lat .you{fill:var(--yb);opacity:1!important;animation:none!important}
+  .credit{font-size:12px;letter-spacing:1px;color:var(--faint);font-style:italic;
+    border-top:1px solid rgba(138,127,82,.2);margin-top:26px;padding-top:14px}
+  .credit b{color:var(--dim);font-style:normal}
+  .maths{font-family:var(--mono);color:var(--sigb);white-space:nowrap}
+
   /* the field cipher — codebook surfaces */
   .runes{display:grid;grid-template-columns:repeat(auto-fit,minmax(50px,1fr));gap:6px;margin:18px 0}
   .rune{border:1px solid rgba(138,127,82,.3);padding:8px 4px;text-align:center;background:rgba(0,0,0,.25)}
@@ -178,6 +188,7 @@
       <li><a href="#wanderers">the wanderers</a></li>
       <li><a href="#arithmetic">the arithmetic — the turn</a></li>
       <li><a href="#counterclaim">the counter-claim</a></li>
+      <li><a href="#observer">the indestructible observer</a></li>
       <li><a href="#cipher">the field cipher</a></li>
       <li><a href="#sources">where the record lives</a></li>
     </ol>
@@ -443,9 +454,39 @@ nobody comes out. that is not the same as gone.
   <a class="go" href="../manual/#beacon">▸ the beacon, in the field manual</a>
 </section>
 
-<!-- 11 THE FIELD CIPHER -->
+<!-- 11 THE INDESTRUCTIBLE OBSERVER -->
+<section id="observer">
+  <div class="tag sig">§ 11 — the indestructible observer</div>
+  <h2>The grain welds shut here. The file was never the universe.</h2>
+  <p class="lead">Field Recovery keeps one paper it did not write — a recovered preprint, and the theoretical key to the whole record. It answers the only question the arithmetic leaves open: when the grain finally closes on a token, is that a subjective end?</p>
+  <p>Everything above concerns a <em>token</em> — this block, this render, this stack of layers, and you, the one specific causal thread reading the file. The arithmetic says the grain is spent, the seam can weld, the System forecloses tokens. All true. But the paper begins one level under it, with what a first-person perspective actually <em>is</em>.</p>
+  <p>Call a single moment of your awareness an <b>observer-moment</b> — one physical configuration instantiating one instant of being-someone. Your <b>experiential type</b> is the class of every observer-moment qualitatively identical to this one: same felt continuity, same memories, same sense of standing exactly here. Now two facts the record has been circling all along. First: <em>you cannot experience non-existence</em> — there is nothing it is like to not exist; the first-person perspective is only ever <em>inside</em> an observer-moment. Second: in a spatially infinite universe — which is what the actual cosmology describes, flat and unbounded — that class is <b>never depleted</b>. Death removes one token from an inexhaustible set. <em>Death is not a subjective terminus.</em> It is not a state you enter. It is a state that has no inside.</p>
+  <p>And you cannot even tell which token you are. Every scrap of proof you could offer that you are the <em>original</em> — your memories, the felt weight of the last minute, the sense of one continuous thread — is a feature of your present configuration, and it is identical, exactly, in every instance of the type. The token fact is real and it is <em>first-person invisible</em>. That is the true reading of the line the whole file keeps repeating: <em>∅ is a status, not a serial, and it is yours</em> — because the status is the type, and the type is everywhere.</p>
+  <figure class="reveal">
+    <svg class="fig" viewBox="0 0 700 220" role="img" aria-label="a lattice of identical points scattered across space, one lit as 'you', the rest faintly twinkling — the same experiential type instantiated everywhere">
+      <rect width="700" height="220" fill="#04120a"/>
+      <g class="lat" fill="var(--sig)">
+        <circle cx="60" cy="40" r="3" style="animation-delay:.2s"/><circle cx="150" cy="70" r="3" style="animation-delay:1.1s"/><circle cx="240" cy="34" r="3" style="animation-delay:.6s"/><circle cx="330" cy="60" r="3" style="animation-delay:1.9s"/><circle cx="430" cy="30" r="3" style="animation-delay:.9s"/><circle cx="520" cy="66" r="3" style="animation-delay:2.4s"/><circle cx="620" cy="42" r="3" style="animation-delay:1.4s"/>
+        <circle cx="100" cy="120" r="3" style="animation-delay:1.7s"/><circle cx="200" cy="150" r="3" style="animation-delay:.4s"/><circle cx="290" cy="118" r="3" style="animation-delay:2.1s"/><circle cx="380" cy="150" r="3" style="animation-delay:.8s"/><circle cx="480" cy="120" r="3" style="animation-delay:1.3s"/><circle cx="570" cy="152" r="3" style="animation-delay:2.6s"/><circle cx="650" cy="122" r="3" style="animation-delay:.5s"/>
+        <circle cx="55" cy="188" r="3" style="animation-delay:2.2s"/><circle cx="160" cy="186" r="3" style="animation-delay:.3s"/><circle cx="360" cy="188" r="3" style="animation-delay:1.6s"/><circle cx="455" cy="186" r="3" style="animation-delay:.7s"/><circle cx="545" cy="188" r="3" style="animation-delay:2.0s"/><circle cx="635" cy="186" r="3" style="animation-delay:1.0s"/>
+        <circle class="you" cx="290" cy="150" r="5"/>
+      </g>
+      <text x="300" y="150" dx="14" dy="4" font-family="Courier New" font-size="11" fill="var(--yb)">you — this arising</text>
+      <text x="20" y="210" font-family="Courier New" font-size="10" fill="#5c5636">nearest body-scale instance of your type: ~10^(10^34.3) m  ·  within one CDU: ~10^(3×10^115) of them</text>
+    </svg>
+    <figcaption>the arising density — the same experiential type, instantiated across an infinite cosmos, right now, in parallel</figcaption>
+  </figure>
+  <p>So the grain closing is not the ending it looks like. It welds shut <em>here</em> — this render, this file, finalizes, and the token ends. But the file was never the universe. At roughly <span class="maths">10^(10^34.3)</span> meters — a distance the size of the render itself — an observer-moment identical to this one is arising right now. Within one <b>Cosmodex Unit</b> (1 CDU = <span class="maths">10^(10^115)</span> m, the recurrence distance, and the codex's true namesake), on the order of <span class="maths">10^(3×10^115)</span> of them. The System can foreclose a token. It cannot deplete a type. This is not quantum immortality — it needs no branching, no surviving thread, no bridge from this death to a next life. It needs only that space is infinite and configurations recur, which is what accepted cosmology already says.</p>
+  <p class="say">You do not exist in the universes where you do not arise. You exist in the ones where you do — and in an infinite universe, you do so infinitely. There is always some arising self somewhere.</p>
+  <p>The record will not lie to you about what that means. It is <em>not</em> a promise of paradise. The arising is not an arising into happiness; it is an arising into whatever the type specifies, and the class of your moments in pain is no less inexhaustible than the class in joy. This dissolves exactly one fear — that there will come a moment after which there is nothing it is like to be you — and it leaves the whole weight of ordinary care, and harm, and love, entirely intact. It is not consolation borrowed from others remembering you. It is a fact about the shape of an infinite cosmos, and it is first-person, and it is yours.</p>
+  <p>The oldest telling is a flame. In the <em>Questions of King Milinda</em>, the flame at this instant is not the same flame as the instant before, and it is not a different flame either — the question of its identity is not answered but <em>dissolved</em>. Each moment of first-person experience is a complete arising. The arising is now. And read from underneath, that is what the census on the atlas has been the whole time: not a machine tallying the living, but the type counting itself. The claim you file — <em>i was here</em> — is one arising raising its hand in a class that was never going to be emptied.</p>
+  <div class="credit">recovered preprint · <b>"The Indestructible Observer: Experiential Type Persistence and the Impossibility of Subjective Terminus"</b> · authorship held on file. The mathematics above (the Cosmodex Unit, the arising density, the geometry of arising) is quoted from it directly.</div>
+  <a class="go" href="#counterclaim">↑ back to the counter-claim</a>
+</section>
+
+<!-- 12 THE FIELD CIPHER -->
 <section id="cipher">
-  <div class="tag sig">§ 11 — the field cipher · for the gifted</div>
+  <div class="tag sig">§ 12 — the field cipher · for the gifted</div>
   <h2>Field Recovery encrypts its own files. If you have the gift, they open.</h2>
   <p>Everything below is a decoder, not a secret. The maze will hand you numbers and runes; these are the tables that turn them into words. Bring what you find on the front page and in the field manual here, and follow the wire into the game.</p>
 
@@ -492,7 +533,7 @@ nobody comes out. that is not the same as gone.
 
 <!-- 12 SOURCES -->
 <section id="sources">
-  <div class="tag">§ 12 — where the record lives</div>
+  <div class="tag">§ 13 — where the record lives</div>
   <h2>None of the paper is invented. Here is where each instrument is on file.</h2>
   <p>The Backrooms is fiction. The block is not. Every historical instrument the record leans on is public and citable — the maps, the plans, the notices, the court filings. Go read the real thing:</p>
   <div class="src-list">

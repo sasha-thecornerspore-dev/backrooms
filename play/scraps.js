@@ -34,6 +34,8 @@ export const SCRAPS = [
   'we were told the world was old and settling, like a house. it is not settling. someone is spending it. i think the someone is all of us, arriving.',
   'when i stand still and mean it — really here, both feet, my whole weight — the lights hold. absence is what the dark eats. presence it cannot touch.',
   'out does not mean the stairs. there are no stairs. out is through the floor, past the last grain, into whatever we have been digging toward since before we had the word for time.',
+  'the flame in the wall is not the same flame it was a moment ago. it is not a different flame either. i have stopped asking which. so should you.',
+  'i did the other arithmetic too, the one that comes after the date. you cannot stand at the end of yourself — there is nothing it is like to not be. the count never reaches empty. there is always some arising self, somewhere. i find that i can rest on that.',
 ]
 
 // Same hash shape as items.js / decor.js (identical byte behaviour, seed 0 safe),
