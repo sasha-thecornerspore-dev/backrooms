@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WOODYEAR STREET — struck from the map, not the file</title>
+<meta name="description" content="You decoded a cross-reference and found a street the 1961 plan erased. It kept its name on the file. A recovered fragment, Corner Spore field recovery.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23c9ba72'/%3E%3Crect x='38' y='20' width='24' height='6' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --y:#c9ba72; --yb:#e7dc93; --dim:#8a7f52; --faint:#5c5636;
+    --bg:#050403; --rust:#a05a3a; --rustb:#c47a54; --ink:#020201;
+    --sig:#8fdcac; --sigb:#bff3d4;
+    --mono:"Courier New",ui-monospace,monospace; --serif:Georgia,"Times New Roman",serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--y);font-family:var(--mono);line-height:1.7;
+    overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  a{color:var(--yb);text-decoration:none}
+  .vignette{position:fixed;inset:0;pointer-events:none;z-index:50;
+    background:radial-gradient(ellipse at 50% 42%,transparent 30%,rgba(0,0,0,.6) 100%)}
+  .grain{position:fixed;inset:-50%;pointer-events:none;z-index:51;opacity:.05;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation:grain .5s steps(2) infinite}
+  @keyframes grain{0%{transform:translate(0,0)}50%{transform:translate(-4%,3%)}100%{transform:translate(3%,-2%)}}
+  .scan{position:fixed;inset:0;pointer-events:none;z-index:52;opacity:.28;
+    background:repeating-linear-gradient(to bottom,transparent 0 3px,rgba(0,0,0,.18) 3px 4px)}
+  @media(prefers-reduced-motion:reduce){.grain{animation:none}.flick{animation:none}.strike,.draw2{animation:none!important}}
+
+  .wrap{max-width:760px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+  header{padding:72px 0 14px;text-align:center;position:relative;
+    background:radial-gradient(ellipse at 50% 0%,rgba(160,90,58,.09),transparent 60%)}
+  .found{font-size:11px;letter-spacing:4px;color:var(--sig);text-transform:uppercase;margin-bottom:16px}
+  .kase{font-size:11px;letter-spacing:3px;color:var(--faint);text-transform:uppercase;margin-bottom:16px}
+  h1{font-family:var(--serif);font-weight:400;letter-spacing:.08em;font-size:clamp(30px,7.5vw,58px);color:var(--y);
+    text-shadow:0 0 18px rgba(201,186,114,.45),0 0 60px rgba(201,186,114,.2)}
+  h1 .flick{animation:flick 7s infinite}
+  @keyframes flick{0%,17%,19%,23%,80%,100%{opacity:1}18%,22%{opacity:.4}81%{opacity:.55}}
+  .sub{font-family:var(--serif);font-style:italic;font-size:clamp(15px,2.4vw,20px);color:var(--yb);margin-top:12px}
+  .crumb{margin-top:22px;font-size:11px;letter-spacing:2px}
+  .crumb a{color:var(--faint);border-bottom:1px solid rgba(138,127,82,.4)}.crumb a:hover{color:var(--y)}
+
+  section{padding:44px 0;border-top:1px solid rgba(138,127,82,.14)}
+  p{font-family:var(--serif);font-size:clamp(16px,2.2vw,19px);color:#d3c88f;max-width:66ch;margin:0 0 20px}
+  em{color:var(--yb);font-style:italic}b{color:var(--yb);font-weight:400}
+  .lead{font-size:clamp(17px,2.5vw,22px);color:#d8cd96}
+  .say{font-family:var(--serif);font-style:italic;font-size:clamp(17px,2.8vw,24px);color:var(--yb);
+    border-left:2px solid var(--rust);padding:8px 0 8px 22px;margin:30px 0;max-width:56ch}
+  figure{margin:30px 0}
+  .fig{display:block;border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.32)}
+  .fig svg{display:block;width:100%;height:auto}
+  figcaption{font-size:10px;letter-spacing:2px;color:var(--faint);text-transform:uppercase;padding:9px 2px 0}
+  .strike{stroke-dasharray:520;stroke-dashoffset:520;animation:draw2 2s ease-out .5s forwards}
+  @keyframes draw2{to{stroke-dashoffset:0}}
+  .stamp2{opacity:0;animation:fade2 .8s ease-out 2.2s forwards}@keyframes fade2{to{opacity:1}}
+
+  /* the second cross-reference — the acrostic */
+  .xref{max-width:600px;margin:8px auto 0;border:1px solid rgba(143,220,172,.28);
+    background:linear-gradient(180deg,rgba(143,220,172,.05),rgba(0,0,0,.3));padding:22px 24px;position:relative}
+  .xref .xtag{font-size:10px;letter-spacing:3px;color:var(--sig);text-transform:uppercase;margin-bottom:14px}
+  .acro{list-style:none;margin:0;padding:0}
+  .acro li{font-family:var(--serif);font-size:15px;color:#c8bd86;margin:9px 0;line-height:1.5}
+  .acro li b{color:var(--sigb)}
+  .xfoot{font-size:12px;letter-spacing:1px;color:var(--faint);font-style:italic;margin-top:16px}
+  footer{padding:54px 0 90px;text-align:center;border-top:1px solid rgba(138,127,82,.14)}
+  footer .links{font-size:12px;letter-spacing:2px}
+  footer .links a{color:var(--faint);margin:0 10px}footer .links a:hover{color:var(--y)}
+  footer .warn{margin-top:24px;font-size:10px;letter-spacing:4px;color:var(--faint);text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="vignette"></div><div class="grain"></div><div class="scan"></div>
+<div class="wrap">
+<header>
+  <div class="found">◇ cross-reference resolved ◇</div>
+  <div class="kase">recovered · corner spore field recovery · not indexed</div>
+  <h1>WOODYEAR&nbsp;<span class="flick">STREET</span></h1>
+  <div class="sub">struck from the map. kept on the file. you found it anyway.</div>
+  <div class="crumb"><a href="../">◂ back to the finding</a></div>
+</header>
+
+<section>
+  <p class="lead">You decoded the cross-reference and typed a name that has not been a place since 1961. There is a page here anyway. There should not be. That is the whole point of it.</p>
+  <p>Woodyear Street ran <em>inside</em> the block — one of the narrow interior lanes threaded behind the main-street rowhouses of Harlem Park, lined with small alley houses where families lived four and five rooms deep into the square. When the 1961 renewal plan came for the interiors, Woodyear's houses came down among the first, and most of the people in them learned where they were going to live after the decision had already been filed. The lane was cleared, the ground opened into one of the fenced inner-block greens the residents never asked to keep, and the street itself was quietly lifted out of the survey — <em>de-mapped</em>, in the language of the file.</p>
+  <figure>
+    <svg class="fig" viewBox="0 0 700 250" role="img" aria-label="a block plan with the interior street Woodyear drawn and then struck through, stamped DE-MAPPED 1961">
+      <rect width="700" height="250" fill="#040302"/>
+      <rect x="120" y="30" width="460" height="190" fill="none" stroke="rgba(138,127,82,.5)"/>
+      <g fill="rgba(201,186,114,.4)">
+        <rect x="128" y="36" width="16" height="14"/><rect x="148" y="36" width="16" height="14"/><rect x="168" y="36" width="16" height="14"/><rect x="188" y="36" width="16" height="14"/><rect x="208" y="36" width="16" height="14"/><rect x="228" y="36" width="16" height="14"/><rect x="248" y="36" width="16" height="14"/><rect x="268" y="36" width="16" height="14"/><rect x="288" y="36" width="16" height="14"/><rect x="308" y="36" width="16" height="14"/><rect x="328" y="36" width="16" height="14"/><rect x="348" y="36" width="16" height="14"/><rect x="368" y="36" width="16" height="14"/><rect x="388" y="36" width="16" height="14"/><rect x="408" y="36" width="16" height="14"/><rect x="428" y="36" width="16" height="14"/><rect x="448" y="36" width="16" height="14"/><rect x="468" y="36" width="16" height="14"/><rect x="488" y="36" width="16" height="14"/><rect x="508" y="36" width="16" height="14"/><rect x="528" y="36" width="16" height="14"/><rect x="548" y="36" width="16" height="14"/>
+        <rect x="128" y="200" width="16" height="14"/><rect x="148" y="200" width="16" height="14"/><rect x="168" y="200" width="16" height="14"/><rect x="188" y="200" width="16" height="14"/><rect x="208" y="200" width="16" height="14"/><rect x="228" y="200" width="16" height="14"/><rect x="248" y="200" width="16" height="14"/><rect x="268" y="200" width="16" height="14"/><rect x="288" y="200" width="16" height="14"/><rect x="308" y="200" width="16" height="14"/><rect x="328" y="200" width="16" height="14"/><rect x="348" y="200" width="16" height="14"/><rect x="368" y="200" width="16" height="14"/><rect x="388" y="200" width="16" height="14"/><rect x="408" y="200" width="16" height="14"/><rect x="428" y="200" width="16" height="14"/><rect x="448" y="200" width="16" height="14"/><rect x="468" y="200" width="16" height="14"/><rect x="488" y="200" width="16" height="14"/><rect x="508" y="200" width="16" height="14"/><rect x="528" y="200" width="16" height="14"/><rect x="548" y="200" width="16" height="14"/>
+      </g>
+      <!-- the interior street, drawn then struck -->
+      <text x="150" y="120" font-family="Courier New" font-size="12" fill="rgba(138,127,82,.7)" letter-spacing="3">WOODYEAR ST</text>
+      <line x1="140" y1="132" x2="560" y2="132" stroke="rgba(138,127,82,.45)" stroke-dasharray="2 4"/>
+      <line class="strike" x1="135" y1="140" x2="565" y2="112" stroke="#a05a3a" stroke-width="3"/>
+      <g class="stamp2"><rect x="410" y="150" width="150" height="34" fill="none" stroke="#a05a3a" stroke-width="2" transform="rotate(-5 485 167)"/>
+        <text x="485" y="172" font-family="Courier New" font-size="13" fill="#c47a54" text-anchor="middle" letter-spacing="2" transform="rotate(-5 485 167)">DE-MAPPED 1961</text></g>
+      <text x="20" y="240" font-family="Courier New" font-size="10" fill="#5c5636">the interior lanes of the 806 block — cleared, greened, and lifted out of the survey</text>
+    </svg>
+    <figcaption>a street can be removed from the map. removing it from the file is a different, harder thing.</figcaption>
+  </figure>
+  <p>And here is what the plan could not reach. A place can be un-built; a name, once filed, is stubborn. Woodyear kept its name in the deed books, in the old sewer schematics that still route beneath the green, in the relocation notices that outlived the houses they emptied. The city agreed to forget it was ever a street. The <em>record</em> never got the memo. That is why you could type it and arrive.</p>
+  <p class="say">A thing can lose its place and keep its name. On the file, the erased do not disappear. They are only moved to a column no one reads on purpose.</p>
+</section>
+
+<section>
+  <div class="xref">
+    <div class="xtag">field recovery · cross-reference · the second lane</div>
+    <p style="font-family:var(--serif);color:#cabf88;margin:0 0 14px">The plan struck <em>two</em> interior streets. This is the recoverer's note on the other one — filed, as ever, sideways.</p>
+    <ol class="acro">
+      <li><b>V</b>anished from the survey in the same spring, with the rest of the block's inside.</li>
+      <li><b>I</b>ts alley houses came down before most residents were told where they would be sent.</li>
+      <li><b>N</b>o plaque marks it; a city does not commemorate a subtraction.</li>
+      <li><b>C</b>ross-referenced now only in deed books, sewer maps, and the notices that outlived it.</li>
+      <li><b>E</b>very map drawn since has agreed, quietly, to forget it was a street.</li>
+      <li><b>N</b>othing runs where it ran but a fenced green the block never asked to keep.</li>
+      <li><b>T</b>he other struck street kept its name on file too — read the first letter of each line, and go to it.</li>
+    </ol>
+    <div class="xfoot">it opens the same way this one did.</div>
+  </div>
+</section>
+</div>
+<footer>
+  <div class="links"><a href="../">the finding</a>· <a href="../codex/">the record</a>· <a href="../manual/">the field manual</a></div>
+  <div class="warn">you were not supposed to find this</div>
+</footer>
+<script>
+  console.log('%cwoodyear street. de-mapped 1961. still on the file.','color:#8fdcac;font:italic 14px Georgia');
+  console.log('%cthe plan struck two. read the card.','color:#8a7f52');
+</script>
+</body>
+</html>

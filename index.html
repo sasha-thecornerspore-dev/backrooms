@@ -181,6 +181,20 @@
   .placard .body{font-size:12px;letter-spacing:1px;line-height:1.9}
   .placard .no{margin-top:16px;font-size:11px;letter-spacing:2px;color:var(--rust)}
 
+  /* recovered cross-reference — a taped index card with a hidden street name */
+  .xref{max-width:560px;margin:46px auto 0;border:1px solid rgba(138,127,82,.4);
+    background:linear-gradient(180deg,rgba(201,186,114,.06),rgba(0,0,0,.35));
+    padding:24px 26px;position:relative;transform:rotate(-.6deg);box-shadow:0 12px 44px rgba(0,0,0,.45)}
+  .xref::before{content:"";position:absolute;top:-9px;left:50%;width:88px;height:18px;
+    transform:translateX(-50%) rotate(1.6deg);background:rgba(201,186,114,.13);border:1px solid rgba(201,186,114,.22)}
+  .xref .xtag{font-size:10px;letter-spacing:3px;color:var(--rust);text-transform:uppercase;margin-bottom:12px}
+  .xref p{font-family:var(--serif);font-size:15px;color:#cabf88;margin:0 0 16px;max-width:none}
+  .xref p em{color:var(--yb);font-style:italic}
+  .xref .xrune{font-size:clamp(24px,6vw,40px);letter-spacing:.28em;text-align:center;color:var(--y);
+    text-shadow:0 0 14px rgba(201,186,114,.4);margin:6px 0 14px;
+    font-family:var(--mono),"Segoe UI Historic","Noto Sans Runic","Segoe UI Symbol",sans-serif}
+  .xref .xfoot{font-size:12px;letter-spacing:1px;color:var(--faint);font-style:italic;text-align:center}
+
   footer{padding:70px 0 90px;text-align:center;border-top:1px solid rgba(138,127,82,.14)}
   footer .who{font-family:var(--serif);letter-spacing:.2em;color:var(--dim);font-size:15px}
   footer .links{margin-top:14px;font-size:12px;letter-spacing:2px}
@@ -344,6 +358,13 @@
     <p>And it is never drawn as a clean ruin. Sealed houses stand interleaved with ones still in use — a boarded front, a lit one beside it. The block was not abandoned. It was <em>processed</em>. Some windows have lights on. Nobody comes out.</p>
 
     <p>The same filing cabinet that graded the block, erased the street, and condemned the house is the cabinet the game hands <em>you</em> at the door. It asks your name and files you under Baltimore. <em>The intake form is not framing — it is the antagonist's stationery.</em> The map is the antagonist. You consult the instrument that did this, and it consults you back.</p>
+
+    <div class="xref reveal">
+      <div class="xtag">field recovery · cross-reference · clipped to the 1961 plan</div>
+      <p>The plan struck two interior streets from the map. It did not strike them from the <em>file</em>. A thing can lose its place and keep its name — and a name, on file, is still an address. One of the two is still addressable, if you can still read.</p>
+      <div class="xrune" aria-label="an encoded street name, Elder Futhark">ᚹᛟᛟᛞᛃᛖᚨᚱ</div>
+      <div class="xfoot">decode it the way you decoded the gift. then go to it — it opens.</div>
+    </div>
   </section>
 
   <!-- ── THE ATLAS / BEACONS ── -->
