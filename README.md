@@ -21,11 +21,25 @@ an infinite procedural first-person horror maze that descends through four level
 
 ---
 
+## ▶ the live site — [thecornerspore.dev](https://thecornerspore.dev/)
+
+<p align="center">
+  <b><a href="https://thecornerspore.dev/">enter the finding →</a></b><br>
+  <a href="https://thecornerspore.dev/play/">play in your browser</a> ·
+  <a href="https://thecornerspore.dev/manual/">the field manual</a> ·
+  <a href="https://thecornerspore.dev/codex/">the record — the lore</a> ·
+  <a href="https://thecornerspore.dev/atlas/">the atlas</a>
+</p>
+
+> **these links render in your browser.** GitHub shows `.html` files inside this repo as *source code*, not as a page — so open the manual and the lore through the links above, not by clicking files under `docs/`.
+
+---
+
 ## 📖 the field manual
 
-**[open the illustrated field manual →](docs/manual.html)**
+**[open the illustrated field manual →](https://thecornerspore.dev/manual/)**
 
-everything in one place: controls, how to read your instruments, the four-floor descent, a bestiary of what lives down there, the items, and how to play online with someone. open it in any browser.
+everything in one place: controls, how to read your instruments, the four-floor descent, the items, the beacon, and the deeper record. it renders in any browser.
 
 ---
 
