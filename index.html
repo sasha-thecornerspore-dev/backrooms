@@ -77,6 +77,10 @@
   .finding em{color:var(--yb);font-style:italic}
   .redact{background:var(--y);color:var(--y);padding:0 .25em;border-radius:2px;
     transition:color .25s} .redact:hover{color:var(--ink)}
+  .redact.rx{cursor:pointer} .redact.shown{color:var(--ink)!important}
+  .memo{border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.3);padding:22px 26px;max-width:640px}
+  .memo p{font-family:var(--mono);font-size:15px;color:#c8bd86;margin:0 0 14px;line-height:1.95}
+  .memo .mfoot{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--faint);margin:0}
 
   /* ── the anchor — 806 N Carey ── */
   .anchor h2{font-family:var(--serif);font-weight:400;letter-spacing:.06em;
@@ -475,6 +479,13 @@
       <div class="no">notice 30150a &nbsp;·&nbsp; status: EXTENSION &nbsp;·&nbsp; 2004 → —</div>
     </div>
   </section>
+  <section class="reveal">
+    <div class="tag">internal · field recovery · // do not distribute</div>
+    <div class="memo">
+      <p>Field Recovery keeps no address. It is not headquartered on the <span class="redact rx" tabindex="0" role="button" aria-label="redacted word">surface</span>. Its only office is <span class="redact rx" tabindex="0" role="button" aria-label="redacted word">presence</span>. Every agent is an <span class="redact rx" tabindex="0" role="button" aria-label="redacted word">observer</span> — filed once, and instantiated by <span class="redact rx" tabindex="0" role="button" aria-label="redacted word">recurrence</span>, which is to say we are <span class="redact rx" tabindex="0" role="button" aria-label="redacted word">everywhere</span>. What we are is the word we were named for.</p>
+      <p class="mfoot">the black bars are not damage. they are a census. read the first letter of each struck word, in order — then go to what we are.</p>
+    </div>
+  </section>
 </main>
 
 <footer>
@@ -551,6 +562,13 @@
     so.observe(document.querySelector('.strata'));
   })();
 
+  // redaction census — reveal on tap/click/keyboard (hover already works via CSS)
+  document.querySelectorAll('.redact.rx').forEach(function(el){
+    var t=function(){el.classList.toggle('shown')};
+    el.addEventListener('click',t);
+    el.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();t()}});
+  });
+
   // for the curious
   console.log('%cthe planck length is nearly closed here.','color:#c9ba72;font:italic 14px Georgia');
   console.log('%c39.2854, -76.6083 — your body remains where you fell in.','color:#8a7f52');
@@ -558,6 +576,7 @@
   // recovered transmission — a vigenère cipher, keyed by the gift. the decoder is in the codex.
   console.log('%cwardline: IYIJEQKS GVEVWGJI AVHYIEKR SVBLLRES JEX','color:#8fdcac;font:13px Courier New');
   console.log('%c↳ keyed by the gift. open /codex/#cipher.','color:#5c5636;font:11px Courier New');
+  console.log('%cthe black bars are not damage. they are a census. read the first letter of each struck word.','color:#8fdcac;font:13px Courier New');
 </script>
 </body>
 </html>
