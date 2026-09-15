@@ -16,6 +16,9 @@
   body{background:var(--bg);color:var(--y);font-family:var(--mono);overflow:hidden}
   #map{position:absolute;inset:0;background:#040302;z-index:1}
   .leaflet-container{background:#040302}
+  /* dark-tint the light Voyager basemap so it reads on-brand — tiles only,
+     so beacon markers and attribution keep their own colours */
+  .leaflet-tile{filter:invert(1) hue-rotate(180deg) brightness(.9) contrast(.85) saturate(.55)}
   .vignette{position:fixed;inset:0;pointer-events:none;z-index:400;
     background:radial-gradient(ellipse at 50% 42%,transparent 45%,rgba(0,0,0,.5) 100%)}
   .scan{position:fixed;inset:0;pointer-events:none;z-index:401;opacity:.25;

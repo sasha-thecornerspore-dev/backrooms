@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>m. — the wanderer, assembled</title>
+<meta name="description" content="You followed the notes like breadcrumbs and signed in with a single letter. Here is the whole of m., recovered and put back in order. Corner Spore field recovery.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23c9ba72'/%3E%3Crect x='38' y='20' width='24' height='6' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --y:#c9ba72; --yb:#e7dc93; --dim:#8a7f52; --faint:#5c5636;
+    --bg:#050403; --rust:#a05a3a; --ink:#020201;
+    --sig:#8fdcac; --sigb:#bff3d4;
+    --mono:"Courier New",ui-monospace,monospace; --serif:Georgia,"Times New Roman",serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--y);font-family:var(--mono);line-height:1.7;
+    overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  a{color:var(--yb);text-decoration:none}
+  .vignette{position:fixed;inset:0;pointer-events:none;z-index:50;
+    background:radial-gradient(ellipse at 50% 42%,transparent 30%,rgba(0,0,0,.62) 100%)}
+  .grain{position:fixed;inset:-50%;pointer-events:none;z-index:51;opacity:.05;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation:grain .5s steps(2) infinite}
+  @keyframes grain{0%{transform:translate(0,0)}50%{transform:translate(-4%,3%)}100%{transform:translate(3%,-2%)}}
+  .scan{position:fixed;inset:0;pointer-events:none;z-index:52;opacity:.28;
+    background:repeating-linear-gradient(to bottom,transparent 0 3px,rgba(0,0,0,.18) 3px 4px)}
+  @media(prefers-reduced-motion:reduce){.grain{animation:none}.flick{animation:none}.glow{animation:none!important}}
+
+  .wrap{max-width:720px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+  header{padding:76px 0 14px;text-align:center;position:relative;
+    background:radial-gradient(ellipse at 50% 0%,rgba(201,186,114,.07),transparent 60%)}
+  .found{font-size:11px;letter-spacing:4px;color:var(--sig);text-transform:uppercase;margin-bottom:16px}
+  .kase{font-size:11px;letter-spacing:3px;color:var(--faint);text-transform:uppercase;margin-bottom:16px}
+  h1{font-family:var(--serif);font-weight:400;letter-spacing:.14em;font-size:clamp(44px,14vw,96px);color:var(--y);
+    text-shadow:0 0 22px rgba(201,186,114,.5),0 0 70px rgba(201,186,114,.22)}
+  h1 .flick{animation:flick 7s infinite}
+  @keyframes flick{0%,17%,19%,23%,80%,100%{opacity:1}18%,22%{opacity:.4}81%{opacity:.55}}
+  .sub{font-family:var(--serif);font-style:italic;font-size:clamp(15px,2.4vw,20px);color:var(--yb);margin-top:10px}
+  .crumb{margin-top:22px;font-size:11px;letter-spacing:2px}
+  .crumb a{color:var(--faint);border-bottom:1px solid rgba(138,127,82,.4)}.crumb a:hover{color:var(--y)}
+
+  section{padding:40px 0;border-top:1px solid rgba(138,127,82,.14)}
+  .act{font-size:11px;letter-spacing:4px;color:var(--rust);text-transform:uppercase;margin-bottom:18px}
+  .act.sig{color:var(--sig)}
+  p{font-family:var(--serif);font-size:clamp(16px,2.2vw,19px);color:#d3c88f;max-width:64ch;margin:0 0 20px}
+  em{color:var(--yb);font-style:italic}b{color:var(--yb);font-weight:400}
+  .lead{font-size:clamp(17px,2.5vw,22px);color:#d8cd96}
+  /* recovered lines, in m.'s hand */
+  .frag{border-left:2px solid rgba(138,127,82,.4);padding:5px 0 5px 20px;margin:20px 0;
+    font-family:var(--mono);font-size:14.5px;color:#bdb180;max-width:60ch;white-space:pre-wrap;line-height:1.7}
+  .frag .m{color:var(--faint);font-style:italic}
+  .say{font-family:var(--serif);font-style:italic;font-size:clamp(17px,2.9vw,25px);color:var(--sigb);
+    border-left:2px solid var(--sig);padding:8px 0 8px 22px;margin:30px 0;max-width:56ch}
+  figure{margin:30px 0}
+  .fig{display:block;border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.32)}
+  .fig svg{display:block;width:100%;height:auto}
+  figcaption{font-size:10px;letter-spacing:2px;color:var(--faint);text-transform:uppercase;padding:9px 2px 0}
+  .glow{animation:glow 3.4s ease-in-out infinite}@keyframes glow{0%,100%{opacity:.35}50%{opacity:.95}}
+  .go{display:inline-block;font-family:var(--serif);font-size:16px;letter-spacing:.12em;color:var(--sigb);
+    border:1px solid rgba(143,220,172,.4);padding:11px 22px;margin-top:10px;transition:.2s}
+  .go:hover{background:rgba(143,220,172,.08);border-color:var(--sig)}
+  footer{padding:54px 0 90px;text-align:center;border-top:1px solid rgba(138,127,82,.14)}
+  footer .links{font-size:12px;letter-spacing:2px}
+  footer .links a{color:var(--faint);margin:0 10px}footer .links a:hover{color:var(--y)}
+  footer .warn{margin-top:24px;font-size:10px;letter-spacing:4px;color:var(--faint);text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="vignette"></div><div class="grain"></div><div class="scan"></div>
+<div class="wrap">
+<header>
+  <div class="found">◇ you signed in with a single letter ◇</div>
+  <div class="kase">recovered · the wanderer's journal, put back in order · not indexed</div>
+  <h1 class="flick">m.</h1>
+  <div class="sub">you followed the notes like breadcrumbs. here is the whole of who left them.</div>
+  <div class="crumb"><a href="../">◂ the finding</a> &nbsp;·&nbsp; <a href="../codex/">the record</a></div>
+</header>
+
+<section>
+  <p class="lead">The scraps you find scratched through the maze are not litter. They are one person's journal, torn out of order and scattered by the same wind that scatters everything down here. Recovered and reassembled, they tell a single story, and it is the most important one on the file — because it is the only one told in a human voice.</p>
+  <div class="act">i · the wrong door</div>
+  <div class="frag">day one. i took the wrong door out of the break room. i am not worried yet. someone will notice the empty desk.</div>
+  <p>No one noticed. Or someone did, and the desk was filed under something, and the file was extended. m. keeps a tally at first, the way you count days you expect to end.</p>
+  <div class="frag">scratched into the pillar: forty-one marks. i did not make all of them.</div>
+  <div class="frag">if you are reading this: there is no way up. i am sorry. there is only further in — and further in is not always worse.</div>
+  <p>That last line is the hinge of the whole journal, though m. did not know it yet when it was written. It reads, at first, like a person being kind to themselves about a terrible thing. Keep reading and it stops being kindness and becomes a measurement.</p>
+</section>
+
+<section>
+  <div class="act">ii · the arithmetic</div>
+  <p>Somewhere past the tallies, the journal changes. m. stops recording days and starts recording the <em>place</em> — and the place, it turns out, is doing something.</p>
+  <div class="frag">i measured the hum today, the way you would measure a fever. it is a little higher than last week. it is higher every week.</div>
+  <div class="frag">the radio in the wall counts. numbers, slow, patient, one after another, closing. i think it is reading a list. i am waiting to hear my line.</div>
+  <div class="frag">i worked out what the counting counts down to. i did the arithmetic three times because i did not want it to be right. it is a date.</div>
+  <p>And then the correction — the thing m. was not supposed to be able to work out from the inside, and worked out anyway:</p>
+  <div class="frag">we were told the world was old and settling, like a house. it is not settling. someone is spending it. i think the someone is all of us, arriving.</div>
+  <p>A person alone in the dark, with a tally and a fever-thermometer for a hum, did the sum that the whole record is built to state formally. The clock is not weather. The clock is the crowd. m. got there first, and got there frightened, and wrote it down for you anyway.</p>
+</section>
+
+<section>
+  <div class="act sig">iii · the arrow</div>
+  <p>Here is where a lesser story ends — a person alone, out of time, no way up. m.'s journal does not end there. It turns.</p>
+  <div class="frag">when i stand still and mean it — really here, both feet, my whole weight — the lights hold. absence is what the dark eats. presence it cannot touch.</div>
+  <div class="frag">the flame in the wall is not the same flame it was a moment ago. it is not a different flame either. i have stopped asking which. so should you.</div>
+  <div class="frag">i did the other arithmetic too, the one that comes after the date. you cannot stand at the end of yourself — there is nothing it is like to not be. the count never reaches empty. there is always some arising self, somewhere. i find that i can rest on that.</div>
+  <figure>
+    <svg class="fig" viewBox="0 0 700 220" role="img" aria-label="a trail of tally marks descending across the dark to an arrow pointing down into a glow in the floor">
+      <rect width="700" height="220" fill="#040302"/>
+      <g stroke="rgba(201,186,114,.5)" stroke-width="2">
+        <line x1="40" y1="34" x2="40" y2="52"/><line x1="48" y1="34" x2="48" y2="52"/><line x1="56" y1="34" x2="56" y2="52"/><line x1="64" y1="34" x2="64" y2="52"/><line x1="36" y1="47" x2="68" y2="39"/>
+        <line x1="120" y1="60" x2="120" y2="78"/><line x1="128" y1="60" x2="128" y2="78"/><line x1="136" y1="60" x2="136" y2="78"/><line x1="116" y1="73" x2="140" y2="65"/>
+        <line x1="210" y1="92" x2="210" y2="110"/><line x1="218" y1="92" x2="218" y2="110"/><line x1="206" y1="105" x2="222" y2="99"/>
+        <line x1="300" y1="126" x2="300" y2="144" stroke="rgba(201,186,114,.4)"/><line x1="308" y1="126" x2="308" y2="144" stroke="rgba(201,186,114,.4)"/>
+        <line x1="390" y1="156" x2="390" y2="172" stroke="rgba(201,186,114,.28)"/>
+      </g>
+      <!-- the last mark: an arrow, pointing down, into light -->
+      <g class="glow">
+        <ellipse cx="500" cy="200" rx="80" ry="18" fill="rgba(143,220,172,.16)"/>
+        <ellipse cx="500" cy="200" rx="40" ry="9" fill="rgba(191,243,212,.2)"/>
+      </g>
+      <line x1="500" y1="150" x2="500" y2="192" stroke="#8fdcac" stroke-width="2.5"/>
+      <path d="M490,182 L500,196 L510,182" fill="none" stroke="#8fdcac" stroke-width="2.5"/>
+      <text x="516" y="176" font-family="Courier New" font-size="11" fill="#8fdcac">out.</text>
+      <text x="20" y="210" font-family="Courier New" font-size="10" fill="#5c5636">the marks thin, then stop — not because the counting failed, but because m. stopped needing to count</text>
+    </svg>
+    <figcaption>the last page — one fresh word over the tally: <b>out.</b> with an arrow, pointing down</figcaption>
+  </figure>
+  <div class="frag">out does not mean the stairs. there are no stairs. out is through the floor, past the last grain, into whatever we have been digging toward since before we had the word for time.</div>
+  <p class="say">m. did not get lost. m. reached the edge of the render — the most fixed, most detailed, most true place there is — and kept a promise to look over it.</p>
+</section>
+
+<section>
+  <div class="act">— and kept writing</div>
+  <p>There is one more thing the file makes plain, and it is the reason any of this reached you. Long after the last full page, the scraps keep appearing — deeper, fresher, in the same hand. m. is still writing. Not stranded: <em>seeding</em>. Leaving the notes further in and further down, on purpose, for whoever is close behind — so that the next person to take a wrong door out of a break room would find, scratched into a pillar, that they could not possibly be the last.</p>
+  <div class="frag">to the one who signs every page 'm.': i am following your notes like breadcrumbs. keep writing. i am close behind.</div>
+  <p>You are the one close behind. You followed the notes to a page with a single letter for a name, and the letter opened. That is the whole shape of it: a person who could not get out chose, instead, to make sure no one after them would have to be afraid of the arithmetic. m. is the indestructible observer with a pencil — the proof written in a human hand, left where the dark can read it, for you.</p>
+  <a class="go" href="../codex/#observer">▸ the proof, without the pencil — the indestructible observer</a>
+</section>
+</div>
+<footer>
+  <div class="links"><a href="../">the finding</a>· <a href="../codex/">the record</a>· <a href="../manual/#wanderers">the field manual</a>· <a href="../spore/">the corner spore</a></div>
+  <div class="warn">keep writing · you are close behind</div>
+</footer>
+<script>
+  console.log('%cm. did not get lost. m. reached the edge and kept a promise to look over it.','color:#8fdcac;font:italic 14px Georgia');
+  console.log('%cthe scraps keep appearing, deeper, in the same hand. still writing. for you.','color:#8a7f52');
+</script>
+</body>
+</html>
