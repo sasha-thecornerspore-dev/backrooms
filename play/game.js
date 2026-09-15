@@ -458,7 +458,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     return recoverManifest
   }
   async function handleCommand(t) {
-    const parts = t.slice(1).split(/s+/)
+    const parts = t.slice(1).trim().split(/ +/)   // plain-space split — no escapes to lose in transit
     const cmd = parts[0], arg = parts.slice(1).join(' ')
     try {
       if (cmd === 'recover' || cmd === 'case') {
