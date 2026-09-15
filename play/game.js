@@ -440,7 +440,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    against the case manifest — the SAME salted hash and the SAME
   //    same-origin keyring the web board at /recover/ uses, so a task done in
   //    the maze shows as read on the board, and vice versa. ──
-  const RECOVER_CASE = 'case-d8'
+  // the open case is remembered per browser (cs.case.open); /recover <case> switches it.
+  const RECOVER_DEFAULT = 'case-d8'
+  const rOpenCase = () => { try { return localStorage.getItem('cs.case.open') || RECOVER_DEFAULT } catch (e) { return RECOVER_DEFAULT } }
+  const rSetOpenCase = (id) => { try { localStorage.setItem('cs.case.open', id) } catch (e) {} }
   const RECOVER_SALT = 'cornerspore:'
   const rNorm = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '')
   async function rHash(s) {
@@ -449,25 +452,52 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
   const rKey = (c, s) => 'cs.case.' + c + '.' + s
   const rSolved = (c, s) => { try { return localStorage.getItem(rKey(c, s)) === '1' } catch (e) { return false } }
-  let recoverManifest = null
-  async function loadCase() {
-    if (recoverManifest) return recoverManifest
-    const r = await fetch('../recover/cases/' + RECOVER_CASE + '.json', { cache: 'no-store' })
+  let recoverManifest = null, recoverIndex = null
+  async function loadIndex() {
+    if (recoverIndex) return recoverIndex
+    const r = await fetch('../recover/cases/index.json', { cache: 'no-store' })
+    if (!r.ok) throw new Error('no index')
+    recoverIndex = (await r.json()).cases || []
+    return recoverIndex
+  }
+  async function loadCase(id) {
+    const want = id || rOpenCase()
+    if (recoverManifest && recoverManifest.id === want) return recoverManifest
+    const r = await fetch('../recover/cases/' + want + '.json', { cache: 'no-store' })
     if (!r.ok) throw new Error('no case')
     recoverManifest = await r.json()
     return recoverManifest
+  }
+  // '/recover d8', '/recover case-s37', '/recover S-37' all resolve against the index
+  async function resolveCase(q) {
+    const n = rNorm(q)
+    if (!n) return null
+    const idx = await loadIndex()
+    return idx.find(c => rNorm(c.id) === n || rNorm(c.code) === n || rNorm(c.id) === 'case' + n) || null
   }
   async function handleCommand(t) {
     const parts = t.slice(1).trim().split(/ +/)   // plain-space split — no escapes to lose in transit
     const cmd = parts[0], arg = parts.slice(1).join(' ')
     try {
-      if (cmd === 'recover' || cmd === 'case') {
+      if (cmd === 'recover' || cmd === 'case' || cmd === 'cases') {
+        if (cmd === 'cases' || arg === 'list') {
+          const idx = await loadIndex()
+          const rows = idx.map(c => c.code + ' ' + (c.stations || []).filter(s => rSolved(c.id, s)).length + '/' + (c.stations || []).length + (c.id === rOpenCase() ? ' (open)' : ''))
+          showMessage(rows.length ? rows.join(' · ') + ' — /recover <case> opens one.' : 'no cases have surfaced.')
+          return
+        }
+        if (arg) {
+          const c = await resolveCase(arg)
+          if (!c) { showMessage('no case answers to that. /cases lists them.'); return }
+          rSetOpenCase(c.id)
+        }
         const m = await loadCase()
         const done = m.stations.filter(s => rSolved(m.id, s.id)).length
         const next = m.stations.find(s => !rSolved(m.id, s.id))
         showMessage(m.title + ' — ' + done + ' of ' + m.stations.length + ' instruments read.' + (next ? ' next: ' + next.title + '.' : ' the case is read.'))
-        if ((level?.index ?? 0) === 4 && next && next.id === 'door')
-          setTimeout(() => showMessage('you are at the sealed door. the notice reads: EXTENSION. /file it.'), 2600)
+        // a station may declare where in the maze it can be read (manifest .maze = {level, hint})
+        if (next && next.maze && next.maze.hint && (level?.index ?? 0) === next.maze.level)
+          setTimeout(() => showMessage(next.maze.hint), 2600)
       } else if (cmd === 'file') {
         if (!arg) { showMessage('file what? /file <answer>'); return }
         const m = await loadCase()
@@ -479,7 +509,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
           if (!m.stations.some(s => !rSolved(m.id, s.id)))
             setTimeout(() => showMessage(((m.reward && m.reward.key) || 'the case is read.') + ' — open the board at /recover/.'), 3000)
         } else showMessage('the file does not answer to that.')
-      } else showMessage('the file does not recognise that. try /recover or /file <answer>.')
+      } else showMessage('the file does not recognise that. try /recover, /cases or /file <answer>.')
     } catch (e) { showMessage('the file could not be opened from here.') }
   }
   if (mpClient) {

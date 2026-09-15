@@ -8,9 +8,15 @@
       "title": "i · the map",
       "where": "the public record · 1937",
       "clue": "The federal Residential Security Map graded this ground with a single letter and a single word — the lowest grade there was, printed in red. Not one building was inspected to earn it. Open the real map, find the red district, and read the word it was stamped with.",
-      "link": { "label": "Mapping Inequality — the 1937 HOLC maps (University of Richmond)", "href": "https://dsl.richmond.edu/panorama/redlining/" },
+      "link": {
+        "label": "Mapping Inequality — the 1937 HOLC maps (University of Richmond)",
+        "href": "https://dsl.richmond.edu/panorama/redlining/"
+      },
       "prompt": "the one word the map stamped on grade D ground",
-      "gate": { "type": "sha256", "hash": "ddc85a7818baf887a17c3a634088f94b6089019d279b13d5a669f0c6a079eb5f" },
+      "gate": {
+        "type": "sha256",
+        "hash": "ddc85a7818baf887a17c3a634088f94b6089019d279b13d5a669f0c6a079eb5f"
+      },
       "onSolve": "the ground was graded. the hazard it scored was the people. now — what came for it, two generations on."
     },
     {
@@ -18,9 +24,15 @@
       "title": "ii · the record",
       "where": "the public record · 2012",
       "clue": "Fifty years after the red line kept the money out, the same line was used to aim money designed to fail — loans steered into the districts the map had condemned. The city sued. Then the U.S. Department of Justice reached its own settlement with the bank, and put the figure on the public record. Open it and find the amount.",
-      "link": { "label": "U.S. Department of Justice — the 2012 fair-lending settlement (archived)", "href": "https://www.justice.gov/archives/opa/pr/justice-department-reaches-settlement-wells-fargo-resulting-more-175-million-relief" },
+      "link": {
+        "label": "U.S. Department of Justice — the 2012 fair-lending settlement (archived)",
+        "href": "https://www.justice.gov/archives/opa/pr/justice-department-reaches-settlement-wells-fargo-resulting-more-175-million-relief"
+      },
       "prompt": "the settlement, in millions of dollars — digits only",
-      "gate": { "type": "sha256", "hash": "1d5617ec76701902bce9e74e23247f8d287bae327fa89630845e380212c106b6" },
+      "gate": {
+        "type": "sha256",
+        "hash": "1d5617ec76701902bce9e74e23247f8d287bae327fa89630845e380212c106b6"
+      },
       "onSolve": "first a wall against the money, then a funnel for it. the same red outline, used twice. one instrument left — the door itself."
     },
     {
@@ -28,11 +40,24 @@
       "title": "iii · the door",
       "where": "the maze · level ∅ — or the record",
       "clue": "The last instrument is the sealed door. Notice 30150A was posted on it in 2004 and never resolved — its status line reads one word, the only line in the whole file the system never closed. You can read that word in the maze: fall in at Level ∅, the block, and the notice on the door says it. Or find it in the record. Either way it is the same word, and it is the key.",
-      "link": { "label": "the record — the notice (§05) and the fourth instrument (§06)", "href": "../codex/#notice" },
-      "parity": ["in the maze — level ∅, the notice on the sealed door", "in the record"],
+      "link": {
+        "label": "the record — the notice (§05) and the fourth instrument (§06)",
+        "href": "../codex/#notice"
+      },
+      "parity": [
+        "in the maze — level ∅, the notice on the sealed door",
+        "in the record"
+      ],
       "prompt": "the status word on notice 30150A",
-      "gate": { "type": "sha256", "hash": "ed4b9955bc97d284e4a75bbd477e6c8449590153dbb3f1b8c835e3cd0262f83e" },
-      "onSolve": "never closed. never appealed. never demolished. extended — indefinitely. that is the door, and you have read it."
+      "gate": {
+        "type": "sha256",
+        "hash": "ed4b9955bc97d284e4a75bbd477e6c8449590153dbb3f1b8c835e3cd0262f83e"
+      },
+      "onSolve": "never closed. never appealed. never demolished. extended — indefinitely. that is the door, and you have read it.",
+      "maze": {
+        "level": 4,
+        "hint": "you are at the sealed door. the notice reads: EXTENSION. /file it."
+      }
     }
   ],
   "reward": {
