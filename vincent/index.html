@@ -61,6 +61,8 @@
   footer .links{font-size:12px;letter-spacing:2px}
   footer .links a{color:var(--faint);margin:0 10px}footer .links a:hover{color:var(--y)}
   footer .warn{margin-top:24px;font-size:10px;letter-spacing:4px;color:var(--faint);text-transform:uppercase}
+  .seal{max-width:520px;margin:22px auto 0;font-family:var(--mono);font-size:11px;letter-spacing:3px;color:var(--dim);text-transform:uppercase;text-align:center}
+  .seal a{color:var(--sigb);border-bottom:1px solid rgba(143,220,172,.4)}
 </style>
 </head>
 <body>
@@ -104,10 +106,23 @@
 <footer>
   <div class="links"><a href="../">the finding</a>· <a href="../codex/">the record</a>· <a href="../woodyear/">woodyear</a>· <a href="../atlas/">the atlas</a></div>
   <div class="warn">a thing can lose its place and keep its name</div>
+  <div class="seal" id="seal" hidden></div>
 </footer>
 <script>
   console.log('%cvincent street. struck once. kept, and kept, and kept.','color:#8fdcac;font:italic 14px Georgia');
   console.log('%cthe system can foreclose a token. it cannot deplete a type.','color:#a05a3a');
+</script>
+<script>
+(function(){
+  var slugs=['woodyear','vincent','spore','m'];
+  try{localStorage.setItem('cs.found.'+"vincent",'1')}catch(e){}
+  var found=slugs.map(function(s){try{return localStorage.getItem('cs.found.'+s)==='1'}catch(e){return false}});
+  var n=found.filter(Boolean).length, el=document.getElementById('seal');
+  if(el){
+    el.innerHTML='the file &nbsp; '+found.map(function(f){return f?'▪':'▫'}).join(' ')+' &nbsp; '+n+' of 4 recovered'+(n===4?' &nbsp;·&nbsp; <a href="../w/">▸ the recoverer</a>':'');
+    el.hidden=false;
+  }
+})();
 </script>
 </body>
 </html>

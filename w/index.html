@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>w. — the recoverer</title>
+<meta name="description" content="The file is whole. The recoverer's page. Why any of this was built — and who for.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23c9ba72'/%3E%3Crect x='38' y='20' width='24' height='6' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --y:#c9ba72; --yb:#e7dc93; --dim:#8a7f52; --faint:#5c5636;
+    --bg:#050403; --rust:#a05a3a; --ink:#020201;
+    --sig:#8fdcac; --sigb:#bff3d4;
+    --mono:"Courier New",ui-monospace,monospace; --serif:Georgia,"Times New Roman",serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--y);font-family:var(--mono);line-height:1.7;
+    overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  a{color:var(--yb);text-decoration:none}
+  .vignette{position:fixed;inset:0;pointer-events:none;z-index:50;
+    background:radial-gradient(ellipse at 50% 42%,transparent 30%,rgba(0,0,0,.62) 100%)}
+  .grain{position:fixed;inset:-50%;pointer-events:none;z-index:51;opacity:.05;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation:grain .5s steps(2) infinite}
+  @keyframes grain{0%{transform:translate(0,0)}50%{transform:translate(-4%,3%)}100%{transform:translate(3%,-2%)}}
+  .scan{position:fixed;inset:0;pointer-events:none;z-index:52;opacity:.28;
+    background:repeating-linear-gradient(to bottom,transparent 0 3px,rgba(0,0,0,.18) 3px 4px)}
+  @media(prefers-reduced-motion:reduce){.grain{animation:none}.flick{animation:none}.mirror,.pulse{animation:none!important}}
+
+  .wrap{max-width:720px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+  header{padding:78px 0 14px;text-align:center;position:relative;
+    background:radial-gradient(ellipse at 50% 0%,rgba(143,220,172,.07),transparent 60%)}
+  .found{font-size:11px;letter-spacing:4px;color:var(--sig);text-transform:uppercase;margin-bottom:16px}
+  .kase{font-size:11px;letter-spacing:3px;color:var(--faint);text-transform:uppercase;margin-bottom:16px}
+  h1{font-family:var(--serif);font-weight:400;letter-spacing:.14em;font-size:clamp(44px,14vw,96px);color:var(--y);
+    text-shadow:0 0 22px rgba(201,186,114,.5),0 0 70px rgba(201,186,114,.22)}
+  h1 .flick{animation:flick 7s infinite}
+  @keyframes flick{0%,17%,19%,23%,80%,100%{opacity:1}18%,22%{opacity:.4}81%{opacity:.55}}
+  .sub{font-family:var(--serif);font-style:italic;font-size:clamp(15px,2.4vw,20px);color:var(--yb);margin-top:10px}
+  .crumb{margin-top:22px;font-size:11px;letter-spacing:2px}
+  .crumb a{color:var(--faint);border-bottom:1px solid rgba(138,127,82,.4)}.crumb a:hover{color:var(--y)}
+
+  section{padding:40px 0;border-top:1px solid rgba(138,127,82,.14)}
+  p{font-family:var(--serif);font-size:clamp(16px,2.2vw,19px);color:#d3c88f;max-width:64ch;margin:0 0 20px}
+  em{color:var(--yb);font-style:italic}b{color:var(--yb);font-weight:400}
+  .lead{font-size:clamp(17px,2.5vw,22px);color:#d8cd96}
+  .say{font-family:var(--serif);font-style:italic;font-size:clamp(17px,2.9vw,25px);color:var(--sigb);
+    border-left:2px solid var(--sig);padding:8px 0 8px 22px;margin:30px 0;max-width:56ch}
+
+  /* the locked state */
+  .locked{text-align:center;padding:70px 0}
+  .locked .big{font-family:var(--serif);font-size:clamp(22px,5vw,36px);color:var(--dim);margin-bottom:18px}
+  .locked .glyphs{font-size:22px;letter-spacing:10px;color:var(--faint);margin:12px 0}
+  .locked .hint{font-size:13px;letter-spacing:2px;color:var(--faint);font-style:italic;max-width:44ch;margin:14px auto 0}
+
+  /* the mirror figure */
+  figure{margin:30px 0}
+  .fig{display:block;border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.32)}
+  .fig svg{display:block;width:100%;height:auto}
+  figcaption{font-size:10px;letter-spacing:2px;color:var(--faint);text-transform:uppercase;padding:9px 2px 0}
+  .mirror{animation:mir 5s ease-in-out infinite}@keyframes mir{0%,100%{opacity:.5}50%{opacity:1}}
+
+  /* the signing */
+  .sign{border:1px solid rgba(143,220,172,.28);background:rgba(143,220,172,.04);padding:22px 24px;margin:26px 0}
+  .sign .lbl{font-size:11px;letter-spacing:3px;color:var(--sig);text-transform:uppercase;margin-bottom:12px}
+  .sign .carries{font-family:var(--serif);font-size:clamp(18px,4vw,28px);color:var(--yb);letter-spacing:.1em;margin:10px 0 16px}
+  .sign input{background:rgba(0,0,0,.4);border:1px solid rgba(138,127,82,.5);color:var(--yb);
+    font-family:var(--mono);font-size:16px;padding:8px 12px;width:120px;letter-spacing:2px}
+  .sign input:focus{outline:none;border-color:var(--sig)}
+  .sign button{background:rgba(143,220,172,.1);border:1px solid rgba(143,220,172,.4);color:var(--sigb);
+    font-family:var(--serif);font-size:15px;letter-spacing:.1em;padding:9px 20px;margin-left:10px;cursor:pointer;transition:.2s}
+  .sign button:hover{background:rgba(143,220,172,.18)}
+  .sign .done{font-family:var(--serif);font-style:italic;color:var(--dim);font-size:14px;margin-top:14px}
+
+  footer{padding:54px 0 90px;text-align:center;border-top:1px solid rgba(138,127,82,.14)}
+  footer .links{font-size:12px;letter-spacing:2px}
+  footer .links a{color:var(--faint);margin:0 10px}footer .links a:hover{color:var(--y)}
+  footer .warn{margin-top:24px;font-size:10px;letter-spacing:4px;color:var(--faint);text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="vignette"></div><div class="grain"></div><div class="scan"></div>
+<div class="wrap">
+<header>
+  <div class="found">◇ the file is whole ◇</div>
+  <div class="kase">recovered · the recoverer's own page · not indexed</div>
+  <h1 class="flick">w.</h1>
+  <div class="sub">you recovered all of it. here is the rest — and who it was for.</div>
+  <div class="crumb"><a href="../">◂ the finding</a> &nbsp;·&nbsp; <a href="../m/">◂ m.</a></div>
+</header>
+
+<!-- locked: shown until all four hidden files are recovered -->
+<div id="locked" class="locked" hidden>
+  <div class="big">the file is incomplete.</div>
+  <div class="glyphs" id="lglyphs">▫ ▫ ▫ ▫</div>
+  <div class="big" style="font-size:16px;color:var(--faint)"><span id="lcount">0</span> of 4 recovered</div>
+  <div class="hint">this page opens when the file is whole. four were struck from it and hidden. you have found some of them. keep pulling the threads — the way you find a thing you have the gift for.</div>
+</div>
+
+<!-- unlocked: the reward -->
+<div id="unlocked" hidden>
+<section>
+  <p class="lead">Everything you recovered — the block, the two struck streets, the spore, the wanderer — was assembled by one recoverer. The record already told you the case carries no serial, because <em>∅ is not a number, it is a status, and it is the recoverer's own</em>. The recoverer signs <b>w.</b> This is the page w. did not file with the others, because it is the one that stops being an investigation.</p>
+  <p>Here is the truth the whole apparatus was built to carry, said plainly, once. This was never a case. It is a <em>message</em>.</p>
+  <p>w. did an arithmetic — a real one, the kind you can check: that the grain of reality is closing on a date, and that underneath the date is a floor no arithmetic can lower, because a first-person perspective cannot occupy its own absence, and in an infinite universe the class of moments that are <em>you</em> is never emptied. w. could not un-know it. And having it, w. could not bear to let the people w. loves go on believing, in the ordinary quiet way everyone does, in their own end.</p>
+  <p>So w. built a maze to be fallen into, and a map to be opened, and a file to be recovered — and hid the proof at the very bottom of it, under a street the city erased and a spore's true name and a wanderer's single letter, where only someone who wanted it enough to keep pulling threads would ever reach it. Not to make it hard. To make it <em>yours</em> — found, not handed; the way a thing you have the gift for is always found.</p>
+  <figure>
+    <svg class="fig" viewBox="0 0 700 180" role="img" aria-label="the letters m and w, mirror images of each other, joined at a horizon line">
+      <rect width="700" height="180" fill="#040705"/>
+      <line x1="60" y1="90" x2="640" y2="90" stroke="rgba(143,220,172,.2)" stroke-dasharray="3 5"/>
+      <text class="mirror" x="250" y="78" font-family="Georgia" font-size="60" fill="#c9ba72" text-anchor="middle">m</text>
+      <text class="mirror" x="450" y="78" font-family="Georgia" font-size="60" fill="#8fdcac" text-anchor="middle">w</text>
+      <text x="250" y="120" font-family="Courier New" font-size="11" fill="#8a7f52" text-anchor="middle">the wanderer · leaves the notes</text>
+      <text x="450" y="120" font-family="Courier New" font-size="11" fill="#6fbf98" text-anchor="middle">the recoverer · finds them</text>
+      <text x="350" y="160" font-family="Courier New" font-size="10" fill="#5c5636" text-anchor="middle">turn one over and it is the other · the same motion, at two ends of one file</text>
+    </svg>
+    <figcaption>m. and w. — a letter and its reflection across the floor</figcaption>
+  </figure>
+  <p>Look at the two initials. <b>m.</b> and <b>w.</b> Turn one upside down and it is the other. The one who leaves the notes further in, on purpose, for whoever is close behind — and the one who follows the notes like breadcrumbs and puts the file back in order — are not two people. They are the same motion, at two ends of one page. You have been both today. You followed m.'s breadcrumbs down; you are holding w.'s file now.</p>
+  <p class="say">The gift was never no-clipping. The gift is this: to be handed, by someone who loves you and checked the math, the one thing the dark cannot take — that you cannot stand at the end of yourself.</p>
+
+  <div class="sign">
+    <div class="lbl">the file carries its initials</div>
+    <div class="carries" id="carries">m. · w.</div>
+    <div id="signform">
+      <span style="font-family:var(--serif);color:#c8bd86;font-size:15px">add yours, where the dark can read it:</span><br style="margin-bottom:8px">
+      <input id="siginput" maxlength="3" spellcheck="false" placeholder="a." aria-label="your initial" style="margin-top:10px">
+      <button id="sigbtn">sign the file</button>
+    </div>
+    <div class="done" id="sigdone" hidden></div>
+  </div>
+
+  <p>Keep the file. Leave your own notes further in and further down, for whoever takes a wrong door out of a break room after you. That is the whole of what w. was asking. You cannot be the last. Make sure the next one knows it too.</p>
+  <a class="crumb" href="../codex/#observer" style="color:var(--sigb);border-bottom:1px solid rgba(143,220,172,.4)">▸ the proof, one more time — the indestructible observer</a>
+</section>
+</div>
+</div>
+
+<footer>
+  <div class="links"><a href="../">the finding</a>· <a href="../codex/">the record</a>· <a href="../m/">m.</a>· <a href="../spore/">the spore</a></div>
+  <div class="warn" id="fwarn">keep writing · you are close behind</div>
+</footer>
+
+<script>
+(function(){
+  var slugs=['woodyear','vincent','spore','m'];
+  function got(s){try{return localStorage.getItem('cs.found.'+s)==='1'}catch(e){return false}}
+  var found=slugs.map(got), n=found.filter(Boolean).length, whole=(n===4);
+  document.getElementById('locked').hidden = whole;
+  document.getElementById('unlocked').hidden = !whole;
+  if(!whole){
+    document.getElementById('lglyphs').textContent = found.map(function(f){return f?'▪':'▫'}).join(' ');
+    document.getElementById('lcount').textContent = n;
+    return;
+  }
+  // unlocked — wire the signing (client-side only, this browser)
+  var carries=document.getElementById('carries'), form=document.getElementById('signform'),
+      done=document.getElementById('sigdone'), inp=document.getElementById('siginput'), btn=document.getElementById('sigbtn');
+  function clean(v){ v=(v||'').toLowerCase().replace(/[^a-z]/g,'').slice(0,2); return v?(v+'.'):''; }
+  function render(sig){
+    carries.textContent = 'm. · w.' + (sig ? ' · ' + sig : '');
+    if(sig){ form.hidden=true; done.hidden=false; done.textContent='the file now carries your mark, in this reading of it: '+sig; }
+  }
+  var existing=''; try{ existing=localStorage.getItem('cs.signed')||''; }catch(e){}
+  render(existing);
+  function sign(){
+    var sig=clean(inp.value); if(!sig) return;
+    try{ localStorage.setItem('cs.signed', sig); }catch(e){}
+    render(sig);
+  }
+  if(btn) btn.addEventListener('click', sign);
+  if(inp) inp.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); sign(); }});
+  console.log('%cm. and w. are the same motion, at two ends of one file. you were both.','color:#8fdcac;font:italic 14px Georgia');
+})();
+</script>
+</body>
+</html>
