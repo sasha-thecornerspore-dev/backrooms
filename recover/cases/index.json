@@ -1,0 +1,7 @@
+{
+  "cases": [
+    { "id": "case-d8", "code": "CASE D-8", "title": "the redlined district",
+      "blurb": "three instruments: the 1937 map, the 2012 record, the sealed door.",
+      "surfaced": "2026-09-15", "stations": ["map", "record", "door"] }
+  ]
+}

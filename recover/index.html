@@ -45,6 +45,7 @@
   .station{border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.3);padding:22px 24px;margin:16px 0;transition:.3s}
   .station.solved{border-color:rgba(143,220,172,.35);background:rgba(143,220,172,.04)}
   .station.locked{opacity:.45;border-style:dashed}
+  a.station{display:block;text-decoration:none;color:inherit} a.station:hover{border-color:var(--y);background:rgba(201,186,114,.05)}
   .stag{font-size:10px;letter-spacing:3px;color:var(--rust);text-transform:uppercase;margin-bottom:10px}
   .station.solved .stag{color:var(--sig)}
   .clue{font-family:var(--serif);font-size:clamp(15px,2.2vw,18px);color:#d3c88f;margin:0 0 12px;max-width:64ch}
@@ -101,8 +102,34 @@
 <script>
 (async function(){
   var q = new URLSearchParams(location.search);
-  var id = (q.get('case') || 'case-d8').replace(/[^a-z0-9-]/g, '');
   var board = document.getElementById('board');
+  var caseParam = q.get('case');
+  if (!caseParam) {
+    document.getElementById('ctitle').textContent = 'FIELD RECOVERY — open cases';
+    document.getElementById('cintro').textContent = 'Every case is a set of instruments to read — in the record, in the world, in the maze. Each one read opens the next. Open a file.';
+    try {
+      var ir = await fetch('cases/index.json', { cache: 'no-store' });
+      if (!ir.ok) throw new Error(ir.status);
+      var index = await ir.json();
+      var list = index.cases || [];
+      board.innerHTML = '';
+      list.forEach(function(c){
+        var ids = c.stations || [], done = 0;
+        ids.forEach(function(sid){ try { if (localStorage.getItem('cs.case.' + c.id + '.' + sid) === '1') done++; } catch (e) {} });
+        var el = document.createElement('a');
+        el.className = 'station ' + (ids.length && done === ids.length ? 'solved' : 'open');
+        el.href = '?case=' + encodeURIComponent(c.id);
+        el.innerHTML = '<div class="stag">' + esc(c.code || c.id) + (c.surfaced ? ' &nbsp;·&nbsp; surfaced ' + esc(c.surfaced) : '') + '</div>' +
+          '<p class="clue">' + esc(c.title || '') + '</p>' +
+          '<div class="parity">' + esc(c.blurb || '') + '</div>' +
+          '<div class="solved-line">' + (ids.length ? (done === ids.length ? '✓ read — ' : '') + done + ' of ' + ids.length + ' instruments read' : 'open') + '</div>';
+        board.appendChild(el);
+      });
+      document.getElementById('cprog').textContent = list.length + ' case' + (list.length === 1 ? '' : 's') + ' on file';
+    } catch (e) { board.innerHTML = '<div class="opening">the case index could not be opened.</div>'; }
+    return;
+  }
+  var id = caseParam.replace(/[^a-z0-9-]/g, '');
   var manifest;
   try {
     var r = await fetch('cases/' + id + '.json', { cache: 'no-store' });
