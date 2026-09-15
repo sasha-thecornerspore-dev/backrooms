@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FIELD RECOVERY — case board</title>
+<meta name="description" content="Corner Spore field recovery. A case is a set of instruments to read — in the record, in the real world, in the maze. Each one read opens the next.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23c9ba72'/%3E%3Crect x='38' y='20' width='24' height='6' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --y:#c9ba72; --yb:#e7dc93; --dim:#8a7f52; --faint:#5c5636;
+    --bg:#050403; --rust:#a05a3a; --ink:#020201;
+    --sig:#8fdcac; --sigb:#bff3d4;
+    --mono:"Courier New",ui-monospace,monospace; --serif:Georgia,"Times New Roman",serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--y);font-family:var(--mono);line-height:1.7;
+    overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  a{color:var(--yb);text-decoration:none}
+  .vignette{position:fixed;inset:0;pointer-events:none;z-index:50;
+    background:radial-gradient(ellipse at 50% 42%,transparent 30%,rgba(0,0,0,.6) 100%)}
+  .grain{position:fixed;inset:-50%;pointer-events:none;z-index:51;opacity:.05;
+    background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    animation:grain .5s steps(2) infinite}
+  @keyframes grain{0%{transform:translate(0,0)}50%{transform:translate(-4%,3%)}100%{transform:translate(3%,-2%)}}
+  .scan{position:fixed;inset:0;pointer-events:none;z-index:52;opacity:.28;
+    background:repeating-linear-gradient(to bottom,transparent 0 3px,rgba(0,0,0,.18) 3px 4px)}
+  @media(prefers-reduced-motion:reduce){.grain{animation:none}.flick{animation:none}}
+
+  .wrap{max-width:760px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
+  header{padding:70px 0 10px;text-align:center;position:relative;
+    background:radial-gradient(ellipse at 50% 0%,rgba(160,90,58,.08),transparent 60%)}
+  .kase{font-size:11px;letter-spacing:4px;color:var(--faint);text-transform:uppercase;margin-bottom:16px}
+  h1{font-family:var(--serif);font-weight:400;letter-spacing:.08em;font-size:clamp(26px,6.5vw,50px);color:var(--y);
+    text-shadow:0 0 18px rgba(201,186,114,.45),0 0 60px rgba(201,186,114,.2)}
+  .sub{font-family:var(--serif);font-style:italic;font-size:clamp(15px,2.3vw,19px);color:#d3c88f;margin:14px auto 0;max-width:62ch}
+  .prog{margin-top:18px;font-size:11px;letter-spacing:3px;color:var(--sig);text-transform:uppercase}
+  .crumb{margin-top:18px;font-size:11px;letter-spacing:2px}
+  .crumb a{color:var(--faint);border-bottom:1px solid rgba(138,127,82,.4)}.crumb a:hover{color:var(--y)}
+
+  main{padding:30px 0 10px}
+  .opening{font-family:var(--serif);font-style:italic;color:var(--dim);text-align:center;padding:40px 0}
+  .station{border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.3);padding:22px 24px;margin:16px 0;transition:.3s}
+  .station.solved{border-color:rgba(143,220,172,.35);background:rgba(143,220,172,.04)}
+  .station.locked{opacity:.45;border-style:dashed}
+  .stag{font-size:10px;letter-spacing:3px;color:var(--rust);text-transform:uppercase;margin-bottom:10px}
+  .station.solved .stag{color:var(--sig)}
+  .clue{font-family:var(--serif);font-size:clamp(15px,2.2vw,18px);color:#d3c88f;margin:0 0 12px;max-width:64ch}
+  .src{display:inline-block;font-size:11px;letter-spacing:1px;color:var(--dim);border-bottom:1px solid rgba(138,127,82,.4);margin:0 0 12px}
+  .src:hover{color:var(--sig)}
+  .parity{font-size:11px;letter-spacing:2px;color:var(--faint);text-transform:uppercase;margin:6px 0 12px}
+  .veil{font-family:var(--serif);font-style:italic;color:var(--faint);font-size:14px}
+  .solved-line{font-family:var(--serif);font-style:italic;color:var(--sigb);font-size:15px;margin-top:8px}
+  .ask label{display:block;font-size:11px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;margin:8px 0 8px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .ask input{flex:1;min-width:180px;background:rgba(0,0,0,.45);border:1px solid rgba(138,127,82,.5);color:var(--yb);
+    font-family:var(--mono);font-size:15px;padding:9px 12px;letter-spacing:1px}
+  .ask input:focus{outline:none;border-color:var(--sig)}
+  .ask button{background:rgba(201,186,114,.1);border:1px solid rgba(201,186,114,.45);color:var(--yb);
+    font-family:var(--serif);font-size:15px;letter-spacing:.1em;padding:9px 18px;cursor:pointer;transition:.2s}
+  .ask button:hover{background:rgba(201,186,114,.2)}
+  .msg{font-family:var(--serif);font-style:italic;color:var(--rust);font-size:13px;margin-top:8px;min-height:1.4em}
+
+  .reward{border:1px solid rgba(143,220,172,.35);background:rgba(143,220,172,.05);padding:26px 28px;margin:26px 0 10px;text-align:center}
+  .reward .rtag{font-size:11px;letter-spacing:4px;color:var(--sig);text-transform:uppercase;margin-bottom:12px}
+  .reward h2{font-family:var(--serif);font-weight:400;font-size:clamp(20px,4.4vw,32px);color:var(--y);margin-bottom:12px}
+  .reward p{font-family:var(--serif);color:#d3c88f;font-size:16px;max-width:58ch;margin:0 auto 16px}
+  .reward .key{font-family:var(--mono);font-size:clamp(16px,3.6vw,24px);letter-spacing:.3em;color:var(--sigb);
+    text-shadow:0 0 14px rgba(143,220,172,.4);margin:14px 0 18px}
+  .go{display:inline-block;font-family:var(--serif);font-size:16px;letter-spacing:.12em;color:var(--sigb);
+    border:1px solid rgba(143,220,172,.4);padding:11px 22px;transition:.2s}
+  .go:hover{background:rgba(143,220,172,.08);border-color:var(--sig)}
+
+  footer{padding:50px 0 90px;text-align:center;border-top:1px solid rgba(138,127,82,.14);margin-top:30px}
+  footer .links{font-size:12px;letter-spacing:2px}
+  footer .links a{color:var(--faint);margin:0 10px}footer .links a:hover{color:var(--y)}
+  footer .warn{margin-top:24px;font-size:10px;letter-spacing:4px;color:var(--faint);text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="vignette"></div><div class="grain"></div><div class="scan"></div>
+<div class="wrap">
+<header>
+  <div class="kase">corner spore · field recovery · case board</div>
+  <h1 id="ctitle">—</h1>
+  <div class="sub" id="cintro"></div>
+  <div class="prog" id="cprog"></div>
+  <div class="crumb"><a href="../">◂ the finding</a> &nbsp;·&nbsp; <a href="../codex/">the record</a></div>
+</header>
+<main id="board"><div class="opening">opening the file…</div></main>
+<div id="reward" class="reward" hidden></div>
+</div>
+<footer>
+  <div class="links"><a href="../">the finding</a>· <a href="../codex/">the record</a>· <a href="../manual/">the field manual</a>· <a href="../atlas/">the atlas</a></div>
+  <div class="warn">each instrument read opens the next</div>
+</footer>
+
+<script src="engine.js"></script>
+<script>
+(async function(){
+  var q = new URLSearchParams(location.search);
+  var id = (q.get('case') || 'case-d8').replace(/[^a-z0-9-]/g, '');
+  var board = document.getElementById('board');
+  var manifest;
+  try {
+    var r = await fetch('cases/' + id + '.json', { cache: 'no-store' });
+    if (!r.ok) throw new Error(r.status);
+    manifest = await r.json();
+  } catch (e) {
+    board.innerHTML = '<div class="opening">the file could not be opened. (case ' + id + ')</div>';
+    return;
+  }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  document.getElementById('ctitle').textContent = manifest.title || id;
+  document.getElementById('cintro').textContent = manifest.intro || '';
+
+  function render(){
+    var p = Recover.progress(manifest);
+    document.getElementById('cprog').textContent = 'instruments read · ' + p.solvedCount + ' of ' + p.stations.length;
+    board.innerHTML = '';
+    p.stations.forEach(function(o, i){
+      var s = o.station, el = document.createElement('section');
+      el.className = 'station ' + o.state;
+      var h = '<div class="stag">' + esc(s.title || ('instrument ' + (i + 1))) + (s.where ? ' &nbsp;·&nbsp; ' + esc(s.where) : '') + '</div>';
+      if (o.state === 'locked') {
+        h += '<div class="veil">— sealed until the instrument before it is read —</div>';
+      } else {
+        h += '<p class="clue">' + esc(s.clue || '') + '</p>';
+        if (s.link) h += '<a class="src" target="_blank" rel="noopener noreferrer" href="' + esc(s.link.href) + '">↗ ' + esc(s.link.label || s.link.href) + '</a><br>';
+        if (s.parity && s.parity.length) h += '<div class="parity">read it by: ' + s.parity.map(esc).join(' &nbsp;·&nbsp; ') + '</div>';
+        if (o.state === 'solved') {
+          h += '<div class="solved-line">✓ read. ' + esc(s.onSolve || '') + '</div>';
+        } else {
+          h += '<div class="ask"><label>' + esc(s.prompt || 'your answer') + '</label>' +
+               '<div class="row"><input type="text" autocomplete="off" spellcheck="false" data-i="' + i + '" aria-label="answer">' +
+               '<button type="button" data-i="' + i + '">file it</button></div><div class="msg" data-m="' + i + '"></div></div>';
+        }
+      }
+      el.innerHTML = h;
+      board.appendChild(el);
+    });
+    var rw = document.getElementById('reward');
+    if (p.complete && manifest.reward) {
+      var R = manifest.reward;
+      rw.innerHTML = '<div class="rtag">◇ case closed ◇</div><h2>' + esc(R.title || '') + '</h2><p>' + esc(R.text || '') + '</p>' +
+        (R.key ? '<div class="key">' + esc(R.key) + '</div>' : '') +
+        (R.href ? '<a class="go" href="' + esc(R.href) + '">' + esc(R.linkLabel || '▸ open the door') + '</a>' : '');
+      rw.hidden = false;
+    } else rw.hidden = true;
+  }
+
+  board.addEventListener('click', async function(e){
+    var b = e.target.closest('button[data-i]'); if (!b) return;
+    var i = +b.dataset.i, s = manifest.stations[i];
+    var inp = board.querySelector('input[data-i="' + i + '"]'), msg = board.querySelector('[data-m="' + i + '"]');
+    var ok = false;
+    try { ok = await Recover.checkGate(inp.value, s.gate); } catch (err) { ok = false; }
+    if (ok) { Recover.markSolved(manifest.id, s.id); render(); }
+    else { msg.textContent = 'the file does not answer to that.'; inp.value = ''; inp.focus(); }
+  });
+  board.addEventListener('keydown', function(e){
+    if (e.key !== 'Enter') return;
+    var inp = e.target.closest('input[data-i]'); if (!inp) return;
+    e.preventDefault();
+    var b = board.querySelector('button[data-i="' + inp.dataset.i + '"]'); if (b) b.click();
+  });
+  render();
+})();
+</script>
+</body>
+</html>
