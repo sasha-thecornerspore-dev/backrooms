@@ -409,7 +409,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     typingStopT = setTimeout(() => { typingSent = false; mpClient.sendTyping(false) }, 1800)
   }
   function openChat() {
-    if (!mpClient || !chatInputEl || chatOpen) return
+    if (!chatInputEl || chatOpen) return          // solo too — the input doubles as the field console
     chatOpen = true
     for (const k in K) K[k] = false            // drop any held movement keys
     document.exitPointerLock()
@@ -423,10 +423,65 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
   chatInputEl?.addEventListener('keydown', (e) => {
     e.stopPropagation()
-    if (e.code === 'Enter' || e.code === 'NumpadEnter') { const t = chatInputEl.value.trim(); if (t) mpClient?.sendChat(t); closeChat() }
+    if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+      const t = chatInputEl.value.trim()
+      if (t.startsWith('/') && !t.startsWith('/me ')) handleCommand(t)   // the field console
+      else if (t && mpClient) mpClient.sendChat(t)
+      else if (t) showMessage('no one is here to hear it.')
+      closeChat()
+    }
     else if (e.code === 'Escape') closeChat()
     else noteTyping()
   })
+
+  // ── the field console: the chat input doubles as a command line, solo or
+  //    online. /recover reports the open case (and at the sealed door on
+  //    Level ∅ surfaces its key); /file <answer> reads the next instrument
+  //    against the case manifest — the SAME salted hash and the SAME
+  //    same-origin keyring the web board at /recover/ uses, so a task done in
+  //    the maze shows as read on the board, and vice versa. ──
+  const RECOVER_CASE = 'case-d8'
+  const RECOVER_SALT = 'cornerspore:'
+  const rNorm = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '')
+  async function rHash(s) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(RECOVER_SALT + rNorm(s)))
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+  }
+  const rKey = (c, s) => 'cs.case.' + c + '.' + s
+  const rSolved = (c, s) => { try { return localStorage.getItem(rKey(c, s)) === '1' } catch (e) { return false } }
+  let recoverManifest = null
+  async function loadCase() {
+    if (recoverManifest) return recoverManifest
+    const r = await fetch('../recover/cases/' + RECOVER_CASE + '.json', { cache: 'no-store' })
+    if (!r.ok) throw new Error('no case')
+    recoverManifest = await r.json()
+    return recoverManifest
+  }
+  async function handleCommand(t) {
+    const parts = t.slice(1).split(/s+/)
+    const cmd = parts[0], arg = parts.slice(1).join(' ')
+    try {
+      if (cmd === 'recover' || cmd === 'case') {
+        const m = await loadCase()
+        const done = m.stations.filter(s => rSolved(m.id, s.id)).length
+        const next = m.stations.find(s => !rSolved(m.id, s.id))
+        showMessage(m.title + ' — ' + done + ' of ' + m.stations.length + ' instruments read.' + (next ? ' next: ' + next.title + '.' : ' the case is read.'))
+        if ((level?.index ?? 0) === 4 && next && next.id === 'door')
+          setTimeout(() => showMessage('you are at the sealed door. the notice reads: EXTENSION. /file it.'), 2600)
+      } else if (cmd === 'file') {
+        if (!arg) { showMessage('file what? /file <answer>'); return }
+        const m = await loadCase()
+        const next = m.stations.find(s => !rSolved(m.id, s.id))
+        if (!next) { showMessage('the case is already read.'); return }
+        if ((await rHash(arg)) === String((next.gate && next.gate.hash) || '').toLowerCase()) {
+          try { localStorage.setItem(rKey(m.id, next.id), '1') } catch (e) {}
+          blip(); showMessage('filed. ' + next.title + ' — read. ' + (next.onSolve || ''))
+          if (!m.stations.some(s => !rSolved(m.id, s.id)))
+            setTimeout(() => showMessage(((m.reward && m.reward.key) || 'the case is read.') + ' — open the board at /recover/.'), 3000)
+        } else showMessage('the file does not answer to that.')
+      } else showMessage('the file does not recognise that. try /recover or /file <answer>.')
+    } catch (e) { showMessage('the file could not be opened from here.') }
+  }
   if (mpClient) {
     mpClient.onChat(addChatLine)
     mpClient.onTyping(showTyping)
@@ -807,7 +862,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
 
     // Enter opens chat when connected to others
-    if (mpClient && !chatOpen && !dialogOpen && !noteOpen && (K['Enter'] || K['NumpadEnter'])) {
+    if (!chatOpen && !dialogOpen && !noteOpen && (K['Enter'] || K['NumpadEnter'])) {
       K['Enter'] = false; K['NumpadEnter'] = false; openChat()
     }
 

@@ -1,7 +1,9 @@
 // The Backrooms — PWA service worker (self-contained /play/ build).
 // Precaches the whole game so it installs and runs offline. Cross-origin
-// requests (the Cloudflare multiplayer relay) are never intercepted.
-const CACHE = 'backrooms-play-v8'
+// requests (the Cloudflare multiplayer relay) are never intercepted, and
+// neither are the recovery-engine case manifests under /recover/ — those
+// must always be live so a case can change without a cache bump.
+const CACHE = 'backrooms-play-v9'
 const SHELL = [
   './', 'index.html',
   'game.js', 'touch.js', 'scraps.js', 'events.js', 'anchor.js', 'items.js', 'save.js', 'world.js', 'decor.js',
@@ -22,6 +24,7 @@ self.addEventListener('fetch', (e) => {
   const req = e.request
   if (req.method !== 'GET') return
   if (new URL(req.url).origin !== self.location.origin) return
+  if (new URL(req.url).pathname.includes('/recover/')) return   // trail manifests stay live — never cached
   e.respondWith((async () => {
     const cached = await caches.match(req)
     if (cached) return cached
