@@ -1,7 +1,29 @@
 {
   "cases": [
-    { "id": "case-d8", "code": "CASE D-8", "title": "the redlined district",
+    {
+      "id": "case-d8",
+      "code": "CASE D-8",
+      "title": "the redlined district",
       "blurb": "three instruments: the 1937 map, the 2012 record, the sealed door.",
-      "surfaced": "2026-09-15", "stations": ["map", "record", "door"] }
+      "surfaced": "2026-09-15",
+      "stations": [
+        "map",
+        "record",
+        "door"
+      ]
+    },
+    {
+      "id": "case-m10q",
+      "code": "CASE M-10Q",
+      "title": "the machine",
+      "blurb": "four instruments: the word, the count, the recount, and the radio in the deep stacks.",
+      "surfaced": "2026-09-15",
+      "stations": [
+        "word",
+        "count",
+        "recount",
+        "radio"
+      ]
+    }
   ]
 }

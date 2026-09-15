@@ -495,8 +495,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         const done = m.stations.filter(s => rSolved(m.id, s.id)).length
         const next = m.stations.find(s => !rSolved(m.id, s.id))
         showMessage(m.title + ' — ' + done + ' of ' + m.stations.length + ' instruments read.' + (next ? ' next: ' + next.title + '.' : ' the case is read.'))
-        // a station may declare where in the maze it can be read (manifest .maze = {level, hint})
-        if (next && next.maze && next.maze.hint && (level?.index ?? 0) === next.maze.level)
+        // a station may declare where in the maze it can be read (manifest .maze = {level | levels, hint})
+        const mazeLevels = next && next.maze ? (next.maze.levels || [next.maze.level]) : []
+        if (next && next.maze && next.maze.hint && mazeLevels.includes(level?.index ?? 0))
           setTimeout(() => showMessage(next.maze.hint), 2600)
       } else if (cmd === 'file') {
         if (!arg) { showMessage('file what? /file <answer>'); return }

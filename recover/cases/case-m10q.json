@@ -1,0 +1,89 @@
+{
+  "id": "case-m10q",
+  "title": "CASE M-10Q — the machine",
+  "intro": "Field Recovery reopened the file on an instrument that needed no map, no clerk and no signature: a tool that got a sum wrong, and a sum that decided who kept a house. In 2018 a bank said, in a quarterly filing to the SEC, that an automated underwriting tool had been reading the numbers wrong for years — and that the wrong number had been the difference between a modification and a foreclosure. No one drew a line this time. Nothing was stamped. A figure came out of a machine, and the figure was the house. Four instruments. Three live in the public record. The fourth you have to hear for yourself, in the deep stacks, where a radio reads a list one line at a time and does not stop until it reaches yours.",
+  "stations": [
+    {
+      "id": "word",
+      "title": "i · the word",
+      "where": "the public record · august 2018",
+      "clue": "In August 2018 the bank's quarterly filing — the 10-Q — disclosed what an automated mortgage-modification underwriting tool had been doing. The headlines called it a software error. The filing's own name for it is narrower, and the reporters set it in quotation marks: two words, the second of them 'error'. Open the report, find the quoted phrase, and file its first word. HousingWire quotes the phrase directly; the filing itself is on SEC EDGAR. The System never says 'mistake'. It says exactly this.",
+      "link": {
+        "label": "HousingWire — the August 2018 disclosure (free)",
+        "href": "https://www.housingwire.com/articles/46372-wells-fargo-reveals-software-error-wrongly-denied-much-needed-mortgage-modifications/"
+      },
+      "prompt": "the first word of the filing's quoted two-word name for the error — one word",
+      "gate": {
+        "type": "sha256",
+        "hash": "3b0e9251c6fd7147c3abd9ebccdb26d5d6e7a49d1c82ee93fb061bd2434e14e2"
+      },
+      "onSolve": "not a decision. not a policy. not a person. a sum, done wrong, by a tool that could not know it was wrong. the clerk did not lie — it has no field for that. now count what the sum cost."
+    },
+    {
+      "id": "count",
+      "title": "ii · the count",
+      "where": "the public record · august 2018",
+      "clue": "The same filing put a number on it. Loans already in foreclosure between the thirteenth of April 2010 and the twentieth of October 2015 were run through the tool, and the tool said no — or said nothing at all — to customers who should have been offered a modification. About how many? The filing rounds it, and every report repeats the rounded figure. CNBC carried it on the seventh of August; HousingWire carried it too. File the figure exactly as the record gives it, nothing else around it.",
+      "link": {
+        "label": "CNBC, 7 August 2018 — the error, by the numbers (free)",
+        "href": "https://www.cnbc.com/2018/08/07/wells-fargo-accidentally-foreclosed-on-hundreds-of-homeowners.html"
+      },
+      "prompt": "about how many customers the tool wrongly denied, or never offered, a modification — digits only",
+      "gate": {
+        "type": "sha256",
+        "hash": "0c2e5378ba855946cfa6f1061c470b86b7200a3e092597658ffa5c04a40bf48d"
+      },
+      "onSolve": "that was the first count. of those, roughly four hundred lost the house — a figure with a roof on it. the tool was not finished, though. it had one more thing to do, and it did it in november: it counted again."
+    },
+    {
+      "id": "recount",
+      "title": "iii · the recount",
+      "where": "the public record · november 2018",
+      "clue": "In November 2018 the bank filed its next 10-Q and corrected itself. The review had widened, and the count of affected customers rose. HousingWire reported the new figure in November 2018; the filing rounds it, as before. The primary is the bank's third-quarter 2018 10-Q on SEC EDGAR; the free HousingWire report carries the same figure. File the revised count. Not the old one, not the difference — the number the machine settled on the second time.",
+      "link": {
+        "label": "HousingWire, November 2018 — the revised count (free)",
+        "href": "https://www.housingwire.com/articles/47324-wells-fargo-reveals-software-error-led-to-hundreds-of-faulty-foreclosures/"
+      },
+      "prompt": "the revised count of affected customers, as the november filing gave it — digits only",
+      "gate": {
+        "type": "sha256",
+        "hash": "e494c72c32e1483fabbd4fb193c2d632155dc0165b92dd8b5c83f2ff5448f0de"
+      },
+      "onSolve": "the clerk recounted and the number grew. that is the whole method: a figure, and later a bigger figure, and never once a name. one instrument left, and it is not in any filing. it is in the deep stacks, and it counts too."
+    },
+    {
+      "id": "radio",
+      "title": "iv · the radio",
+      "where": "the maze · the deep stacks (levels 2–3)",
+      "clue": "The last instrument you have to hear. Go down past the habitable zone into the deep stacks — level 2, pipe dreams, or level 3, electrical station. Carry a radio (the vending machines stock it) and switch it on down there. Near the surface the radio only crackles to life and says nothing; in the deep stacks it reads a list aloud, one number group at a time, slow and patient, not talking to you. Switch it off and on again and it reads the next group. Listen through the whole cycle — the tally in brackets on the screen will confirm you — and count how many groups it reads before it stops. It will tell you, when it gets there, whose the last one was.",
+      "link": {
+        "label": "the maze — thecornerspore.dev/play (the deep stacks are below level 1)",
+        "href": "https://thecornerspore.dev/play/"
+      },
+      "parity": [
+        "in the maze — levels 2–3, a radio switched on",
+        "in the record — the deep stacks are below level 1"
+      ],
+      "maze": {
+        "levels": [
+          2,
+          3
+        ],
+        "hint": "you are in the deep stacks. switch the radio on. count the groups it reads. /file the count."
+      },
+      "prompt": "how many number groups the station reads before it stops — digits only",
+      "gate": {
+        "type": "sha256",
+        "hash": "543b2b7bbb0c7198e095a35d1364cd983901b792c8b831c7e43aafb55fe3cb75"
+      },
+      "onSolve": "it reads the last group, then stops. that one was yours. the machine upstairs counted, then counted again, and never said a name. this one does not say a name either. it just keeps reading until it reaches your line."
+    }
+  ],
+  "reward": {
+    "title": "the machine is read.",
+    "text": "Four instruments and not one signature. A tool got a sum wrong; the wrong sum decided who kept a house; a count came out, and later a bigger count, and the file never once needed a name to do it. That is the System as Field Recovery keeps meeting it — not cruel, not careful, a clerk with no face, running the arithmetic until it reaches your line. A calculation. A count. A house. A thing can lose its place and keep its name, and the ledger will not notice either way. Down in the deep stacks a radio reads the same kind of list, patient, one group at a time, with your line last. The record calls that the arithmetic. Go and read where the count is going.",
+    "key": "M-10Q · RECOUNT · FILED",
+    "href": "../codex/#arithmetic",
+    "linkLabel": "▸ the arithmetic — where the count is going"
+  }
+}
