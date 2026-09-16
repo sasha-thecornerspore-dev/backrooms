@@ -149,7 +149,18 @@
   }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   // only https or same-site relative links ever render — a manifest can't smuggle javascript:/data: hrefs
-  function safeHref(h){ h = String(h == null ? '' : h); return /^https:\/\//.test(h) || (!/^[a-z][a-z0-9+.-]*:/i.test(h) && h.indexOf('//') !== 0 && h.length > 0); }
+  // resolve a link exactly as the browser will: refuse whitespace, backslashes and control characters anywhere
+  // (browsers strip or reinterpret them, which turns a 'relative' string into an external or script link), then
+  // accept only https, and a relative link only when it lands on this same site
+  function safeHref(h){
+    h = String(h == null ? '' : h);
+    if (!h || /[\s\\\x00-\x1f\x7f]/.test(h)) return false;
+    var u; try { u = new URL(h, location.href); } catch (e) { return false; }
+    if (h.indexOf('//') === 0) return false;                      // protocol-relative: never used by a manifest
+    var relative = !/^[a-z][a-z0-9+.-]*:/i.test(h);
+    if (relative) return u.origin === location.origin;
+    return u.protocol === 'https:';
+  }
   document.getElementById('ctitle').textContent = manifest.title || id;
   document.getElementById('cintro').textContent = manifest.intro || '';
 
@@ -174,10 +185,12 @@
         if (s.parity && s.parity.length) h += '<div class="parity">read it by: ' + s.parity.map(esc).join(' &nbsp;·&nbsp; ') + '</div>';
         if (o.state !== 'solved' && s.geo && typeof s.geo.lat === 'number') {
           // a public landmark where the key can be read on site. the button asks for
-          // location only when pressed; the position is compared here and discarded.
+          // location only when pressed; if the landmark is a live door on the atlas the position is posted once to
+          // the relay's check-in (it verifies proximity and keeps no coordinates), otherwise compared here and dropped.
           // the safety line is fixed here, not authorable from the manifest.
           h += '<div class="geo"><div class="gname">◎ ' + esc(s.geo.name || 'the landmark') + (s.geo.hours ? ' &nbsp;·&nbsp; ' + esc(s.geo.hours) : '') + '</div>' +
-               '<div class="safe">read it from the public grounds, in open hours. stay where anyone may stand; nothing to touch, take or enter. bring someone. the record link above reads the same key from anywhere.</div>' +
+               '<div class="safe">read it from the public grounds, in open hours. stay where anyone may stand; nothing to touch, take or enter. bring someone. the record link above reads the same key from anywhere.' +
+               (s.geo.beacon ? ' this landmark is a door on the atlas: reading it here leaves an anonymous mark there, and your position is used once to check you are at it, then dropped.' : '') + '</div>' +
                '<div class="row"><button type="button" class="here" data-g="' + i + '">i am standing at it — read it here</button>' +
                (s.geo.beacon && safeHref('../atlas/#' + s.geo.beacon) ? '<a class="src" href="../atlas/#' + esc(s.geo.beacon) + '">↗ this door on the atlas</a>' : '') + '</div>' +
                '<div class="msg gmsg" data-gm="' + i + '"></div></div>';

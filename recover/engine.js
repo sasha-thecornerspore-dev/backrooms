@@ -48,8 +48,10 @@
   }
 
   // ── geo parity: a station may name a PUBLIC landmark where its key can be read on site.
-  // Proximity is computed HERE, in the browser. The position never leaves the page, is
-  // never stored, and only ever answers one question: is this device within the radius?
+  // These helpers compute proximity in the browser for the fallback read (no live door on the atlas, or the
+  // relay unreachable): the position is compared here and dropped. When the landmark IS a live unsealed door,
+  // index.html instead posts the position once to the relay's existing check-in, which verifies proximity and
+  // stores no coordinates. Nothing here is ever stored.
   function haversineM(lat1, lng1, lat2, lng2) {
     var R = 6371000, toR = function (d) { return d * Math.PI / 180; };
     var dLat = toR(lat2 - lat1), dLng = toR(lng2 - lng1);
