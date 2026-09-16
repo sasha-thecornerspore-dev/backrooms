@@ -161,6 +161,7 @@
   }).addTo(map)
 
   const byId = new Map()
+  const mapPts = []   // every door and case door drawn, for framing the view
 
   let visitor = localStorage.getItem('atlas:visitor')
   if (!visitor) { visitor = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)); localStorage.setItem('atlas:visitor', visitor) }
@@ -171,7 +172,7 @@
     const res = validateBeaconSet(doc)
     if (!res.ok) throw new Error(res.error)
     document.getElementById('count').textContent = `${res.count} door${res.count === 1 ? '' : 's'}`
-    const pts = []
+    const pts = mapPts
     for (const b of doc.beacons) {
       const st = beaconStyle(b)
       // display tier from public presence strata (sealed doors are records, not doors — no rings)
@@ -211,7 +212,9 @@
       let manifest = null
       try { const r = await fetch('../recover/cases/' + encodeURIComponent(c.id) + '.json', { cache: 'no-store' }); if (r.ok) manifest = await r.json() } catch {}
       const stations = (manifest && manifest.stations) || []
-      const geoStations = stations.length ? stations.filter((s, i) => s.geo && (i === 0 || read(c.id, stations[i - 1].id))).map(s => ({ id: s.id, ...s.geo, done: read(c.id, s.id) }))
+      // the case's first place-read instrument is on the map from the start (the door is the invitation);
+      // any later one appears only once this browser has read the instrument before it
+      const geoStations = stations.length ? stations.filter((s, i) => s.geo && (s.id === c.geo.station || i === 0 || read(c.id, stations[i - 1].id))).map(s => ({ id: s.id, ...s.geo, done: read(c.id, s.id) }))
                                           : [{ id: c.geo.station, ...c.geo }]
       for (const g of geoStations) {
         if (typeof g.lat !== 'number' || typeof g.lng !== 'number') continue
@@ -219,8 +222,11 @@
           .addTo(map).bindTooltip('◇ ' + (c.code || c.id) + ' · ' + (g.name || 'an instrument') + (g.done ? ' · read' : ''), { direction: 'top', opacity: 0.9 })
         mk.on('click', () => { location.href = '../recover/?case=' + encodeURIComponent(c.id) })
         if (g.beacon) { if (!caseDoorsByBeacon.has(g.beacon)) caseDoorsByBeacon.set(g.beacon, []); caseDoorsByBeacon.get(g.beacon).push(c) }
+        mapPts.push([g.lat, g.lng])
       }
     }
+    // frame every door and every case door that is on the map (unless a shared link already opened one)
+    if (mapPts.length > 1 && !beaconIdFromHash(location.hash)) map.fitBounds(mapPts, { padding: [60, 60] })
   }
   function read(caseId, stationId) { try { return localStorage.getItem('cs.case.' + caseId + '.' + stationId) === '1' } catch { return false } }
 
