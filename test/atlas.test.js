@@ -259,19 +259,33 @@ describe('presence is served at day resolution', () => {
   it('check-in and drop-in store the day, not the moment', () => {
     const c = checkin(store(), {}, 'open', near, 'k1', NOW)
     expect(c.store.beacons[0].strata.at(-1).ts).toBe('2026-09-16T00:00:00Z')
-    expect(c.json.strata.at(-1).ts).toBe('2026-09-16T00:00:00Z')
+    expect(c.json.strata.some(s => s.src === 'presence')).toBe(false)   // today's mark is not public yet
     const d = dropin(store(), null, 'open', { lat: 40, lng: -76.6 }, NOW)
     expect(d.store.beacons[0].strata.at(-1).ts).toBe('2026-09-16T00:00:00Z')
-    expect(d.json.beacon.strata.at(-1).ts).toBe('2026-09-16T00:00:00Z')
+    expect(d.json.beacon.strata.some(s => s.src === 'presence')).toBe(false)
   })
 
   it('reads truncate presence marks stored before the change, and leave authored strata exact', () => {
     const legacy = store()
     legacy.beacons[0].strata.push({ tier: 'faint', ts: '2026-09-15T21:03:59.000Z', fragment: 'someone stood at the door.', src: 'presence' })
-    for (const r of [readAtlas(legacy, { resource: 'beacons' }).json.beacons[0], readAtlas(legacy, { resource: 'beacon', id: 'open' }).json]) {
+    const LATER = Date.parse('2026-09-17T08:00:00Z')
+    for (const r of [readAtlas(legacy, { resource: 'beacons' }, LATER).json.beacons[0], readAtlas(legacy, { resource: 'beacon', id: 'open' }, LATER).json]) {
       expect(r.strata.find(s => s.src === 'presence').ts).toBe('2026-09-15T00:00:00Z')
       expect(r.strata.find(s => s.src !== 'presence').ts).toBe('2020-01-01T13:45:10Z')
     }
     expect(legacy.beacons[0].strata.at(-1).ts).toBe('2026-09-15T21:03:59.000Z')   // read is pure
+  })
+})
+
+describe("today's presence stays private until the day is over", () => {
+  const open = () => ({ version: 1, beacons: [{ id: 'open', kind: 'genesis', name: 'O', lat: 39.3, lng: -76.6, strata: [] }] })
+  it('a poller sees nothing change during the day, and one mark the next day', () => {
+    const MORNING = Date.parse('2026-09-16T09:12:00Z'), LATER = Date.parse('2026-09-16T23:59:00Z'), NEXT = Date.parse('2026-09-17T00:00:01Z')
+    const c = checkin(open(), {}, 'open', { lat: 39.3001, lng: -76.6001 }, 'k', MORNING)
+    expect(readAtlas(c.store, { resource: 'beacons' }, MORNING).json.beacons[0].strata.length).toBe(0)
+    expect(readAtlas(c.store, { resource: 'beacons' }, LATER).json.beacons[0].strata.length).toBe(0)
+    const next = readAtlas(c.store, { resource: 'beacon', id: 'open' }, NEXT).json.strata
+    expect(next.length).toBe(1)
+    expect(next[0].ts).toBe('2026-09-16T00:00:00Z')
   })
 })

@@ -121,7 +121,7 @@ export class Atlas extends DurableObject {
     if (!store) { store = SEED; await this.ctx.storage.put('store', store) }
 
     if (request.method === 'GET') {
-      const r = readAtlas(store, route)
+      const r = readAtlas(store, route, Date.now())
       return atlasJson(r.status, r.json)
     }
 
