@@ -1,0 +1,79 @@
+{
+  "id": "case-l22",
+  "title": "CASE L-22 — the little things",
+  "intro": "Field Recovery logged an object out of the stacks that does not belong to the System. It is a primer, the kind a child is read from, and every page ends on the same instruction. It came in with its magnifying glass still pressed into the cover. Everything else in the file reads small things in order to itemize someone: a grade, a figure, a sail at the edge of a lookout's glass. This book reads them the other way. Three instruments: what the glass finds in the pictures, the page that shares a word with the house that found the book, and the one tool in the deep stacks that measures the smallest thing the maze is made of.",
+  "stations": [
+    {
+      "id": "glass",
+      "title": "i · the glass",
+      "where": "a very small book · the pictures",
+      "clue": "The book has a page of its own now. Its magnifying glass is still in the cover: pick it up. Every picture is hiding one mark, too small to see at the size a page is read — a letter, or only a dot. Carry the glass through the book in page order and read the marks as you go. They make a sentence. File its second word.",
+      "link": {
+        "label": "the book — Don’t Forget How Big The Little Things Are",
+        "href": "https://littlethings.thecornerspore.dev/"
+      },
+      "parity": [
+        "in the record — the book, with its glass"
+      ],
+      "prompt": "the second word of the sentence the glass reads — one word",
+      "gate": {
+        "type": "sha256",
+        "hash": "549ad76b162d42d27207fa9cdefb79ea8bc54b76ca98f1d3ea17317c8cfc2fde"
+      },
+      "onSolve": "a speck. the book hid a whole sentence at the one size nothing in the file is ever counted at. the pictures are not the only place it points — read the words next."
+    },
+    {
+      "id": "page",
+      "title": "ii · the page",
+      "where": "a very small book · the words",
+      "clue": "The house that found this book is named for something smaller than a seed, carried on the air, that arises again wherever it lands. One page of the book names that very thing, in the same breath as the smallest monsters there are. Find the page. File its number.",
+      "link": {
+        "label": "the book — the words, page by page",
+        "href": "https://littlethings.thecornerspore.dev/"
+      },
+      "parity": [
+        "in the record — the book, page by page"
+      ],
+      "prompt": "the number printed on that page — digits only",
+      "gate": {
+        "type": "sha256",
+        "hash": "00b8cfcdebfe29fe6ad9766305c9fa124d01abaffd99eada8f653edb9d24aa3c"
+      },
+      "onSolve": "the house and the book use the same word. nothing in this file was an accident of scale. one instrument left, and it is not in the book. it is at the bottom of the maze."
+    },
+    {
+      "id": "grain",
+      "title": "iii · the grain",
+      "where": "the maze · the deep stacks (levels 2–3) — or the field manual",
+      "clue": "The maze keeps little things of its own. In the deep stacks, levels 2 and 3, the vending machines carry a tool that is not a provision. It measures the grain, the finest thing the maze is built from, and nothing about it is ever spent. Buy one and look at what it is called, or read what the field manual says the deep machines carry. File the tool.",
+      "link": {
+        "label": "the field manual — §06, provisions",
+        "href": "../manual/#provisions"
+      },
+      "parity": [
+        "in the maze — levels 2–3, the vending machines",
+        "in the record — the field manual, §06 provisions"
+      ],
+      "maze": {
+        "levels": [
+          2,
+          3
+        ],
+        "hint": "you are in the deep stacks. one thing the machines down here sell is a tool, not a provision. /file the last word of its name."
+      },
+      "prompt": "the tool — the last word of its name, one word",
+      "gate": {
+        "type": "sha256",
+        "hash": "76c4ebe60bdfda625c026b7e6b34691c0c06ff43ddf406e6209f4d25665cf295"
+      },
+      "onSolve": "the one thing at the bottom of the maze that measures the smallest things. the book said it first: don't forget how big the little things are."
+    }
+  ],
+  "reward": {
+    "title": "the little things are read.",
+    "text": "Three instruments, and every one of them small: a sentence hidden at the size of a speck, a page that shares a word with the house that found it, a tool that measures the grain. The System counts small things so it can itemize the people they belong to. This book counted them to keep them, and it hid its door at the one scale the ledger has no field for. You found it by looking closer than a page is read.",
+    "key": "L-22 · SPECK · FILED",
+    "href": "../speck/",
+    "linkLabel": "▸ the speck — your door"
+  }
+}

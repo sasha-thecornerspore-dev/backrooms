@@ -21,6 +21,18 @@
       }
     },
     {
+      "id": "case-l22",
+      "code": "CASE L-22",
+      "title": "the little things",
+      "blurb": "three instruments: the glass in the cover, the page that names the house, the tool that reads the grain.",
+      "surfaced": "2026-09-16",
+      "stations": [
+        "glass",
+        "page",
+        "grain"
+      ]
+    },
+    {
       "id": "case-d8",
       "code": "CASE D-8",
       "title": "the redlined district",
