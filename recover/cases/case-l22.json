@@ -7,7 +7,7 @@
       "id": "glass",
       "title": "i · the glass",
       "where": "a very small book · the pictures",
-      "clue": "The book has a page of its own now. Its magnifying glass is still in the cover: pick it up. Every picture is hiding one mark, too small to see at the size a page is read — a letter, or only a dot. Carry the glass through the book in page order and read the marks as you go. They make a sentence. File its second word.",
+      "clue": "The book has a page of its own now. Its magnifying glass is still in the cover: pick it up. Every numbered page’s picture is hiding one mark, too small to see at the size a page is read — a letter, or only a dot. Carry the glass through the book in page order and read the marks as you go. They make a sentence. File its second word.",
       "link": {
         "label": "the book — Don’t Forget How Big The Little Things Are",
         "href": "https://littlethings.thecornerspore.dev/"
@@ -44,14 +44,14 @@
     {
       "id": "grain",
       "title": "iii · the grain",
-      "where": "the maze · the deep stacks (levels 2–3) — or the field manual",
+      "where": "the maze at thecornerspore.dev/play · the deep stacks (levels 2–3) — or the field manual",
       "clue": "The maze keeps little things of its own. In the deep stacks, levels 2 and 3, the vending machines carry a tool that is not a provision. It measures the grain, the finest thing the maze is built from, and nothing about it is ever spent. Buy one and look at what it is called, or read what the field manual says the deep machines carry. File the tool.",
       "link": {
         "label": "the field manual — §06, provisions",
         "href": "../manual/#provisions"
       },
       "parity": [
-        "in the maze — levels 2–3, the vending machines",
+        "in the maze (thecornerspore.dev/play) — levels 2–3, the vending machines",
         "in the record — the field manual, §06 provisions"
       ],
       "maze": {

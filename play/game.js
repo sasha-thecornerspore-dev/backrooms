@@ -352,8 +352,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     for (let i = 0; i < 6; i++) {
       const item = itemSys.inventory[i]
       const sel = i === itemSys.selected ? ' sel' : ''
-      const label = item ? (ITEM_NAMES[item.type] ?? item.type).split(' ')[0] + (item.on ? ' ♪' : '') : ''
-      html += `<div class="slot${sel}" data-slot="${i}"><span class="num">${i + 1}</span>${label}</div>`
+      const full = item ? (ITEM_NAMES[item.type] ?? item.type) : ''
+      const words = full.split(' ')
+      // provisions read by their first word (almond, radio); a tool reads by what it is (a survey plumb is a plumb)
+      const label = item ? (item.tool ? words[words.length - 1] : words[0]) + (item.on ? ' ♪' : '') : ''
+      html += `<div class="slot${sel}" data-slot="${i}" title="${full}"><span class="num">${i + 1}</span>${label}</div>`
     }
     hotbarEl.innerHTML = html
     for (const el of hotbarEl.querySelectorAll('.slot')) {
