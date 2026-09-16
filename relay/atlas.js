@@ -66,10 +66,11 @@ export function parseAtlasPath(pathname) {
 }
 
 export function readAtlas(store, route) {
-  if (route.resource === 'beacons') return { status: 200, json: { version: store.version ?? 1, beacons: store.beacons } }
+  // served at day resolution even for marks stored before presenceDay existed
+  if (route.resource === 'beacons') return { status: 200, json: { version: store.version ?? 1, beacons: store.beacons.map(publicBeacon) } }
   if (route.resource === 'beacon') {
     const b = store.beacons.find(x => x.id === route.id)
-    return b ? { status: 200, json: b } : { status: 404, json: { error: 'no such beacon' } }
+    return b ? { status: 200, json: publicBeacon(b) } : { status: 404, json: { error: 'no such beacon' } }
   }
   return { status: 404, json: { error: 'not found' } }
 }
@@ -118,6 +119,13 @@ const MAX_DEDUP_ENTRIES = 500
 
 const isPresence = s => s != null && s.src === 'presence'
 
+// Presence marks are public (GET /atlas/beacons is open). An exact timestamp per mark
+// would publish a timetable of when someone — possibly a minor — stood at a public
+// place, so presence is only ever stored and served at the resolution of a UTC day.
+export const presenceDay = now => new Date(now).toISOString().slice(0, 10) + 'T00:00:00Z'
+const dayOnly = s => (isPresence(s) && typeof s.ts === 'string' ? { ...s, ts: s.ts.slice(0, 10) + 'T00:00:00Z' } : s)
+export const publicBeacon = b => (b && Array.isArray(b.strata) ? { ...b, strata: b.strata.map(dayOnly) } : b)
+
 // Keep every authored stratum plus the most-recent `max` presence strata, in
 // original order (presence layers are appended at the end, so this drops the
 // oldest presence layers first). Pure; returns the same array if within cap.
@@ -160,10 +168,10 @@ export function checkin(store, dedup, id, coords, visitorHash, now, opts = {}) {
       Object.entries(pruned).sort((a, b) => b[1] - a[1]).slice(0, MAX_DEDUP_ENTRIES)
     )
   }
-  const layer = { tier: 'faint', ts: new Date(now).toISOString(), fragment: 'someone stood at the door.', src: 'presence' }
+  const layer = { tier: 'faint', ts: presenceDay(now), fragment: 'someone stood at the door.', src: 'presence' }
   const nb = { ...b, strata: capPresenceStrata([...(b.strata ?? []), layer]) }
   const beacons = store.beacons.map(x => (x.id === id ? nb : x))
-  return { status: 201, json: nb, store: { ...store, beacons }, dedup: dedupOut }
+  return { status: 201, json: publicBeacon(nb), store: { ...store, beacons }, dedup: dedupOut }
 }
 
 // ── passage: the drop-in economy. A per-visitor balance that regenerates over
@@ -196,9 +204,9 @@ export function dropin(store, passageRec, id, coords, now, opts = {}) {
   const cost = passageCost(haversineMeters(lat, lng, b.lat, b.lng), opts)
   const balance = regenBalance(passageRec, now, opts)
   if (balance < cost) return { status: 402, json: { error: 'not enough passage', passage: Math.floor(balance), cost } }
-  const layer = { tier: 'faint', ts: new Date(now).toISOString(), fragment: 'someone reached the door from far off.', src: 'presence' }
+  const layer = { tier: 'faint', ts: presenceDay(now), fragment: 'someone reached the door from far off.', src: 'presence' }
   const nb = { ...b, strata: capPresenceStrata([...(b.strata ?? []), layer]) }
   const beacons = store.beacons.map(x => (x.id === id ? nb : x))
-  return { status: 201, json: { beacon: nb, passage: Math.floor(balance - cost), cost },
+  return { status: 201, json: { beacon: publicBeacon(nb), passage: Math.floor(balance - cost), cost },
            store: { ...store, beacons }, passage: { balance: balance - cost, ts: now } }
 }

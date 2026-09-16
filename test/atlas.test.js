@@ -244,3 +244,34 @@ describe('dedup map cap', () => {
     expect(Object.keys(dedup).length).toBeLessThanOrEqual(500)
   })
 })
+
+// ── Presence is public: never an exact timestamp. A per-visit time series at a public place
+// is a timetable of when someone stood there; the atlas only ever needs the day.
+describe('presence is served at day resolution', () => {
+  const store = () => ({ version: 1, beacons: [
+    { id: 'open', kind: 'genesis', name: 'O', lat: 39.3, lng: -76.6, strata: [
+      { tier: 'deep', ts: '2020-01-01T13:45:10Z', fragment: 'authored lore' },
+    ] },
+  ] })
+  const near = { lat: 39.3001, lng: -76.6001 }
+  const NOW = Date.parse('2026-09-16T15:42:07.123Z')
+
+  it('check-in and drop-in store the day, not the moment', () => {
+    const c = checkin(store(), {}, 'open', near, 'k1', NOW)
+    expect(c.store.beacons[0].strata.at(-1).ts).toBe('2026-09-16T00:00:00Z')
+    expect(c.json.strata.at(-1).ts).toBe('2026-09-16T00:00:00Z')
+    const d = dropin(store(), null, 'open', { lat: 40, lng: -76.6 }, NOW)
+    expect(d.store.beacons[0].strata.at(-1).ts).toBe('2026-09-16T00:00:00Z')
+    expect(d.json.beacon.strata.at(-1).ts).toBe('2026-09-16T00:00:00Z')
+  })
+
+  it('reads truncate presence marks stored before the change, and leave authored strata exact', () => {
+    const legacy = store()
+    legacy.beacons[0].strata.push({ tier: 'faint', ts: '2026-09-15T21:03:59.000Z', fragment: 'someone stood at the door.', src: 'presence' })
+    for (const r of [readAtlas(legacy, { resource: 'beacons' }).json.beacons[0], readAtlas(legacy, { resource: 'beacon', id: 'open' }).json]) {
+      expect(r.strata.find(s => s.src === 'presence').ts).toBe('2026-09-15T00:00:00Z')
+      expect(r.strata.find(s => s.src !== 'presence').ts).toBe('2020-01-01T13:45:10Z')
+    }
+    expect(legacy.beacons[0].strata.at(-1).ts).toBe('2026-09-15T21:03:59.000Z')   // read is pure
+  })
+})
