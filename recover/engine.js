@@ -61,7 +61,19 @@
     return haversineM(pos.lat, pos.lng, geo.lat, geo.lng) <= (geo.radiusM || 150);
   }
 
+  // ── the field-read seal: an honour flag set when a place-read instrument was read AT the
+  // place (the relay's door check-in answered 201). It never gates anything; it changes the
+  // reward's closing text when every place-read instrument of a case was walked.
+  function fieldKey(caseId, stationId) { return kkey(caseId, stationId) + '.field'; }
+  function isFieldRead(caseId, stationId) { try { return localStorage.getItem(fieldKey(caseId, stationId)) === '1'; } catch (e) { return false; } }
+  function markFieldRead(caseId, stationId) { try { localStorage.setItem(fieldKey(caseId, stationId), '1'); } catch (e) {} }
+  function fieldComplete(manifest) {
+    var geo = ((manifest && manifest.stations) || []).filter(function (s) { return s.geo; });
+    return geo.length > 0 && geo.every(function (s) { return isFieldRead(manifest.id, s.id); });
+  }
+
   window.Recover = { SALT: SALT, normalize: normalize, sha256hex: sha256hex, gateHash: gateHash,
                      checkGate: checkGate, isSolved: isSolved, markSolved: markSolved, progress: progress,
-                     haversineM: haversineM, withinM: withinM };
+                     haversineM: haversineM, withinM: withinM,
+                     isFieldRead: isFieldRead, markFieldRead: markFieldRead, fieldComplete: fieldComplete };
 })();
