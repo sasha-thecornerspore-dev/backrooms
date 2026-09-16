@@ -67,6 +67,21 @@ Strata fields:
 4. Commit `beacons.json` and push `gh-pages` — GitHub Pages redeploys in about a minute. The map fits
    itself to all beacons automatically once there is more than one.
 
+## Layered doors (display only)
+
+- The page reads the live registry first and merges the bundled `beacons.json` under it (live wins per id;
+  a bundled-only door shows but cannot take a mark until the registry lists it).
+- A door's **tier** is a display tier computed in the browser from the public presence marks it carries:
+  distinct days walked in a rolling 14-day window (a mark from afar counts half). Tiers: a door · walked ·
+  worn · thick · layered, drawn as rings; a door nobody walks fades. Sealed doors are records, never tiered.
+- The panel never lists presence marks one by one — they collapse to one line ("N marks · last this week").
+  Authored strata are always shown in full.
+- "cases at this door" links recovery cases whose place-read instrument sits at the door. Case doors draw as
+  dashed gold markers; a case's later doors appear only as this browser walks its trail.
+- Your own marks are kept only as hashes ("you have been here") and "forget my marks on this device" clears
+  them and gives the device a new visitor id. No counts, no times, no places in the clear.
+- The basemap is OpenStreetMap's keyless tiles, dark-tinted with CSS.
+
 ## Notes
 
 - **The map is empty of "way-in" doors on purpose right now** — 806 is `sealed`. Add your first real
