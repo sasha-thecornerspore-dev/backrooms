@@ -3,7 +3,7 @@
 // requests (the Cloudflare multiplayer relay) are never intercepted, and
 // neither are the recovery-engine case manifests under /recover/ — those
 // must always be live so a case can change without a cache bump.
-const CACHE = 'backrooms-play-v12'
+const CACHE = 'backrooms-play-v13'
 const SHELL = [
   './', 'index.html',
   'game.js', 'touch.js', 'scraps.js', 'events.js', 'anchor.js', 'items.js', 'save.js', 'world.js', 'decor.js',

@@ -483,7 +483,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if (cmd === 'cases' || arg === 'list') {
           const idx = await loadIndex()
           const rows = idx.map(c => c.code + ' ' + (c.stations || []).filter(s => rSolved(c.id, s)).length + '/' + (c.stations || []).length + (c.id === rOpenCase() ? ' (open)' : ''))
-          showMessage(rows.length ? rows.join(' · ') + ' — /recover <case> opens one.' : 'no cases have surfaced.')
+          const shown = rows.slice(0, 5), more = rows.length - shown.length
+          showMessage(rows.length ? shown.join(' · ') + (more > 0 ? ' · and ' + more + ' more on the board' : '') + ' — /recover <case> opens one.' : 'no cases have surfaced.')
           return
         }
         if (arg) {

@@ -67,6 +67,18 @@
   #dropin-btn:hover{background:rgba(160,90,58,.1)}
   #dropin-btn:disabled{opacity:.5;cursor:default}
   .passage-line{font-size:10px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;margin-bottom:10px;min-height:1em}
+  .panel-tier{font-size:10px;letter-spacing:2px;color:var(--sig);text-transform:uppercase;margin:-8px 0 14px;min-height:1em}
+  .panel-tier.fading{color:var(--dim)} .panel-tier.thick{text-shadow:0 0 10px rgba(143,220,172,.4)}
+  .panel-been{display:none;font-size:10px;letter-spacing:2px;color:var(--yb);text-transform:uppercase;margin:0 0 14px}
+  .panel-been.show{display:block}
+  .panel-strata li.collapsed{border-left-style:dotted}
+  .panel-listening{display:none;font-family:var(--serif);font-style:italic;font-size:13px;color:var(--dim);margin-top:18px;border-top:1px solid rgba(138,127,82,.3);padding-top:14px}
+  .panel-listening.show{display:block}
+  .case-link{display:block;font-family:var(--serif);font-size:14px;color:var(--yb);padding:6px 0;border-bottom:1px dotted rgba(138,127,82,.3)}
+  .case-link:hover{color:var(--sigb)}
+  .safe{font-family:var(--serif);font-style:italic;font-size:12px;color:var(--dim);line-height:1.5;margin-bottom:12px}
+  .forget{display:block;margin:28px 0 0;background:none;border:none;color:var(--faint);font-family:var(--mono);font-size:10px;letter-spacing:2px;cursor:pointer;text-transform:uppercase}
+  .forget:hover{color:var(--y)}
 </style>
 </head>
 <body>
@@ -90,41 +102,62 @@
   <div class="panel-sub" id="p-sub"></div>
   <p class="panel-blurb" id="p-blurb"></p>
   <div class="panel-sealed" id="p-sealed">sealed — shown for its record. not a way in.</div>
+  <div class="panel-tier" id="p-tier"></div>
+  <div class="panel-been" id="p-been">▪ you have been here.</div>
   <div class="panel-strata-h">strata · read down</div>
   <ol class="panel-strata" id="p-strata"></ol>
+  <div id="p-cases"></div>
+  <div class="panel-listening" id="p-listening">this door is on the map but not yet listening — it cannot take a mark until the registry knows it.</div>
   <div class="panel-checkin" id="p-checkin">
     <div class="passage-line" id="passage-line"></div>
+    <div class="safe">a door is a public place. go in open hours, stay where anyone may stand, bring someone; nothing to touch, take or enter. your position is used once to see whether you are at the door, then dropped.</div>
     <button id="checkin-btn">◎ check in — leave a mark</button>
     <button id="dropin-btn">➹ drop in from afar — spend passage</button>
     <div class="checkin-msg" id="checkin-msg"></div>
   </div>
+  <button class="forget" id="forget-btn" title="clears the marks this device remembers and gives it a new visitor id">forget my marks on this device</button>
 </aside>
 
 <script src="vendor/leaflet.js"></script>
 <script type="module">
-  import { validateBeaconSet, beaconStyle, orderStrata, stratumLabel, beaconIdFromHash } from './atlas-core.mjs'
+  import { validateBeaconSet, beaconStyle, stratumLabel, beaconIdFromHash,
+           doorTier, visibleStrata, nearbyCases, mergeRegistries } from './atlas-core.mjs'
 
-  // The live registry (the relay's Atlas durable object). Read it first; fall
-  // back to the bundled beacons.json on ANY failure — network, CORS, bad status,
-  // unparseable body, or invalid data — so the map always renders something.
+  // The live registry (the relay's Atlas durable object) is the source of truth for
+  // strata; the bundled beacons.json can add genesis doors the registry does not list
+  // yet (they show, but cannot be checked into until the relay knows them). On ANY
+  // live failure — network, CORS, bad status, unparseable body, invalid data — the
+  // bundled snapshot alone renders, so the map always shows something.
   const ATLAS_API = 'https://backrooms-relay.jeff-schatz112.workers.dev/atlas'
   async function loadBeacons() {
+    let live = null
     try {
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), 5000)
       const r = await fetch(`${ATLAS_API}/beacons`, { signal: ctrl.signal, cache: 'no-store' })
       clearTimeout(timer)
-      if (r.ok) {
-        const doc = await r.json()
-        if (validateBeaconSet(doc).ok) return doc
-      }
-    } catch { /* live registry unreachable — use the bundled snapshot below */ }
-    return (await fetch('beacons.json', { cache: 'no-store' })).json()
+      if (r.ok) { const doc = await r.json(); if (validateBeaconSet(doc).ok) live = doc }
+    } catch { /* live registry unreachable */ }
+    let bundled = null
+    try { const doc = await (await fetch('beacons.json', { cache: 'no-store' })).json(); if (validateBeaconSet(doc).ok) bundled = doc } catch {}
+    if (!live && !bundled) throw new Error('no registry')
+    return mergeRegistries(live, bundled)
   }
 
+  // marks you left, kept only as hashes (no counts, no times, no places in the clear)
+  async function markHash(id) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(visitor + ':' + id))
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+  }
+  const marks = () => { try { return JSON.parse(localStorage.getItem('atlas:marks') || '[]') } catch { return [] } }
+  async function rememberMark(id) { try { const h = await markHash(id); const m = marks(); if (!m.includes(h)) { m.push(h); localStorage.setItem('atlas:marks', JSON.stringify(m)) } } catch {} }
+  async function hasMark(id) { try { return marks().includes(await markHash(id)) } catch { return false } }
+
   const map = L.map('map', { zoomControl: true, attributionControl: true }).setView([39.2966, -76.6414], 14)
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap contributors © CARTO', maxZoom: 19, subdomains: 'abcd',
+  // keyless basemap (CARTO's free Voyager tiles began watermarking without a key in
+  // 2026-09); the dark tint is a CSS filter on .leaflet-tile, so any light basemap works
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 19,
   }).addTo(map)
 
   const byId = new Map()
@@ -141,40 +174,100 @@
     const pts = []
     for (const b of doc.beacons) {
       const st = beaconStyle(b)
+      // display tier from public presence strata (sealed doors are records, not doors — no rings)
+      const tier = b.sealed ? { tier: 0, label: 'sealed' } : doorTier(b.strata)
+      b.tierInfo = tier
+      for (let i = tier.tier; i >= 1; i--) {
+        L.circleMarker([b.lat, b.lng], { radius: 7 + 5 * i, color: st.color, weight: 1, fill: false, opacity: tier.fading ? 0.25 : 0.55, interactive: false }).addTo(map)
+      }
       const m = L.circleMarker([b.lat, b.lng], {
         radius: 7, color: st.color, weight: 2, fillColor: st.color, fillOpacity: 0.35,
       }).addTo(map)
-      m.beacon = b            // Task 4 reads this on click
+      m.beacon = b
       m.on('click', () => openPanel(b))
       byId.set(b.id, b)
       pts.push([b.lat, b.lng])
     }
     if (pts.length > 1) map.fitBounds(pts, { padding: [60, 60] })
+    drawCaseDoors()
   } catch (e) {
     document.getElementById('err').style.display = 'grid'
     console.error('atlas:', e)
   }
 
+  // ── case doors: instruments of the recovery board that are read at a place ──
+  // The index lists each case's FIRST geo instrument; later ones are drawn only once
+  // this browser has read the instrument before them (the trail extends as it is walked).
+  let caseIndex = []
+  const caseDoorsByBeacon = new Map()
+  async function drawCaseDoors() {
+    try {
+      const r = await fetch('../recover/cases/index.json', { cache: 'no-store' })
+      if (!r.ok) return
+      caseIndex = (await r.json()).cases || []
+    } catch { return }
+    for (const c of caseIndex) {
+      if (!c.geo) continue
+      let manifest = null
+      try { const r = await fetch('../recover/cases/' + encodeURIComponent(c.id) + '.json', { cache: 'no-store' }); if (r.ok) manifest = await r.json() } catch {}
+      const stations = (manifest && manifest.stations) || []
+      const geoStations = stations.length ? stations.filter((s, i) => s.geo && (i === 0 || read(c.id, stations[i - 1].id))).map(s => ({ id: s.id, ...s.geo, done: read(c.id, s.id) }))
+                                          : [{ id: c.geo.station, ...c.geo }]
+      for (const g of geoStations) {
+        if (typeof g.lat !== 'number' || typeof g.lng !== 'number') continue
+        const mk = L.circleMarker([g.lat, g.lng], { radius: 10, color: '#c9ba72', weight: 1.5, fill: false, dashArray: '3 4', opacity: g.done ? 0.35 : 0.9 })
+          .addTo(map).bindTooltip('◇ ' + (c.code || c.id) + ' · ' + (g.name || 'an instrument') + (g.done ? ' · read' : ''), { direction: 'top', opacity: 0.9 })
+        mk.on('click', () => { location.href = '../recover/?case=' + encodeURIComponent(c.id) })
+        if (g.beacon) { if (!caseDoorsByBeacon.has(g.beacon)) caseDoorsByBeacon.set(g.beacon, []); caseDoorsByBeacon.get(g.beacon).push(c) }
+      }
+    }
+  }
+  function read(caseId, stationId) { try { return localStorage.getItem('cs.case.' + caseId + '.' + stationId) === '1' } catch { return false } }
+
   const panel = document.getElementById('panel')
-  function openPanel(b) {
+  async function openPanel(b) {
     const st = beaconStyle(b)
-    document.getElementById('p-kind').textContent = st.label
+    const t = b.tierInfo || (b.sealed ? { tier: 0, label: 'sealed' } : doorTier(b.strata))
+    document.getElementById('p-kind').textContent = st.label + (b.sealed ? '' : ' · ' + t.label)
     document.getElementById('p-kind').style.color = st.color
     document.getElementById('p-name').textContent = b.name
     document.getElementById('p-sub').textContent = b.subtitle || ''
     document.getElementById('p-blurb').textContent = b.blurb || ''
     document.getElementById('p-sealed').classList.toggle('show', !!b.sealed)
+    // the hold: distinct days walked in the window. doors that nobody walks fade.
+    const tierEl = document.getElementById('p-tier')
+    tierEl.textContent = b.sealed ? '' : t.tier === 0 ? 'unheld · no one has stood here lately'
+      : 'held · walked ' + t.days + ' of the last 14 days' + (t.fading ? ' · fading' : '')
+    tierEl.className = 'panel-tier' + (t.fading ? ' fading' : '') + (t.tier >= 3 ? ' thick' : '')
     const ol = document.getElementById('p-strata')
     ol.innerHTML = ''
-    orderStrata(b.strata).forEach((s, i) => {
+    visibleStrata(b.strata).forEach((s, i) => {
       const li = document.createElement('li')
       if (s.tier === 'faint') li.className = 'faint'
-      const lab = document.createElement('div'); lab.className = 'lab'; lab.textContent = stratumLabel(s, i)
+      if (s.collapsed) li.className += ' collapsed'
+      const lab = document.createElement('div'); lab.className = 'lab'; lab.textContent = s.collapsed ? 'presence' : stratumLabel(s, i)
       const frag = document.createElement('div'); frag.className = 'frag'; frag.textContent = s.fragment
       li.append(lab, frag); ol.appendChild(li)
     })
+    // cases read at this door
+    const cs = document.getElementById('p-cases')
+    cs.innerHTML = ''
+    const here = [...new Map([...(caseDoorsByBeacon.get(b.id) || []), ...nearbyCases(b, caseIndex)].map(c => [c.id, c])).values()]
+    if (!b.sealed) {
+      if (here.length) {
+        const h = document.createElement('div'); h.className = 'panel-strata-h'; h.textContent = 'cases at this door'; cs.appendChild(h)
+        for (const c of here) {
+          const a = document.createElement('a'); a.className = 'case-link'; a.href = '../recover/?case=' + encodeURIComponent(c.id)
+          a.textContent = '◇ ' + (c.code || c.id) + ' — ' + (c.title || ''); cs.appendChild(a)
+        }
+      } else if (t.tier >= 3) {
+        const h = document.createElement('div'); h.className = 'panel-strata-h'; h.textContent = 'the system has noticed this door.'; cs.appendChild(h)
+      }
+    }
     const ci = document.getElementById('p-checkin')
-    ci.classList.toggle('show', !b.sealed)
+    ci.classList.toggle('show', !b.sealed && !b.bundled)
+    document.getElementById('p-listening').classList.toggle('show', !b.sealed && !!b.bundled)
+    document.getElementById('p-been').classList.toggle('show', !b.sealed && await hasMark(b.id))
     checkinMsg('')
     document.getElementById('checkin-btn').onclick = () => doCheckin(b)
     document.getElementById('dropin-btn').onclick = () => doDropin(b)
@@ -188,6 +281,12 @@
     history.replaceState(null, '', location.pathname + location.search)
   }
   document.getElementById('panel-x').addEventListener('click', closePanel)
+  // forget: drop the hashed marks this device holds and rotate its visitor id
+  document.getElementById('forget-btn').addEventListener('click', () => {
+    try { localStorage.removeItem('atlas:marks'); visitor = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)); localStorage.setItem('atlas:visitor', visitor) } catch {}
+    document.getElementById('p-been').classList.remove('show')
+    checkinMsg('this device no longer remembers where it has been.')
+  })
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel() })
 
   // geolocation check-in: prove you're at the door, leave a faint mark. The relay
@@ -203,9 +302,9 @@
           body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude, visitor }),
         })
         const j = await r.json().catch(() => ({}))
-        if (r.status === 201) { checkinMsg('you left a mark. the door remembers.'); openPanel(j) }
-        else if (r.status === 429) checkinMsg('you were just here.')
-        else if (r.status === 403) checkinMsg('you’re not close enough — stand at the door.')
+        if (r.status === 201) { await rememberMark(b.id); checkinMsg('you left a mark. the door remembers.'); j.tierInfo = j.sealed ? { tier: 0, label: 'sealed' } : doorTier(j.strata); byId.set(j.id, j); openPanel(j) }
+        else if (r.status === 429) checkinMsg('the door already knows you were here.')
+        else if (r.status === 403) checkinMsg('the door does not read from here. it can be read in the record.')
         else checkinMsg('the door stayed quiet.')
       } catch { checkinMsg('the door stayed quiet.') }
       finally { const bb = document.getElementById('checkin-btn'); if (bb) bb.disabled = false }

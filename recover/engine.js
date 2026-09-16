@@ -47,6 +47,21 @@
     return { stations: out, solvedCount: solvedCount, complete: st.length > 0 && solvedCount === st.length };
   }
 
+  // ── geo parity: a station may name a PUBLIC landmark where its key can be read on site.
+  // Proximity is computed HERE, in the browser. The position never leaves the page, is
+  // never stored, and only ever answers one question: is this device within the radius?
+  function haversineM(lat1, lng1, lat2, lng2) {
+    var R = 6371000, toR = function (d) { return d * Math.PI / 180; };
+    var dLat = toR(lat2 - lat1), dLng = toR(lng2 - lng1);
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toR(lat1)) * Math.cos(toR(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.asin(Math.sqrt(a));
+  }
+  function withinM(pos, geo) {
+    if (!pos || !geo || typeof geo.lat !== 'number' || typeof geo.lng !== 'number') return false;
+    return haversineM(pos.lat, pos.lng, geo.lat, geo.lng) <= (geo.radiusM || 150);
+  }
+
   window.Recover = { SALT: SALT, normalize: normalize, sha256hex: sha256hex, gateHash: gateHash,
-                     checkGate: checkGate, isSolved: isSolved, markSolved: markSolved, progress: progress };
+                     checkGate: checkGate, isSolved: isSolved, markSolved: markSolved, progress: progress,
+                     haversineM: haversineM, withinM: withinM };
 })();

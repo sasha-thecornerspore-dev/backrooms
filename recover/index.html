@@ -63,6 +63,13 @@
     font-family:var(--serif);font-size:15px;letter-spacing:.1em;padding:9px 18px;cursor:pointer;transition:.2s}
   .ask button:hover{background:rgba(201,186,114,.2)}
   .msg{font-family:var(--serif);font-style:italic;color:var(--rust);font-size:13px;margin-top:8px;min-height:1.4em}
+  .geo{border-top:1px dashed rgba(138,127,82,.3);margin:14px 0 4px;padding-top:12px}
+  .gname{font-size:11px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;margin-bottom:10px}
+  .safe{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--dim);margin:0 0 12px;max-width:60ch}
+  button.here{background:rgba(143,220,172,.06);border:1px solid rgba(143,220,172,.4);color:var(--sigb);
+    font-family:var(--serif);font-size:14px;letter-spacing:.08em;padding:8px 16px;cursor:pointer;transition:.2s}
+  button.here:hover{background:rgba(143,220,172,.14)} button.here:disabled{opacity:.5;cursor:wait}
+  .gmsg.near{color:var(--sigb);text-shadow:0 0 12px rgba(143,220,172,.35)}
 
   .reward{border:1px solid rgba(143,220,172,.35);background:rgba(143,220,172,.05);padding:26px 28px;margin:26px 0 10px;text-align:center}
   .reward .rtag{font-size:11px;letter-spacing:4px;color:var(--sig);text-transform:uppercase;margin-bottom:12px}
@@ -140,6 +147,8 @@
     return;
   }
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  // only https or same-site relative links ever render — a manifest can't smuggle javascript:/data: hrefs
+  function safeHref(h){ h = String(h == null ? '' : h); return /^https:\/\//.test(h) || (!/^[a-z][a-z0-9+.-]*:/i.test(h) && h.indexOf('//') !== 0 && h.length > 0); }
   document.getElementById('ctitle').textContent = manifest.title || id;
   document.getElementById('cintro').textContent = manifest.intro || '';
 
@@ -155,8 +164,22 @@
         h += '<div class="veil">— sealed until the instrument before it is read —</div>';
       } else {
         h += '<p class="clue">' + esc(s.clue || '') + '</p>';
-        if (s.link) h += '<a class="src" target="_blank" rel="noopener noreferrer" href="' + esc(s.link.href) + '">↗ ' + esc(s.link.label || s.link.href) + '</a><br>';
+        if (s.link && safeHref(s.link.href)) {
+          h += '<a class="src" target="_blank" rel="noopener noreferrer" href="' + esc(s.link.href) + '">↗ ' + esc(s.link.label || s.link.href) + '</a>';
+          if (s.link.archive && safeHref(s.link.archive)) h += ' &nbsp; <a class="src" target="_blank" rel="noopener noreferrer" href="' + esc(s.link.archive) + '">↗ archived copy</a>';
+          h += '<br>';
+        }
         if (s.parity && s.parity.length) h += '<div class="parity">read it by: ' + s.parity.map(esc).join(' &nbsp;·&nbsp; ') + '</div>';
+        if (o.state !== 'solved' && s.geo && typeof s.geo.lat === 'number') {
+          // a public landmark where the key can be read on site. the button asks for
+          // location only when pressed; the position is compared here and discarded.
+          // the safety line is fixed here, not authorable from the manifest.
+          h += '<div class="geo"><div class="gname">◎ ' + esc(s.geo.name || 'the landmark') + (s.geo.hours ? ' &nbsp;·&nbsp; ' + esc(s.geo.hours) : '') + '</div>' +
+               '<div class="safe">read it from the public grounds, in open hours. stay where anyone may stand; nothing to touch, take or enter. bring someone. the record link above reads the same key from anywhere.</div>' +
+               '<div class="row"><button type="button" class="here" data-g="' + i + '">i am standing at it — read it here</button>' +
+               (s.geo.beacon && safeHref('../atlas/#' + s.geo.beacon) ? '<a class="src" href="../atlas/#' + esc(s.geo.beacon) + '">↗ this door on the atlas</a>' : '') + '</div>' +
+               '<div class="msg gmsg" data-gm="' + i + '"></div></div>';
+        }
         if (o.state === 'solved') {
           h += '<div class="solved-line">✓ read. ' + esc(s.onSolve || '') + '</div>';
         } else {
@@ -173,7 +196,7 @@
       var R = manifest.reward;
       rw.innerHTML = '<div class="rtag">◇ case closed ◇</div><h2>' + esc(R.title || '') + '</h2><p>' + esc(R.text || '') + '</p>' +
         (R.key ? '<div class="key">' + esc(R.key) + '</div>' : '') +
-        (R.href ? '<a class="go" href="' + esc(R.href) + '">' + esc(R.linkLabel || '▸ open the door') + '</a>' : '');
+        (R.href && safeHref(R.href) ? '<a class="go" href="' + esc(R.href) + '">' + esc(R.linkLabel || '▸ open the door') + '</a>' : '');
       rw.hidden = false;
     } else rw.hidden = true;
   }
@@ -186,6 +209,27 @@
     try { ok = await Recover.checkGate(inp.value, s.gate); } catch (err) { ok = false; }
     if (ok) { Recover.markSolved(manifest.id, s.id); render(); }
     else { msg.textContent = 'the file does not answer to that.'; inp.value = ''; inp.focus(); }
+  });
+  // geo parity: prove you are at the landmark and the key surfaces (the gate is still the hash).
+  // getCurrentPosition runs only on this click; the fix is compared in-page and dropped.
+  board.addEventListener('click', function(e){
+    var b = e.target.closest('button.here[data-g]'); if (!b) return;
+    var i = +b.dataset.g, s = manifest.stations[i], msg = board.querySelector('[data-gm="' + i + '"]');
+    if (!s || !s.geo) return;
+    if (!navigator.geolocation) { msg.textContent = 'this device cannot say where it is. read the instrument in the record instead.'; return; }
+    b.disabled = true; msg.textContent = 'reading where you stand…';
+    navigator.geolocation.getCurrentPosition(function(pos){
+      var here = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      var near = Recover.withinM(here, s.geo);
+      here = null; pos = null;
+      msg.textContent = near ? (s.geo.hint || 'you are at it. read what is written there, and file it.')
+                             : 'the instrument does not read from here — the record link holds the same key' + (s.maze ? ', and so does the maze.' : '.');
+      msg.classList.toggle('near', near);
+      b.disabled = false;
+    }, function(){
+      msg.textContent = 'location withheld — the landmark can still be read in the record' + (s.maze ? ', or in the maze.' : '.');
+      b.disabled = false;
+    }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
   });
   board.addEventListener('keydown', function(e){
     if (e.key !== 'Enter') return;

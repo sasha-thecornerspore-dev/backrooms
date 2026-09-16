@@ -1,0 +1,7 @@
+# the recovery tools rewrite these wholesale; keep them LF so bot and human edits never conflict on line endings
+recover/cases/*.json text eol=lf
+recover/*.js text eol=lf
+recover/*.html text eol=lf
+atlas/*.mjs text eol=lf
+atlas/*.json text eol=lf
+atlas/*.html text eol=lf

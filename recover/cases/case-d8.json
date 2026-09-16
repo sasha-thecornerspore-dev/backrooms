@@ -56,7 +56,7 @@
       "onSolve": "never closed. never appealed. never demolished. extended — indefinitely. that is the door, and you have read it.",
       "maze": {
         "level": 4,
-        "hint": "you are at the sealed door. the notice reads: EXTENSION. /file it."
+        "hint": "you are at the sealed door. the status line on the notice is the key — the record (§05) prints the same notice. /file it."
       }
     }
   ],
