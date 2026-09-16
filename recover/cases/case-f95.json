@@ -1,0 +1,118 @@
+{
+  "id": "case-f95",
+  "title": "CASE F-95 — the lookout",
+  "intro": "Before the System had a form to fill, it had a hill. A man stood on it with a glass and counted sails coming up the Patapsco, and when he was sure, a flag went up and the merchants downtown knew a vessel was theirs. Not a name — an arrival. For much of the city's early history the hill went by Signal Hill, after the job. Field Recovery reopened the file because the ledger on this hill contradicts itself: the marker at the park's corner dates the feast that named the hill to one year, the encyclopedia's park page to another, its neighborhood page to a third, and no one has ever filed a correction. The clerk does not mind. The clerk keeps counting. Five instruments: a year the record agrees on, the name of the first observer, the marker's own word for how long the watch lasted, the marker itself, and a signal in the deep stacks that still counts the same distance.",
+  "stations": [
+    {
+      "id": "year",
+      "title": "i · the year",
+      "where": "the public record · May, the year of the riot",
+      "clue": "The hill's other use was military, and the record is exact about the night. On the twelfth of May, in the year of the Baltimore riot, a thousand Union troops and a battery came up from Annapolis by rail, through a thunderstorm, under General Benjamin F. Butler, and by morning a small fort stood on the hill with its cannon turned toward the business district. Not to defend the city — to hold it. The encyclopedia's neighborhood page names the riot's year in the same sentence as the occupation. The System files the year, not the reason. Find it.",
+      "link": {
+        "label": "Wikipedia — Federal Hill, Baltimore (early history)",
+        "href": "https://en.wikipedia.org/wiki/Federal_Hill,_Baltimore"
+      },
+      "prompt": "the year of that May occupation — four digits",
+      "gate": {
+        "type": "sha256",
+        "hash": "8229d83785747eea1aff666c9eb2ab8f030a8fbc42de04e8f8fbe94647929863"
+      },
+      "onSolve": "held, not defended. the year is filed. the fort came late, though — the hill had been counting for the System for two generations by then, and the count began with one man and a glass."
+    },
+    {
+      "id": "observer",
+      "title": "ii · the observer",
+      "where": "the public record · the tower",
+      "clue": "The encyclopedia's page for the park keeps the founding of the watch. A captain, working with the Maritime Exchange, set a marine observatory and a signal tower on the hill; when the watchman on the tower spotted a ship coming up the river he ran up the house flag, and the merchants at the Exchange knew one of their vessels was on its way. The System's first census-taker, then: one man with a glass, itemizing arrivals. The page gives the captain's surname. File only that.",
+      "link": {
+        "label": "Wikipedia — Federal Hill Park (the observatory)",
+        "href": "https://en.wikipedia.org/wiki/Federal_Hill_Park"
+      },
+      "prompt": "the surname of the captain who set the observatory on the hill — one word",
+      "gate": {
+        "type": "sha256",
+        "hash": "306c2877e1fd8e11c68550316ebb0d14ab78d5c433770245adaf1b530dbea236"
+      },
+      "onSolve": "a captain, a glass, a flag: the first clerk this hill ever had, and the only one who ever waved. the marker at the corner of the park says how long his watch was kept. read its word."
+    },
+    {
+      "id": "word",
+      "title": "iii · the word",
+      "where": "the public record · the marker",
+      "clue": "The marker was erected by the Maryland Historical Society, and it is a ledger in four sentences: the founding, the feast, the observatory, then the shipyards and the clay and the fort and the park. It is also wrong on its face. It dates the feast that named the hill to 1780 — years before there was a Constitution to ratify — while the encyclopedia's park page puts the parade in May 1788 and its neighborhood page says the name came in 1789. Three years for one party, and the marker has never been corrected. Field Recovery does not correct the record; it reads it as filed. The sentence about the observatory ends by saying how long the signalling service lasted. One word. Transcribe it from the inscription on the marker database page.",
+      "link": {
+        "label": "HMdb — the Federal Hill marker, archived copy (inscription and location)",
+        "href": "https://web.archive.org/web/20230926000247/https://www.hmdb.org/m.asp?m=2555"
+      },
+      "prompt": "the marker's word for how long the observatory's service lasted — one word",
+      "gate": {
+        "type": "sha256",
+        "hash": "d9b4994fd409236dfff71168d32d869e8977fb25d0f0c95ecb32c42d0de04b3b"
+      },
+      "onSolve": "a hundred years of a man on a hill running up a flag so the ledger downtown could open a line. the marker keeps one more number, and the next instrument is the marker itself — or its transcript."
+    },
+    {
+      "id": "marker",
+      "title": "iv · the marker",
+      "where": "the world · Federal Hill Park — or the record",
+      "clue": "The marker stands at the corner of the park where Warren meets Henry, readable from the corner in daylight. The park is open dawn to dusk; the steep steps up the hill are not part of this reading. The third sentence is the observatory's — built here in a certain year, signalling the merchants of their vessels. The System's watch on this harbor opened that year. Read it off the marker, or off the transcript on the marker database page; the record gives exactly the same digits, and the walk is never required.",
+      "link": {
+        "label": "HMdb — the Federal Hill marker, archived copy (the inscription, transcribed)",
+        "href": "https://web.archive.org/web/20230926000247/https://www.hmdb.org/m.asp?m=2555"
+      },
+      "parity": [
+        "in the record — the inscription transcribed on hmdb.org, archived copy linked",
+        "in the world — the marker at the park's Warren and Henry corner, in daylight"
+      ],
+      "geo": {
+        "name": "Federal Hill Park (Maryland Historical Society marker at Warren Ave and Henry St)",
+        "lat": 39.2792,
+        "lng": -76.6083,
+        "hours": "dawn to dusk",
+        "radiusM": 150,
+        "hint": "the marker at the park's Warren and Henry corner; the third sentence, the one about the observatory and the merchants' vessels — the year sits near its start.",
+        "kind": "public-landmark"
+      },
+      "prompt": "the year the observatory was built, as the marker gives it — four digits",
+      "gate": {
+        "type": "sha256",
+        "hash": "d403b62799e782bd5bed50ae6e5d27db3fae79ca5716f07de8b11c14c0f05ca3"
+      },
+      "onSolve": "the watch opens. sixty-six years before the fort, eighty-five before the park: the first line in this hill's ledger is a man counting what came up the river. one instrument left, and it is not on the hill. it is in the deep stacks, and it is still counting."
+    },
+    {
+      "id": "signal",
+      "title": "v · the signal",
+      "where": "the maze · the deep stacks (levels 2–3) — or the record",
+      "clue": "The tower's reach is on the record: the encyclopedia's park page says how far down the Patapsco the observatory could see, in miles, a round figure. That is the number the first observer worked with — the distance at which a sail became a line in the ledger. Now go down. In the deep stacks, levels 2 and 3, carry a radio from a vending machine and switch it on. It reads the ledger in number groups, slow, not to you; switch it off and on to hear the next. When it reaches the group it says is yours, listen to the numbers in it. The lookout's reach is one of them. The System has been counting the same distance since before the hill was a park. File the miles.",
+      "link": {
+        "label": "Wikipedia — Federal Hill Park (the observatory's reach)",
+        "href": "https://en.wikipedia.org/wiki/Federal_Hill_Park"
+      },
+      "parity": [
+        "in the record — the observatory's reach, on the encyclopedia's park page",
+        "in the maze — levels 2–3, the radio's final group, the one it calls yours"
+      ],
+      "maze": {
+        "levels": [
+          2,
+          3
+        ],
+        "hint": "you are in the deep stacks. switch the radio on and let it read through to the group it calls yours; the lookout's reach in miles is among that group's numbers. the park page on the record gives the same figure. /file it."
+      },
+      "prompt": "the observatory's reach down the river, in miles — digits only",
+      "gate": {
+        "type": "sha256",
+        "hash": "6b9d2720846785ff41e6edf28e69ed2c52b7c448300f103cd0256b61616cd4fa"
+      },
+      "onSolve": "fifteen miles. the same figure in the lookout's harbor and in the radio's last group — the one it says is yours. the tower counted sails at that distance for a hundred years, and the station counts you at it now. the case is read."
+    }
+  ],
+  "reward": {
+    "title": "the lookout is read.",
+    "text": "Five instruments, and the oldest is a man with a glass. Before the 1937 map, before the notice on the door, before any form had a field, the System kept a hill: a captain's tower, a flag for every sail at fifteen miles, a hundred years of arrivals itemized downtown — and then a fort on the same ground with its guns turned on the city it had been counting for. The marker at the corner misdates the party that named the hill and no one has corrected it, because the clerk does not read its own marker; it only adds a line. You read the lines. The radio in the deep stacks still counts the lookout's distance. It is counting you. The file does not close. It extends.",
+    "key": "F-95 · LOOKOUT · FILED",
+    "href": "../codex/#observer",
+    "linkLabel": "▸ the observer — who counts the counters"
+  }
+}

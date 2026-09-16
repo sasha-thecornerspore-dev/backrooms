@@ -1,6 +1,26 @@
 {
   "cases": [
     {
+      "id": "case-f95",
+      "code": "CASE F-95",
+      "title": "the lookout",
+      "blurb": "five instruments: the fort's year, the observer's name, the marker's word, the marker itself, and the radio's distance.",
+      "surfaced": "2026-09-16",
+      "stations": [
+        "year",
+        "observer",
+        "word",
+        "marker",
+        "signal"
+      ],
+      "geo": {
+        "station": "marker",
+        "name": "Federal Hill Park (Maryland Historical Society marker at Warren Ave and Henry St)",
+        "lat": 39.2792,
+        "lng": -76.6083
+      }
+    },
+    {
       "id": "case-d8",
       "code": "CASE D-8",
       "title": "the redlined district",
