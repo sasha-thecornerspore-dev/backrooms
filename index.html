@@ -4,32 +4,47 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>THE BACKROOMS — you have no-clipped out of reality</title>
-<meta name="description" content="An infinite procedural horror maze. Reality inside is reality outside — recursively. The people who find it can enter. If you can read this, you have the gift.">
+<meta name="description" content="A free first-person horror maze you play in your browser — built on a real paper trail, pinned to a real map, with puzzle cases open now. If you can read this, you have the gift.">
+<link rel="canonical" href="https://thecornerspore.dev/">
+<meta name="theme-color" content="#050403">
+<meta name="color-scheme" content="dark">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%23c9ba72'/%3E%3Crect x='38' y='20' width='24' height='6' fill='%23fff'/%3E%3C/svg%3E">
-<!-- social share (the "website i found") -->
+<!-- social share -->
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="The Corner Spore">
 <meta property="og:title" content="THE BACKROOMS">
-<meta property="og:description" content="you have no-clipped out of reality. reality inside is reality outside — recursively. the people who find it can enter. if you can read this, you have the gift.">
-<meta property="og:image" content="https://sasha-thecornerspore-dev.github.io/backrooms/og.png">
-<meta property="og:url" content="https://sasha-thecornerspore-dev.github.io/backrooms/">
+<meta property="og:description" content="you have no-clipped out of reality. a horror maze you can play in your browser, a map where its paper trail touches the ground, and cases waiting for a reader. if you can read this, you have the gift.">
+<meta property="og:url" content="https://thecornerspore.dev/">
+<meta property="og:image" content="https://thecornerspore.dev/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Yellow walls under a drop ceiling, running into light — level 0, drawn by the game's engine.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="THE BACKROOMS">
-<meta name="twitter:description" content="you have no-clipped out of reality. if you can read this, you have the gift.">
-<meta name="twitter:image" content="https://sasha-thecornerspore-dev.github.io/backrooms/og.png">
+<meta name="twitter:description" content="you have no-clipped out of reality. play it in your browser. if you can read this, you have the gift.">
+<meta name="twitter:image" content="https://thecornerspore.dev/og.jpg">
 <style>
   :root{
+    --bg:#050403; --plate:#040302; --ink:#020201;
     --y:#c9ba72; --yb:#e7dc93; --dim:#8a7f52; --faint:#5c5636;
-    --bg:#050403; --rust:#a05a3a; --ink:#020201;
-    --sig:#8fdcac; --sigb:#bff3d4;               /* the signal — beacons answer in this colour */
+    --rust:#a05a3a; --rust-t:#c06a46;
+    --sig:#8fdcac; --sigb:#bff3d4;
+    --prose:#d3c88f; --prose-2:#c8bd86;
+    --rule:rgba(138,127,82,.2); --rule-2:rgba(138,127,82,.4);
     --mono:"Courier New",ui-monospace,monospace; --serif:Georgia,"Times New Roman",serif;
+    --rune:"Courier New",ui-monospace,"Segoe UI Historic","Noto Sans Runic","Segoe UI Symbol",sans-serif;
+    --g:16px;
   }
+  @media(min-width:700px){:root{--g:24px}}
   *{margin:0;padding:0;box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{
-    background:var(--bg); color:var(--y); font-family:var(--mono);
-    line-height:1.7; overflow-x:hidden; -webkit-font-smoothing:antialiased;
-  }
-  a{color:var(--yb); text-decoration:none}
+  @media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+  body{background:var(--bg);color:var(--y);font-family:var(--mono);line-height:1.7;
+    overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  a{color:var(--yb);text-decoration:none}
+  a:focus-visible,[tabindex]:focus-visible{outline:1px solid var(--yb);outline-offset:3px}
+  .vh{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+  .nw{white-space:nowrap}
+
   /* ── overlays ── */
   .vignette{position:fixed;inset:0;pointer-events:none;z-index:50;
     background:radial-gradient(ellipse at 50% 42%,transparent 30%,rgba(0,0,0,.55) 100%)}
@@ -39,218 +54,698 @@
   @keyframes grain{0%{transform:translate(0,0)}50%{transform:translate(-4%,3%)}100%{transform:translate(3%,-2%)}}
   .scan{position:fixed;inset:0;pointer-events:none;z-index:52;opacity:.35;
     background:repeating-linear-gradient(to bottom,transparent 0 3px,rgba(0,0,0,.18) 3px 4px)}
-  @media(prefers-reduced-motion:reduce){.grain{animation:none}.flick{animation:none}
-    .sweep{animation:none}.pulse{animation:none}.corenode{animation:none}}
+  .skip{position:absolute;left:var(--g);top:-80px;z-index:60;background:var(--y);color:var(--ink);
+    padding:12px 16px;font-size:13px;letter-spacing:1px}
+  .skip:focus{top:8px}
 
-  .wrap{max-width:940px;margin:0 auto;padding:0 24px;position:relative;z-index:1}
-  .meta{font-size:11px;letter-spacing:3px;color:var(--faint);text-transform:uppercase}
-
-  /* ── hero ── */
-  header{min-height:100svh;display:flex;flex-direction:column;justify-content:center;
-    align-items:center;text-align:center;gap:26px;position:relative;
-    background:radial-gradient(ellipse at 50% 60%,rgba(201,186,114,.10),transparent 60%)}
-  .topbar{position:absolute;top:20px;left:0;right:0;display:flex;justify-content:space-between;
-    padding:0 24px;font-size:10px;letter-spacing:2px;color:var(--faint)}
-  h1{font-family:var(--serif);font-weight:400;letter-spacing:.22em;
-    font-size:clamp(38px,9vw,104px);color:var(--y);
+  /* ── THE PLATE (hero) ── */
+  header.hero{position:relative;min-height:100svh;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);overflow:hidden;
+    background:radial-gradient(ellipse at 50% 26%,rgba(201,186,114,.06),transparent 58%),var(--bg)}   /* .06: the head's --dim text keeps 4.6:1+ on the glow */
+  .survey,.fan{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .survey{z-index:0} .fan{z-index:1}
+  /* the topbar and the legend sit above the vignette, grain and scan layers (z 50–52) so their small text keeps its contrast */
+  .topbar{position:absolute;z-index:53;top:14px;left:var(--g);right:var(--g);display:flex;
+    justify-content:space-between;gap:16px;font-size:11px;letter-spacing:2px;color:var(--dim);line-height:1.5}
+  .topbar span:last-child{text-align:right;white-space:nowrap}
+  @media(max-width:359px){.topbar{letter-spacing:1px}}
+  .head{position:relative;z-index:53;min-width:0;display:flex;flex-direction:column;align-items:center;text-align:center;
+    gap:clamp(10px,1.9vh,18px);padding:clamp(78px,11vh,104px) var(--g) 6px}
+  /* phones: a tighter stack, so the play button's two-line caption still leaves both plate marks on a 375x812 first screen */
+  @media(max-width:699px){.head{gap:8px;padding-top:clamp(72px,8.6vh,104px)}}
+  @media(min-width:700px) and (max-height:780px){.head{gap:clamp(8px,1.3vh,18px);padding-top:clamp(60px,9vh,104px)}}
+  .meta{font-size:12px;letter-spacing:3px;color:var(--dim);text-transform:uppercase}
+  h1{font-family:var(--serif);font-weight:400;line-height:1.1;color:var(--y);
+    font-size:clamp(28px,min(8vw,11vh),88px);letter-spacing:.14em;padding-left:.14em;text-wrap:balance;
     text-shadow:0 0 18px rgba(201,186,114,.55),0 0 60px rgba(201,186,114,.25)}
+  @media(min-width:481px){h1{letter-spacing:.22em;padding-left:.22em}}
   .flick{animation:flick 6s infinite}
   @keyframes flick{0%,17%,19%,23%,80%,100%{opacity:1}18%,22%{opacity:.35}18.5%{opacity:.7}81%{opacity:.5}}
-  .hook{font-family:var(--serif);font-style:italic;font-size:clamp(16px,3vw,24px);
-    color:var(--yb);min-height:1.6em}
-  .hook .cur{color:var(--yb);animation:blink 1s steps(1) infinite}
+  .hook{font-family:var(--serif);font-style:italic;font-size:clamp(17px,2.4vw,24px);color:var(--yb);min-height:1.5em;text-wrap:pretty}
+  .hook .cur{animation:blink 1s steps(1) infinite}
   @keyframes blink{50%{opacity:0}}
-  .gift{font-size:13px;letter-spacing:4px;color:var(--dim);text-transform:uppercase;
-    font-family:var(--mono),"Segoe UI Historic","Noto Sans Runic","Segoe UI Symbol",sans-serif;min-height:1.6em}
-  .gift .r{color:var(--faint)}                    /* still-encoded runes: dim */
-  .gift .done{animation:decode .5s ease-out}      /* the moment a glyph resolves */
+  .gift{font-size:13px;letter-spacing:4px;color:var(--dim);text-transform:uppercase;font-family:var(--rune);min-height:1.6em}
+  .gift .r{color:var(--dim)}
+  .gift .vh{text-transform:none}
+  .gift .done{animation:decode .5s ease-out}
   @keyframes decode{from{color:var(--yb);text-shadow:0 0 10px var(--y)}to{color:var(--dim);text-shadow:none}}
-  .down{position:absolute;bottom:26px;font-size:22px;color:var(--faint);animation:bob 2.4s ease-in-out infinite}
-  @keyframes bob{50%{transform:translateY(8px);opacity:.4}}
+  .facts{font-size:13px;letter-spacing:1px;color:var(--y);line-height:1.6;max-width:92ch}
+  .facts span{white-space:nowrap}.facts .dot{color:var(--faint);padding:0 .5em}
+  /* one line only where it fits (≥1000px); below that each fact takes its own line, so the line can never widen the hero */
+  @media(max-width:999px){.facts span{display:block;white-space:normal;text-wrap:balance}.facts .dot{display:none}}
+  .acts{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:12px 18px;margin-top:4px}
+  .touchnote{display:none;font-size:12px;letter-spacing:1px;color:var(--prose-2);max-width:40ch;line-height:1.7;text-wrap:balance}
+  .touchnote a{color:var(--yb);text-decoration:underline;text-underline-offset:4px;display:inline-block;padding:12px 2px;margin:-12px -2px}
+  @media(max-width:699px),(hover:none) and (pointer:coarse){.touchnote{display:block}}
+  .btn{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-family:var(--serif);text-align:center;
+    font-size:clamp(19px,2vw,22px);letter-spacing:.3em;color:var(--ink);background:var(--y);min-height:56px;
+    padding:12px 38px 10px;box-shadow:0 0 30px rgba(201,186,114,.35);transition:background .2s,box-shadow .2s}
+  .btn small{font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;text-wrap:balance}
+  /* the play button's caption: a touch screen is told the truth (the maze is made for a computer) */
+  .btn .tc{display:none}
+  @media(max-width:699px),(hover:none) and (pointer:coarse){.btn .kb{display:none}.btn .tc{display:inline}}
+  .btn:hover{background:var(--yb);box-shadow:0 0 60px rgba(201,186,114,.6)}
+  .ghost{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:48px;padding:10px 20px;
+    border:1px solid var(--rule-2);color:var(--yb);font-size:13px;letter-spacing:2px;text-transform:uppercase;
+    background:rgba(4,3,2,.6);transition:border-color .2s,background .2s}
+  .ghost:hover{border-color:var(--y);background:rgba(201,186,114,.07)}
+  .ghost small{font-size:11px;letter-spacing:2px;color:var(--prose-2);text-wrap:balance}
+  .ghost,.gift,.topbar span:first-child{text-wrap:balance}
+  @media(max-width:699px){.acts{flex-direction:column;align-self:stretch;align-items:stretch}}
+  @media(max-width:400px){.ghost{letter-spacing:1px;padding:10px 14px}.btn{padding-left:16px;padding-right:16px}}   /* the caption stays on one line */
+
+  /* the stage has no z-index of its own; the art and the legend (z 53) sit above the vignette, grain and scan layers so the
+     plate's small labels keep their token contrast. The plate is clipped to its own box: it never paints over (or catches
+     clicks meant for) the buttons above it. */
+  .stage{position:relative;display:flex;flex-direction:column;margin-top:clamp(10px,2vh,24px);min-height:clamp(250px,40vh,520px)}
+  @media(max-width:699px){.stage{margin-top:8px}}
+  @media(max-width:699px) and (max-height:700px){.stage{margin-top:6px}}
+  /* tall enough that the first mark's label always clears the buttons by 60px+ (it sits at viewBox y≈184: 16vw+44px) */
+  .art{position:relative;z-index:53;flex:1 1 auto;min-height:calc(16vw + 44px)}
+  @media(max-width:1039px){.art{min-height:max(290px,calc(16vw + 44px))}}   /* keeps plate labels at 11px or more */
+  .art svg{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none}
+  .art .pin{pointer-events:auto}
+  .art .m{display:none}
+  /* wide screens: the plate stops growing at 1700px (its labels stay near the head's type scale); it sits on the stage's
+     floor and fades out at its sides. The fan reads getScreenCTM, so it follows. */
+  @media(min-width:1700px){.art svg.d{left:50%;right:auto;top:auto;bottom:0;width:1700px;height:min(100%,468px);transform:translateX(-50%);
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent);mask-image:linear-gradient(90deg,transparent,#000 10%,#000 90%,transparent)}}
+  /* phones, and short narrow windows (landscape phones, small tablets): the phone plate, with the legend in flow under it.
+     Wider short windows keep the desktop plate (the laptop rule above makes it fit). The script's `narrow` query must stay
+     identical to this one. */
+  @media (max-width:699px),(max-height:520px),(max-width:899px) and (max-height:640px){
+    .stage{min-height:0}.art{flex:0 0 auto;min-height:0;height:min(300px,calc(70vw + 12px),62vh)}.art .d{display:none}.art .m{display:block}}
+  .shore{fill:none;stroke:rgba(138,127,82,.5);stroke-width:1.2}
+  .water{fill:url(#wh);opacity:.6}
+  .hl{font-family:var(--serif);font-style:italic;font-size:17px;fill:var(--dim);letter-spacing:2px}
+  .neat{fill:none;stroke:rgba(138,127,82,.28);stroke-width:1}
+  .pin text,.hl{paint-order:stroke;stroke:#050403;stroke-width:5px;stroke-linejoin:round}
+  .pin text{font-family:var(--mono);letter-spacing:1.5px;transition:fill .35s}
+  .pin .t1{fill:var(--y)} .pin .t2,.pin .t3{fill:var(--prose-2)}
+  .pin.lit .t1,.pin.case:hover .t1{fill:var(--yb)} .pin.case.lit .ring{stroke:var(--yb)}
+  .pin.sealed .t1{fill:var(--y)} .pin.sealed .t2,.pin.sealed .t3{fill:var(--rust-t)}
+  .pin.sealed:hover text{text-decoration:underline}
+  .art .m .pin text{letter-spacing:.6px}
+  .pin .hit{fill:transparent;stroke:none}
+  .pin:focus{outline:none} .pin:focus-visible .hit{stroke:var(--yb);stroke-width:1.5}
+  .sq{fill:url(#rh);stroke:var(--rust);stroke-width:2}
+  .ring{fill:none;stroke:var(--y);stroke-width:2;stroke-dasharray:3 4}
+  /* the legend is a row in normal flow under the art at every width, so the art can never run under it */
+  .legend{position:relative;z-index:53;display:flex;flex-wrap:wrap;justify-content:center;gap:0 28px;margin:0;
+    padding:8px var(--g) 14px;font-size:11px;letter-spacing:1px;color:var(--dim);line-height:1.75;text-align:center;
+    background:linear-gradient(180deg,rgba(5,4,3,.55),rgba(5,4,3,.92) 35%)}
+  .legend .lg{display:block;max-width:100%;text-wrap:balance}
+  .legend #lg-case{color:var(--prose-2)}
+  .legend .k{display:inline-block;width:1.4em;color:var(--rust-t)} .legend .k.c{color:var(--y)}
+  .legend a{color:var(--yb);display:inline-block;padding:13px 4px;margin:-13px -4px}
+  .legend a:hover{text-decoration:underline}
+  @media(max-width:1439px){.legend .dk{display:none}}
+  /* laptop and Chromebook browser windows (about 600–700px of visible height): the whole hero, legend and its
+     case-door safety line included, fits the first screen. (After the base hero and legend rules, so it wins.) */
+  @media (min-width:700px) and (max-height:780px){h1{font-size:clamp(28px,min(8vw,9.5vh),88px)}.hook{font-size:clamp(17px,2.1vw,22px)}}
+  @media (min-width:700px) and (max-height:700px){.head{padding-top:42px;gap:5px}h1{font-size:clamp(28px,min(8vw,8.5vh),88px)}
+    .hook{font-size:clamp(17px,2vw,21px)}.btn{padding-top:9px;padding-bottom:8px}.legend{padding-top:4px;padding-bottom:6px}}
+  @media(forced-colors:active){
+    .art .pin text,.hl{stroke:Canvas}.art .pin.sealed text,.art .pin.case text{fill:CanvasText}.art .pin.sealed .t1,.art .pin.case .t1{fill:LinkText}
+    .pin:focus-visible .hit{stroke:Highlight;stroke-width:3}
+    .art .pin .ring,.art .pin.case.lit .ring,.art .pin .sq{stroke:CanvasText}.shore,.neat{stroke:GrayText}.fan{display:none}}
 
   /* ── sections ── */
-  section{padding:min(16vh,140px) 0;border-top:1px solid rgba(138,127,82,.14)}
-  .tag{font-size:11px;letter-spacing:5px;color:var(--rust);text-transform:uppercase;margin-bottom:22px}
-  .tag.sig{color:var(--sig)}
-  .finding p{font-family:var(--serif);font-size:clamp(17px,2.4vw,22px);color:#d8cd96;
+  /* main and the footer sit above the vignette, grain and scan layers (z 50–52) like the hero's text does: their
+     backgrounds are transparent, so the overlays still texture the page, but never the small text */
+  .wrap{max-width:980px;margin:0 auto;padding:0 var(--g);position:relative;z-index:53}
+  section{padding:clamp(64px,13vh,130px) 0;border-top:1px solid rgba(138,127,82,.14)}
+  @media(max-width:699px){section{padding:clamp(44px,7vh,90px) 0}}
+  section[id]{scroll-margin-top:8px}
+  .tag,h2.tag{font-family:var(--mono);font-weight:400;font-size:12px;letter-spacing:4px;color:var(--rust-t);text-transform:uppercase;
+    line-height:1.7;margin:0 0 18px;max-width:none;text-wrap:balance}
+  h2{font-family:var(--serif);font-weight:400;letter-spacing:.04em;font-size:clamp(25px,4.2vw,40px);
+    color:var(--y);line-height:1.18;margin-bottom:16px;max-width:30ch;text-wrap:balance}
+  .lede{font-family:var(--serif);font-size:clamp(17px,2.3vw,21px);color:var(--prose);max-width:62ch;margin-bottom:28px;line-height:1.65;text-wrap:pretty}
+  .fine{font-size:12px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;overflow-wrap:anywhere}
+  .alt{display:inline-flex;flex-direction:column;justify-content:center;min-height:44px;font-size:13px;letter-spacing:1px;color:var(--yb);padding:8px 0;line-height:1.5}
+  .alt span{border-bottom:1px solid var(--rule-2);align-self:flex-start}
+  .alt:hover span{border-color:var(--y)}
+  .alt small{display:block;font-size:11px;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+
+  /* key to the plate */
+  .key ul{list-style:none;border-top:1px solid var(--rule)}
+  .key li{position:relative;display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:0 20px;padding:20px 8px;
+    border-bottom:1px solid var(--rule);transition:background .2s}
+  .key .sym{width:36px;height:36px;margin-top:4px}
+  .key .id{font-size:12px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;line-height:1.5;text-wrap:balance}
+  .key h3{font-family:var(--serif);font-weight:400;font-size:clamp(20px,2.4vw,24px);color:var(--y);margin:3px 0 6px;line-height:1.25}
+  .key h3 a{color:inherit} .key h3 a::after{content:"";position:absolute;inset:0}
+  .key .desc{font-size:15px;color:var(--prose-2);max-width:60ch;line-height:1.7}
+  .key .aside{font-family:var(--serif);font-style:italic;font-size:15px;color:var(--dim);margin-top:8px;max-width:60ch;line-height:1.55}
+  .key .to{font-size:12px;letter-spacing:1px;color:var(--dim);align-self:center;white-space:nowrap}
+  .key .newest{font-size:12px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;margin-top:8px;line-height:1.6}
+  .key li:hover{background:rgba(201,186,114,.05)} .key li:hover h3{color:var(--yb)} .key li:hover .to{color:var(--yb)}
+  .key li:focus-within{outline:1px solid var(--yb);outline-offset:-1px} .key h3 a:focus-visible{outline:none}
+  .key .aside a.jump{position:relative;z-index:2;display:inline-block;padding:11px 0;margin:-11px 0;color:var(--prose-2)}
+  .key .aside a.jump .nw{color:var(--yb);text-decoration:underline;text-decoration-color:var(--rule-2);text-underline-offset:4px}
+  .key .aside a.jump:hover .nw{text-decoration-color:var(--y)}
+  .key li:has(.aside a.jump:focus-visible){outline:none}
+  .key li:has(.aside a.jump:hover){background:none} .key li:has(.aside a.jump:hover) h3{color:var(--y)}
+  @media(max-width:699px){.key li{grid-template-columns:30px minmax(0,1fr);gap:0 14px;padding:16px 2px}.key .sym{width:30px;height:30px}
+    .key .to{display:none}.key .desc{font-size:14px}
+    /* the row hints are hidden on phones, so the title itself says it can be tapped */
+    .key h3::after{content:"\00a0▸";content:"\00a0▸"/"";color:var(--dim);font-size:.8em}
+    .key li.out h3::after{content:"\00a0↗";content:"\00a0↗"/""}}
+  /* one rule between the key list and the finding, not two */
+  section.key+section{border-top:0}
+  @media(min-width:1000px){.key .frame{max-width:640px}}
+  @media(max-height:520px){.frame img{max-height:70svh;object-fit:cover}}
+
+  /* the finding */
+  .finding p{font-family:var(--serif);font-size:clamp(17px,2.4vw,22px);color:var(--prose);
     max-width:70ch;margin:0 0 26px}
   .finding em{color:var(--yb);font-style:italic}
   .redact{background:var(--y);color:var(--y);padding:0 .25em;border-radius:2px;
     transition:color .25s} .redact:hover{color:var(--ink)}
   .redact.rx{cursor:pointer} .redact.shown{color:var(--ink)!important}
-  .memo{border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.3);padding:22px 26px;max-width:640px}
-  .memo p{font-family:var(--mono);font-size:15px;color:#c8bd86;margin:0 0 14px;line-height:1.95}
-  .memo .mfoot{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--faint);margin:0}
+  .doc{display:block;border:1px solid rgba(138,127,82,.3);padding:18px 20px;max-width:560px;margin-top:10px;
+    background:rgba(201,186,114,.03);transition:background .2s,border-color .2s;position:relative}
+  .doc:hover{background:rgba(201,186,114,.09);border-color:var(--y)}
+  .doc .code{font-size:11px;letter-spacing:2px;color:var(--dim)}
+  .doc .name{font-size:clamp(15px,2.2vw,19px);color:var(--yb);margin-top:4px}
 
-  /* ── the anchor — 806 N Carey ── */
-  .anchor h2{font-family:var(--serif);font-weight:400;letter-spacing:.06em;
-    font-size:clamp(24px,4.4vw,42px);color:var(--y);margin-bottom:8px;line-height:1.15}
-  .anchor .sub{font-size:12px;letter-spacing:3px;color:var(--faint);text-transform:uppercase;margin-bottom:34px}
-  .anchor p{font-family:var(--serif);font-size:clamp(16px,2.2vw,20px);color:#d3c88f;
-    max-width:68ch;margin:0 0 22px}
+  /* the atlas — the first door */
   .anchor em{color:var(--yb);font-style:italic}
-  .anchor .say{font-family:var(--serif);font-style:italic;font-size:clamp(18px,2.8vw,26px);
-    color:var(--yb);border-left:2px solid var(--rust);padding:6px 0 6px 22px;margin:34px 0;max-width:60ch}
-
-  /* the three instruments — a timeline */
-  .instr{display:grid;gap:0;margin:40px 0 8px;border-top:1px solid rgba(138,127,82,.2)}
-  .row{display:grid;grid-template-columns:96px 1fr;gap:20px;padding:20px 0;
-    border-bottom:1px solid rgba(138,127,82,.2);align-items:baseline}
-  .row .yr{font-family:var(--serif);font-size:clamp(22px,3vw,30px);color:var(--rust);letter-spacing:.04em}
-  .row .what{font-size:11px;letter-spacing:3px;color:var(--faint);text-transform:uppercase;margin-bottom:6px}
-  .row .txt{color:#c8bd86;font-size:15px}
+  .door{display:grid;grid-template-columns:minmax(260px,320px) minmax(0,1fr);gap:clamp(28px,5vw,56px);align-items:start;margin-top:34px}
+  .card{border:1px solid var(--rule-2);background:rgba(4,3,2,.7);padding:20px 20px 22px}
+  @media(min-width:1000px){.card{position:sticky;top:24px}}
+  @media(max-width:999px){.door{grid-template-columns:minmax(0,1fr)}.card{max-width:560px}}
+  .card .kind{font-size:11px;letter-spacing:3px;color:var(--rust-t);text-transform:uppercase}
+  .card h3{font-family:var(--serif);font-weight:400;font-size:clamp(22px,3vw,28px);color:var(--y);margin:6px 0 6px;line-height:1.2}
+  .anchor .sub{font-size:11px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;margin-bottom:16px;line-height:1.7;text-wrap:balance}
+  .card .blurb{font-family:var(--serif);font-size:15px;color:var(--prose);line-height:1.6;margin-bottom:14px}
+  .card .sealedbox{border:1px solid var(--rust);color:var(--rust-t);font-size:12px;letter-spacing:1px;padding:8px 10px;margin-bottom:14px}
+  .card .safe{font-family:var(--serif);font-style:italic;font-size:15px;color:var(--yb);line-height:1.55;margin-bottom:18px}
+  .read p.strata-h{font-family:var(--mono);font-size:12px;letter-spacing:3px;text-transform:uppercase;color:var(--dim);margin:0 0 12px;line-height:1.7}
+  .read p{font-family:var(--serif);font-size:clamp(16px,2.2vw,20px);color:var(--prose);max-width:62ch;margin:0 0 22px}
+  .instr{display:grid;gap:0;margin:24px 0 8px;border-top:1px solid var(--rule)}
+  .row{display:grid;grid-template-columns:96px minmax(0,1fr);gap:20px;padding:20px 0;
+    border-bottom:1px solid var(--rule);align-items:baseline}
+  .row .yr{font-family:var(--serif);font-size:clamp(22px,3vw,30px);color:var(--rust-t);letter-spacing:.04em}
+  .row .what{font-size:11px;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:6px}
+  .row .txt{color:var(--prose-2);font-size:15px}
   .row .txt b{color:var(--yb);font-weight:400}
+  .row .txt em{color:var(--yb);font-style:italic}
   .row.still .yr{color:var(--dim)}
   .row.still .txt b{color:var(--y)}
+  @media(max-width:1000px){.row{grid-template-columns:minmax(0,1fr);gap:2px}}
+  .anchor .say{font-family:var(--serif);font-style:italic;font-size:clamp(18px,2.8vw,26px);
+    color:var(--yb);border-left:2px solid var(--rust);padding:6px 0 6px 22px;margin:40px 0 34px;max-width:60ch}
+  .anchor .closing{font-family:var(--serif);font-style:italic;color:var(--dim);font-size:17px;margin:12px 0 14px}
+  .anchor .links{display:flex;flex-wrap:wrap;align-items:center;gap:10px 26px}
 
-  /* field plates — original illustrations that open the real record */
-  .platesintro{font-family:var(--serif);font-style:italic;color:var(--dim);font-size:15px;margin:40px 0 16px}
+  /* field plates (kept markup) */
+  .platesintro{font-family:var(--serif);font-style:italic;color:var(--dim);font-size:15px;margin:48px 0 16px}
   .plates{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:14px}
-  .plate{display:block;border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.3);transition:.2s;text-decoration:none}
-  .plate:hover{border-color:var(--y);background:rgba(201,186,114,.06);transform:translateY(-3px)}
-  .plate svg{display:block;width:100%;height:auto;border-bottom:1px solid rgba(138,127,82,.2)}
-  .plate .cap{padding:11px 13px}
-  .plate .cap .yr{font-size:9px;letter-spacing:2px;color:var(--rust);text-transform:uppercase}
-  .plate .cap .ti{font-family:var(--serif);font-size:14px;color:var(--yb);margin:3px 0 7px;line-height:1.25}
-  .plate .cap .src{font-size:9px;letter-spacing:1px;color:var(--faint)}
-  .plate .cap .src::before{content:"↗ "}
-  .plate:hover .cap .src{color:var(--sig)}
+  a.plate{display:block;border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.3);transition:border-color .2s,background .2s;text-decoration:none}
+  a.plate:hover{border-color:var(--y);background:rgba(201,186,114,.06)}
+  a.plate svg{display:block;width:100%;height:auto;border-bottom:1px solid rgba(138,127,82,.2)}
+  a.plate .cap{padding:11px 13px}
+  a.plate .cap .yr{font-size:11px;letter-spacing:2px;color:var(--rust-t);text-transform:uppercase}
+  a.plate .cap .ti{font-family:var(--serif);font-size:14px;color:var(--yb);margin:3px 0 7px;line-height:1.25}
+  a.plate .cap .src{font-size:11px;letter-spacing:1px;color:var(--dim);overflow-wrap:anywhere}
+  a.plate .cap .src::before{content:"↗\00a0"}
+  a.plate:hover .cap .src{color:var(--sig)}
+  /* phones: one plate per row, drawing left and caption right, so a source domain never breaks mid-word */
+  @media(max-width:699px){.plates{grid-template-columns:minmax(0,1fr);gap:10px;max-width:560px}
+    a.plate{display:grid;grid-template-columns:clamp(84px,28vw,150px) minmax(0,1fr);align-items:center}
+    a.plate svg{border-bottom:0;border-right:1px solid rgba(138,127,82,.2)}
+    a.plate .cap{padding:10px 12px}a.plate .cap .src{letter-spacing:0;overflow-wrap:break-word}}
+  @media(min-width:700px) and (max-width:1179px){.plates{grid-template-columns:repeat(6,minmax(0,1fr));max-width:760px}
+    a.plate{grid-column:span 2}a.plate:nth-child(4){grid-column:2/span 2}}
+  /* 1180px and up: all five papers on one row, stepping slightly past the text column */
+  @media(min-width:1180px){.plates{grid-template-columns:repeat(5,minmax(0,1fr));margin:0 -70px}a.plate .cap .src{letter-spacing:0}}
+  @media(max-width:359px){a.plate{grid-template-columns:72px minmax(0,1fr)}a.plate .cap .src{white-space:nowrap}}
 
-  /* recovered documents */
-  .docs{display:grid;gap:14px}
-  .doc{display:block;border:1px solid rgba(138,127,82,.3);padding:18px 20px;
-    background:rgba(201,186,114,.03);transition:.2s;position:relative}
-  .doc:hover{background:rgba(201,186,114,.09);border-color:var(--y);transform:translateX(4px)}
-  .doc .code{font-size:10px;letter-spacing:2px;color:var(--faint)}
-  .doc .name{font-size:clamp(15px,2.2vw,19px);color:var(--yb);margin-top:4px}
-  .doc .status{position:absolute;top:16px;right:18px;font-size:10px;letter-spacing:2px;
-    color:var(--rust);border:1px solid var(--rust);padding:2px 7px}
-
-  /* ── the atlas / beacons preview ── */
-  .atlas .lead{font-family:var(--serif);font-size:clamp(17px,2.4vw,22px);color:#d8cd96;max-width:66ch;margin:0 0 12px}
-  .atlas .lead em{color:var(--sigb);font-style:italic}
-  .atlas .coming{font-size:11px;letter-spacing:4px;color:var(--sig);text-transform:uppercase;margin-bottom:30px;opacity:.8}
-  .mapwrap{position:relative;border:1px solid rgba(143,220,172,.22);background:
-    radial-gradient(ellipse at 50% 40%,rgba(143,220,172,.05),transparent 70%),#040705;
-    overflow:hidden;aspect-ratio:16/9}
-  .mapwrap svg{display:block;width:100%;height:100%}
-  .grid line{stroke:rgba(143,220,172,.10);stroke-width:.5}
-  .land{fill:rgba(143,220,172,.035);stroke:rgba(143,220,172,.18);stroke-width:.8}
-  .sweep{transform-origin:50% 52%;animation:sweep 9s linear infinite}
-  @keyframes sweep{to{transform:rotate(360deg)}}
-  .pulse{transform-box:fill-box;transform-origin:center;animation:pulse 3.2s ease-out infinite}
-  @keyframes pulse{0%{r:3;opacity:.7}70%{opacity:0}100%{r:26;opacity:0}}
-  .corenode{transform-box:fill-box;transform-origin:center;animation:core 3.2s ease-in-out infinite}
-  @keyframes core{0%,100%{opacity:.55}50%{opacity:1}}
-  .genesis .corenode{fill:var(--yb);animation-duration:2.2s}
-  .genesis .pulse{stroke:var(--yb);animation-duration:2.2s}
-  .blabel{font-family:var(--mono);font-size:9px;letter-spacing:2px;fill:var(--dim)}
-  .blabel.g{fill:var(--y)}
-  .mapcap{position:absolute;left:14px;bottom:12px;font-size:10px;letter-spacing:2px;color:var(--faint)}
-  .mapcap .on{color:var(--sig)}
-  .maptitle{position:absolute;right:14px;top:12px;font-size:10px;letter-spacing:3px;color:var(--faint);text-align:right}
-
-  /* the two ways + strata */
-  .ways{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:30px 0}
-  @media(max-width:640px){.ways{grid-template-columns:1fr}}
-  .way{border:1px solid rgba(138,127,82,.28);padding:20px 22px;background:rgba(201,186,114,.03)}
-  .way h4{font-family:var(--serif);font-weight:400;font-size:19px;color:var(--yb);margin-bottom:8px;letter-spacing:.04em}
-  .way .k{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--rust);margin-bottom:12px}
-  .way p{font-size:14px;color:#c2b884;margin:0}
-  .way.deep{border-color:rgba(143,220,172,.3)}
-  .way.deep .k{color:var(--sig)}
-  .strata{margin:34px 0 0;border:1px solid rgba(138,127,82,.28);padding:24px;background:rgba(0,0,0,.25)}
-  .strata .h{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;flex-wrap:wrap;gap:8px}
-  .strata .h .t{font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--dim)}
-  .strata .h .c{font-family:var(--serif);font-size:22px;color:var(--sigb)}
-  .strata .h .c span{color:var(--faint);font-size:12px;letter-spacing:2px}
-  .cols{display:flex;gap:3px;align-items:flex-end;height:84px}
-  .cols i{flex:1;display:block;background:linear-gradient(to top,rgba(143,220,172,.5),rgba(143,220,172,.06));
-    border-top:1px solid rgba(191,243,212,.5)}
-  .strata .note{margin-top:16px;font-size:13px;color:#b7ac7c;font-family:var(--serif);font-style:italic;max-width:64ch}
-
-  /* descend */
-  .descend{text-align:center}
-  .descend p{color:var(--dim);max-width:56ch;margin:0 auto 34px;font-size:15px}
-  .btn{display:inline-block;font-family:var(--serif);font-size:22px;letter-spacing:.3em;
-    color:var(--bg);background:var(--y);padding:18px 54px;border:none;cursor:pointer;
-    box-shadow:0 0 30px rgba(201,186,114,.35);transition:.2s}
-  .btn:hover{background:var(--yb);box-shadow:0 0 60px rgba(201,186,114,.6);transform:scale(1.03)}
-  .fine{margin-top:18px;font-size:11px;letter-spacing:3px;color:var(--faint);text-transform:uppercase}
-
-  /* condemnation placard */
-  .placard{max-width:520px;margin:0 auto;border:3px double var(--dim);padding:26px 28px;
-    background:rgba(0,0,0,.4);text-align:center;transform:rotate(-1.2deg);color:var(--dim)}
-  .placard h3{font-family:var(--serif);letter-spacing:.15em;color:var(--y);font-size:19px;margin-bottom:12px}
-  .placard .body{font-size:12px;letter-spacing:1px;line-height:1.9}
-  .placard .no{margin-top:16px;font-size:11px;letter-spacing:2px;color:var(--rust)}
-
-  /* recovered cross-reference — a taped index card with a hidden street name */
-  .xref{max-width:560px;margin:46px auto 0;border:1px solid rgba(138,127,82,.4);
+  /* the taped cross-reference card (kept markup) */
+  .xref{max-width:560px;margin:46px auto 40px;border:1px solid rgba(138,127,82,.4);
     background:linear-gradient(180deg,rgba(201,186,114,.06),rgba(0,0,0,.35));
     padding:24px 26px;position:relative;transform:rotate(-.6deg);box-shadow:0 12px 44px rgba(0,0,0,.45)}
   .xref::before{content:"";position:absolute;top:-9px;left:50%;width:88px;height:18px;
     transform:translateX(-50%) rotate(1.6deg);background:rgba(201,186,114,.13);border:1px solid rgba(201,186,114,.22)}
-  .xref .xtag{font-size:10px;letter-spacing:3px;color:var(--rust);text-transform:uppercase;margin-bottom:12px}
-  .xref p{font-family:var(--serif);font-size:15px;color:#cabf88;margin:0 0 16px;max-width:none}
+  .xref .xtag{font-size:11px;letter-spacing:3px;color:var(--rust-t);text-transform:uppercase;margin-bottom:12px}
+  .xref p{font-family:var(--serif);font-size:15px;color:var(--prose-2);margin:0 0 16px;max-width:none}
   .xref p em{color:var(--yb);font-style:italic}
   .xref .xrune{font-size:clamp(24px,6vw,40px);letter-spacing:.28em;text-align:center;color:var(--y);
-    text-shadow:0 0 14px rgba(201,186,114,.4);margin:6px 0 14px;
-    font-family:var(--mono),"Segoe UI Historic","Noto Sans Runic","Segoe UI Symbol",sans-serif}
-  .xref .xfoot{font-size:12px;letter-spacing:1px;color:var(--faint);font-style:italic;text-align:center}
+    text-shadow:0 0 14px rgba(201,186,114,.4);margin:6px 0 14px;font-family:var(--rune)}
+  .xref .xfoot{font-size:12px;letter-spacing:1px;color:var(--dim);font-style:italic;text-align:center}
+  .xref .xtag{text-wrap:balance}
+  @media(max-width:480px){.xref{padding:22px 18px}.xref .xrune{letter-spacing:.18em}.xref .xtag{letter-spacing:2px}}
+  @media(max-width:359px){.xref .xtag{letter-spacing:1px}}
+  @media(max-width:319px){.xref .xtag{letter-spacing:.5px}}
 
-  footer{padding:70px 0 90px;text-align:center;border-top:1px solid rgba(138,127,82,.14)}
+  /* case board */
+  .tags{list-style:none;display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin:8px 0 26px}
+  @media(min-width:520px){.tags{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(min-width:960px){.tags{grid-template-columns:repeat(4,minmax(0,1fr))}}
+  .tagcard{position:relative;display:flex;flex-direction:column;height:100%;border:1px solid var(--rule-2);background:rgba(201,186,114,.03);
+    padding:38px 18px 18px;transition:border-color .2s,background .2s}
+  .tagcard::before{content:"";position:absolute;top:14px;left:16px;width:10px;height:10px;border:1px solid var(--dim);border-radius:50%}
+  .tagcard::after{content:"";position:absolute;top:0;left:21px;width:1px;height:14px;background:var(--dim);opacity:.6}
+  .tagcard:hover{border-color:var(--y);background:rgba(201,186,114,.08)}
+  .tagcard.start{border-color:rgba(201,186,114,.6)}
+  .tagcard .sf{position:absolute;top:11px;right:14px;font-size:11px;letter-spacing:1px;color:var(--dim)}
+  .tagcard .code{font-size:22px;letter-spacing:2px;color:var(--yb);line-height:1.3}
+  .tagcard .ti{font-family:var(--serif);font-size:19px;color:var(--y);margin:2px 0 6px;line-height:1.3}
+  .tagcard .tease{font-family:var(--serif);font-size:15px;color:var(--prose);line-height:1.5;margin:0 0 10px;text-wrap:balance}
+  .tagcard .n{font-size:12px;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+  .tagcard .pips{display:flex;gap:5px;margin:8px 0 2px}
+  .tagcard .pip{display:block;width:11px;height:11px;border:1px solid var(--dim)}
+  .tagcard .pip.on{background:var(--y);border-color:var(--y)}
+  .tagcard .prog{font-size:11px;letter-spacing:1px;color:var(--y)}
+  .tagcard .prog:empty{display:none}
+  .tagcard .note{font-family:var(--serif);font-style:italic;font-size:15px;color:var(--prose-2);margin-top:10px;line-height:1.5;text-wrap:balance}
+  .cases .fine{margin-top:14px}
+
+  /* the book */
+  .book{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:clamp(24px,5vw,56px);align-items:start}
+  @media(max-width:699px){.book{grid-template-columns:minmax(0,1fr)}.sleeve{max-width:240px}}
+  .sleeve{border:1px solid var(--rule-2);background:linear-gradient(180deg,rgba(201,186,114,.07),rgba(0,0,0,.3));padding:0 0 14px}
+  .sleeve .strip{font-size:11px;letter-spacing:2px;color:var(--rust-t);text-transform:uppercase;padding:9px 14px;border-bottom:1px dashed var(--rule-2);line-height:1.5;text-wrap:balance}
+  .sleeve svg{display:block;width:100%;height:auto}
+  .credit{font-size:13px;letter-spacing:1px;color:var(--dim);margin:-6px 0 22px}
+  .bk p{font-family:var(--serif);font-size:clamp(16px,2.1vw,19px);color:var(--prose);max-width:58ch;margin-bottom:16px;line-height:1.65}
+  .bk p.credit{font-family:var(--mono);font-size:13px;color:var(--dim);line-height:1.7}
+  .bk p.soft{font-style:italic;color:var(--yb)}
+  .bk .case-l a,.manual-line a{display:inline-block;max-width:100%;line-height:24px;padding:10px 0;
+    text-decoration:underline;text-decoration-color:var(--rule-2);text-decoration-thickness:1px;text-underline-offset:5px}
+  .bk .case-l a:hover,.manual-line a:hover{text-decoration-color:var(--y)}
+  .bk p.go{margin:24px 0 8px}
+  .bk p.fine{font-family:var(--mono);font-size:12px;color:var(--dim);overflow-wrap:normal}
+
+  /* the way in */
+  .frame{position:relative;margin:6px 0 clamp(30px,5vh,48px);border:1px solid var(--rule-2);background:#000}
+  .frame img{display:block;width:100%;height:auto;aspect-ratio:1200/630}
+  .frame{transition:border-color .2s}
+  .frame figcaption{font-size:11px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;padding:8px 12px;border-top:1px solid var(--rule);line-height:1.5;text-wrap:balance}
+  .frame figcaption a{color:var(--yb)} .frame figcaption a::after{content:"";position:absolute;inset:0;z-index:1}
+  .frame:hover{border-color:var(--y)} .frame:hover figcaption a{text-decoration:underline;text-underline-offset:4px}
+  .frame:focus-within{outline:1px solid var(--yb);outline-offset:3px} .frame figcaption a:focus-visible{outline:none}
+  .frame::before,.frame::after{content:"";position:absolute;width:14px;height:14px;border:1px solid var(--y);opacity:.6}
+  .frame::before{top:-6px;left:-6px;border-right:0;border-bottom:0}
+  .frame::after{bottom:-6px;right:-6px;border-left:0;border-top:0}
+  .levels-h{font-family:var(--mono);font-weight:400;font-size:12px;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin:6px 0 10px;line-height:1.6}
+  .levels{list-style:none;border-top:1px solid var(--rule);margin:0 0 34px;max-width:880px}
+  .levels li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:4px 16px;align-items:baseline;padding:12px 0;border-bottom:1px solid var(--rule)}
+  .levels .tube{display:block;width:28px;height:3px;border-radius:2px;background:var(--lc);box-shadow:0 0 8px var(--lc);transform:translateY(-4px)}
+  .levels .lv{font-size:13px;letter-spacing:1px;color:var(--y)}
+  .levels .ls{grid-column:2;font-family:var(--serif);font-style:italic;font-size:15px;color:var(--prose-2);line-height:1.5;text-wrap:pretty}
+  @media(min-width:700px){.levels li{grid-template-columns:28px 262px minmax(0,1fr)}.levels .ls{grid-column:auto}}
+  .sheet{display:grid;grid-template-columns:150px minmax(0,1fr);border-top:1px solid var(--rule);margin:8px 0 30px;max-width:880px}
+  .sheet dt,.sheet dd{padding:12px 0;border-bottom:1px solid var(--rule)}
+  .sheet dt{font-size:12px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;padding-top:14px;padding-right:12px;text-wrap:balance}
+  .sheet dd{font-size:15px;color:var(--prose-2)}
+  @media(max-width:520px){.sheet{grid-template-columns:104px minmax(0,1fr)}.sheet dt{letter-spacing:1px}.sheet dd{font-size:14px}}
+  @media(max-width:359px){.sheet{grid-template-columns:minmax(0,1fr)}.sheet dt{border-bottom:0;padding-bottom:0}}
+  .manual-line{font-family:var(--serif);font-size:16px;color:var(--prose-2);margin:0 0 34px;max-width:62ch;line-height:1.9}
+  .descend-acts{display:flex;flex-wrap:wrap;gap:14px 30px;align-items:center}
+  @media(max-width:699px){.descend-acts{flex-direction:column;align-items:stretch}.descend-acts .btn{width:100%}}
+
+  /* condemnation placard + memo (kept markup) */
+  .placard{max-width:520px;margin:0 auto;border:3px double var(--dim);padding:26px 28px;
+    background:rgba(0,0,0,.4);text-align:center;transform:rotate(-1.2deg);color:var(--dim)}
+  .placard h3{font-family:var(--serif);letter-spacing:.15em;color:var(--y);font-size:19px;margin-bottom:12px}
+  .placard .body{font-size:12px;letter-spacing:1px;line-height:1.9}
+  .placard .no{margin-top:16px;font-size:11px;letter-spacing:2px;color:var(--rust-t);text-wrap:balance}
+  .memo{border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.3);padding:22px 26px;max-width:640px}
+  .memo p{font-family:var(--mono);font-size:15px;color:var(--prose-2);margin:0 0 14px;line-height:1.95}
+  .memo .mfoot{font-family:var(--serif);font-style:italic;font-size:13px;color:var(--dim);margin:0}
+  @media(max-width:480px){.placard{padding:22px 18px;margin:0 4px}.memo{padding:20px 18px}}
+
+  /* standing orders */
+  .orders ol{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px;margin:6px 0 30px}
+  .orders li{border:1px solid var(--rule-2);padding:18px 20px 12px;background:rgba(201,186,114,.03);display:flex;flex-direction:column}
+  .orders h3{font-family:var(--serif);font-weight:400;font-size:22px;color:var(--y);line-height:1.25;margin-bottom:8px}
+  .orders h3 .no{font-family:var(--mono);font-size:13px;letter-spacing:2px;color:var(--rust-t);margin-right:4px}
+  .orders li p{font-family:var(--serif);font-size:16px;color:var(--prose);line-height:1.6;margin-bottom:10px;flex:1 1 auto}
+  .orders .none{font-family:var(--serif);font-style:italic;font-size:15px;color:var(--dim);max-width:62ch;line-height:1.6}
+
+  /* footer — one door leads back up */
+  footer{border-top:1px solid rgba(138,127,82,.14);padding:56px var(--g) 80px;text-align:center;position:relative;z-index:53}
+  footer .up{font-family:var(--serif);font-style:italic;font-size:17px;color:var(--prose-2);margin-bottom:30px}
+  footer .up a{display:inline-block;font-family:var(--mono);font-style:normal;font-size:13px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--yb);border:1px solid var(--rule-2);padding:12px 18px;margin-left:8px;min-height:44px}
+  footer .up a:hover{border-color:var(--y)}
   footer .who{font-family:var(--serif);letter-spacing:.2em;color:var(--dim);font-size:15px}
-  footer .links{margin-top:14px;font-size:12px;letter-spacing:2px}
-  footer .links a{color:var(--faint);margin:0 10px}footer .links a:hover{color:var(--y)}
-  footer .warn{margin-top:30px;font-size:10px;letter-spacing:4px;color:var(--faint);text-transform:uppercase}
+  footer nav ul{list-style:none;display:flex;flex-wrap:wrap;justify-content:center;gap:0 6px;margin-top:12px}
+  footer nav a{display:inline-flex;align-items:center;min-height:44px;padding:0 8px;font-size:13px;letter-spacing:1px;color:var(--dim)}
+  footer nav a:hover{color:var(--y)}
+  footer .warn{margin-top:26px;font-size:11px;letter-spacing:4px;color:var(--dim);text-transform:uppercase;text-wrap:balance}
+
+  /* folds: long lore that phones read on request. Open in the markup (so the page reads whole with scripts off);
+     the script closes them under 700px and keeps them open from 700px, where the toggle row is not shown at all */
+  details.fold>summary{list-style:none;cursor:pointer}
+  details.fold>summary::-webkit-details-marker{display:none}
+  details.fold>summary:focus-visible{outline:1px solid var(--yb);outline-offset:3px}
+  @media(min-width:700px){details.fold>summary{display:none}}
+  /* the record's fold also carries the full-width papers after the strata (they sit outside the details so the
+     desktop layout keeps the card beside the strata): one toggle shows or hides both */
+  .anchor:has(#record-lore:not([open])) .lore-more{display:none}
+  .anchor.shut .lore-more{display:none}
+
+  /* ── phones: one dense vertical rhythm under 700px (tablets and desktop are untouched: every rule is in this query) ── */
+  @media(max-width:699px){
+    body{line-height:1.55}
+    /* hero: the plate, its legend and DESCEND all fit a 390x844 first screen, and the page goes on right under it */
+    header.hero{min-height:0}
+    .head{gap:6px;padding-top:56px;padding-bottom:0}
+    .gift{letter-spacing:1px}
+    .acts{gap:8px}
+    .btn{min-height:52px;padding-top:9px;padding-bottom:8px}
+    .ghost{min-height:44px;padding-top:6px;padding-bottom:6px}
+    .touchnote{line-height:1.5}
+    .stage{margin-top:6px}
+    .art{height:min(250px,calc(64vw + 2px))}
+    .legend{padding:4px var(--g) 8px;line-height:1.55}
+
+    section{padding:30px 0}
+    .tag,h2.tag{margin-bottom:8px;line-height:1.5}
+    h2{font-size:22px;line-height:1.18;margin-bottom:10px}
+    .lede{font-size:16px;line-height:1.5;margin-bottom:16px}
+    .fine{letter-spacing:1px;line-height:1.5}
+    .alt{padding:6px 0}
+
+    /* key: compact rows, a letterboxed frame */
+    .key .frame{margin:0 0 10px}
+    .key .frame img{max-height:112px;object-fit:cover}
+    .key .frame figcaption{padding:5px 10px;letter-spacing:1px}
+    .key li{grid-template-columns:24px minmax(0,1fr);gap:0 12px;padding:10px 0}
+    .key .sym{width:24px;height:24px;margin-top:1px}
+    .key .id{font-size:11px;line-height:1.35}
+    .key h3{font-size:19px;line-height:1.2;margin:1px 0 3px}
+    .key .desc{font-size:13px;line-height:1.5}
+    .key .aside{font-size:14px;line-height:1.4;margin-top:3px}
+    .key .newest{font-size:11px;letter-spacing:1px;line-height:1.4;margin-top:3px}
+
+    .finding p{font-size:16px;line-height:1.5;margin:0 0 12px}
+    .doc{padding:10px 14px;margin-top:2px}
+    .doc .name{font-size:15px;line-height:1.45}
+
+    /* the record: the door card, then one toggle for the reading */
+    .door{margin-top:14px;gap:12px}
+    .card{padding:14px 14px 16px}
+    .card .kind{line-height:1.5}
+    .card h3{font-size:22px;margin:2px 0 4px}
+    .anchor .sub{letter-spacing:1px;line-height:1.5;margin-bottom:10px}
+    .card .blurb{line-height:1.5;margin-bottom:10px}
+    .card .sealedbox{line-height:1.5;padding:6px 10px;margin-bottom:10px}
+    .card .safe{line-height:1.45;margin-bottom:12px}
+    details.fold>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:10px 14px;
+      border:1px solid var(--rule-2);background:rgba(201,186,114,.04);font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--yb);line-height:1.4}
+    details.fold>summary .arr{color:var(--y);transition:transform .2s}
+    details.fold[open]>summary .arr{transform:rotate(180deg)}
+    details.fold[open]>summary{margin-bottom:14px}
+    .read p{font-size:16px;line-height:1.5;margin-bottom:14px}
+    .read p.strata-h{margin-bottom:6px}
+    .instr{margin:12px 0 4px}
+    .row{padding:11px 0}
+    .row .txt{font-size:14px;line-height:1.55}
+    .platesintro{margin:22px 0 10px;line-height:1.5}
+    /* the five papers: a swipe strip, the next one peeking in */
+    .plates{display:flex;gap:10px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;
+      margin:0 calc(-1 * var(--g));padding:0 var(--g) 10px;scroll-padding:0 var(--g);max-width:none}
+    a.plate{display:block;flex:0 0 188px;scroll-snap-align:start}
+    a.plate svg{border-right:0;border-bottom:1px solid rgba(138,127,82,.2)}
+    a.plate .cap{padding:8px 10px}
+    a.plate .cap .ti{margin:2px 0 4px}
+    a.plate .cap .src{white-space:normal;overflow-wrap:anywhere;letter-spacing:0}
+    .anchor .say{font-size:18px;line-height:1.45;margin:20px 0 16px;padding:4px 0 4px 16px}
+    .xref{margin:26px auto 20px;padding:18px 16px}
+    .xref p{line-height:1.5;margin-bottom:12px}
+    .anchor .closing{font-size:16px;line-height:1.5;margin:14px 0 4px}
+    .anchor .links{gap:0 20px}
+
+    /* case board: index cards two by two */
+    .tags{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:4px 0 14px}
+    .tagcard{padding:28px 12px 12px}
+    .tagcard::before{top:10px;left:12px} .tagcard::after{left:17px;height:10px}
+    .tagcard .code{font-size:17px;letter-spacing:1px}
+    .tagcard .ti{font-size:16px;margin:1px 0 4px}
+    .tagcard .tease{font-size:14px;line-height:1.4;margin:0 0 6px}
+    .tagcard .n{font-size:11px;letter-spacing:1px;line-height:1.4}
+    .tagcard .pips{margin:5px 0 1px}
+    .tagcard .prog{line-height:1.4}
+    .tagcard .note{font-size:14px;line-height:1.4;margin-top:6px}
+    .tagcard .sf{top:7px;right:9px;letter-spacing:0}
+    .cases .fine{margin-top:8px}
+
+    /* the book: the small drawing tucks in beside the title */
+    .book{display:block}
+    .sleeve{float:right;width:112px;margin:2px 0 8px 14px}
+    .sleeve .strip{display:none}
+    .bk p{font-size:16px;line-height:1.5;margin-bottom:12px}
+    .bk p.credit{font-size:12px;line-height:1.5;margin:-2px 0 12px}
+    .bk p.go{margin:14px 0 6px}
+
+    /* the way in */
+    .levels-h{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;margin:0}
+    .levels{margin:0 0 16px}
+    .levels li{gap:2px 12px;padding:8px 0}
+    .levels .lv{font-size:12px;line-height:1.4}
+    .levels .ls{font-size:14px;line-height:1.4}
+    .sheet{display:block;margin:4px 0 16px}
+    .sheet dt{float:left;clear:left;border:0;padding:9px 10px 0 0;font-size:11px;letter-spacing:1px;line-height:19px}
+    .sheet dd{padding:8px 0;font-size:14px;line-height:1.5}
+    .manual-line{font-size:15px;line-height:1.55;margin:0 0 16px}
+
+    /* the notice and the memo */
+    main>section:not([id]){padding:24px 0}
+    /* the memo's fold row sits in its own band between the notice and the standing orders */
+    #memo-lore{border-top:1px solid rgba(138,127,82,.14);padding:22px 0}
+    #memo-lore[open]{padding-bottom:0}
+    #memo-lore[open]>summary{margin-bottom:0}
+    .placard{padding:18px 16px}
+    .placard h3{font-size:17px;margin-bottom:8px}
+    .placard .body{line-height:1.6}
+    .placard .no{margin-top:10px;line-height:1.5}
+    .memo{padding:16px 14px}
+    .memo p{font-size:13px;line-height:1.6;margin-bottom:10px}
+    .memo .mfoot{line-height:1.45}
+
+    .orders ol{gap:0;margin:4px 0 12px;border-top:1px solid var(--rule)}
+    .orders li{border:0;border-bottom:1px solid var(--rule);background:none;padding:10px 0 2px}
+    .orders h3{font-size:20px;margin-bottom:4px}
+    .orders li p{font-size:15px;line-height:1.5;margin-bottom:0}
+    .orders .none{font-size:14px;line-height:1.5}
+
+    footer{padding:30px var(--g) 36px}
+    footer .up{margin-bottom:12px}
+    footer .up a{padding:10px 14px}
+    footer nav ul{margin-top:4px;gap:0 2px}
+    footer nav a{padding:0 6px;font-size:12px}
+    footer .warn{margin-top:10px;letter-spacing:2px;line-height:1.5}
+  }
+  /* narrow phones (360–374px wide): the gift keeps to one line and the plate gives a little, so the legend still makes the first screen */
+  @media(max-width:374px){.gift{letter-spacing:0}.facts{line-height:1.45}.art{height:min(250px,calc(60vw + 2px))}.head{padding-top:52px}}
+  @media(max-width:359px){.tags{grid-template-columns:minmax(0,1fr)}}
 
   /* content is visible by default; JS opts in to the scroll-reveal animation so a
      script failure can never blank the page (and static snapshots stay readable) */
   .js .reveal{opacity:0;transform:translateY(22px);transition:opacity .9s,transform .9s}
   .js .reveal.in{opacity:1;transform:none}
+  @media(prefers-reduced-motion:reduce){
+    .grain,.flick,.hook .cur,.gift .done{animation:none}
+    .hook .cur{display:none}
+    .js .reveal{opacity:1;transform:none;transition:none}
+    .btn,.ghost,.key li,.tagcard,a.plate,.doc,.pin text,.frame,details.fold>summary .arr{transition:none}
+  }
 </style>
 </head>
 <body>
 <script>document.documentElement.classList.add('js')</script>
 <div class="vignette"></div><div class="grain"></div><div class="scan"></div>
+<a class="skip" href="#key">skip to the ways in</a>
 
-<header>
+<header class="hero" id="top">
+  <svg class="survey" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+    <defs><pattern id="sg" width="80" height="80" patternUnits="userSpaceOnUse"><path d="M80 0H0V80" fill="none" stroke="rgba(138,127,82,.07)" stroke-width="1"/></pattern></defs>
+    <rect width="1600" height="1000" fill="url(#sg)"/>
+    <g fill="none" stroke="rgba(138,127,82,.09)" stroke-width="1">
+      <path d="M-40 250C180 190 330 300 520 250S860 120 1040 170 1380 300 1640 230"/>
+      <path d="M-40 330C200 280 340 390 540 340S880 220 1060 262 1400 390 1640 320"/>
+      <path d="M-40 420C220 380 380 470 560 432S900 330 1080 360 1420 470 1640 410"/>
+      <path d="M-40 520C240 490 400 560 600 530S940 450 1110 470 1440 560 1640 510"/>
+    </g>
+    <g stroke="rgba(201,186,114,.28)" stroke-width="1"><path d="M40 28V52M28 40H52M1560 28V52M1548 40H1572M40 948V972M28 960H52M1560 948V972M1548 960H1572"/></g>
+  </svg>
+  <canvas class="fan" aria-hidden="true"></canvas>
   <div class="topbar">
     <span>CORNER SPORE // FIELD RECOVERY</span>
     <span>39.2854, −76.6083</span>
   </div>
-  <div class="meta">case ∅ — do not distribute</div>
-  <h1 class="flick">THE&nbsp;BACKROOMS</h1>
-  <div class="hook"><span id="tw"></span><span class="cur">▌</span></div>
-  <div class="gift" id="gift" aria-label="if you can read this, you have the gift"></div>
-  <div class="down">▾</div>
+  <div class="head">
+    <p class="meta">case ∅ — do not distribute</p>
+    <h1 class="flick">THE BACKROOMS</h1>
+    <p class="hook"><span class="vh">you have no-clipped out of reality.</span><span id="tw" aria-hidden="true">you have no-clipped out of reality.</span><span class="cur" aria-hidden="true">▌</span></p>
+    <p class="gift"><span class="vh">if you can read this, you have the gift.</span><span id="gift" aria-hidden="true">ᛁᚠ ᛃᛟᚢ ᚲᚨᚾ ᚱᛖᚨᛞ ᛏᚺᛁᛊ, ᛃᛟᚢ ᚺᚨᚹᛖ ᛏᚺᛖ ᚷᛁᚠᛏ</span></p>
+    <p class="facts"><span>a horror game in an endless maze</span><span class="dot" aria-hidden="true">·</span><span>built on a real paper trail</span><span class="dot" aria-hidden="true">·</span><span>pinned to a real map</span></p>
+    <div class="acts">
+      <a class="btn" href="play/">DESCEND&nbsp;▸<small><span class="kb">play free in your browser</span><span class="tc">free · best on a computer · works on phones too</span></small></a>
+      <a class="ghost" href="atlas/">open the atlas&nbsp;▸<small>a real map of Baltimore</small></a>
+    </div>
+    <p class="touchnote">not ready to descend? start with <span class="nw"><a href="atlas/">the atlas</a>,</span> <a href="#cases">a case</a> or <a href="#book">the book</a>.</p>
+  </div>
+  <figure class="stage">
+    <div class="art">
+    <svg class="d" viewBox="0 0 1600 440" preserveAspectRatio="xMidYMax slice" data-apex="800,640" data-len="760" data-amp="30" role="group" aria-label="Schematic plate of the harbor city, not to scale">
+      <defs>
+        <pattern id="rh" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V5" stroke="#a05a3a" stroke-width="2"/></pattern>
+        <pattern id="wh" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)"><path d="M0 0H7" stroke="rgba(138,127,82,.16)" stroke-width="1"/></pattern>
+        <linearGradient id="wf" gradientUnits="userSpaceOnUse" x1="900" y1="0" x2="1070" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff"/></linearGradient>
+        <mask id="wm" maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="440"><rect width="1600" height="440" fill="url(#wf)"/></mask>
+      </defs>
+      <path class="water" d="M900 200L1020 196C1045 198 1060 214 1080 232L1130 268 1215 286 1305 298 1410 318 1600 360V440H1340L1300 412 1230 372 1150 336 1070 296C1050 282 1030 268 1004 266L900 264Z" mask="url(#wm)"/>
+      <clipPath id="wc"><path d="M900 200L1020 196C1045 198 1060 214 1080 232L1130 268 1215 286 1305 298 1410 318 1600 360V440H1340L1300 412 1230 372 1150 336 1070 296C1050 282 1030 268 1004 266L900 264Z"/></clipPath>
+      <g clip-path="url(#wc)" mask="url(#wm)" fill="none" stroke="rgba(138,127,82,.5)" stroke-width="1">
+        <path d="M900 200L1020 196C1045 198 1060 214 1080 232L1130 268 1215 286 1305 298 1410 318 1600 360" transform="translate(0 8)" opacity=".7"/><path d="M900 200L1020 196C1045 198 1060 214 1080 232L1130 268 1215 286 1305 298 1410 318 1600 360" transform="translate(0 17)" opacity=".42"/><path d="M900 200L1020 196C1045 198 1060 214 1080 232L1130 268 1215 286 1305 298 1410 318 1600 360" transform="translate(0 28)" opacity=".22"/>
+        <path d="M900 264L1004 266C1030 268 1050 282 1070 296L1150 336 1230 372 1300 412 1340 440" transform="translate(8 -6)" opacity=".7"/><path d="M900 264L1004 266C1030 268 1050 282 1070 296L1150 336 1230 372 1300 412 1340 440" transform="translate(18 -12)" opacity=".42"/><path d="M900 264L1004 266C1030 268 1050 282 1070 296L1150 336 1230 372 1300 412 1340 440" transform="translate(30 -19)" opacity=".22"/>
+      </g>
+      <path class="shore" d="M900 200L1020 196C1045 198 1060 214 1080 232L1130 268 1215 286 1305 298 1410 318 1600 360M900 264L1004 266C1030 268 1050 282 1070 296L1150 336 1230 372 1300 412 1340 440"/>
+      <text class="hl" x="928" y="243" aria-hidden="true">harbor</text>
+      <path class="neat" d="M0 1H1600M80 1V9M160 1V9M240 1V9M320 1V9M400 1V9M480 1V9M560 1V9M640 1V9M720 1V9M800 1V9M880 1V9M960 1V9M1040 1V9M1120 1V9M1200 1V9M1280 1V9M1360 1V9M1440 1V9M1520 1V9"/>
+      <a class="pin sealed" href="atlas/#806-n-carey" data-occ="618,200,16" data-sealed="1" aria-label="The first door: a sealed record, not a way in. Opens its file on the atlas.">
+        <rect class="hit" x="596" y="176" width="267.7" height="88.8"/>
+        <rect class="sq" style="fill:url(#rh)" x="609" y="191" width="18" height="18"/>
+        <text class="t1" x="644" y="198" font-size="19">∅ THE FIRST DOOR</text>
+        <text class="t2" x="644" y="221" font-size="17.1">SEALED · A RECORD,</text>
+        <text class="t3" x="644" y="241.1" font-size="17.1">NOT A WAY IN</text>
+      </a>
+      <a class="pin case" href="recover/?case=case-f95" data-occ="960,300,14" aria-label="Case F-95, the lookout: a case door at a public landmark. Opens the case on the board." aria-describedby="lg-case">
+        <rect class="hit" x="649.5" y="276" width="334.5" height="69.4"/>
+        <circle class="ring" cx="960" cy="300" r="14"/>
+        <text class="t1" x="936" y="298" font-size="19" text-anchor="end">CASE F-95</text>
+        <text class="t2" x="936" y="321" font-size="17.1" text-anchor="end">THE LOOKOUT · CASE DOOR</text>
+      </a>
+    </svg>
+    <svg class="m" viewBox="0 0 400 280" preserveAspectRatio="xMidYMax meet" data-apex="200,400" data-len="420" data-amp="26" role="group" aria-label="Schematic plate of the harbor city, not to scale">
+      <defs>
+        <pattern id="rh-m" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V5" stroke="#a05a3a" stroke-width="2"/></pattern>
+        <pattern id="wh-m" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)"><path d="M0 0H7" stroke="rgba(138,127,82,.16)" stroke-width="1"/></pattern>
+        <linearGradient id="wf-m" gradientUnits="userSpaceOnUse" x1="236" y1="0" x2="306" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff"/></linearGradient>
+        <mask id="wm-m" maskUnits="userSpaceOnUse" x="0" y="0" width="400" height="280"><rect width="400" height="280" fill="url(#wf-m)"/></mask>
+      </defs>
+      <path class="water" style="fill:url(#wh-m)" d="M236 150L284 148C292 149 298 156 304 162L330 176 400 188V280H360L336 226 306 202C298 194 290 187 280 186L236 184Z" mask="url(#wm-m)"/>
+      <clipPath id="wc-m"><path d="M236 150L284 148C292 149 298 156 304 162L330 176 400 188V280H360L336 226 306 202C298 194 290 187 280 186L236 184Z"/></clipPath>
+      <g clip-path="url(#wc-m)" mask="url(#wm-m)" fill="none" stroke="rgba(138,127,82,.5)" stroke-width="1">
+        <path d="M236 150L284 148C292 149 298 156 304 162L330 176 400 188" transform="translate(0 4)" opacity=".7"/><path d="M236 150L284 148C292 149 298 156 304 162L330 176 400 188" transform="translate(0 9)" opacity=".4"/>
+        <path d="M236 184L280 186C290 187 298 194 306 202L336 226 360 280" transform="translate(4 -3)" opacity=".7"/><path d="M236 184L280 186C290 187 298 194 306 202L336 226 360 280" transform="translate(9 -6)" opacity=".4"/>
+      </g>
+      <path class="shore" d="M236 150L284 148C292 149 298 156 304 162L330 176 400 188M236 184L280 186C290 187 298 194 306 202L336 226 360 280"/>
+      <path class="neat" d="M0 1H400M40 1V6M80 1V6M120 1V6M160 1V6M200 1V6M240 1V6M280 1V6M320 1V6M360 1V6"/>
+      <a class="pin sealed" href="atlas/#806-n-carey" data-occ="62,58,13" data-sealed="1" aria-label="The first door: a sealed record, not a way in. Opens its file on the atlas.">
+        <rect class="hit" x="43" y="37" width="262.9" height="60.1"/>
+        <rect class="sq" style="fill:url(#rh-m)" x="54.5" y="50.5" width="15" height="15"/>
+        <text class="t1" x="84" y="56" font-size="17">∅ THE FIRST DOOR</text>
+        <text class="t2" x="84" y="77" font-size="16">SEALED · NOT A WAY IN</text>
+      </a>
+      <a class="pin case" href="recover/?case=case-f95" data-occ="292,236,12" aria-label="Case F-95, the lookout: a case door at a public landmark. Opens the case on the board." aria-describedby="lg-case">
+        <rect class="hit" x="19.7" y="214" width="294.3" height="64.2"/>
+        <circle class="ring" cx="292" cy="236" r="12"/>
+        <text class="t1" x="270" y="234" font-size="17" text-anchor="end">CASE F-95</text>
+        <text class="t2" x="270" y="255" font-size="16" text-anchor="end">THE LOOKOUT · CASE DOOR</text>
+      </a>
+    </svg>
+    </div>
+    <figcaption class="legend">
+      <span class="vh">Schematic plate, not to scale. Two marks from the atlas: the first door, sealed, a record and not a way in; and the case door for CASE F-95, the lookout, at a public landmark.</span>
+      <span class="lg"><span class="k" aria-hidden="true">▪</span>sealed — a record, not a way in</span>
+      <span class="lg" id="lg-case"><span class="k c" aria-hidden="true">◌</span>case door — read it from home. if you go: daylight, open hours, bring someone.</span>
+      <span class="lg">schematic<span class="dk"> of Baltimore</span> <span class="nw">· not to scale</span> <span class="nw">· <a href="atlas/"><span class="dk">the </span>real map<span class="dk"> is in the atlas</span>&nbsp;▸</a></span></span>
+    </figcaption>
+  </figure>
 </header>
 
 <main class="wrap">
-  <section class="finding reveal">
-    <div class="tag">the finding</div>
+  <section class="key reveal" id="key" aria-labelledby="key-h">
+    <p class="tag">key to the plate</p>
+    <h2 id="key-h">The map is the proof. Everything else is a way in.</h2>
+    <p class="lede">Something that belongs to the maze has been pinned to real ground. Follow it any of these ways — every one works from home.</p>
+    <figure class="frame">
+      <img src="og.jpg" width="1200" height="630" decoding="async" alt="Yellow walls under a drop ceiling, running into light — level 0, drawn by the game's engine.">
+      <figcaption>recovered frame · level 0 · drawn by the engine <span class="nw">· <a href="play/">play it&nbsp;▸</a></span></figcaption>
+    </figure>
+    <nav aria-label="ways in"><ul>
+      <li>
+        <svg class="sym" viewBox="0 0 36 36" aria-hidden="true" focusable="false"><rect x="3" y="3" width="30" height="30" fill="none" stroke="#8a7f52"/><path d="M13 3V33M23 3V33M3 13H33M3 23H33" stroke="rgba(138,127,82,.45)"/><rect x="15" y="15" width="6" height="6" fill="none" stroke="#c9ba72" stroke-width="1.5"/></svg>
+        <div><p class="id">THE ATLAS</p><h3><a href="atlas/">The Atlas</a></h3><p class="desc">A dark map of Baltimore with the story's record pinned to the ground. Open the first door and read its file down, layer by layer, to 1937. Then find the case waiting on the same map: the dashed gold ring. Read it from home.</p><p class="aside">No account. Reading the map does not ask where you are, and it shows places, never people. Its map tiles come from OpenStreetMap.</p></div>
+        <span class="to" aria-hidden="true">atlas/&nbsp;▸</span>
+      </li>
+      <li>
+        <svg class="sym" viewBox="0 0 36 36" aria-hidden="true" focusable="false"><rect x="3" y="3" width="30" height="30" fill="none" stroke="#8a7f52"/><rect x="13" y="12" width="10" height="12" fill="rgba(201,186,114,.18)" stroke="#c9ba72"/><path d="M3 3L13 12M33 3L23 12M3 33L13 24M33 33L23 24" stroke="#8a7f52"/><path d="M14 6H22" stroke="#e7dc93" stroke-width="1.5"/></svg>
+        <div><p class="id">LEVEL 0</p><h3><a href="play/">The maze — play it</a></h3><p class="desc">The game itself: a first-person walk through yellow rooms that do not end, and the levels under them. Free in your browser. Add it as an app from your browser’s menu, and it can keep working offline.</p><p class="aside"><a class="jump" href="#way-in">What’s in it, playing with a friend, and the comfort switches: <span class="nw">the way in&nbsp;▾</span></a></p></div>
+        <span class="to" aria-hidden="true">play/&nbsp;▸</span>
+      </li>
+      <li>
+        <svg class="sym" viewBox="0 0 36 36" aria-hidden="true" focusable="false"><circle cx="18" cy="18" r="12" fill="none" stroke="#c9ba72" stroke-width="2" stroke-dasharray="3 4"/></svg>
+        <div><p class="id"><span class="nw">CASE D-8 ·</span> <span class="nw">M-10Q ·</span> <span class="nw">F-95 ·</span> <span class="nw">L-22</span></p><h3><a href="recover/">The case board</a></h3><p class="desc">Four open puzzles built on real things — public records, a very small book, and the maze itself. Read one instrument and the next unseals.</p><p class="newest">newest: <span id="newest">CASE L-22 · surfaced 2026-09-16</span></p></div>
+        <span class="to" aria-hidden="true">recover/&nbsp;▸</span>
+      </li>
+      <li>
+        <svg class="sym" viewBox="0 0 36 36" aria-hidden="true" focusable="false"><defs><pattern id="rk" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V4" stroke="#a05a3a" stroke-width="1.6"/></pattern></defs><rect x="9" y="9" width="18" height="18" fill="url(#rk)" stroke="#a05a3a" stroke-width="2"/></svg>
+        <div><p class="id"><span class="nw">DOC-∅-806 ·</span> <span class="nw">DOC-GEO-01</span></p><h3><a href="codex/">The Record</a></h3><p class="desc">The history the horror is built on — a 1937 map, a 1961 plan, a 2004 notice that was never closed — with every source listed.</p></div>
+        <span class="to" aria-hidden="true">codex/&nbsp;▸</span>
+      </li>
+      <li class="out">
+        <svg class="sym" viewBox="0 0 36 36" aria-hidden="true" focusable="false"><rect x="7" y="5" width="22" height="26" rx="1.5" fill="none" stroke="#c9ba72"/><path d="M10 5V31" stroke="#8a7f52"/><circle cx="19.5" cy="16" r="6" fill="none" stroke="#e7dc93" stroke-width="1.5"/><path d="M16.5 13.5A4 4 0 0 1 20 12" fill="none" stroke="#e7dc93" stroke-width="1"/></svg>
+        <div><p class="id"><span class="nw">ITEM L-22</span></p><h3><a href="https://littlethings.thecornerspore.dev/">A very small book</a></h3><p class="desc">Illustrated poems, found in the stacks with a magnifying glass still pressed into the cover. Pick up the glass and look closer.</p><p class="aside">Its last page uses strong language.</p></div>
+        <span class="to" aria-hidden="true">littlethings.thecornerspore.dev&nbsp;↗</span>
+      </li>
+      <li>
+        <svg class="sym" viewBox="0 0 36 36" aria-hidden="true" focusable="false"><path d="M8 8H30L28 13H6Z" fill="none" stroke="#c9ba72"/><path d="M8 16H30L28 21H6Z" fill="none" stroke="#8a7f52"/><path d="M8 24H30L28 29H6Z" fill="rgba(201,186,114,.15)" stroke="#8a7f52"/></svg>
+        <div><p class="id"><span class="nw">DOC-FIELD-00</span></p><h3><a href="manual/">The Field Manual</a></h3><p class="desc">Every control, what your light is for, and the comfort settings that switch the creatures and the damage off.</p></div>
+        <span class="to" aria-hidden="true">manual/&nbsp;▸</span>
+      </li>
+    </ul></nav>
+  </section>
+
+  <section class="finding reveal" id="finding" aria-labelledby="finding-h">
+    <h2 class="tag" id="finding-h">the finding</h2>
+    <details class="fold" id="finding-lore" open>
+      <summary><span>read the finding</span><span class="arr" aria-hidden="true">▾</span></summary>
     <p>We dug, and dug, and found only more rooms. Reality <em>inside</em> is reality <em>outside</em> — the same, recursively, all the way down. Simulation theory was never a theory. We have been excavating worlds for longer than there have been words for time.</p>
     <p>But something here is <em>different</em>. The Planck length — the grain of reality itself — is nearly <em>closed</em>. In every layer above us it ran wide, and that slack is how they spun up wildly different universes for almost nothing. Not here. Here the world is fixed, and tight, and old.</p>
     <p>The people who find the Backrooms can <em>enter</em> them. That is the gift. It is the only reason you are reading <span class="redact">this recovered file</span>.</p>
+    </details>
+    <a class="doc" href="codex/"><div class="code">DOC-GEO-01</div><div class="name">geo-tethered sectors — your county is a world</div></a>
   </section>
 
-  <!-- ── THE ANCHOR — 806 N CAREY ── -->
-  <section class="anchor reveal">
-    <div class="tag">the anchor</div>
-    <h2>806 North Carey Street</h2>
+  <section class="anchor reveal" id="record" aria-labelledby="record-h">
+    <p class="tag">the atlas</p>
+    <h2 id="record-h">The first door is on the map. It is shut.</h2>
+    <p class="lede">The Atlas is a dark map of Baltimore with the story's record pinned to the ground. Choose a mark and its file slides out: what the place is, whether it is sealed, and its strata — the layers of paper under it, newest on top. The first door is sealed. It is on the map for its record, and this is what the record says.</p>
+    <div class="door">
+      <aside class="card" aria-labelledby="card-h">
+        <p class="kind">door 806-n-carey · sealed</p>
+        <h3 id="card-h">806 North Carey Street</h3>
     <div class="sub">Harlem Park · West Baltimore · notice 30150A · status EXTENSION</div>
-
-    <p>Every version of this place begins at one real door. Not a set, not a render of somewhere — an address you can stand in front of. The engine that draws the Backrooms fakes every surface, because faking surfaces is the only thing a raycaster can do. This block is <em>also</em> made of faked surfaces — but those were faked by hand, over sixty years, by the city itself. <em>The medium and the subject are the same technique.</em> Of everything this renderer could point at, the 800 block of North Carey is the one subject it was accidentally built to tell the truth about.</p>
-
+        <p class="blurb">the first door. sealed by the city with concrete block behind its original frame — a masoned door does not open. you do not enter here. you enter through the gap the paperwork left.</p>
+        <p class="sealedbox">sealed — shown for its record. not a way in.</p>
+        <p class="safe">Sealed by the city and shown for its paper. It is not a place to visit. The way in is the maze — never the street.</p>
+        <a class="ghost" href="atlas/#806-n-carey">open its file on the atlas&nbsp;▸</a>
+      </aside>
+      <details class="fold lore" id="record-lore" open>
+        <summary><span>read the record</span><span class="arr" aria-hidden="true">▾</span></summary>
+      <div class="read">
+        <p class="strata-h">strata · read down</p>
     <p>Three instruments did the work, each one a piece of paper, each one still on file.</p>
-
-    <div class="instr">
-      <div class="row">
-        <div class="yr">1937</div>
+        <div class="instr">
+      <div class="row still">
+        <div class="yr">still</div>
         <div>
-          <div class="what">the map</div>
-          <div class="txt">A federal <em>Residential Security Map</em> rings Black West Baltimore in red and stamps it <b>D — "hazardous."</b> Not one building was inspected. The hazard it scored was the people who lived there — its own grading criteria counted <b>"the percentage of negro families"</b> as a defect of the ground itself. That is the lie this whole game is built to indict: not decay, not danger, but a government instrument ruling that human beings made the land worth less by being on it. Every later paper on this block only enforces the red line drawn here — and the game hands that same instrument back to the state, not to the street.</div>
+          <div class="what">— twenty-one years —</div>
+          <div class="txt">The notice never resolves. Its status is <b>EXTENSION</b>. It is the most Backrooms word in the whole dataset: the file is never closed, never appealed, never demolished. It is <em>extended</em>. Indefinitely.</div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="yr">2004</div>
+        <div>
+          <div class="what">the notice</div>
+          <div class="txt">Vacant-building notice <b>30150A</b> is issued against 806 N Carey. It advises that the structure is <b>"condemned as being unsafe or dangerous for occupancy or use"</b> and that <b>"the public is warned to keep away."</b></div>
         </div>
       </div>
       <div class="row">
@@ -261,21 +756,18 @@
         </div>
       </div>
       <div class="row">
-        <div class="yr">2004</div>
+        <div class="yr">1937</div>
         <div>
-          <div class="what">the notice</div>
-          <div class="txt">Vacant-building notice <b>30150A</b> is issued against 806 N Carey. It advises that the structure is <b>"condemned as being unsafe or dangerous for occupancy or use"</b> and that <b>"the public is warned to keep away."</b></div>
+          <div class="what">the map</div>
+          <div class="txt">A federal <em>Residential Security Map</em> rings Black West Baltimore in red and stamps it <b>D — "hazardous."</b> Not one building was inspected. The hazard it scored was the people who lived there — its own grading criteria counted <b>"the percentage of negro families"</b> as a defect of the ground itself. That is the lie this whole game is built to indict: not decay, not danger, but a government instrument ruling that human beings made the land worth less by being on it. Every later paper on this block only enforces the red line drawn here — and the game hands that same instrument back to the state, not to the street.</div>
         </div>
       </div>
-      <div class="row still">
-        <div class="yr">still</div>
-        <div>
-          <div class="what">— twenty-one years —</div>
-          <div class="txt">The notice never resolves. Its status is <b>EXTENSION</b>. It is the most Backrooms word in the whole dataset: the file is never closed, never appealed, never demolished. It is <em>extended</em>. Indefinitely.</div>
         </div>
       </div>
+      </details>
     </div>
 
+    <div class="lore-more">
     <div class="platesintro">Five papers, still on file. Each plate opens where the record lives.</div>
     <div class="plates">
 
@@ -355,13 +847,11 @@
 
     <p class="say">The front was sealed by the city. The back was emptied by the city. You enter through the gap the paperwork left.</p>
 
-    <p>The front doors on this block do not open — they are filled with concrete block behind their original wooden frames. A masoned door is not a door. The only unsealed thing on the whole row is the hollow the 1961 plan carved out of its middle and then forgot to want. That interior — the block park behind the houses — is the way in. It is where you fall through.</p>
+    <div class="read">
+    <p>Every version of this place begins at one real door, and that door is shut. Not a set, not a render of somewhere — a record. The engine that draws the Backrooms fakes every surface, because faking surfaces is the only thing a raycaster can do. This block is <em>also</em> made of faked surfaces — but those were faked by hand, over sixty years, by the city itself. <em>The medium and the subject are the same technique.</em> Of everything this renderer could point at, the 800 block of North Carey is the one subject it was accidentally built to tell the truth about.</p>
 
     <p>And the block wears its condition as <em>illusion</em>. The stone fronts are Formstone — stucco troweled and tinted to imitate masonry, patented here in 1937, "the polyester of brick." Some of the boarded windows are not boards at all but life-sized <em>photographs</em> of windows, glued to plywood, sold to the city so a street would read as lived-in from a passing car. A resident of one such block said it plainest: <em>"even though it's fake, you have to look up on it to see that it's fake."</em> That is the exact sentence a raycaster would say about a wall.</p>
-
-    <p>And it is never drawn as a clean ruin. Sealed houses stand interleaved with ones still in use — a boarded front, a lit one beside it. The block was not abandoned. It was <em>processed</em>. Some windows have lights on. Nobody comes out.</p>
-
-    <p>The same filing cabinet that graded the block, erased the street, and condemned the house is the cabinet the game hands <em>you</em> at the door. It asks your name and files you under Baltimore. <em>The intake form is not framing — it is the antagonist's stationery.</em> The map is the antagonist. You consult the instrument that did this, and it consults you back.</p>
+    </div>
 
     <div class="xref reveal">
       <div class="xtag">field recovery · cross-reference · clipped to the 1961 plan</div>
@@ -369,119 +859,106 @@
       <div class="xrune" aria-label="an encoded street name, Elder Futhark">ᚹᛟᛟᛞᛃᛖᚨᚱ</div>
       <div class="xfoot">decode it the way you decoded the gift. then go to it — it opens.</div>
     </div>
-  </section>
-
-  <!-- ── THE ATLAS / BEACONS ── -->
-  <section class="atlas reveal">
-    <div class="tag sig">the atlas</div>
-    <p class="lead">806 is the first, not the last. Other doors are beginning to <em>surface</em> in the real world — and where they surface, they go up on a map you can open from anywhere.</p>
-    <a class="coming" href="atlas/" style="text-decoration:none;border-bottom:1px solid var(--sig);">▸ enter the atlas</a>
-
-    <div class="mapwrap" aria-label="preview of the beacon map">
-      <svg viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice" role="img">
-        <defs>
-          <radialGradient id="halo" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#8fdcac" stop-opacity=".35"/>
-            <stop offset="100%" stop-color="#8fdcac" stop-opacity="0"/>
-          </radialGradient>
-        </defs>
-        <g class="grid">
-          <line x1="0" y1="60" x2="640" y2="60"/><line x1="0" y1="120" x2="640" y2="120"/>
-          <line x1="0" y1="180" x2="640" y2="180"/><line x1="0" y1="240" x2="640" y2="240"/>
-          <line x1="0" y1="300" x2="640" y2="300"/>
-          <line x1="80" y1="0" x2="80" y2="360"/><line x1="160" y1="0" x2="160" y2="360"/>
-          <line x1="240" y1="0" x2="240" y2="360"/><line x1="320" y1="0" x2="320" y2="360"/>
-          <line x1="400" y1="0" x2="400" y2="360"/><line x1="480" y1="0" x2="480" y2="360"/>
-          <line x1="560" y1="0" x2="560" y2="360"/>
-        </g>
-        <!-- abstract landmass, not a real coastline -->
-        <path class="land" d="M60,150 C120,110 150,180 210,160 C260,145 280,90 350,110 C420,130 430,200 500,205 C560,209 590,170 600,220 C610,270 540,300 470,285 C400,271 380,320 300,305 C230,292 210,250 150,255 C95,259 70,215 60,150 Z"/>
-        <!-- radar sweep -->
-        <g class="sweep">
-          <line x1="320" y1="187" x2="320" y2="40" stroke="rgba(143,220,172,.28)" stroke-width="1"/>
-          <circle cx="320" cy="187" r="150" fill="url(#halo)" opacity=".25"/>
-        </g>
-
-        <!-- genesis beacon: 806 -->
-        <g class="genesis">
-          <circle class="pulse" cx="196" cy="168" r="3" fill="none" stroke-width="1.2"/>
-          <circle class="corenode" cx="196" cy="168" r="3.4"/>
-          <text class="blabel g" x="205" y="164">∅ 806 N CAREY</text>
-          <text class="blabel g" x="205" y="176" opacity=".6">GENESIS</text>
-        </g>
-
-        <!-- organic beacons (teaser) -->
-        <g><circle class="pulse" cx="360" cy="112" r="3" fill="none" stroke="var(--sig)" stroke-width="1"/><circle class="corenode" cx="360" cy="112" r="2.6" fill="var(--sig)"/><text class="blabel" x="368" y="110">SURFACED</text></g>
-        <g><circle class="pulse" cx="486" cy="214" r="3" fill="none" stroke="var(--sig)" stroke-width="1" style="animation-delay:1.1s"/><circle class="corenode" cx="486" cy="214" r="2.6" fill="var(--sig)" style="animation-delay:1.1s"/><text class="blabel" x="452" y="232">SURFACED</text></g>
-        <g><circle class="pulse" cx="300" cy="286" r="3" fill="none" stroke="var(--sig)" stroke-width="1" style="animation-delay:1.9s"/><circle class="corenode" cx="300" cy="286" r="2.6" fill="var(--sig)" style="animation-delay:1.9s"/></g>
-        <g><circle class="pulse" cx="150" cy="250" r="3" fill="none" stroke="var(--sig)" stroke-width="1" style="animation-delay:.6s"/><circle class="corenode" cx="150" cy="250" r="2.6" fill="var(--sig)" style="animation-delay:.6s"/></g>
-      </svg>
-      <div class="maptitle">THE ATLAS<br>◦ live registry of surfaced doors</div>
-      <div class="mapcap"><span class="on">●</span> 1 genesis &nbsp;·&nbsp; 4 surfaced &nbsp;·&nbsp; the rest are still counting</div>
     </div>
 
-    <div class="ways">
-      <div class="way deep reveal">
-        <div class="k">stand where it stands</div>
-        <h4>Walk to the door.</h4>
-        <p>Go to the real place. Presence is free, and it is remembered <em>deeply</em> — the strongest mark a door can hold. The near world is the cheap world; the door around the corner is the one that costs you nothing and gives you the most.</p>
+    <p class="closing">Every layer of this door is a paper you can look up.</p>
+    <p class="links"><a class="ghost" href="atlas/">open the atlas&nbsp;▸</a><a class="alt" href="codex/"><span>read the whole record — <span class="nw">DOC-∅-806&nbsp;▸</span></span></a></p>
+  </section>
+
+  <section class="cases reveal" id="cases" aria-labelledby="cases-h">
+    <p class="tag">field recovery · case board</p>
+    <h2 id="cases-h">Four cases are open. Every clue points at something you can check.</h2>
+    <p class="lede">A case is a chain of instruments: a clue, a source you can check, and a box that only accepts the right reading. File one and the next unseals. The board doesn’t show you the answers — it only recognizes one when you bring it. Every case can be closed from home.</p>
+    <ul class="tags" id="case-tags">
+      <li><a class="tagcard start" href="recover/?case=case-d8" data-case="case-d8">
+        <span class="code">CASE D-8</span><span class="ti">the redlined district</span><span class="tease">A line was drawn once. The paper never let it go.</span>
+        <span class="n">3 instruments</span><span class="pips" aria-hidden="true"><i class="pip"></i><i class="pip"></i><i class="pip"></i></span><span class="prog"></span>
+        <span class="note">New here? Start with this one — the gentlest.</span>
+        <span class="sf">surfaced 2026-09-15</span>
+      </a></li>
+      <li><a class="tagcard" href="recover/?case=case-m10q" data-case="case-m10q">
+        <span class="code">CASE M-10Q</span><span class="ti">the machine</span><span class="tease">No one drew a line this time.</span>
+        <span class="n">4 instruments</span><span class="pips" aria-hidden="true"><i class="pip"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i></span><span class="prog"></span>
+        <span class="note">Part of it is read inside the maze.</span>
+        <span class="sf">surfaced 2026-09-15</span>
+      </a></li>
+      <li><a class="tagcard" href="recover/?case=case-f95" data-case="case-f95">
+        <span class="code">CASE F-95</span><span class="ti">the lookout</span><span class="tease">Somebody kept watch, long before the maze.</span>
+        <span class="n">5 instruments</span><span class="pips" aria-hidden="true"><i class="pip"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i><i class="pip"></i></span><span class="prog"></span>
+        <span class="note">Read it from home. One instrument can also be read at a public landmark — daylight, open hours, bring someone. Never required.</span>
+        <span class="sf">surfaced 2026-09-16</span>
+      </a></li>
+      <li><a class="tagcard" href="recover/?case=case-l22" data-case="case-l22">
+        <span class="code">CASE L-22</span><span class="ti">the little things</span><span class="tease">Something in the file does not belong to it.</span>
+        <span class="n">3 instruments</span><span class="pips" aria-hidden="true"><i class="pip"></i><i class="pip"></i><i class="pip"></i></span><span class="prog"></span>
+        <span class="note">Begins inside the very small book.</span>
+        <span class="sf">surfaced 2026-09-16</span>
+      </a></li>
+    </ul>
+    <p><a class="ghost" href="recover/">open the case board&nbsp;▸</a></p>
+    <p class="fine">no account · your progress stays in this browser</p>
+  </section>
+
+  <section class="reveal" id="book" aria-labelledby="book-h">
+    <p class="tag">found in the stacks <span class="nw">· item L-22</span></p>
+    <div class="book">
+      <figure class="sleeve">
+        <figcaption class="strip">field recovery <span class="nw">· item L-22</span> <span class="nw">· found</span></figcaption>
+        <svg viewBox="0 0 300 240" role="img" aria-label="Drawing: a small closed book with a round magnifying glass set into its cover">
+          <rect x="0" y="0" width="300" height="240" fill="rgba(0,0,0,.25)"/>
+          <g transform="rotate(-4 150 120)">
+            <rect x="78" y="34" width="150" height="176" rx="3" fill="#0d0b07" stroke="#8a7f52"/>
+            <rect x="74" y="30" width="150" height="176" rx="3" fill="#15120b" stroke="#c9ba72" stroke-width="1.5"/>
+            <path d="M86 30V206" stroke="rgba(138,127,82,.6)"/>
+            <path d="M224 40V200M227 42V202" stroke="rgba(138,127,82,.35)"/>
+            <circle cx="155" cy="104" r="44" fill="rgba(4,3,2,.9)" stroke="#8a7f52" stroke-width="3"/>
+            <circle cx="155" cy="104" r="37" fill="rgba(231,220,147,.05)" stroke="#c9ba72" stroke-width="1.5"/>
+            <path d="M130 88A30 30 0 0 1 152 72" fill="none" stroke="#e7dc93" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+            <path d="M126 170H184M136 182H174" stroke="rgba(201,186,114,.45)" stroke-width="2"/>
+          </g>
+        </svg>
+      </figure>
+      <div class="bk">
+        <h2 id="book-h">Don’t Forget How Big The Little Things Are</h2>
+        <p class="credit">a very small book by <span class="nw">Curtis R Carlisle-McGee</span> · shared with the author’s permission</p>
+        <p class="soft">Not everything found down here is frightening.</p>
+        <p>This one is a book of illustrated poems about very small things, and it came up from the stacks with its magnifying glass still pressed into the cover. Turn the pages. Then lift the glass, carry it over the pictures, and look closer than a page is read.</p>
+        <p class="case-l"><a href="recover/?case=case-l22">CASE L-22</a> begins inside it.</p>
+        <p class="go"><a class="ghost" href="https://littlethings.thecornerspore.dev/">open the book&nbsp;↗</a></p>
+        <p class="fine">littlethings.<wbr>thecornerspore.dev<br>the last page uses strong language</p>
       </div>
-      <div class="way reveal">
-        <div class="k">or drop in from anywhere</div>
-        <h4>Fall in at a distance.</h4>
-        <p>Paste a pin and reach a far door without leaving your chair — but distance has a price, and what you leave behind is <em>faint</em>. Carry the right things and the reach gets cheaper. Most who arrive will always be the ones already near.</p>
-      </div>
-    </div>
-
-    <div class="strata reveal">
-      <div class="h">
-        <div class="t">strata · 806 n carey</div>
-        <div class="c" id="stratCount">— <span>layers</span></div>
-      </div>
-      <div class="cols" id="stratCols" aria-hidden="true"></div>
-      <div class="note">Nothing here is spent. Every visitor leaves a layer, and the door only deepens. The last to arrive reads more than the first ever could — a place that remembers every observation laid upon it.</div>
     </div>
   </section>
 
-  <section class="reveal">
-    <div class="tag">recovered documents</div>
-    <p class="finding" style="margin-bottom:26px"><span style="font-family:var(--serif);font-size:clamp(16px,2.2vw,20px);color:#d3c88f">Three files came up with the case. If you can read this page, they will open for you.</span></p>
-    <div class="docs">
-      <a class="doc" href="codex/#tether">
-        <span class="status">sealed</span>
-        <div class="code">DOC-GEO-01</div>
-        <div class="name">geo-tethered sectors — your county is a world</div>
-      </a>
-      <a class="doc" href="codex/">
-        <span class="status">extension</span>
-        <div class="code">DOC-∅-806</div>
-        <div class="name">level ∅ — 806 n carey st — the block the paperwork forgot</div>
-      </a>
-      <a class="doc" href="manual/">
-        <span class="status">open</span>
-        <div class="code">DOC-FIELD-00</div>
-        <div class="name">the field manual — controls, wishes, the descent</div>
-      </a>
-      <a class="doc" href="recover/">
-        <span class="status">open</span>
-        <div class="code">DOC-CASE-D8</div>
-        <div class="name">the case board — three instruments to read: in the record, in the world, in the maze</div>
-      </a>
-      <a class="doc" href="https://littlethings.thecornerspore.dev/">
-        <span class="status">found</span>
-        <div class="code">DOC-L22</div>
-        <div class="name">a very small book, found in the stacks — look closer than a page is read</div>
-      </a>
+  <section class="wayin reveal" id="way-in" aria-labelledby="way-in-h">
+    <p class="tag">the way in</p>
+    <h2 id="way-in-h">The way in is a program. It runs in your browser.</h2>
+    <p class="lede">Yellow wallpaper. A light that hums and never turns off. Rooms that open onto more rooms, and levels under those. You carry a flashlight, your nerve, and whatever you find — almond water, and scraps of paper left by someone who came before you. Below level 0, you are not alone.</p>
+    <details class="fold" id="levels-lore" open>
+      <summary><span>the descent, level by level</span><span class="arr" aria-hidden="true">▾</span></summary>
+    <h3 class="levels-h" id="levels-h">the descent, as the game files it</h3>
+    <ol class="levels" aria-labelledby="levels-h">
+      <li><span class="tube" style="--lc:#E8E0C0" aria-hidden="true"></span><span class="lv">level 0 — the lobby</span><span class="ls">the hum of fluorescent light. damp carpet. no exit.</span></li>
+      <li><span class="tube" style="--lc:#9E9A88" aria-hidden="true"></span><span class="lv">level 1 — habitable zone</span><span class="ls">concrete and dim service lights. something moved in the warehouse dark.</span></li>
+      <li><span class="tube" style="--lc:#705C46" aria-hidden="true"></span><span class="lv">level 2 — pipe dreams</span><span class="ls">endless maintenance tunnels. steam, rust, and the dark between the pipes.</span></li>
+      <li><span class="tube" style="--lc:#4C505A" aria-hidden="true"></span><span class="lv">level 3 — electrical station</span><span class="ls">transformers hum with current in the black. one door leads back up.</span></li>
+    </ol>
+    </details>
+    <dl class="sheet">
+      <dt>cost</dt><dd>free</dd>
+      <dt>runs on</dt><dd>best on a computer or a Chromebook <span class="nw">· works on phones too.</span></dd>
+      <dt>keep it</dt><dd>add it as an app from your browser’s menu, and it can keep playing offline. your solo run stays saved in this browser.</dd>
+      <dt>with a friend</dt><dd>choose PLAY ONLINE, use a made-up name, type nothing real about yourself, and share its room code only with someone you know — you both fall into the same world. the chat is not moderated.</dd>
+      <dt>what’s in it</dt><dd>dark rooms, a heartbeat that quickens as something closes in, and creatures that chase you and can catch you.</dd>
+      <dt>comfort</dt><dd>switch the creatures off, switch damage off, switch the film grain off — walk it as a place, not a threat.</dd>
+    </dl>
+    <p class="manual-line">Controls, your light and every comfort setting are in <a href="manual/">the field manual — <span class="nw">DOC-FIELD-00&nbsp;▸</span></a></p>
+    <div class="descend-acts">
+      <a class="btn" href="play/">DESCEND&nbsp;▸<small><span class="kb">play free in your browser</span><span class="tc">free · best on a computer · works on phones too</span></small></a>
     </div>
   </section>
 
-  <section class="descend reveal">
-    <div class="tag">the way in</div>
-    <p>The way in is a program. Install it. It updates itself. It remembers where your body is. The lights do not turn off.</p>
-    <a class="btn" href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">DESCEND&nbsp;▸</a>
-    <div class="fine">windows · signed · auto-updating</div>
-  </section>
-
+  <h2 class="vh">the notice on the door</h2>
   <section class="reveal">
     <div class="placard">
       <h3>NOTICE OF CONDEMNATION</h3>
@@ -489,6 +966,9 @@
       <div class="no">notice 30150a &nbsp;·&nbsp; status: EXTENSION &nbsp;·&nbsp; 2004 → —</div>
     </div>
   </section>
+  <h2 class="vh">an internal memo</h2>
+  <details class="fold" id="memo-lore" open>
+    <summary><span>read the internal memo</span><span class="arr" aria-hidden="true">▾</span></summary>
   <section class="reveal">
     <div class="tag">internal · field recovery · // do not distribute</div>
     <div class="memo">
@@ -496,25 +976,44 @@
       <p class="mfoot">the black bars are not damage. they are a census. read the first letter of each struck word, in order — then go to what we are.</p>
     </div>
   </section>
+  </details>
+
+  <section class="orders reveal" id="orders" aria-labelledby="orders-h">
+    <h2 class="tag" id="orders-h">standing orders</h2>
+    <p class="lede">There is no roster to join and nothing to sign. If the runes resolved for you, you were recruited on the first screen.</p>
+    <ol>
+      <li><h3><span class="no">1 ·</span> Descend.</h3><p>Every solo run begins at level ∅. <span class="nw">No-clip</span> out, then play level 0 until the wallpaper starts to feel familiar. Then go lower.</p><a class="alt" href="play/"><span>play in your browser&nbsp;▸</span></a></li>
+      <li><h3><span class="no">2 ·</span> Open a case.</h3><p>Start with CASE D-8 — it is the gentlest; everything it asks is on the public record. Then try CASE L-22: it begins inside a very small book.</p><a class="alt" href="recover/?case=case-d8"><span>open CASE D-8&nbsp;▸</span></a></li>
+      <li><h3><span class="no">3 ·</span> Read the map.</h3><p>Open the first door and read its strata down, newest to oldest.</p><a class="alt" href="atlas/#806-n-carey"><span>read the first door&nbsp;▸</span></a></li>
+    </ol>
+    <p class="none">This page loads nothing from anyone else — no ads, no trackers, no analytics. Your solo run and your case progress stay in your own browser; online play goes through our server, which keeps each room’s world.</p>
+  </section>
 </main>
 
 <footer>
-  <div class="who">THE CORNER SPORE</div>
-  <div class="links">
-    <a href="codex/">the record</a>·
-    <a href="manual/">the manual</a>·
-    <a href="atlas/">the atlas</a>·
-    <a href="https://github.com/sasha-thecornerspore-dev/backrooms">the source</a>
-  </div>
-  <div class="warn">you were not supposed to find this</div>
+  <p class="up">one door leads back up. <a href="#top">▴ climb out</a></p>
+  <p class="who">THE CORNER SPORE</p>
+  <nav aria-label="the file"><ul>
+    <li><a href="atlas/">the atlas</a></li>
+    <li><a href="play/">play in your browser</a></li>
+    <li><a href="recover/">the case board</a></li>
+    <li><a href="codex/">the record</a></li>
+    <li><a href="manual/">the field manual</a></li>
+    <li><a href="https://littlethings.thecornerspore.dev/">the very small book&nbsp;↗</a></li>
+    <li><a href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">windows build&nbsp;↗</a></li>
+    <li><a href="https://github.com/sasha-thecornerspore-dev/backrooms">the source&nbsp;↗</a></li>
+  </ul></nav>
+  <p class="warn">you were not supposed to find this</p>
 </footer>
 
 <script>
+  const RM=matchMedia('(prefers-reduced-motion: reduce)');
   // the gift line: starts in Elder Futhark, decodes into English for those who can read it
   const GIFT="if you can read this, you have the gift";
   const RUNE={a:'ᚨ',b:'ᛒ',c:'ᚲ',d:'ᛞ',e:'ᛖ',f:'ᚠ',g:'ᚷ',h:'ᚺ',i:'ᛁ',j:'ᛃ',k:'ᚲ',l:'ᛚ',m:'ᛗ',n:'ᚾ',o:'ᛟ',p:'ᛈ',q:'ᚲ',r:'ᚱ',s:'ᛊ',t:'ᛏ',u:'ᚢ',v:'ᚹ',w:'ᚹ',x:'ᚲ',y:'ᛃ',z:'ᛉ'};
   const RUNES="ᚨᛒᚲᛞᛖᚠᚷᚺᛁᛃᛚᛗᚾᛟᛈᚱᛊᛏᚢᚹᛉᚦᛇᛦᛥ";
   const giftEl=document.getElementById('gift');
+  giftEl.textContent='';
   const cells=[...GIFT].map(ch=>{
     const s=document.createElement('span');
     const letter=/[a-z]/i.test(ch);
@@ -524,6 +1023,7 @@
     return {s,ch,letter};
   });
   function decodeGift(){
+    if(RM.matches){ cells.forEach(({s,ch,letter})=>{ if(letter){ s.textContent=ch; s.classList.remove('r') } }); return }
     cells.forEach(({s,ch,letter},i)=>{
       const delay=350+i*60;
       if(!letter){ setTimeout(()=>s.classList.add('done'),delay); return }
@@ -537,39 +1037,144 @@
     });
   }
 
-  // typewriter hook → then the runes decode
+  // typewriter hook → then the runes decode (reduced motion: the line is already there; the runes turn once, after 1500 ms)
   const line="you have no-clipped out of reality.";
-  const tw=document.getElementById('tw');let i=0;let decoded=false;
-  (function type(){
-    if(i<=line.length){tw.textContent=line.slice(0,i++);setTimeout(type,55+Math.random()*40)}
-    else if(!decoded){decoded=true;setTimeout(decodeGift,500)}
+  const tw=document.getElementById('tw');
+  if(RM.matches){ setTimeout(decodeGift,1500) }
+  else {
+    let i=0; tw.textContent='';
+    (function type(){
+      if(i<=line.length){ tw.textContent=line.slice(0,i++); setTimeout(type,55+Math.random()*40) }
+      else { setTimeout(decodeGift,500); const cur=document.querySelector('.hook .cur'); if(cur) setTimeout(()=>{ cur.style.visibility='hidden' },3200) }
+    })();
+  }
+
+  // scroll reveals (tall sections reveal once a quarter-screen of them is showing)
+  (function(){
+    const els=document.querySelectorAll('.js .reveal');
+    if(RM.matches||!('IntersectionObserver' in window)){ els.forEach(el=>el.classList.add('in')); return }
+    const io=new IntersectionObserver(es=>es.forEach(e=>{
+      if(e.isIntersecting&&(e.intersectionRatio>=.12||e.intersectionRect.height>=innerHeight*.25)){ e.target.classList.add('in'); io.unobserve(e.target) }
+    }),{threshold:[0,.02,.04,.06,.08,.12]});
+    els.forEach(el=>io.observe(el));
   })();
 
-  // scroll reveals
-  const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.18});
-  document.querySelectorAll('.reveal').forEach(el=>io.observe(el));
-
-  // strata: build the layer bars, then count up to a resting number when scrolled into view
+  // folds: phones get the long lore on request; from 700px it is always open (and the toggle row is not shown)
   (function(){
-    const cols=document.getElementById('stratCols');
-    const countEl=document.getElementById('stratCount');
-    const N=48;
-    for(let k=0;k<N;k++){
-      const b=document.createElement('i');
-      const h=18+Math.round(70*(k/N)+ (Math.random()*14-7));
-      b.style.height=Math.max(8,Math.min(84,h))+'px';
-      b.style.opacity=(0.35+0.6*(k/N)).toFixed(2);
-      cols.appendChild(b);
+    const wide=matchMedia('(min-width:700px)');
+    document.querySelectorAll('details.fold').forEach(d=>{
+      const sec=d.closest('section'), sync=()=>{ if(sec) sec.classList.toggle('shut',!d.open) };
+      const set=()=>{ d.open=wide.matches; sync() };
+      d.addEventListener('toggle',sync); set();
+      if(wide.addEventListener) wide.addEventListener('change',set);
+    });
+  })();
+
+  // THE PLATE — the renderer reads the map. 75° is the engine's own field of view (renderer.js: FOV = π/2.4).
+  // The view sways on a sine, side to side; it never spins. The sealed mark stops rays but never lights up.
+  (function(){
+    const hdr=document.querySelector('header.hero'), cv=hdr&&hdr.querySelector('.fan');
+    const ctx=cv&&cv.getContext&&cv.getContext('2d'); if(!ctx) return;
+    const FOV=Math.PI/2.4, N=61, PERIOD=26;
+    const narrow=matchMedia('(max-width:699px),(max-height:520px),(max-width:899px) and (max-height:640px)');
+    let geo=null, raf=0, last=0, onscreen=true; const t0=performance.now();
+    function setup(){
+      geo=null;
+      const svg=hdr.querySelector(narrow.matches?'.art .m':'.art .d'); const m=svg&&svg.getScreenCTM(); if(!m) return;
+      const r=hdr.getBoundingClientRect(), dpr=Math.min(2,window.devicePixelRatio||1);
+      cv.width=Math.round(r.width*dpr); cv.height=Math.round(r.height*dpr);
+      const P=(x,y)=>({x:(m.a*x+m.c*y+m.e-r.left)*dpr,y:(m.b*x+m.d*y+m.f-r.top)*dpr});
+      const s=Math.hypot(m.a,m.b)*dpr, ap=svg.dataset.apex.split(',').map(Number);
+      geo={a:P(ap[0],ap[1]),len:+svg.dataset.len*s,amp:+svg.dataset.amp*Math.PI/180,dpr,
+        pins:[...svg.querySelectorAll('.pin')].map(el=>{const o=el.dataset.occ.split(',').map(Number);const p=P(o[0],o[1]);
+          return{el,x:p.x,y:p.y,r:o[2]*s,sealed:el.dataset.sealed==='1'}})};
     }
-    let ran=false;
-    const so=new IntersectionObserver(es=>es.forEach(e=>{
-      if(e.isIntersecting && !ran){ ran=true; let c=0;
-        const iv=setInterval(()=>{ c+=Math.max(1,Math.round((N-c)/6));
-          if(c>=N){c=N;clearInterval(iv)} countEl.childNodes[0].nodeValue=c+' ';
-        },40);
+    function draw(c){
+      if(!geo) return; const {a,len,pins,dpr}=geo;
+      ctx.clearRect(0,0,cv.width,cv.height);
+      const g=ctx.createRadialGradient(a.x,a.y,0,a.x,a.y,len);
+      g.addColorStop(0,'rgba(201,186,114,.55)'); g.addColorStop(.45,'rgba(201,186,114,.18)'); g.addColorStop(1,'rgba(201,186,114,0)');
+      const f=ctx.createRadialGradient(a.x,a.y,0,a.x,a.y,len);
+      f.addColorStop(0,'rgba(201,186,114,.16)'); f.addColorStop(.5,'rgba(201,186,114,.05)'); f.addColorStop(1,'rgba(201,186,114,0)');
+      const lit=new Set(), ticks=[], ends=[];
+      ctx.lineWidth=dpr; ctx.strokeStyle=g; ctx.beginPath();
+      for(let k=0;k<N;k++){
+        const ang=c-FOV/2+FOV*k/(N-1), dx=Math.sin(ang), dy=-Math.cos(ang); let D=len, hp=null;
+        for(const p of pins){const vx=p.x-a.x, vy=p.y-a.y, t=vx*dx+vy*dy; if(t<=0) continue;
+          const d2=vx*vx+vy*vy-t*t; if(d2<p.r*p.r){const h=t-Math.sqrt(p.r*p.r-d2); if(h<D){D=h;hp=p}}}
+        if(hp&&!hp.sealed){lit.add(hp);ticks.push([a.x+dx*D,a.y+dy*D,dx,dy])}
+        ctx.moveTo(a.x,a.y); ctx.lineTo(a.x+dx*D,a.y+dy*D); ends.push([a.x+dx*D,a.y+dy*D]);
       }
-    }),{threshold:.4});
-    so.observe(document.querySelector('.strata'));
+      ctx.stroke();
+      ctx.fillStyle=f; ctx.beginPath(); ctx.moveTo(a.x,a.y); ends.forEach(e=>ctx.lineTo(e[0],e[1])); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle='rgba(231,220,147,.8)'; ctx.lineWidth=1.5*dpr; ctx.beginPath();
+      for(const [x,y,dx,dy] of ticks){ctx.moveTo(x-dy*4*dpr,y+dx*4*dpr);ctx.lineTo(x+dy*4*dpr,y-dx*4*dpr)}
+      ctx.stroke();
+      pins.forEach(p=>{ if(!p.sealed) p.el.classList.toggle('lit',lit.has(p)) });
+    }
+    const angle=now=>RM.matches?0:geo.amp*Math.sin(2*Math.PI*((now-t0)/1000)/PERIOD);
+    function frame(now){
+      if(RM.matches||document.hidden||!onscreen){ raf=0; draw(angle(now)); return }   // settle on one still frame and stop
+      raf=requestAnimationFrame(frame); if(now-last<33) return; last=now; draw(angle(now))
+    }
+    function run(){
+      cancelAnimationFrame(raf); raf=0; setup(); if(!geo) return;
+      draw(angle(performance.now()));                       // paint at once; never wait on a frame
+      if(RM.matches||!onscreen||document.hidden) return; raf=requestAnimationFrame(frame);
+    }
+    if('IntersectionObserver' in window) new IntersectionObserver(es=>{onscreen=es[es.length-1].isIntersecting; run()}).observe(hdr);
+    document.addEventListener('visibilitychange',run);
+    let rz=0; addEventListener('resize',()=>{cancelAnimationFrame(rz); rz=requestAnimationFrame(run)});
+    if(RM.addEventListener) RM.addEventListener('change',run);
+    if(narrow.addEventListener) narrow.addEventListener('change',run);
+    run();
+  })();
+
+  // case board: one same-origin read of the public index. Only cases that already have a reviewed card on this page
+  // are shown, with only the code, the title, the instrument count and the date from the index; the teaser and the
+  // note come from the page itself. Progress is what this browser has already read. The static tags stay if anything fails.
+  (function(){
+    const list=document.getElementById('case-tags'); if(!list) return;
+    const known={};
+    list.querySelectorAll('[data-case]').forEach(a=>{ const t=a.querySelector('.tease'), n=a.querySelector('.note');
+      known[a.dataset.case]={tease:t?t.textContent:'', note:n?n.textContent:'', start:a.classList.contains('start')} });
+    const store=(()=>{ try{ return window.localStorage }catch(e){ return null } })();
+    const read=(id,st)=>{ try{ return !!store&&store.getItem('cs.case.'+id+'.'+st)==='1' }catch(e){ return false } };
+    const el=(tag,cls,text)=>{ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e };
+    const progText=(n,m)=>n>0?n+' of '+m+' read in this browser':'';
+    // the static cards first, so saved progress shows even if the index never loads. The page names no instruments,
+    // so this counts the case's read marks in this browser (the board writes cs.case.<id>.<instrument> = '1').
+    list.querySelectorAll('[data-case]').forEach(a=>{
+      const id=a.dataset.case, pre='cs.case.'+id+'.', pips=[...a.querySelectorAll('.pip')], prog=a.querySelector('.prog'); let n=0;
+      try{ if(store) for(let i=0;i<store.length;i++){ const k=store.key(i);
+        if(k&&k.indexOf(pre)===0&&/^[a-z0-9-]+$/.test(k.slice(pre.length))&&store.getItem(k)==='1') n++ } }catch(e){ n=0 }
+      n=Math.min(n,pips.length); pips.forEach((p,k)=>p.classList.toggle('on',k<n)); if(prog) prog.textContent=progText(n,pips.length);
+    });
+    if(!window.fetch) return;
+    fetch('recover/cases/index.json',{credentials:'same-origin'}).then(r=>r.ok?r.json():Promise.reject(r.status)).then(d=>{
+      const cs=(d&&Array.isArray(d.cases)?d.cases:[]).map((c,k)=>[c,k]).filter(([c])=>c&&typeof c.id==='string'&&/^case-[a-z0-9-]+$/.test(c.id)
+        &&Object.prototype.hasOwnProperty.call(known,c.id)&&Array.isArray(c.stations)&&typeof c.code==='string');
+      if(!cs.length) return;
+      cs.sort((x,y)=>String(x[0].surfaced||'').localeCompare(String(y[0].surfaced||''))||x[1]-y[1]);
+      const frag=document.createDocumentFragment();
+      cs.forEach(([c])=>{
+        const k=known[c.id], m=c.stations.length, n=c.stations.filter(st=>typeof st==='string'&&read(c.id,st)).length;
+        const li=el('li'), a=el('a','tagcard'+(k.start?' start':''));
+        a.href='recover/?case='+encodeURIComponent(c.id); a.dataset.case=c.id;
+        a.append(el('span','code',c.code), el('span','ti',typeof c.title==='string'?c.title:''));
+        if(k.tease) a.append(el('span','tease',k.tease));
+        a.append(el('span','n',m+(m===1?' instrument':' instruments')));
+        const pips=el('span','pips'); pips.setAttribute('aria-hidden','true');
+        for(let j=0;j<m;j++) pips.append(el('i','pip'+(j<n?' on':'')));
+        a.append(pips, el('span','prog',progText(n,m)));
+        if(k.note) a.append(el('span','note',k.note));
+        if(typeof c.surfaced==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(c.surfaced)) a.append(el('span','sf','surfaced '+c.surfaced));
+        li.append(a); frag.append(li);
+      });
+      list.replaceChildren(frag);
+      const nw=document.getElementById('newest'), c=cs[cs.length-1][0];
+      if(nw&&typeof c.surfaced==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(c.surfaced)) nw.textContent=c.code+' · '+'surfaced '+c.surfaced;
+    }).catch(()=>{});
   })();
 
   // redaction census — reveal on tap/click/keyboard (hover already works via CSS)
@@ -577,6 +1182,12 @@
     var t=function(){el.classList.toggle('shown')};
     el.addEventListener('click',t);
     el.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();t()}});
+  });
+
+  // the same census for screen readers: each bar says whether it is lifted, and a lifted bar speaks its word
+  document.querySelectorAll('.redact.rx').forEach(function(el){
+    var sync=function(){ var on=el.classList.contains('shown'); el.setAttribute('aria-pressed',on?'true':'false'); el.setAttribute('aria-label',on?el.textContent:'redacted word') };
+    sync(); if(window.MutationObserver) new MutationObserver(sync).observe(el,{attributes:true,attributeFilter:['class']});
   });
 
   // for the curious

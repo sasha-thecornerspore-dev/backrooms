@@ -71,6 +71,19 @@
   button.here:hover{background:rgba(143,220,172,.14)} button.here:disabled{opacity:.5;cursor:wait}
   .gmsg.near{color:var(--sigb);text-shadow:0 0 12px rgba(143,220,172,.35)}
   .seal{color:var(--sigb);text-shadow:0 0 10px rgba(143,220,172,.4)}
+  /* the note seal: rereading a note this browser holds no key for, this browser's copy, quiet notices */
+  .reread{margin-top:6px}
+  .reread summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;min-height:44px;
+    font-family:var(--serif);font-style:italic;font-size:15px;color:var(--dim)}
+  .reread summary::-webkit-details-marker{display:none}
+  .reread summary:hover,.reread summary:focus-visible{color:var(--y)}
+  .reread summary .mk{display:inline-block;font-style:normal;transition:transform .2s}
+  .reread[open] summary .mk{transform:rotate(90deg)}
+  .why{font-family:var(--serif);font-style:italic;color:var(--dim);font-size:14px;margin:0 0 4px;max-width:60ch}
+  .quiet{font-family:var(--serif);font-style:italic;color:var(--dim);font-size:14px;margin-top:6px}
+  .reward .ask{text-align:left;max-width:560px;margin:14px auto 0}
+  .reward .why,.reward .quiet{margin-left:auto;margin-right:auto}
+  .solved-line:focus,.reward:focus{outline:none}
 
   .reward{border:1px solid rgba(143,220,172,.35);background:rgba(143,220,172,.05);padding:26px 28px;margin:26px 0 10px;text-align:center}
   .reward .rtag{font-size:11px;letter-spacing:4px;color:var(--sig);text-transform:uppercase;margin-bottom:12px}
@@ -106,7 +119,7 @@
   <div class="warn">each instrument read opens the next</div>
 </footer>
 
-<script src="engine.js"></script>
+<script src="engine.js?v=seal1"></script>
 <script>
 (async function(){
   var q = new URLSearchParams(location.search);
@@ -164,12 +177,42 @@
   document.getElementById('ctitle').textContent = manifest.title || id;
   document.getElementById('cintro').textContent = manifest.intro || '';
 
-  function render(){
-    var p = Recover.progress(manifest);
+  // ── the note seal: notes and the closing file may ship encrypted (see engine.js). refresh() opens what this browser
+  // can, then render() draws synchronously. An unsealed (older) manifest renders as it always did.
+  var gen = 0, support = null, rewardBox = document.getElementById('reward');
+  var hasSeal = !!(Recover.openStation && Recover.openReward && Recover.fileAnswer);
+  async function refresh(opts){
+    var my = ++gen, p = Recover.progress(manifest), notes = {}, closing = null;
+    try {
+      if (hasSeal) {
+        if (support === null && Recover.isSealed(manifest)) support = await Recover.sealSupported();
+        for (var k = 0; k < p.stations.length; k++)
+          if (p.stations[k].state === 'solved') notes[p.stations[k].station.id] = await Recover.openStation(manifest, p.stations[k].station);
+        if (p.complete) closing = await Recover.openReward(manifest);
+      } else {
+        // the engine's seal section did not load in this browser: unsealed files read as before, sealed ones cannot open
+        if (manifest.seal != null) support = false;
+        p.stations.forEach(function(o){ if (o.state === 'solved') notes[o.station.id] = manifest.seal == null ? { text: String(o.station.onSolve || ''), from: 'plain' } : null; });
+        if (p.complete) closing = manifest.seal == null ? (manifest.reward ? { reward: manifest.reward, from: 'plain' } : { none: true }) : { unsupported: true };
+      }
+    } catch (e) {}
+    if (my === gen) render(p, notes, closing, opts || {});      // a later refresh wins
+  }
+  function newerSeal(){ return hasSeal && !Recover.sealKnown(manifest); }
+  function stateKey(inp){ return inp.dataset.i != null ? 'i' + inp.dataset.i : 'r' + inp.dataset.ri; }
+
+  function render(p, notes, closing, opts){
+    notes = notes || {}; opts = opts || {};
+    // keep what the player had opened or typed across the redraw
+    var keepOpen = {}, keepVal = {};
+    board.querySelectorAll('details[data-rd]').forEach(function(d){ if (d.open) keepOpen[d.dataset.rd] = true; });
+    document.querySelectorAll('#board input[data-i], #reward input[data-ri]').forEach(function(inp){ if (inp.value) keepVal[stateKey(inp)] = inp.value; });
     document.getElementById('cprog').textContent = 'instruments read · ' + p.solvedCount + ' of ' + p.stations.length;
+    var askInReward = !!(p.complete && closing && closing.missing);
     board.innerHTML = '';
     p.stations.forEach(function(o, i){
       var s = o.station, el = document.createElement('section');
+      var note = o.state === 'solved' ? notes[s.id] : null;
       el.className = 'station ' + o.state;
       var h = '<div class="stag">' + esc(s.title || ('instrument ' + (i + 1))) + (s.where ? ' &nbsp;·&nbsp; ' + esc(s.where) : '') +
               (s.geo && Recover.isFieldRead(manifest.id, s.id) ? ' &nbsp;·&nbsp; <span class="seal">◎ field-read</span>' : '') + '</div>';
@@ -183,11 +226,11 @@
           h += '<br>';
         }
         if (s.parity && s.parity.length) h += '<div class="parity">read it by: ' + s.parity.map(esc).join(' &nbsp;·&nbsp; ') + '</div>';
-        if (o.state !== 'solved' && s.geo && typeof s.geo.lat === 'number') {
-          // a public landmark where the key can be read on site. the button asks for
-          // location only when pressed; if the landmark is a live door on the atlas the position is posted once to
-          // the relay's check-in (it verifies proximity and keeps no coordinates), otherwise compared here and dropped.
-          // the safety line is fixed here, not authorable from the manifest.
+        if ((o.state !== 'solved' || note == null) && s.geo && typeof s.geo.lat === 'number') {
+          // a public landmark where the key can be read on site (offered again when a read note cannot open here). the
+          // button asks for location only when pressed; if the landmark is a live door on the atlas the position is posted
+          // once to the relay's check-in (it verifies proximity and keeps no coordinates), otherwise compared here and
+          // dropped. the safety line is fixed here, not authorable from the manifest.
           h += '<div class="geo"><div class="gname">◎ ' + esc(s.geo.name || 'the landmark') + (s.geo.hours ? ' &nbsp;·&nbsp; ' + esc(s.geo.hours) : '') + '</div>' +
                '<div class="safe">read it from the public grounds, in open hours. stay where anyone may stand; nothing to touch, take or enter. bring someone. the record link above reads the same key from anywhere.' +
                (s.geo.beacon ? ' this landmark is a door on the atlas: reading it here leaves an anonymous mark there, and your position is used once to check you are at it, then dropped.' : '') + '</div>' +
@@ -196,7 +239,20 @@
                '<div class="msg gmsg" data-gm="' + i + '"></div></div>';
         }
         if (o.state === 'solved') {
-          h += '<div class="solved-line">✓ read. ' + esc(s.onSolve || '') + '</div>';
+          if (note != null) {
+            h += '<div class="solved-line" tabindex="-1" data-n="' + i + '">✓ read. ' + esc(note.text) + '</div>';
+            if (note.from === 'copy') h += '<div class="quiet">this browser’s copy of the note.</div>';
+          } else {
+            h += '<div class="solved-line" tabindex="-1" data-n="' + i + '">✓ read.</div>';
+            if (newerSeal()) h += '<div class="quiet">this note was locked by a newer board — reload the page to read it.</div>';
+            else if (support === false) h += '<div class="quiet">this browser can’t open locked notes — your progress is kept.</div>';
+            else if (askInReward) h += '<div class="quiet">its note comes back when you reopen the closing file below.</div>';
+            else h += '<details class="reread" data-rd="' + i + '"><summary><span class="mk" aria-hidden="true">▸</span> read this note again</summary>' +
+                      '<div class="ask"><p class="why">your progress is kept. the board now locks each note with its answer — file it once more and the note comes back.</p>' +
+                      '<label>' + esc(s.prompt || 'your answer') + '</label>' +
+                      '<div class="row"><input type="text" autocomplete="off" spellcheck="false" data-i="' + i + '" aria-label="answer">' +
+                      '<button type="button" data-i="' + i + '">file it again</button></div><div class="msg" data-m="' + i + '"></div></div></details>';
+          }
         } else {
           h += '<div class="ask"><label>' + esc(s.prompt || 'your answer') + '</label>' +
                '<div class="row"><input type="text" autocomplete="off" spellcheck="false" data-i="' + i + '" aria-label="answer">' +
@@ -206,25 +262,72 @@
       el.innerHTML = h;
       board.appendChild(el);
     });
-    var rw = document.getElementById('reward');
-    if (p.complete && manifest.reward) {
-      var R = manifest.reward;
+    var rw = rewardBox;
+    if (!p.complete || !closing || closing.none) { rw.hidden = true; rw.innerHTML = ''; }
+    else if (closing.reward) {
+      var R = closing.reward;
       var walked = Recover.fieldComplete(manifest);
       rw.innerHTML = '<div class="rtag">◇ case closed' + (walked ? ' · field-read' : '') + ' ◇</div><h2>' + esc(R.title || '') + '</h2><p>' + esc((walked && R.fieldText) || R.text || '') + '</p>' +
         (R.key ? '<div class="key">' + esc(R.key) + '</div>' : '') +
-        (R.href && safeHref(R.href) ? '<a class="go" href="' + esc(R.href) + '">' + esc(R.linkLabel || '▸ open the door') + '</a>' : '');
+        (R.href && safeHref(R.href) ? '<a class="go" href="' + esc(R.href) + '">' + esc(R.linkLabel || '▸ open the door') + '</a>' : '') +
+        (closing.from === 'copy' ? '<p class="quiet">this browser’s copy of the closing file.</p>' : '') +
+        (closing.from === 'plain' && R.key ? '<p class="quiet">copy this key somewhere of your own. soon each closing file opens only for the answers that closed it, and a new browser will ask for them again.</p>' : '');
       rw.hidden = false;
-    } else rw.hidden = true;
+    } else if (closing.missing) {
+      var one = closing.missing.length === 1;
+      rw.innerHTML = '<div class="rtag">◇ case closed ◇</div><p class="why">your case is still closed. to reopen the closing file, file ' + (one ? 'this answer' : 'these answers') + ' once more:</p>' +
+        closing.missing.map(function(s){ var i = manifest.stations.indexOf(s);
+          return '<div class="ask"><label>' + esc(s.title || ('instrument ' + (i + 1))) + ' — ' + esc(s.prompt || 'your answer') + '</label>' +
+            '<div class="row"><input type="text" autocomplete="off" spellcheck="false" data-ri="' + i + '" aria-label="answer">' +
+            '<button type="button" data-ri="' + i + '">file it again</button></div><div class="msg" data-rm="' + i + '"></div></div>'; }).join('');
+      rw.hidden = false;
+    } else {
+      rw.innerHTML = '<div class="rtag">◇ case closed ◇</div><p class="quiet">' + (closing.newer ? 'this closing file was locked by a newer board — reload the page to read it.' :
+        closing.unsupported ? 'this browser can’t open locked closing files — your case is still closed and your progress is kept.' : 'the closing file could not be opened.') + '</p>';
+      rw.hidden = false;
+    }
+    // restore what was open or typed, then move focus to where the player's next step is
+    board.querySelectorAll('details[data-rd]').forEach(function(d){ if (keepOpen[d.dataset.rd]) d.open = true; });
+    document.querySelectorAll('#board input[data-i], #reward input[data-ri]').forEach(function(inp){ var v = keepVal[stateKey(inp)]; if (v) inp.value = v; });
+    var target = null;
+    if (opts.focusNote != null) { var n = board.querySelector('[data-n="' + opts.focusNote + '"]'); if (n && n.textContent !== '✓ read.') target = n; }
+    if (!target && opts.focusNext) {
+      target = rw.querySelector('input[data-ri]') || board.querySelector('input[data-i]');
+      if (!target && !rw.hidden && closing && closing.reward) { rw.setAttribute('tabindex', '-1'); target = rw; }
+    }
+    if (target) { try { target.focus(); } catch (e) {} }
   }
 
+  // the gate decides; the engine keeps this instrument's key before it sets the read mark
+  async function file(s, value){
+    if (hasSeal) { try { return await Recover.fileAnswer(manifest, s, value); } catch (err) { return { ok: false }; } }
+    var ok = false;
+    try { ok = await Recover.checkGate(value, s.gate); } catch (err) { ok = false; }
+    if (ok) Recover.markSolved(manifest.id, s.id);
+    return { ok: ok, kept: false };
+  }
   board.addEventListener('click', async function(e){
     var b = e.target.closest('button[data-i]'); if (!b) return;
     var i = +b.dataset.i, s = manifest.stations[i];
     var inp = board.querySelector('input[data-i="' + i + '"]'), msg = board.querySelector('[data-m="' + i + '"]');
-    var ok = false;
-    try { ok = await Recover.checkGate(inp.value, s.gate); } catch (err) { ok = false; }
-    if (ok) { Recover.markSolved(manifest.id, s.id); render(); }
+    var reread = Recover.isSolved(manifest.id, s.id);
+    var r = await file(s, inp.value);
+    if (r.ok) { if (r.kept === false && manifest.seal != null) support = false; await refresh(reread ? { focusNote: i } : {}); }
     else { msg.textContent = 'the file does not answer to that.'; inp.value = ''; inp.focus(); }
+  });
+  rewardBox.addEventListener('click', async function(e){
+    var b = e.target.closest('button[data-ri]'); if (!b) return;
+    var i = +b.dataset.ri, s = manifest.stations[i];
+    var inp = rewardBox.querySelector('input[data-ri="' + i + '"]'), msg = rewardBox.querySelector('[data-rm="' + i + '"]');
+    var r = await file(s, inp.value);
+    if (r.ok) { if (r.kept === false) support = false; await refresh({ focusNext: true }); }
+    else { msg.textContent = 'the file does not answer to that.'; inp.value = ''; inp.focus(); }
+  });
+  rewardBox.addEventListener('keydown', function(e){
+    if (e.key !== 'Enter') return;
+    var inp = e.target.closest('input[data-ri]'); if (!inp) return;
+    e.preventDefault();
+    var b = rewardBox.querySelector('button[data-ri="' + inp.dataset.ri + '"]'); if (b) b.click();
   });
   // geo parity: prove you are at the landmark and the key surfaces (the gate is still the hash).
   // getCurrentPosition runs only on this click, once. If the landmark is a live, unsealed door on
@@ -293,7 +396,7 @@
     e.preventDefault();
     var b = board.querySelector('button[data-i="' + inp.dataset.i + '"]'); if (b) b.click();
   });
-  render();
+  refresh();
 })();
 </script>
 </body>
