@@ -7,6 +7,7 @@ import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
 import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
+import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP } from './gfx-quality.js'
 import { writeSave } from './save.js'
 import { formatAnchor, driftMeters } from './anchor.js'
 import { initTouchControls, isTouchDevice } from './touch.js'
@@ -112,11 +113,29 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let flicker    = 1.0
   let flickTgt   = 1.0
   let flickTimer = 0
+  const fk = createFlickerState()   // the rate limiter's bookkeeping (gfx-quality.js stepFlicker); flicker/flickTgt/flickTimer stay ours
 
   initAudio(base)
 
-  // shared, live-mutable render options (toggled from the settings panel)
-  const renderOpts = { grain: getPref('grain'), particles: getPref('particles'), crosshair: getPref('crosshair') }
+  // shared, live-mutable render options (toggled from the settings panel). maxGlobalDip bounds how far the WHOLE frame
+  // may dim in a flicker (0.5; reduceFlicker tightens it to 0.25) whatever quality tier is chosen.
+  const renderOpts = {
+    grain: getPref('grain'), particles: getPref('particles'), crosshair: getPref('crosshair'),
+    reduceFlicker: getPref('reduceFlicker'), maxGlobalDip: DEFAULT_MAX_GLOBAL_DIP,
+    renderer: getPref('renderer'),     // 'auto' | 'gpu' | 'cpu' — read by createRenderer() (renderer.js); 'auto' is still the CPU path until the GPU is verified
+  }
+  // Test / harness hook: a page that sets globalThis.__backroomsRenderOpts BEFORE the game boots (tools/gfx/page.cjs --ropts) can add renderOpts such as
+  // { allowSoftwareGl: true } (WebGL on SwiftShader, never used in production) or { __failGl: 'frame' }. It is read ONLY when the harness has also marked
+  // the page as a test run (globalThis.__backroomsTestRun === true, set by page.cjs' preload) — nothing in the shipped page or the URL sets either,
+  // and gfx-gl.js / renderer.js re-check the marker before honouring allowSoftwareGl, __failGl and gpuValidate.
+  try { const dbg = globalThis.__backroomsRenderOpts; if (dbg && typeof dbg === 'object' && globalThis.__backroomsTestRun === true) Object.assign(renderOpts, dbg) } catch { /* ignore */ }
+  // The quality director turns the graphicsQuality / hiDpi / fpsCap prefs plus the frame times it is fed into
+  // renderOpts.qualityTier / renderScale / uiScale and the canvas size (gfx-quality.js). resize() below lays it out.
+  const qd = createQualityDirector({
+    env: readDeviceEnv(navigator, window),
+    graphicsQuality: getPref('graphicsQuality'), hiDpi: getPref('hiDpi'), fpsCap: getPref('fpsCap'),
+  })
+  let fpsCap = getPref('fpsCap')
 
   // ── per-level state, rebuilt on every transition ──
   let level = null
@@ -145,8 +164,17 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
   }
 
+  // one renderer for a level (buildLevel; and a live change of the renderer pref). Logs one hidden diagnostics line: kind / why / GPU info.
+  function makeGfx(cfg, cache) {
+    const g = createRenderer(canvas, cfg, renderOpts, cfg.map ? { materialAt: (wx, wy) => cache.materialAt(wx, wy) } : {})
+    try { console.info(g.diagnostics()) } catch { /* a console-less host */ }
+    return g
+  }
+
   function buildLevel(index) {
     const cfg   = levelConfig(base, index)
+    // HUD theme hook: index.html restyles body[data-level] ('0'..'3' | '∅') — light ink on dark plates below the lobby
+    if (typeof document !== 'undefined' && document.body) document.body.dataset.level = String(cfg.levelIndex)
     // Level ∅ is a hand-authored fixed grid; the rest are procedural chunk worlds.
     // Both expose the same isWall(wx,wy,pcx,pcy); the fixed map adds materialAt.
     const cache = cfg.map ? createFixedMap(cfg.map) : createChunkCache(cfg, worldSeed)
@@ -154,8 +182,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const isWall = (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy)
     const entitySys = createEntitySystem(cfg, isWall)
     const decor     = createDecorSystem(cfg, isWall, worldSeed)
-    const gfx       = createRenderer(canvas, cfg, renderOpts,
-      cfg.map ? { materialAt: (wx, wy) => cache.materialAt(wx, wy) } : {})
+    // The previous level's renderer is disposed BEFORE the next one is created: a GPU backend owns a WebGL context on a sibling canvas, and
+    // browsers cap live contexts (~16), so a level change must not leave one behind.
+    if (level && level.gfx) { try { level.gfx.dispose() } catch { /* a half-torn-down renderer must never block a level change */ } level.gfx = null }
+    const gfx       = makeGfx(cfg, cache)
     itemSys.enterLevel(cfg)
     vendedSet.clear()               // a re-entered floor re-stocks its machines
 
@@ -291,7 +321,18 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   noteCardEl?.addEventListener('pointerdown', closeNoteCard)   // tap / click the card to put it back
 
   // ── resize ──
-  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight }
+  // The backing store is the css size (today's behaviour) unless the player opted into hi-DPI, in which case the
+  // director may make it up to 1.5x larger within a pixel budget; the INTERNAL render size is unaffected (renderScale
+  // is scaled down to match), so a HiDPI Chromebook or phone does not silently fill more pixels.
+  let lastDpr = window.devicePixelRatio
+  function resize() {
+    lastDpr = window.devicePixelRatio
+    const p = qd.layout(window.innerWidth, window.innerHeight, lastDpr)
+    if (canvas.width !== p.width || canvas.height !== p.height) { canvas.width = p.width; canvas.height = p.height }
+    canvas.style.width  = p.ratio === 1 ? '' : `${p.cssW}px`
+    canvas.style.height = p.ratio === 1 ? '' : `${p.cssH}px`
+    qd.apply(renderOpts)
+  }
   window.addEventListener('resize', resize)
   resize()
 
@@ -537,12 +578,28 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
   // ── polaroid ──
   const flashEl = document.getElementById('flash')
+  let flashAt = -1e9, flashT = 0
   function firePolaroid() {
     let dataUrl = null
-    try { dataUrl = canvas.toDataURL('image/png') } catch { /* ignore */ }
+    // through the renderer: a WebGL canvas is only readable when re-drawn, and the GPU backend draws on a sibling canvas, not on #c
+    try { dataUrl = level?.gfx?.capture ? level.gfx.capture() : canvas.toDataURL('image/png') } catch { /* ignore */ }
     if (flashEl) {
-      flashEl.style.transition = 'none'; flashEl.style.opacity = '0.9'
-      requestAnimationFrame(() => { flashEl.style.transition = 'opacity 1.2s'; flashEl.style.opacity = '0' })
+      // A gentle ramp to a soft peak and a long decay (was: instant 90% white). Photosensitivity: a second flash
+      // inside minGapMs is skipped so mashing the button cannot strobe the screen; reduceFlicker lowers it further.
+      // The flash also shares the flicker limiter's budget (flashWait / noteFlash): it is held back while a light dip
+      // is starting or has just started, and counts as a dip start itself, so the two never exceed 3 flashes a second.
+      const fx = flashFor(renderOpts.reduceFlicker), now = performance.now()
+      if (now - flashAt >= fx.minGapMs) {
+        flashAt = now
+        clearTimeout(flashT)
+        const go = () => {
+          noteFlash(fk)
+          flashEl.style.transition = `opacity ${fx.attackMs}ms ease-out`; flashEl.style.opacity = String(fx.peak)
+          flashT = setTimeout(() => { flashEl.style.transition = `opacity ${fx.decayMs}ms ease-in-out`; flashEl.style.opacity = '0' }, fx.attackMs)
+        }
+        const wait = flashWait(fk, renderOpts.reduceFlicker)
+        if (wait > 0) flashT = setTimeout(go, Math.ceil(wait * 1000) + 30); else go()
+      }
     }
     // the caption develops from the LIVE frame, so it works in the browser too
     // (no save bridge). A capture is a small counter-claim — it steadies you.
@@ -750,6 +807,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (k === 'grain')          renderOpts.grain = v
     else if (k === 'particles') renderOpts.particles = v
     else if (k === 'crosshair') renderOpts.crosshair = v
+    else if (k === 'reduceFlicker') renderOpts.reduceFlicker = v
+    else if (k === 'renderer') { renderOpts.renderer = v; if (level && level.gfx) { try { level.gfx.dispose() } catch { /* ignore */ } level.gfx = makeGfx(level.cfg, level.cache) } }   // rebuilt now, not at the next level
+    else if (k === 'fpsCap')    { fpsCap = v; qd.setPrefs({ fpsCap: v }) }
+    else if (k === 'graphicsQuality' || k === 'hiDpi') { if (qd.setPrefs({ [k]: v })) resize() }
     else if (k === 'music')     setMusicEnabled(v)
     else if (k === 'musicVolume') setMusicVolume(v)
     else if (k === 'ambience')  setAmbience(v)
@@ -760,28 +821,35 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let last = 0
   let frameCount = 0
   let loopErrs = 0
+  // time plumbing: `dt` below is the CLAMPED simulation step; `rawMs` is the real interval between processed frames,
+  // which the quality controller and the renderer's animation clock need (a clamped dt hides an overloaded machine)
+  const pacer = createFramePacer()
+  const timing = { t: 0, dt: 1 / 60 }     // handed to render(): seconds since the first frame / real frame time (capped at 0.1 s)
+  let t0 = -1, lastWorkMs = 0
   function loop(ts) {
    try {
-    const dt = Math.min((ts - last) / 1000, 0.05)
+    if (!pacer.due(ts, fpsCap)) { requestAnimationFrame(loop); return }   // fpsCap: skip frames on the raw timestamp
+    const w0 = performance.now()
+    const rawMs = last > 0 ? ts - last : 1000 / 60
+    if (t0 < 0) t0 = ts
+    const dt = Math.min(rawMs / 1000, 0.05)
     last = ts
+    timing.t = (ts - t0) / 1000; timing.dt = Math.min(rawMs / 1000, 0.1)
+    if (qd.frame(rawMs, lastWorkMs)) qd.apply(renderOpts)                 // adaptive resolution: down fast, up slowly
+    // the GPU health monitor watches the REAL frame interval (a CPU-side timer cannot see GPU time); it only acts once the resolution is at its floor
+    if (level.gfx.kind === 'gpu') level.gfx.noteFrame(rawMs, { budgetMs: 1000 / (fpsCap > 0 ? fpsCap : 60), atFloor: qd.state.atFloor })
+    if (frameCount % 120 === 0 && window.devicePixelRatio !== lastDpr) resize()   // the window moved to another display
     const cfg = level.cfg
 
-    // ── flicker (per-level tuning) ──
+    // ── flicker (per-level tuning) — rate-limited: at most 3 dips a second (WCAG 2.3.1), depth-capped under
+    //    reduceFlicker. The state machine is gfx-quality.js stepFlicker; events and items that write flickTgt /
+    //    flickTimer directly (lights-cascade, sour water, ...) are vetted by it on the next step. ──
     const fl = cfg.flicker
-    flickTimer -= dt
-    if (calmTimer > 0) {
-      calmTimer -= dt
-      flickTgt = 0.97
-    } else if (flickTimer <= 0) {
-      if (Math.random() < fl.rate) {
-        flickTgt   = 1 - fl.depth * Math.random()
-        flickTimer = 0.04 + Math.random() * 0.12
-      } else {
-        flickTgt   = 0.92 + Math.random() * 0.08
-        flickTimer = 0.8  + Math.random() * 3
-      }
-    }
-    flicker += (flickTgt - flicker) * Math.min(1, dt * fl.recoverySpeed)
+    const calm = calmTimer > 0
+    if (calm) calmTimer -= dt
+    fk.value = flicker; fk.target = flickTgt; fk.timer = flickTimer
+    stepFlicker(fk, dt, fl, Math.random, calm, renderOpts.reduceFlicker)
+    flicker = fk.value; flickTgt = fk.target; flickTimer = fk.timer
     setFlicker(flicker)
 
     // ── movement (frozen during a transition fade or while typing in chat) ──
@@ -795,13 +863,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (K['KeyS'] || K['ArrowDown']) { tryMove(player.x - ca * sp * 0.6, player.y - sa * sp * 0.6); moved = true }
       if (K['KeyA'])                   { tryMove(player.x + Math.cos(player.angle - Math.PI/2) * sp * 0.7, player.y + Math.sin(player.angle - Math.PI/2) * sp * 0.7); moved = true }
       if (K['KeyD'])                   { tryMove(player.x + Math.cos(player.angle + Math.PI/2) * sp * 0.7, player.y + Math.sin(player.angle + Math.PI/2) * sp * 0.7); moved = true }
-      if (!locked && K['ArrowLeft'])  player.angle -= 0.04
-      if (!locked && K['ArrowRight']) player.angle += 0.04
+      if (!locked && K['ArrowLeft'])  player.angle -= 0.04 * dt * 60   // dt-scaled: a 144 Hz display turns at the same rate
+      if (!locked && K['ArrowRight']) player.angle += 0.04 * dt * 60
       if (moved && wantSprint) stamina = Math.max(0, stamina - 22 * dt)
       else                     stamina = Math.min(100, stamina + 9 * dt)
     }
     player.moving = moved
-    if (moved) player.bob += 0.12
+    if (moved) player.bob += 0.12 * dt * 60
     player.bobOffset = (moved && getPref('headBob')) ? Math.sin(player.bob) * 4 : 0
 
     if (fogTimer > 0) fogTimer -= dt
@@ -1028,7 +1096,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // ── screen shake (decays) ──
     if (shake > 0.01) {
       shake = Math.max(0, shake - dt * 3)
-      const m = shake * 8
+      const m = shake * 8 * (renderOpts.reduceFlicker ? 0.25 : 1)     // reduce flicker / reduced motion: a quarter of the shake
       canvas.style.transform = `translate(${((Math.random() - 0.5) * m).toFixed(1)}px, ${((Math.random() - 0.5) * m).toFixed(1)}px)`
     } else if (canvas.style.transform) canvas.style.transform = ''
 
@@ -1036,19 +1104,19 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const remoteEntities = mpClient
       ? mpClient.getRemotePlayers().map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle, chatText: p.chatText, hp: p.hp }))
       : []
-    const propEntities = level.decor.getProps().map(p => ({ x: p.x, y: p.y, kind: 'prop', type: p.type }))
-    const exitEntities = level.decor.getExits().map(e => ({ x: e.x, y: e.y, kind: 'exit' }))
-    const npcEntities  = level.decor.getNpcs().map(n => ({ x: n.x, y: n.y, kind: 'npc', name: 'a lost soul' }))
-    const itemEntities = itemSys.getWorldItems().map(it => ({ x: it.x, y: it.y, kind: 'item', itemType: it.type }))
-    const scrapEntities = level.decor.getScraps().map(s => ({ x: s.x, y: s.y, kind: 'note', read: readSet.has(s.frag) }))
-    const machineEntities = level.decor.getMachines().map(m => ({ x: m.x, y: m.y, kind: 'machine', vended: vendedSet.has(m.key) }))
-    const sightEntities = level.decor.getSights().map(s => ({ x: s.x, y: s.y, kind: 'sight', sightType: s.type }))
+    const propEntities = level.decor.getProps().map(p => ({ x: p.x, y: p.y, kind: 'prop', type: p.type, rot: p.rot, key: p.key }))
+    const exitEntities = level.decor.getExits().map(e => ({ x: e.x, y: e.y, kind: 'exit', target: e.target, key: e.key }))
+    const npcEntities  = level.decor.getNpcs().map(n => ({ x: n.x, y: n.y, kind: 'npc', name: 'a lost soul', key: n.key }))
+    const itemEntities = itemSys.getWorldItems().map(it => ({ x: it.x, y: it.y, kind: 'item', itemType: it.type, key: it.key }))
+    const scrapEntities = level.decor.getScraps().map(s => ({ x: s.x, y: s.y, kind: 'note', read: readSet.has(s.frag), frag: s.frag, key: s.key }))
+    const machineEntities = level.decor.getMachines().map(m => ({ x: m.x, y: m.y, kind: 'machine', vended: vendedSet.has(m.key), key: m.key }))
+    const sightEntities = level.decor.getSights().map(s => ({ x: s.x, y: s.y, kind: 'sight', sightType: s.type, key: s.key }))
     // advance any event apparitions (render-only; no collision or damage)
     for (let i = ephemera.length - 1; i >= 0; i--) {
       const a = ephemera[i]; a.x += a.vx * dt; a.y += a.vy * dt; a.ttl -= dt
       if (a.ttl <= 0) ephemera.splice(i, 1)
     }
-    const apparitionEntities = ephemera.map(a => ({ x: a.x, y: a.y, variant: a.variant }))
+    const apparitionEntities = ephemera.map(a => ({ x: a.x, y: a.y, variant: a.variant, vx: a.vx, vy: a.vy }))
     const enemyEntities = creaturesOn ? level.entitySys.getEntities() : []
     const allEntities = [
       ...enemyEntities, ...remoteEntities, ...npcEntities,
@@ -1056,8 +1124,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     ]
 
     level.gfx.render(player, (wx, wy) => level.cache.isWall(wx, wy, pcx, pcy), flicker, allEntities, fogMul,
-      { flashlight, glow: fogTimer > 0 ? [80, 235, 110] : null })
+      { flashlight, glow: fogTimer > 0 ? [80, 235, 110] : null }, timing)
     frameCount++
+    lastWorkMs = performance.now() - w0                                   // this frame's callback cost: the controller's headroom signal
    } catch (e) {
     // A per-frame error must never permanently freeze the game: log it (first
     // few only, to avoid flooding) and fall through to reschedule below.
