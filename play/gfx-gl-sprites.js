@@ -9,10 +9,11 @@
 //     returns     the remote-player nameplate records exactly as gfx-sprites.js drawSprites() returns them ({sx, y, name, alpha, speech, hp},
 //                 sx/y in the internal W x H frame)
 //
-// SPLIT OF WORK. The CPU half (gfx-gl-sprites-plan.js) is drawSprites' entity logic — cull, MAXS priority cap, far-to-near order, per-kind pose,
-// warp, pulse, light, fog, rim and dissolve terms — writing one instance per layer into a reused Float32Array. The atlas bookkeeping is
+// SPLIT OF WORK. What is drawn is decided by gfx-sprites.js planSprites() — the SAME plan the CPU blitter draws (cull, MAXS priority cap,
+// far-to-near order, per-kind pose, warp, pulse, light, fog, rim and dissolve terms, nameplates); gfx-gl-sprites-plan.js packs its records into
+// one instance per layer of a reused Float32Array. The atlas bookkeeping is
 // gfx-gl-sprites-atlas.js: layer mips are uploaded ON DEMAND (the mip the CPU blitter's pickMip would use) with texSubImage2D, into one RGBA8 atlas
-// (+ an R8 plane for the rim data), shelf-packed with a texel gutter; atlas full -> flush (or grow, 1024 up to 2048) and re-plan. This file is the GL: program, buffers, draw.
+// (+ an R8 plane for the rim data), shelf-packed with a texel gutter; atlas full -> flush (or grow, 1024 up to 2048) and re-pack the same plan. This file is the GL: program, buffers, draw.
 //
 // SHADING (mirrors blitRect / setLayerColour): per fragment
 //   over    src.rgb = texel.rgb * m * cm * dk + texel.a * F * dk (+ rim);  src.a = texel.a * A * dk;   blend ONE, ONE_MINUS_SRC_ALPHA
@@ -23,7 +24,12 @@
 //
 // Filtering: the CPU picks a mip so texels are 1..1.2 px and samples nearest; here the same mip is sampled bilinearly (hardware), which is
 // smoother when a sprite is magnified — welcome — and identical in placement, size and colour.
-import { compileProgram, createTexture2D, GlError } from './gfx-gl-util.js'
+//
+// PROGRAM. Queued first (startProgram), so the driver compiles it while this pass builds its textures and the level's frames and while the other
+// passes are created; with KHR_parallel_shader_compile it is collected by the first render() that finds it finished, or on first use, otherwise at
+// the end of creation (the status query would block wherever it is asked; better at creation than as a hitch in a frame). A compile / link failure, a
+// missing uniform or a misbound attribute is a GlError wherever it is collected (renderer.js swaps to the CPU renderer either way).
+import { createTexture2D, GlError, startProgram, programReady, finishProgram } from './gfx-gl-util.js'
 import { mulberry32 } from './gfx-util.js'
 import { prewarmSprites } from './gfx-sprites.js'
 import { createAtlasManager, isLittleEndian } from './gfx-gl-sprites-atlas.js'
@@ -128,11 +134,23 @@ const UNIFORMS = ['uAtlas', 'uRim', 'uCols', 'uDith', 'uRes', 'uAtlasSize']
 export function createSpritePass(env) {
   const { gl, caps } = env
   if (!isLittleEndian()) throw new GlError('sprites', 'a big-endian device: the packed sprite texels would need swizzling')
-  const prog = compileProgram(gl, VS, FS, 'sprites')
-  for (const n of UNIFORMS) if (prog.u[n] === undefined) throw new GlError('sprites', `uniform ${n} is missing from the compiled sprite program`)
-  for (let i = 0; i < 9; i++) {
-    if (gl.getAttribLocation(prog.prog, 'aI' + i) !== i) throw new GlError('sprites', `attribute aI${i} is not bound to location ${i}`)
+  const parallel = gl.getExtension('KHR_parallel_shader_compile')
+  let pending = startProgram(gl, VS, FS, 'sprites'), prog = null
+  // the linked program, collected (and checked) the first time it is asked for
+  function program() {
+    if (prog !== null) return prog
+    if (pending === null) throw new GlError('sprites', 'the sprite program failed to build earlier')
+    const q = pending
+    pending = null
+    const p = finishProgram(q)
+    const bad = UNIFORMS.find((n) => p.u[n] === undefined)
+    if (bad !== undefined) { gl.deleteProgram(p.prog); throw new GlError('sprites', `uniform ${bad} is missing from the compiled sprite program`) }
+    for (let i = 0; i < 9; i++) {
+      if (gl.getAttribLocation(p.prog, 'aI' + i) !== i) { gl.deleteProgram(p.prog); throw new GlError('sprites', `attribute aI${i} is not bound to location ${i}`) }
+    }
+    return (prog = p)
   }
+  const dropPending = () => { if (pending !== null) { const q = pending; pending = null; gl.deleteShader(q.vs); gl.deleteShader(q.fs); gl.deleteProgram(q.prog) } }
 
   const want = (env.ropts && env.ropts.spriteAtlasSize) | 0            // a test knob: a fixed small atlas exercises the flush path
   const maxTex = (caps && caps.maxTexture) || ATLAS_MAX
@@ -171,7 +189,7 @@ export function createSpritePass(env) {
     atlasTex = a; rimTex = r; size = n
   }
   const atlas = createAtlasManager({ size, maxSize: sizeMax, upload, resize })
-  const planner = createSpritePlanner(atlas, { config: env.config })
+  const planner = createSpritePlanner(atlas)
 
   // the instance buffer: nine vec4 attributes, one instance per layer; re-pointed per run (WebGL2 has no base instance)
   const vao = gl.createVertexArray()
@@ -185,20 +203,22 @@ export function createSpritePass(env) {
     for (let i = 0; i < 9; i++) gl.vertexAttribPointer(i, 4, gl.FLOAT, false, STRIDE, first * STRIDE + i * 16)
   }
 
-  // build the level's frames now under a hard cap, as the CPU renderer does at creation (a cut drops the tail; the draw path builds the rest)
+  // build the level's frames now under a hard cap, as the CPU renderer does at creation (a cut drops the tail; it is queued and built in the background)
   try { prewarmSprites(env.config, PREWARM_MS) } catch { /* the sprites build lazily anyway */ }
 
   let warned = false, frameNo = 0
   function render(fs, entities, world) {
     frameNo++
+    if (pending !== null && parallel && programReady(pending, parallel)) program()      // collect it off the critical path once the driver is done
     let res = planner.plan(fs, entities)
     if (res.atlasFull) {
       atlas.recover(frameNo)                                     // the atlas is full: forget it (or, if it filled again soon, grow it) and re-upload what THIS frame needs
-      res = planner.plan(fs, entities)
-      if (res.atlasFull && atlas.canGrow) { atlas.recover(frameNo, true); res = planner.plan(fs, entities) }     // one frame alone did not fit: grow, once more
+      res = planner.rebuild()                                    // the same plan, packed again (nothing is decided twice)
+      if (res.atlasFull && atlas.canGrow) { atlas.recover(frameNo, true); res = planner.rebuild() }     // one frame alone did not fit: grow, once more
       if (res.atlasFull && !warned && typeof console !== 'undefined') { warned = true; console.warn('[gfx-gl-sprites] atlas too small for one frame; some sprites are skipped') }
     }
     if (res.count === 0) return res.plates
+    const p = program()
     const need = res.count * STRIDE
     gl.bindVertexArray(vao)
     gl.bindBuffer(gl.ARRAY_BUFFER, buf)
@@ -210,12 +230,12 @@ export function createSpritePass(env) {
     gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.SCISSOR_TEST)
     gl.colorMask(true, true, true, true)
     gl.enable(gl.BLEND)
-    gl.useProgram(prog.prog)
+    gl.useProgram(p.prog)
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, atlasTex)
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, rimTex)
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, world.colsTex)
     gl.activeTexture(gl.TEXTURE3); gl.bindTexture(gl.TEXTURE_2D, dithTex)
-    const u = prog.u
+    const u = p.u
     gl.uniform1i(u.uAtlas, 0); gl.uniform1i(u.uRim, 1); gl.uniform1i(u.uCols, 2); gl.uniform1i(u.uDith, 3)
     gl.uniform2f(u.uRes, world.W, world.H)
     gl.uniform2f(u.uAtlasSize, size, size)
@@ -238,10 +258,13 @@ export function createSpritePass(env) {
   }
 
   function dispose() {
-    gl.deleteProgram(prog.prog)
+    dropPending()
+    if (prog !== null) gl.deleteProgram(prog.prog)
     gl.deleteTexture(atlasTex); gl.deleteTexture(rimTex); gl.deleteTexture(dithTex)
     gl.deleteBuffer(buf); gl.deleteVertexArray(vao)
   }
-  return { render, dispose, get stats() { return { ...atlas.st, fill: atlas.packer.fill } } }
+  // collected here unless the driver compiles in the background and is not done yet (then render() collects it); a failure frees this pass's GL objects
+  if (!parallel || programReady(pending, parallel)) { try { program() } catch (e) { dispose(); throw e } }
+  return { render, dispose, get stats() { return { ...atlas.st, fill: atlas.packer.fill } }, get programState() { return prog !== null ? 'ready' : pending !== null ? 'compiling' : 'none' } }
 }
 

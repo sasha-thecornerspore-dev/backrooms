@@ -26,7 +26,9 @@
 // (a fraction of a texel) do not survive fp16. Too many tile layers for MAX_ARRAY_TEXTURE_LAYERS, a frame wider than MAX_TEXTURE_SIZE, a missing
 // uniform, a shader that does not compile: all GlError at creation (or at the first frame that needs the variant).
 import { castRay } from './raycaster.js'
-import { hexToRgb } from './gfx-util.js'
+import { rayAsk, rayAskDone } from './gfx-world.js'
+import { hexToRgb, levelKey } from './gfx-util.js'
+import { resolvePalette } from './gfx-textures.js'
 import { FLASH_PITCH, FLASH_SX, FLASH_SY } from './gfx-light.js'
 import { cloudStrip, skyConfigFor } from './gfx-sky.js'
 import {
@@ -81,7 +83,10 @@ export function createWorldPass(env) {
   const maxTex = (caps && caps.maxTexture) || 2048
   const maxLayers = (caps && caps.maxArrayLayers) || 256
   const hasSky = !!config.sky
-  const fogRgb = hexToRgb(config.palette.fog)
+  // The fog colour, resolved exactly as gfx-cpu.js and gfx-gl.js resolve it (a palette whose fog hex is missing or invalid, e.g. a wish-drifted one,
+  // fogs toward the LEVEL's stock fog from levels.js, not a neutral grey), so the walls, floor and ceiling fog toward the colour the sprites and
+  // the post pass use. render() prefers the frame's own fs.fogRgb (the value every other stage of the frame reads) and falls back to this.
+  const fogRgb = hexToRgb(resolvePalette(config.palette, levelKey(config)).fog)
 
   const problem = floatTextureProblem(gl)
   if (problem) throw new GlError('caps', `the GPU world pass needs float textures (${problem}); the CPU renderer is used instead`)
@@ -201,6 +206,7 @@ export function createWorldPass(env) {
     resize(fs.W, fs.H)
     if (parallel) for (const [key, q] of [...queued]) if (programReady(q, parallel)) program(key === 'lit')   // collect a variant the driver has finished, off the critical path
     const { player, fov: FOV, hf: HF, fog, quality: q } = fs
+    const fogC = Array.isArray(fs.fogRgb) && fs.fogRgb.length >= 3 ? fs.fogRgb : fogRgb
     const px = player.x, py = player.y, angle = player.angle
     const ld = q ? q.lightDetail | 0 : 0
 
@@ -214,9 +220,10 @@ export function createWorldPass(env) {
     // ── columns: one ray each ──
     const rayMax = Math.min(96, Math.ceil(fog) + 3)
     const wall0 = plan.walls['0'].base
+    const ask = rayAsk(isWallFn, rayMax, px, py)    // (a frame's rays ask about the same few cells again and again: see gfx-world.js, memoSafe)
     for (let col = 0; col < W; col++) {
       const a = angle - HF + (col / W) * FOV
-      const hit = castRay(px, py, a, isWallFn, rayMax)
+      const hit = castRay(px, py, a, ask, rayMax)
       const corr = hit.dist * Math.cos(a - angle)
       zb[col] = corr
       const far = hit.dist >= rayMax
@@ -225,6 +232,7 @@ export function createWorldPass(env) {
       o = (W + col) * 4
       cols[o] = lit ? wallPoolShare(F, hit, px, py) : 0; cols[o + 1] = hit.dist; cols[o + 2] = corr; cols[o + 3] = wallRows(corr, H, fs.HH)
     }
+    rayAskDone()
     upload2D(UNIT.cols, colsTex, W, COL_ROWS, gl.RGBA, gl.FLOAT, cols)
 
     // ── the small tables ──
@@ -268,7 +276,7 @@ export function createWorldPass(env) {
     if (lit) {
       const single = F.single, rc = light.recipe
       const fk = F.fogGain * F.gdip
-      gl.uniform3f(u.uFogL, fogRgb[0] / 255 * fk, fogRgb[1] / 255 * fk, fogRgb[2] / 255 * fk)
+      gl.uniform3f(u.uFogL, fogC[0] / 255 * fk, fogC[1] / 255 * fk, fogC[2] / 255 * fk)
       gl.uniform1f(u.uGdip, F.gdip)
       if (single) {
         gl.uniform3f(u.uAmbF, F.tR * F.ambient, F.tG * F.ambient, F.tB * F.ambient); gl.uniform3f(u.uAmbC, F.tR * F.ceilAmbient, F.tG * F.ceilAmbient, F.tB * F.ceilAmbient)
@@ -300,7 +308,7 @@ export function createWorldPass(env) {
       bindTex(UNIT.pool, gl.TEXTURE_2D, poolTex); bindTex(UNIT.wallTab, gl.TEXTURE_2D, wallTab); bindTex(UNIT.cells, gl.TEXTURE_2D, cellsTex)
       bindTex(UNIT.lm, gl.TEXTURE_2D, lmTex); bindTex(UNIT.lmAny, gl.TEXTURE_2D, lmAnyTex); bindTex(UNIT.lev, gl.TEXTURE_2D, levTex)
     } else {
-      gl.uniform3f(u.uFogL, fogRgb[0] / 255 * flicker, fogRgb[1] / 255 * flicker, fogRgb[2] / 255 * flicker)
+      gl.uniform3f(u.uFogL, fogC[0] / 255 * flicker, fogC[1] / 255 * flicker, fogC[2] / 255 * flicker)
       gl.uniform1f(u.uFlicker, flicker)
     }
     if (hasSky) {

@@ -275,7 +275,9 @@ export async function startAttract(canvas, opts = {}) {
       player.x = cam.x; player.y = cam.y; player.angle = cam.angle; player.bobOffset = cam.bobOffset; player.moving = cam.moving
       const pcx = Math.floor(cam.x / CHUNK_SIZE), pcy = Math.floor(cam.y / CHUNK_SIZE)
       const t1 = performance.now()
-      renderer.render(player, (wx, wy) => cache.isWall(wx, wy, pcx, pcy), calm ? 1 : flickerAt(t), [], 1, {}, { t, dt })
+      const wallFn = (wx, wy) => cache.isWall(wx, wy, pcx, pcy)
+      wallFn.pcx = pcx; wallFn.pcy = pcy          // the chunk handed to the cache: lets the rays' isWall memo on (gfx-world.js memoSafe; default evict radius)
+      renderer.render(player, wallFn, calm ? 1 : flickerAt(t), [], 1, {}, { t, dt })
       const ms = performance.now() - t1
       session.stats.frames++
       session.stats.avgRenderMs += (ms - session.stats.avgRenderMs) * 0.1

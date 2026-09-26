@@ -4,8 +4,9 @@
 // No DOM at module scope: import-safe in Node (canvases are only created inside the functions that draw).
 //
 // `fs` is the frame state built by gfx-cpu.js. `post` is the mutable per-renderer state that gfx-cpu.js
-// owns and hands back every frame: { pcfg, count, particles, vignette, grainPattern, grainPhase } — everything else this
-// module needs (atmosphere, bloom buffers, particle sprites, tape scratch, …) is allocated lazily inside it.
+// owns and hands back every frame: { pcfg, count, particles (+ fieldW/fieldH: the size they were laid out for), grainPattern, grainPhase } —
+// everything else this module needs (the legacy vignette, atmosphere, bloom buffers, particle sprites, tape scratch, …) is allocated lazily
+// inside it, and a canvas resize REUSES those canvases and rescales the particle field (fitParticles) instead of re-seeding it.
 //
 // ── two looks, one pipeline ──────────────────────────────────────────────────────────────────────────────────────
 // `legacy` (fs.quality.lightDetail === 0 — the tier `legacy`, the default until Track D flips it) is EXACTLY the
@@ -23,6 +24,9 @@
 //   light model expresses flicker spatially] → particles → flashlight/glow → nameplates → crosshair.
 // Cost (software raster, 1280x720, noisy machine): the modern medium post is ~2 ms CHEAPER than legacy (grain as tile blits instead of a
 // pattern fill saves more than the grade costs); bloom (tier high) adds ~2 ms. See the report for the measured numbers.
+// Byte-identical savings (track HP): the bloom's SCREEN composite is clipped to where the halo is not transparent (haloRect: usually a small
+// part of the frame; 5-6 ms -> 0.2-3.5 ms at 1280x720 high), the flashlight / glowstick gradients fill only their circle's box (lightBox, -16..20%),
+// and the bloom's CPU field reuses per-size column tables and an unclamped blur interior (-12..20% of bloomField).
 import { hexToRgb, levelKey, mulberry32, hash2 } from './gfx-util.js'
 import { cloudStrip } from './gfx-sky.js'
 
@@ -171,7 +175,15 @@ export function blur5x3(P, tmp, w, h) {
   const s3 = w * 3
   for (let y = 0; y < h; y++) {
     const row = y * s3
+    // the interior columns need no clamping: the same sums, straight offsets (-6 -3 0 +3 +6); the two columns at each edge clamp (below)
+    const end = row + (w - 2) * 3
+    for (let i = row + 6; i < end; i += 3) {
+      tmp[i] = (P[i - 6] + P[i + 6] + 4 * (P[i - 3] + P[i + 3]) + 6 * P[i]) * 0.0625
+      tmp[i + 1] = (P[i - 5] + P[i + 7] + 4 * (P[i - 2] + P[i + 4]) + 6 * P[i + 1]) * 0.0625
+      tmp[i + 2] = (P[i - 4] + P[i + 8] + 4 * (P[i - 1] + P[i + 5]) + 6 * P[i + 2]) * 0.0625
+    }
     for (let x = 0; x < w; x++) {
+      if (x === 2 && w > 4) x = w - 2                          // (the interior is done)
       const i = row + x * 3
       const a = row + (x < 2 ? 0 : x - 2) * 3, b = row + (x < 1 ? 0 : x - 1) * 3, d = row + (x > w - 2 ? w - 1 : x + 1) * 3, e = row + (x > w - 3 ? w - 1 : x + 2) * 3
       tmp[i] = (P[a] + P[e] + 4 * (P[b] + P[d]) + 6 * P[i]) * 0.0625
@@ -224,9 +236,13 @@ export function createPostState(config) {
   return { pcfg, count, particles: [], vignette: null, grainPattern: null, grainPhase: 0, atmos: resolveAtmos(config), fogHex: config.palette && config.palette.fog }
 }
 
+// Seed the particle field for a winW x winH canvas. Called ONCE per renderer (fitParticles): a later resize rescales the field instead, so
+// the motes never pop. The positions are canvas pixels OF THE SIZE RECORDED in post.fieldW / fieldH (so the motion code works in plain pixels
+// and the initial field is byte for byte what it always was).
 export function seedParticles(post, winW, winH) {
   const particles = post.particles
   particles.length = 0
+  post.fieldW = winW; post.fieldH = winH; post.seeded = true
   // the extra per-particle fields come from their own PRNG so the legacy positions (Math.random, drawn in the old order)
   // are unchanged
   const rnd = mulberry32(0x5eed + winW * 31 + winH)
@@ -240,11 +256,69 @@ export function seedParticles(post, winW, winH) {
   post.rng = mulberry32(0xd057 + winW * 17 + winH * 3)   // respawn positions for the modern particles
 }
 
-const canvasFactory = () => (typeof document !== 'undefined' ? (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c } : null)
+// Keep the particle field for a W x H canvas: the first call seeds it (seedParticles, exactly as before); every later size change only RESCALES
+// it — each mote keeps its place as a fraction of the frame (x / oldW * newW), its depth, phase and jitter, and the respawn stream carries on — so a
+// window resize, a rotation or the GPU validation's small frame never re-rolls the field (a visible pop of every mote). No Math.random after the
+// seed. Returns true when it seeded. Both backends call it (gfx-cpu.js on a canvas resize, gfx-gl-post.js per frame).
+// H4-1, degenerate sizes: a canvas below FIELD_MIN on either side (0 x 0, 1 x 1, a window shrunk to its title bar) is not a size to fit to: the
+// field stays at its last real size (no x * 0 / 0 = NaN, no squash into one edge band) and the particle steps skip such a frame (particleFieldLive),
+// so when the canvas grows back the motes are rescaled from where they were. A field SEEDED at a degenerate size (the first frame was tiny) has
+// no layout to keep: the first real size re-lays its positions from the respawn stream (depth, phase and jitter kept). The first call is still
+// exactly seedParticles, so every normal-size render is unchanged.
+export const FIELD_MIN = 16
+export function particleFieldLive(OW, OH) { return OW >= FIELD_MIN && OH >= FIELD_MIN }
+export function fitParticles(post, W, H) {
+  if (!post.seeded) { seedParticles(post, W, H); return true }
+  if (post.fieldW === W && post.fieldH === H) return false
+  if (!particleFieldLive(W, H)) return false
+  if (!particleFieldLive(post.fieldW, post.fieldH)) {
+    const rng = post.rng || (post.rng = mulberry32(0xd057))
+    for (const p of post.particles) { p.x = rng() * W; p.y = rng() * H }
+  } else {
+    const sx = W / post.fieldW, sy = H / post.fieldH
+    for (const p of post.particles) { p.x *= sx; p.y *= sy }
+  }
+  post.fieldW = W; post.fieldH = H
+  return false
+}
 
-// precompute the vignette once (full-res, drawn over the upscaled world) — the legacy one
-export function buildVignette(W, H) {
-  const vignette = document.createElement('canvas')
+// Give every canvas the post state owns back to the browser NOW (a zero-size backing store) instead of at the next GC: a level change drops the
+// whole renderer, and these are a full-resolution vignette, the low-res veil, the bloom chain, the tape scratch and a few sprites. The state is dead
+// afterwards (gfx-cpu.js dispose).
+export function releasePost(post) {
+  const zap = (c) => { if (c && typeof c.width === 'number') { c.width = 0; c.height = 0 } }
+  zap(post.vignette); zap(post.veil); zap(post.grainTile)
+  if (post.bloom) for (const k of ['c1', 'c2', 'c3', 'cOut', 'up1', 'up2']) zap(post.bloom[k])
+  if (post.tape) { zap(post.tape.cr); zap(post.tape.cb); zap(post.tape.half) }
+  if (post.spr) { zap(post.spr.tex); zap(post.spr.glowTex) }
+  if (post.flash) zap(post.flash.canvas)
+  post.vignette = post.veil = post.grainTile = post.bloom = post.tape = post.spr = post.flash = post.grainPattern = null
+  post.veilW = post.veilH = 0
+}
+
+const canvasFactory = () => (typeof document !== 'undefined' ? (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c } : null)
+// Size an offscreen canvas that is being reused: only a real change touches it (assigning width/height, even the same value, clears the canvas
+// and resets its context state). Returns true when it changed.
+function fitCanvas(c, w, h) {
+  if (c.width === w && c.height === h) return false
+  c.width = w; c.height = h
+  return true
+}
+
+// The legacy tier's full-resolution vignette, built LAZILY by the legacy path the first time it draws (the modern tiers never need it: they draw
+// their vignette inside the low-res veil) and rebuilt only when the canvas size really changed (its canvas is reused). Outside a browser
+// (unit tests) whatever post.vignette already holds is kept.
+export function ensureLegacyVignette(post, W, H) {
+  const v = post.vignette
+  if (v && v.width === W && v.height === H) return v
+  if (typeof document === 'undefined') return v
+  post.vignette = buildVignette(W, H, v)
+  return post.vignette
+}
+
+// precompute the vignette once (full-res, drawn over the upscaled world) — the legacy one. `reuse` = an old vignette canvas to redraw into.
+export function buildVignette(W, H, reuse = null) {
+  const vignette = reuse || document.createElement('canvas')
   vignette.width = W; vignette.height = H
   const vg = vignette.getContext('2d')
   const grad = vg.createRadialGradient(W / 2, H / 2, H * 0.12, W / 2, H / 2, H * 0.85)
@@ -264,8 +338,10 @@ export function vignetteAlpha(r, depth, from) { return depth * Math.pow(smoothst
 // percent toward the level's veil colour, which lifts the blacks toward that hue — and, being a blend, can never brighten a highlight.
 export const VEIL_A = 0.05
 export function veilColors(grade) { return { V: grade.lift.map((v) => Math.min(255, v / VEIL_A)), D: grade.lift.map((v) => v * 0.4) } }
-export function buildVeil(mk, W, H, grade, vig) {
-  const c = mk(W, H)
+// `reuse` = the previous veil canvas: redrawn in place at the new size instead of allocating another one
+export function buildVeil(mk, W, H, grade, vig, reuse = null) {
+  const c = reuse || mk(W, H)
+  if (reuse) { c.width = W; c.height = H }                     // (always assigned: clears it, and the gradient below covers every pixel)
   const g = c.getContext('2d')
   const { V, D } = veilColors(grade)
   const R = 0.5 * Math.hypot(W, H)
@@ -345,11 +421,17 @@ export function drawGrade(wctx, fs, post) {
   }
   const mk = canvasFactory()
   if (!mk) return
-  if (post.veilW !== W || post.veilH !== H) { post.veilW = W; post.veilH = H; post.veil = buildVeil(mk, W, H, A.grade, A.vig) }   // (the atmosphere is fixed per renderer: only the size can change)
+  if (post.veilW !== W || post.veilH !== H) {                   // (the atmosphere is fixed per renderer: only the size can change; the canvas is reused)
+    const old = post.veil
+    post.veilW = W; post.veilH = H; post.veil = buildVeil(mk, W, H, A.grade, A.vig, old)
+    if (post.veil !== old) { const c = post.veil; onContextLoss(c, () => { if (post.veil === c) post.veilW = 0 }) }   // H4-2: a lost / restored context cleared it: redraw
+  }
   wctx.drawImage(post.veil, 0, 0)
 }
 
 // ══ bloom ════════════════════════════════════════════════════════════════════════════════════════════════════════
+// The bloom chain for a RW x RH frame. A new frame size (a resize, a tier or adaptive-scale change) REUSES the six canvases — each is touched only
+// when its own size changed (fitCanvas) — and reallocates only the planes whose size changed; the halo is invalidated (have = false).
 function ensureBloom(post, RW, RH, mk) {
   let bl = post.bloom
   if (bl && bl.RW === RW && bl.RH === RH) return bl
@@ -357,20 +439,34 @@ function ensureBloom(post, RW, RH, mk) {
   const w2 = Math.max(2, w1 >> 1), h2 = Math.max(2, h1 >> 1)
   const BW = Math.max(2, w2 >> 1), BH = Math.max(2, h2 >> 1)
   const n = BW * BH
-  const cOut = mk(BW, BH)
-  const gOut = cOut.getContext('2d')
   const wW = Math.max(2, BW >> 2), wH = Math.max(2, BH >> 2)
-  bl = post.bloom = {
-    RW, RH, BW, BH, wW, wH, have: false, t: 0, ang: 0,
-    c1: mk(w1, h1), c2: mk(w2, h2), c3: mk(BW, BH), cOut, gOut, imgOut: gOut.createImageData(BW, BH),
-    up1: mk(BW * 2, BH * 2), up2: mk(BW * 4, BH * 4),
-    P: new Float32Array(n * 3), tmp: new Float32Array(n * 3), luma: new Uint8Array(n),
-    W: new Float32Array(wW * wH * 3), wtmp: new Float32Array(wW * wH * 3),
+  if (!bl) {
+    const cOut = mk(BW, BH)
+    bl = post.bloom = {
+      RW, RH, BW, BH, wW, wH, have: false, t: 0, ang: 0,
+      c1: mk(w1, h1), c2: mk(w2, h2), c3: mk(BW, BH), cOut, gOut: cOut.getContext('2d'), imgOut: null,
+      up1: mk(BW * 2, BH * 2), up2: mk(BW * 4, BH * 4),
+      P: null, tmp: null, luma: null, W: null, wtmp: null, L: null, M: null, Mt: null,
+    }
+    // g3 is the one context we getImageData from every recompute: tell the browser so it keeps that tiny canvas in CPU memory (a GPU-backed
+    // one would flush the pipeline 25x a second). Nothing else about it changes.
+    bl.g1 = bl.c1.getContext('2d'); bl.g2 = bl.c2.getContext('2d'); bl.g3 = bl.c3.getContext('2d', { willReadFrequently: true })
+    bl.gu1 = bl.up1.getContext('2d'); bl.gu2 = bl.up2.getContext('2d')
+  } else {
+    bl.RW = RW; bl.RH = RH; bl.have = false; bl.t = 0; bl.ang = 0
+    fitCanvas(bl.c1, w1, h1); fitCanvas(bl.c2, w2, h2); fitCanvas(bl.c3, BW, BH); fitCanvas(bl.cOut, BW, BH)
+    fitCanvas(bl.up1, BW * 2, BH * 2); fitCanvas(bl.up2, BW * 4, BH * 4)
   }
-  // g3 is the one context we getImageData from every recompute: tell the browser so it keeps that tiny canvas in CPU memory (a GPU-backed
-  // one would flush the pipeline 25x a second). Nothing else about it changes.
-  bl.g1 = bl.c1.getContext('2d'); bl.g2 = bl.c2.getContext('2d'); bl.g3 = bl.c3.getContext('2d', { willReadFrequently: true })
-  bl.gu1 = bl.up1.getContext('2d'); bl.gu2 = bl.up2.getContext('2d')
+  if (!bl.imgOut || bl.BW !== BW || bl.BH !== BH) {
+    bl.BW = BW; bl.BH = BH
+    bl.imgOut = bl.gOut.createImageData(BW, BH)
+    bl.P = new Float32Array(n * 3); bl.tmp = new Float32Array(n * 3); bl.luma = new Uint8Array(n); bl.L = null
+  }
+  if (!bl.W || bl.wW !== wW || bl.wH !== wH) {
+    bl.wW = wW; bl.wH = wH
+    bl.W = new Float32Array(wW * wH * 3); bl.wtmp = new Float32Array(wW * wH * 3); bl.M = null; bl.Mt = null
+  }
+  // (a canvas whose size changed had its context state reset: set it again, on all of them - it is idempotent)
   bl.g1.imageSmoothingEnabled = bl.g2.imageSmoothingEnabled = bl.g3.imageSmoothingEnabled = bl.gu1.imageSmoothingEnabled = bl.gu2.imageSmoothingEnabled = true
   return bl
 }
@@ -387,6 +483,17 @@ export function bloomField(bl, px, A) {
   const thr = A.thr, knee = A.knee, tm = A.tintMix, T = A.tint
   const inv255 = 1 / 255
   const sx = BW / wW, sy = BH / wH
+  // the grid column each tiny column reads bilinearly (x0, x1 as plane offsets, the weight tx and 1 - tx): the same numbers the loops below used to
+  // recompute per pixel, computed once per size
+  let C = bl.cols
+  if (!C || C.BW !== BW || C.wW !== wW) {
+    C = bl.cols = { BW, wW, x0: new Int32Array(BW), x1: new Int32Array(BW), tx: new Float64Array(BW), omtx: new Float64Array(BW) }
+    for (let x = 0; x < BW; x++) {
+      const fx = Math.min(wW - 1, Math.max(0, (x + 0.5) / sx - 0.5)), x0 = fx | 0, x1 = Math.min(wW - 1, x0 + 1), tx = fx - x0
+      C.x0[x] = x0 * 3; C.x1[x] = x1 * 3; C.tx[x] = tx; C.omtx[x] = 1 - tx
+    }
+  }
+  const cx0 = C.x0, cx1 = C.x1, ctx_ = C.tx, comtx = C.omtx
   // pass 1: each tiny pixel's emitter luma, and the frame's LOCAL AVERAGE brightness (a coarse box grid, blurred wide)
   for (let i = 0, n = BW * BH; i < n; i++) {
     const l = emitterLuma(px[i * 4] * inv255, px[i * 4 + 1] * inv255, px[i * 4 + 2] * inv255)
@@ -409,12 +516,13 @@ export function bloomField(bl, px, A) {
   let any = 0
   for (let y = 0; y < BH; y++) {
     const fy = Math.min(wH - 1, Math.max(0, (y + 0.5) / sy - 0.5)), y0 = fy | 0, y1 = Math.min(wH - 1, y0 + 1), ty = fy - y0
+    const r0 = y0 * wW * 3, r1 = y1 * wW * 3, omty = 1 - ty
     for (let x = 0; x < BW; x++) {
       const i = y * BW + x, o = i * 3, l = L[i]
       let w = brightWeight(l, thr, knee)
       if (w > 0) {
-        const fx = Math.min(wW - 1, Math.max(0, (x + 0.5) / sx - 0.5)), x0 = fx | 0, x1 = Math.min(wW - 1, x0 + 1), tx = fx - x0
-        const m = (M[(y0 * wW + x0) * 3] * (1 - tx) + M[(y0 * wW + x1) * 3] * tx) * (1 - ty) + (M[(y1 * wW + x0) * 3] * (1 - tx) + M[(y1 * wW + x1) * 3] * tx) * ty
+        const x0 = cx0[x], x1 = cx1[x], tx = ctx_[x], omtx = comtx[x]
+        const m = (M[r0 + x0] * omtx + M[r0 + x1] * tx) * omty + (M[r1 + x0] * omtx + M[r1 + x1] * tx) * ty
         w *= smoothstep(BLOOM_CONTRAST_LO, BLOOM_CONTRAST_HI, l - m)
       }
       if (w > 0) {
@@ -441,12 +549,14 @@ export function bloomField(bl, px, A) {
   blur5x3(P, tmp, BW, BH)
   const out = bl.imgOut.data
   const gA = A.gain, gW = A.gain * A.wide
+  let bx0 = BW, by0 = BH, bx1 = -1, by1 = -1                        // the halo's support: the tiny pixels it does not leave transparent
   for (let y = 0; y < BH; y++) {
     const fy = Math.min(wH - 1, Math.max(0, (y + 0.5) / sy - 0.5)), y0 = fy | 0, y1 = Math.min(wH - 1, y0 + 1), ty = fy - y0
+    const r0 = y0 * wW * 3, r1 = y1 * wW * 3, omty = 1 - ty
     for (let x = 0; x < BW; x++) {
-      const fx = Math.min(wW - 1, Math.max(0, (x + 0.5) / sx - 0.5)), x0 = fx | 0, x1 = Math.min(wW - 1, x0 + 1), tx = fx - x0
-      const a = (y0 * wW + x0) * 3, b = (y0 * wW + x1) * 3, c = (y1 * wW + x0) * 3, d = (y1 * wW + x1) * 3
-      const w00 = (1 - tx) * (1 - ty), w10 = tx * (1 - ty), w01 = (1 - tx) * ty, w11 = tx * ty
+      const x0 = cx0[x], x1 = cx1[x], tx = ctx_[x], omtx = comtx[x]
+      const a = r0 + x0, b = r0 + x1, c = r1 + x0, d = r1 + x1
+      const w00 = omtx * omty, w10 = tx * omty, w01 = omtx * ty, w11 = tx * ty
       const o = (y * BW + x) * 3, q = (y * BW + x) * 4
       const lr = P[o] * gA + (WP[a] * w00 + WP[b] * w10 + WP[c] * w01 + WP[d] * w11) * gW
       const lg = P[o + 1] * gA + (WP[a + 1] * w00 + WP[b + 1] * w10 + WP[c + 1] * w01 + WP[d + 1] * w11) * gW
@@ -457,10 +567,31 @@ export function bloomField(bl, px, A) {
       const k = 255 / I
       out[q] = lr * k > 255 ? 255 : lr * k; out[q + 1] = lg * k > 255 ? 255 : lg * k; out[q + 2] = lb * k > 255 ? 255 : lb * k
       out[q + 3] = I >= 1 ? 255 : I * 255
+      if (x < bx0) bx0 = x
+      if (x > bx1) bx1 = x
+      if (y < by0) by0 = y
+      by1 = y
     }
   }
+  // (inclusive, tiny pixels; null = an all-transparent halo)
+  const box = bl.box || (bl.box = [0, 0, 0, 0])
+  if (bx1 < 0) bl.boxOn = false
+  else { box[0] = bx0; box[1] = by0; box[2] = bx1; box[3] = by1; bl.boxOn = true }
   return true
 }
+
+// Where the halo can touch the RW x RH frame when drawn shifted by dx: its support in the tiny grid, grown by what the two smoothed doublings and
+// the final smoothed scale can spread it (under 2 tiny pixels at the far side), in frame pixels, clamped. A pixel outside it gets a fully
+// transparent halo, and SCREEN with transparent black leaves a pixel exactly as it was, so the composite only needs this rectangle.
+// -> [x, y, w, h] (w or h 0: nothing to draw)
+export function haloRect(box, BW, BH, RW, RH, dx, out = [0, 0, 0, 0]) {
+  const kx = RW / BW, ky = RH / BH
+  const x0 = Math.max(0, Math.floor((box[0] - 1) * kx + dx) - 2), x1 = Math.min(RW, Math.ceil((box[2] + 2) * kx + dx) + 2)
+  const y0 = Math.max(0, Math.floor((box[1] - 1) * ky) - 2), y1 = Math.min(RH, Math.ceil((box[3] + 2) * ky) + 2)
+  out[0] = x0; out[1] = y0; out[2] = Math.max(0, x1 - x0); out[3] = Math.max(0, y1 - y0)
+  return out
+}
+const HALO_RECT = [0, 0, 0, 0]
 
 // A low-resolution bright-pass composite. The finished low-res frame (world + sprites) is box-downsampled 8x by three GPU-friendly
 // halving blits, ONE tiny read-back (~8k pixels) feeds a CPU bright pass + blurs (a tight halo and a wide veil), and the halo is
@@ -497,7 +628,12 @@ export function drawBloom(wctx, world, fs, post) {
     bl.have = true; bl.t = fs.t; bl.ang = ang
   } else post.bloomLive = true
   const dx = -wrapPi(ang - bl.ang) * (RW / (fs.fov || 1.3))
+  if (!bl.boxOn) return                                           // an all-transparent halo: the composite would change nothing
+  const hr = haloRect(bl.box, bl.BW, bl.BH, RW, RH, dx, HALO_RECT)
+  if (!(hr[2] > 0 && hr[3] > 0)) return
+  const clip = hr[2] < RW || hr[3] < RH                           // (the whole frame: no clip needed)
   wctx.save()
+  if (clip) { wctx.beginPath(); wctx.rect(hr[0], hr[1], hr[2], hr[3]); wctx.clip() }
   wctx.imageSmoothingEnabled = true
   // SCREEN: the halo is light, but light on an already-bright pixel must not clip it flat. Plain add saturated a lit panel / wall to white
   // and lost its texture; screen (1-(1-frame)(1-halo)) brightens the dark surroundings almost like an add and leaves a bright pixel's
@@ -520,9 +656,12 @@ function drawTapeFringe(wctx, world, fs, post) {
   const RW = fs.W, RH = fs.H, d = post.atmos.tape.fringe
   if (d <= 0) return
   let tp = post.tape
-  if (!tp || tp.w !== RW || tp.h !== RH) {
+  if (!tp) {
     tp = post.tape = { w: RW, h: RH, cr: mk(RW, RH), cb: mk(RW, RH), half: mk(Math.max(2, RW >> 1), Math.max(2, RH >> 1)) }
     tp.gr = tp.cr.getContext('2d'); tp.gb = tp.cb.getContext('2d'); tp.gh = tp.half.getContext('2d')
+  } else if (tp.w !== RW || tp.h !== RH) {                         // a new frame size: the same three canvases, resized
+    tp.w = RW; tp.h = RH
+    fitCanvas(tp.cr, RW, RH); fitCanvas(tp.cb, RW, RH); fitCanvas(tp.half, Math.max(2, RW >> 1), Math.max(2, RH >> 1))
   }
   // red-only and blue-only copies of the frame
   tp.gr.globalCompositeOperation = 'source-over'; tp.gr.drawImage(world, 0, 0)
@@ -570,7 +709,8 @@ export function upscale(ctx, world, fs, post) {
 // dip: a full-window black overlay on top of a world that is ALREADY dimmed by the same scalar — i.e. flicker applied twice. When a
 // light model is live it expresses flicker spatially (per panel), so the overlay is skipped entirely.
 export function drawVignette(ctx, fs, post) {
-  if (post.vignette) ctx.drawImage(post.vignette, 0, 0)
+  const vignette = ensureLegacyVignette(post, fs.OW, fs.OH)
+  if (vignette) ctx.drawImage(vignette, 0, 0)
   drawFlickerOverlay(ctx, fs)
 }
 // (the modern tiers draw their vignette inside the low-res veil — see drawGrade — and only need this half)
@@ -632,6 +772,7 @@ function buildSprite(mk, kind, rgb) {
 }
 
 function ensureSprites(post, fs, mk) {
+  if (post.spr) return post.spr                                    // (its inputs — pcfg, fogHex, atmos — are fixed for the life of the post state)
   const P = post.pcfg, A = post.atmos.part
   const fogHex = post.fogHex
   const fog = fogHex ? hexToRgb(fogHex) : [200, 200, 190]
@@ -665,6 +806,19 @@ export function airLight(x, y, OW, OH, A, lights, frameLuma, out) {
   out.L = L; out.g = g
   return out
 }
+
+// V9: rising steam near the camera. A wisp grows with its depth z (near = big) and its alpha with the light of the air, so a near wisp in a
+// flashlight beam — at the tiers that cannot measure the frame's brightness (low / medium: no bloom pass, so nothing dims the air light
+// in a dark tunnel) — became a large, fairly opaque grey oval that read as a smudge on the lens. Near wisps are now capped: the radius at a
+// fraction of the canvas height, and the alpha by a ceiling that FALLS with depth (a near wisp is out of focus: big, faint haze, never a
+// defined blob). Far wisps keep their look. Both backends call this (gfx-gl-post-particles.js stepModern).
+export const STEAM_NEAR = { rMax: 0.05, aFar: 0.24, aNear: 0.12, z0: 0.5 }
+export function steamLimits(z, OH, out) {
+  out.r = STEAM_NEAR.rMax * OH
+  out.a = mix(STEAM_NEAR.aFar, STEAM_NEAR.aNear, smoothstep(STEAM_NEAR.z0, 1, z))
+  return out
+}
+const STEAM_LIM = { r: 0, a: 0 }
 
 const LIT = { L: 0, g: 0 }
 // `sc` scales the drawing (positions and sprite sizes; the simulation stays in visible-canvas pixels): 1 draws onto the visible canvas, W/OW
@@ -747,6 +901,9 @@ export function drawParticlesModern(ctx, fs, post, sc = 1) {
       const fade = smoothstep(-0.02, 0.12, u) * Math.pow(Math.max(0, 1 - u), 0.7)
       alpha = 0.27 * (0.5 + 0.5 * z) * fade * Math.min(1.6, lit.L * 1.1) * A.alpha * p.a
       r = baseSize * (3.4 + 4.4 * z) * (1 + 0.9 * u) * p.s
+      const lim = steamLimits(z, OH, STEAM_LIM)                     // V9: no lens smudges
+      if (r > lim.r) r = lim.r
+      if (alpha > lim.a) alpha = lim.a
     } else {
       // dust: motes that are only there where the air is lit; the very near ones go out of focus (big, faint)
       const bokeh = z > 0.92
@@ -769,7 +926,8 @@ export function drawParticlesModern(ctx, fs, post, sc = 1) {
 
 export function drawParticles(ctx, fs, post, sc = 1) {
   const { opts } = fs
-  if (post.count && opts.particles !== false && (!fs.quality || fs.quality.particles !== false)) {
+  // (H4-1: a degenerate canvas neither steps nor draws the field: it stays where it was for when the canvas grows back)
+  if (post.count && opts.particles !== false && (!fs.quality || fs.quality.particles !== false) && particleFieldLive(fs.OW, fs.OH)) {
     if (modernPost(fs)) drawParticlesModern(ctx, fs, post, sc)
     else drawParticlesLegacy(ctx, fs, post)
   }
@@ -780,15 +938,73 @@ const NOT_HANDLED = Object.freeze({ flashlight: false, glow: false })
 // ── the player's own light: flashlight cone + a glowstick's colored wash ──
 // (fs.handled.flashlight / .glow are set by the world pass when it already lit the surfaces with that light
 // per pixel — then the screen-space gradient must not be drawn on top of it a second time.)
-export function drawLights(ctx, fs) {
+// Both gradients end in transparent black at their outer radius and pad beyond it, and an additive ('lighter') transparent-black pixel leaves the
+// frame exactly as it was: so the fill only needs the circle's bounding box (clamped to the canvas), not the whole canvas. Same bytes, a
+// fraction of the raster work (a full-frame radial-gradient fill was the most expensive stage of the low / medium / legacy post). -> [x, y, w, h]
+export function lightBox(cx, cy, R, OW, OH, out = [0, 0, 0, 0]) {
+  const x0 = Math.max(0, Math.floor(cx - R)), y0 = Math.max(0, Math.floor(cy - R))
+  const x1 = Math.min(OW, Math.ceil(cx + R)), y1 = Math.min(OH, Math.ceil(cy + R))
+  out[0] = x0; out[1] = y0; out[2] = Math.max(0, x1 - x0); out[3] = Math.max(0, y1 - y0)
+  return out
+}
+const LBOX = [0, 0, 0, 0]
+
+// PERCEPTUALLY identical, not byte-identical (flagged): the flashlight's gradient never changes for a canvas size, so composeFrame draws it ONCE into
+// an offscreen layer (flashLayer) and blits that with 'lighter' every frame — ~4x cheaper than rasterising the radial gradient again. The layer's
+// origin is aligned down to a multiple of 8 so the gradient's ordered dither lands on the same device pixels as a direct fill; what remains is the
+// rounding of the additive blend (dst + round(g) instead of round(dst + g)): measured, a few dozen pixels per 1280x720 frame differ, by 1 level.
+// Only the modern tiers use the layer (the legacy tier stays exactly the pre-overhaul post); without a post state (the legacy path, tests, tools) the
+// gradient is filled directly, as before. The glowstick breathes, so it is always filled directly.
+function flashGradient(g, OW, OH) {
+  const gr = g.createRadialGradient(OW / 2, OH * 0.52, OH * 0.04, OW / 2, OH * 0.52, OH * 0.72)
+  gr.addColorStop(0, 'rgba(255,244,212,0.24)')
+  gr.addColorStop(0.5, 'rgba(255,238,196,0.09)')
+  gr.addColorStop(1, 'rgba(0,0,0,0)')
+  return gr
+}
+// H4-2: an offscreen 2D canvas can be GPU-backed, and a context loss (a GPU-process restart, a driver reset, a sleep/resume) CLEARS it. At low /
+// medium this layer is the player's whole flashlight, so a cached layer is never trusted blindly: its context is asked every frame (isContextLost,
+// one call) and its canvas reports 'contextlost' / 'contextrestored' (onContextLoss: also catches a loss AND restore between two frames). A lost
+// layer is marked stale; while the context is still lost the caller fills the gradient directly (drawLights' fallback), and once it is back the
+// layer is redrawn. Nothing changes for a healthy context.
+const ctxLost = (g) => !!(g && typeof g.isContextLost === 'function' && g.isContextLost() === true)
+function onContextLoss(c, fn) {
+  if (c && typeof c.addEventListener === 'function') { c.addEventListener('contextlost', fn); c.addEventListener('contextrestored', fn) }
+}
+export function flashLayer(post, OW, OH) {
+  let f = post.flash
+  if (f && f.OW === OW && f.OH === OH && !f.stale) {
+    if (!ctxLost(f.g)) return f
+    f.stale = true
+  }
+  if (f && f.stale && ctxLost(f.g)) return null                  // still lost: filled directly this frame, redrawn once the context is back
+  const mk = canvasFactory()
+  if (!mk) return null
+  const b = lightBox(OW / 2, OH * 0.52, OH * 0.72, OW, OH, [0, 0, 0, 0])
+  const x0 = b[0] & ~7, y0 = b[1] & ~7, w = b[0] + b[2] - x0, h = b[1] + b[3] - y0
+  if (!(w > 0 && h > 0)) return null
+  const c = f ? f.canvas : mk(w, h)
+  if (!f) onContextLoss(c, () => { if (post.flash && post.flash.canvas === c) post.flash.stale = true })
+  c.width = w; c.height = h                                     // (a reused layer: always cleared)
+  const g = c.getContext('2d')
+  g.setTransform(1, 0, 0, 1, -x0, -y0)
+  g.fillStyle = flashGradient(g, OW, OH)
+  g.fillRect(x0, y0, w, h)
+  g.setTransform(1, 0, 0, 1, 0, 0)
+  f = post.flash = { OW, OH, x0, y0, canvas: c, g, stale: false }
+  return f
+}
+
+export function drawLights(ctx, fs, post = null) {
   const { OW, OH, lights } = fs
   const handled = fs.handled || NOT_HANDLED
-  if (lights.flashlight && !handled.flashlight) {
-    const g = ctx.createRadialGradient(OW / 2, OH * 0.52, OH * 0.04, OW / 2, OH * 0.52, OH * 0.72)
-    g.addColorStop(0, 'rgba(255,244,212,0.24)')
-    g.addColorStop(0.5, 'rgba(255,238,196,0.09)')
-    g.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g; ctx.fillRect(0, 0, OW, OH); ctx.restore()
+  const layer = post && lights.flashlight && !handled.flashlight ? flashLayer(post, OW, OH) : null
+  if (layer) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(layer.canvas, layer.x0, layer.y0); ctx.restore()
+  } else if (lights.flashlight && !handled.flashlight) {
+    const g = flashGradient(ctx, OW, OH)
+    const b = lightBox(OW / 2, OH * 0.52, OH * 0.72, OW, OH, LBOX)
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g; ctx.fillRect(b[0], b[1], b[2], b[3]); ctx.restore()
   }
   if (lights.glow && !handled.glow) {
     const [gr, gg, gb] = lights.glow
@@ -797,7 +1013,8 @@ export function drawLights(ctx, fs) {
     const g = ctx.createRadialGradient(OW / 2, OH * 0.6, OH * 0.03, OW / 2, OH * 0.6, OH * 0.62)
     g.addColorStop(0, `rgba(${gr},${gg},${gb},${(0.20 * pulse).toFixed(3)})`)
     g.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g; ctx.fillRect(0, 0, OW, OH); ctx.restore()
+    const b = lightBox(OW / 2, OH * 0.6, OH * 0.62, OW, OH, LBOX)
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g; ctx.fillRect(b[0], b[1], b[2], b[3]); ctx.restore()
   }
 }
 
@@ -906,7 +1123,7 @@ export function composeFrame(ctx, wctx, world, fs, post, namePlates) {
     upscale(ctx, world, fs, post)
     drawVignette(ctx, fs, post)
     drawParticles(ctx, fs, post)
-    drawLights(ctx, fs)
+    drawLights(ctx, fs)                            // (no layer: the legacy tier keeps the exact gradient fill)
     drawNameplates(ctx, fs, namePlates)
     drawCrosshair(ctx, fs)
     return
@@ -923,7 +1140,7 @@ export function composeFrame(ctx, wctx, world, fs, post, namePlates) {
   if (tape) drawTapeSoft(ctx, world, fs, post)
   drawFlickerOverlay(ctx, fs)                      // the legacy blackout — skipped when a light model expresses flicker spatially
   if (!steam) drawParticles(ctx, fs, post, 1)      // dust and sparks stay full-res, crisp, and un-graded (sparks are light sources)
-  drawLights(ctx, fs)
+  drawLights(ctx, fs, post)
   drawNameplates(ctx, fs, namePlates)
   drawCrosshair(ctx, fs)
 }

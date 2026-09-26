@@ -7,7 +7,8 @@ import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
 import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
-import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP } from './gfx-quality.js'
+import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
+import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
 import { writeSave } from './save.js'
 import { formatAnchor, driftMeters } from './anchor.js'
 import { initTouchControls, isTouchDevice } from './touch.js'
@@ -61,6 +62,124 @@ function exitArrow(rel) {
   let a = rel % (Math.PI * 2)
   if (a < 0) a += Math.PI * 2
   return EXIT_DIRS[Math.round(a / (Math.PI / 4)) % 8]
+}
+
+// ── per-frame plumbing that must not allocate (pure, exported for test/gfx-hc-game.test.js) ──
+
+// The sprite list handed to render() every frame, assembled WITHOUT fresh objects: each category keeps a pool of records that are
+// overwritten in place (index i of a category always goes through the same fill function, so every record keeps one shape and its fields in
+// the literal's order), and the output array itself is reused. What the renderer receives is exactly what the old per-frame .map() built —
+// same fields, same values, same order. Safe because no renderer stage keeps an entity across frames or keys anything on its identity
+// (the sprite passes key motion on id/key/name, the GL atlas on its own mips).
+//   const A = createEntityAssembler()
+//   A.begin(); A.pass(list) (objects handed through as-is); A.add('prop', list, fill, ctx) ...; const all = A.end()
+export function createEntityAssembler() {
+  const out = []
+  const pools = Object.create(null)
+  let n = 0
+  return {
+    begin() { n = 0 },
+    // objects that are already what the renderer wants (the entity system's enemies): handed through untouched
+    pass(list) { for (let i = 0; i < list.length; i++) out[n++] = list[i] },
+    // one pooled record per element of `list`, written by fill(record, element, ctx)
+    add(cat, list, fill, ctx) {
+      const pool = pools[cat] || (pools[cat] = [])
+      for (let i = 0; i < list.length; i++) {
+        let r = pool[i]
+        if (r === undefined) r = pool[i] = {}
+        fill(r, list[i], ctx)
+        out[n++] = r
+      }
+    },
+    end() { if (out.length !== n) out.length = n; return out },
+    poolSize(cat) { return pools[cat] ? pools[cat].length : 0 },
+  }
+}
+// the record fills: field for field (and in the order of) the object literals game.js used to build every frame
+export const ENTITY_FILLS = Object.freeze({
+  player:  (r, p) => { r.x = p.x; r.y = p.y; r.kind = 'player'; r.name = p.name || 'wanderer'; r.angle = p.angle; r.chatText = p.chatText; r.hp = p.hp },
+  npc:     (r, n) => { r.x = n.x; r.y = n.y; r.kind = 'npc'; r.name = 'a lost soul'; r.key = n.key },
+  prop:    (r, p) => { r.x = p.x; r.y = p.y; r.kind = 'prop'; r.type = p.type; r.rot = p.rot; r.key = p.key },
+  exit:    (r, e) => { r.x = e.x; r.y = e.y; r.kind = 'exit'; r.target = e.target; r.key = e.key },
+  item:    (r, it) => { r.x = it.x; r.y = it.y; r.kind = 'item'; r.itemType = it.type; r.key = it.key },
+  note:    (r, s, readSet) => { r.x = s.x; r.y = s.y; r.kind = 'note'; r.read = readSet.has(s.frag); r.frag = s.frag; r.key = s.key },
+  machine: (r, m, vendedSet) => { r.x = m.x; r.y = m.y; r.kind = 'machine'; r.vended = vendedSet.has(m.key); r.key = m.key },
+  sight:   (r, s) => { r.x = s.x; r.y = s.y; r.kind = 'sight'; r.sightType = s.type; r.key = s.key },
+  apparition: (r, a) => { r.x = a.x; r.y = a.y; r.variant = a.variant; r.vx = a.vx; r.vy = a.vy },
+})
+
+// Window resizes come in storms (a drag fires dozens a second, each used to reallocate the canvas and the renderer's buffers). They only
+// raise a flag; the game loop takes it at most once per animation frame, before it draws.
+export function createResizeGate() {
+  let pending = false
+  return { request() { pending = true }, take() { const p = pending; pending = false; return p }, get pending() { return pending } }
+}
+// Call onChange once when window.devicePixelRatio changes (the window moved to another display, the browser zoom changed). A
+// `(resolution: Xdppx)` media query fires when the ratio leaves X; it is re-armed for the new ratio each time. -> stop()
+export function watchDpr(win, onChange) {
+  let mql = null, stopped = false
+  const arm = () => {
+    if (stopped) return
+    try {
+      mql = win.matchMedia(`(resolution: ${win.devicePixelRatio || 1}dppx)`)
+      mql.addEventListener('change', fire, { once: true })
+    } catch { mql = null }       // no matchMedia / an old engine: the loop's periodic check still catches it
+  }
+  function fire() { if (stopped) return; try { onChange() } finally { arm() } }
+  arm()
+  return () => { stopped = true; try { if (mql) mql.removeEventListener('change', fire) } catch { /* ignore */ } }
+}
+
+// After a level change the screen stays black until the new level has drawn this many frames (its first frames carry the one-time costs:
+// lazily built sprites, the GPU's first-frame validation on the 4th render), or until SETTLE_MAX_MS, whichever comes first — so those costs
+// land under the fade, not as a visible stutter after it.
+export const SETTLE_FRAMES = 5
+export const SETTLE_MAX_MS = 1500
+
+// The level-change / respawn fade. run(cb, onShown): the veil goes black (FADE_OUT_MS), cb() swaps the level or respawns under it, and the veil
+// lifts only once the NEW picture has drawn settleFrames frames (or settleMaxMs passed); onShown() runs graceMs AFTER the veil starts to lift.
+// game.js ends its transition in onShown, so movement, events and contact damage stay frozen for as long as the screen is black — never
+// released on a fixed timer while the veil still holds. Fades are SEQUENCED: each run() is a new generation, and the pending reveal / onShown
+// of an older run does nothing once a newer run has started (an older fade can never lift the veil in the middle of a newer — a death — fade,
+// nor end the newer transition). cb itself always runs: it is the state change the caller asked for.
+//   deps: el (the #fade element, or null: no veil — cb, then onShown after graceMs), frames() (frames drawn so far), now(), setTimeout, raf
+export const FADE_OUT_MS = 580, FADE_GRACE_MS = 150
+export function createFader({
+  el, frames, now = () => performance.now(), setTimeout: later = (f, ms) => setTimeout(f, ms), raf = (f) => requestAnimationFrame(f),
+  fadeMs = FADE_OUT_MS, graceMs = FADE_GRACE_MS, settleFrames = SETTLE_FRAMES, settleMaxMs = SETTLE_MAX_MS,
+} = {}) {
+  let gen = 0
+  return {
+    get gen() { return gen },
+    run(cb, onShown) {
+      const g = ++gen
+      const shown = () => { if (onShown) later(() => { if (g === gen) onShown() }, graceMs) }
+      if (!el) { cb(); shown(); return }
+      el.style.transition = 'opacity 0.55s'
+      el.style.opacity = '1'
+      later(() => {
+        cb()
+        if (g !== gen) return                        // a newer fade started meanwhile: it owns the veil and the transition
+        const f0 = frames(), s0 = now()
+        const reveal = () => {
+          if (g !== gen) return
+          if (frames() - f0 >= settleFrames || now() - s0 >= settleMaxMs) { el.style.opacity = '0'; shown() }
+          else raf(reveal)
+        }
+        raf(reveal)
+      }, fadeMs)
+    },
+  }
+}
+
+// The head of every animation frame: the fpsCap pacer FIRST, then the pending layout. A layout assigns #c's width/height, which clears it; a
+// frame the pacer skips draws nothing, so a layout taken there would be PRESENTED as a cleared, transparent canvas — with a window drag or a
+// pinch firing resizes every frame and fpsCap 30 (or 60 on a 120/144 Hz display) that is a scene / blank strobe. A pending layout therefore
+// waits (the gate keeps it) for the next callback that goes on to draw. -> true when this frame draws.
+export function frameDue(ts, pacer, fpsCap, gate, relayout) {
+  if (!pacer.due(ts, fpsCap)) return false
+  if (gate.take()) relayout()
+  return true
 }
 
 export async function initGame(canvas, { worldSeed = null, mpClient = null, anchor = null, resume = null } = {}) {
@@ -140,6 +259,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── per-level state, rebuilt on every transition ──
   let level = null
   let transitioning = false
+  // what the last level start cost (buildLevel, the renderer inside it, the first frame): the ?gfxstats=1 panel shows it
+  let levelStart = null
   const fadeEl = document.getElementById('fade')
 
   // ── track selection (N) ──
@@ -172,6 +293,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
 
   function buildLevel(index) {
+    const tb    = performance.now()
     const cfg   = levelConfig(base, index)
     // HUD theme hook: index.html restyles body[data-level] ('0'..'3' | '∅') — light ink on dark plates below the lobby
     if (typeof document !== 'undefined' && document.body) document.body.dataset.level = String(cfg.levelIndex)
@@ -185,7 +307,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // The previous level's renderer is disposed BEFORE the next one is created: a GPU backend owns a WebGL context on a sibling canvas, and
     // browsers cap live contexts (~16), so a level change must not leave one behind.
     if (level && level.gfx) { try { level.gfx.dispose() } catch { /* a half-torn-down renderer must never block a level change */ } level.gfx = null }
+    const tg        = performance.now()
     const gfx       = makeGfx(cfg, cache)
+    const gfxMs     = performance.now() - tg
     itemSys.enterLevel(cfg)
     vendedSet.clear()               // a re-entered floor re-stocks its machines
 
@@ -210,18 +334,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     updateHud()
     renderHotbar()
+    levelStart = { level: cfg.levelIndex, t0: tb, buildMs: performance.now() - tb, gfxMs, firstMs: NaN, readyMs: NaN, frames: 0 }
     return level
   }
 
-  function fadeThen(cb) {
-    if (!fadeEl) { cb(); return }
-    fadeEl.style.transition = 'opacity 0.55s'
-    fadeEl.style.opacity = '1'
-    setTimeout(() => {
-      cb()
-      requestAnimationFrame(() => { fadeEl.style.opacity = '0' })
-    }, 580)
-  }
+  // lift the veil only once the (new) level has drawn its first frames, so their one-time costs stay under it (SETTLE_FRAMES); the transition
+  // (frozen movement, events, contact damage) ends a moment after the veil lifts, not while it is still black (createFader)
+  const fader = createFader({ el: fadeEl, frames: () => frameCount })
+  function fadeThen(cb) { fader.run(cb, () => { transitioning = false }) }
 
   function descend(target, label) {
     if (transitioning) return
@@ -232,7 +352,6 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       persist()                       // save on every descent
       showMessage(level.cfg.levelName)
       if (level.cfg.exit?.hint) setTimeout(() => showMessage(level.cfg.exit.hint), 3800)
-      setTimeout(() => { transitioning = false }, 150)
     })
   }
 
@@ -245,7 +364,6 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       player.x = HALF + 0.5; player.y = HALF + 0.5
       invuln = 1.6; regenDelay = 0; hurt = 0
       showMessage('everything goes dark. you wake where you fell in.')
-      setTimeout(() => { transitioning = false }, 150)
     })
   }
 
@@ -333,7 +451,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     canvas.style.height = p.ratio === 1 ? '' : `${p.cssH}px`
     qd.apply(renderOpts)
   }
-  window.addEventListener('resize', resize)
+  // every source of a new size only raises the flag; the loop lays out at most once per animation frame (createResizeGate)
+  const resizeGate = createResizeGate()
+  const queueResize = () => resizeGate.request()
+  window.addEventListener('resize', queueResize)
+  window.addEventListener('orientationchange', queueResize)
+  watchDpr(window, queueResize)
   resize()
 
   const SPEED = 0.05
@@ -810,7 +933,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     else if (k === 'reduceFlicker') renderOpts.reduceFlicker = v
     else if (k === 'renderer') { renderOpts.renderer = v; if (level && level.gfx) { try { level.gfx.dispose() } catch { /* ignore */ } level.gfx = makeGfx(level.cfg, level.cache) } }   // rebuilt now, not at the next level
     else if (k === 'fpsCap')    { fpsCap = v; qd.setPrefs({ fpsCap: v }) }
-    else if (k === 'graphicsQuality' || k === 'hiDpi') { if (qd.setPrefs({ [k]: v })) resize() }
+    else if (k === 'graphicsQuality' || k === 'hiDpi') { if (qd.setPrefs({ [k]: v })) queueResize() }     // laid out by the next frame that draws
     else if (k === 'music')     setMusicEnabled(v)
     else if (k === 'musicVolume') setMusicVolume(v)
     else if (k === 'ambience')  setAmbience(v)
@@ -818,6 +941,19 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // mouseSensitivity, headBob, creatures and damage are read live each frame
   })
 
+  // ?gfxstats=1: the diagnostics panel (gfx-stats.js) — created only when asked for; otherwise nothing, no timer, no element
+  const gfxStats = statsEnabled(location.search) ? createStatsOverlay({
+    doc: document, parent: document.getElementById('hud-cluster'),
+    read: () => {
+      const g = level.gfx, t = renderOpts.qualityTier
+      return {
+        kind: g.kind, why: g.why, info: g.info, fallbacks: g.fallbacks, tier: t, scale: renderOpts.renderScale ?? qualityFor(t).scale,
+        canvasW: canvas.width, canvasH: canvas.height, cssW: canvas.clientWidth, cssH: canvas.clientHeight, dpr: window.devicePixelRatio, levelStart,
+      }
+    },
+  }) : null
+
+  const entityAsm = createEntityAssembler(), EF = ENTITY_FILLS
   let last = 0
   let frameCount = 0
   let loopErrs = 0
@@ -828,7 +964,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let t0 = -1, lastWorkMs = 0
   function loop(ts) {
    try {
-    if (!pacer.due(ts, fpsCap)) { requestAnimationFrame(loop); return }   // fpsCap: skip frames on the raw timestamp
+    // fpsCap: skip frames on the raw timestamp; a pending layout (at most one per frame, however many events came in) only on a frame that draws
+    if (!frameDue(ts, pacer, fpsCap, resizeGate, resize)) { requestAnimationFrame(loop); return }
     const w0 = performance.now()
     const rawMs = last > 0 ? ts - last : 1000 / 60
     if (t0 < 0) t0 = ts
@@ -1101,31 +1238,40 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     } else if (canvas.style.transform) canvas.style.transform = ''
 
     // ── assemble sprites and render ──
-    const remoteEntities = mpClient
-      ? mpClient.getRemotePlayers().map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle, chatText: p.chatText, hp: p.hp }))
-      : []
-    const propEntities = level.decor.getProps().map(p => ({ x: p.x, y: p.y, kind: 'prop', type: p.type, rot: p.rot, key: p.key }))
-    const exitEntities = level.decor.getExits().map(e => ({ x: e.x, y: e.y, kind: 'exit', target: e.target, key: e.key }))
-    const npcEntities  = level.decor.getNpcs().map(n => ({ x: n.x, y: n.y, kind: 'npc', name: 'a lost soul', key: n.key }))
-    const itemEntities = itemSys.getWorldItems().map(it => ({ x: it.x, y: it.y, kind: 'item', itemType: it.type, key: it.key }))
-    const scrapEntities = level.decor.getScraps().map(s => ({ x: s.x, y: s.y, kind: 'note', read: readSet.has(s.frag), frag: s.frag, key: s.key }))
-    const machineEntities = level.decor.getMachines().map(m => ({ x: m.x, y: m.y, kind: 'machine', vended: vendedSet.has(m.key), key: m.key }))
-    const sightEntities = level.decor.getSights().map(s => ({ x: s.x, y: s.y, kind: 'sight', sightType: s.type, key: s.key }))
     // advance any event apparitions (render-only; no collision or damage)
     for (let i = ephemera.length - 1; i >= 0; i--) {
       const a = ephemera[i]; a.x += a.vx * dt; a.y += a.vy * dt; a.ttl -= dt
       if (a.ttl <= 0) ephemera.splice(i, 1)
     }
-    const apparitionEntities = ephemera.map(a => ({ x: a.x, y: a.y, variant: a.variant, vx: a.vx, vy: a.vy }))
-    const enemyEntities = creaturesOn ? level.entitySys.getEntities() : []
-    const allEntities = [
-      ...enemyEntities, ...remoteEntities, ...npcEntities,
-      ...propEntities, ...exitEntities, ...itemEntities, ...scrapEntities, ...machineEntities, ...sightEntities, ...apparitionEntities,
-    ]
+    // one flat list in this order: enemies (as-is), remote players, npcs, props, exits, items, notes, machines, sights, apparitions — built
+    // from pooled records every frame instead of fresh objects (createEntityAssembler: same fields, same values, same order as before)
+    entityAsm.begin()
+    if (creaturesOn) entityAsm.pass(level.entitySys.getEntities())
+    if (mpClient) entityAsm.add('player', mpClient.getRemotePlayers(), EF.player)
+    entityAsm.add('npc', level.decor.getNpcs(), EF.npc)
+    entityAsm.add('prop', level.decor.getProps(), EF.prop)
+    entityAsm.add('exit', level.decor.getExits(), EF.exit)
+    entityAsm.add('item', itemSys.getWorldItems(), EF.item)
+    entityAsm.add('note', level.decor.getScraps(), EF.note, readSet)
+    entityAsm.add('machine', level.decor.getMachines(), EF.machine, vendedSet)
+    entityAsm.add('sight', level.decor.getSights(), EF.sight)
+    entityAsm.add('apparition', ephemera, EF.apparition)
+    const allEntities = entityAsm.end()
 
-    level.gfx.render(player, (wx, wy) => level.cache.isWall(wx, wy, pcx, pcy), flicker, allEntities, fogMul,
+    const r0 = performance.now()
+    // the wall test declares the chunk it hands the cache (and the cache's evict radius), which lets the rays' per-frame isWall memo stay on
+    // (gfx-world.js memoSafe); an undeclared closure renders the same pixels, only slower
+    const wallFn = (wx, wy) => level.cache.isWall(wx, wy, pcx, pcy)
+    wallFn.pcx = pcx; wallFn.pcy = pcy; wallFn.evictRadius = level.cfg.chunkEvictRadius ?? 3
+    level.gfx.render(player, wallFn, flicker, allEntities, fogMul,
       { flashlight, glow: fogTimer > 0 ? [80, 235, 110] : null }, timing)
+    const r1 = performance.now()
     frameCount++
+    if (levelStart && levelStart.frames++ === 0) {
+      levelStart.firstMs = r1 - r0; levelStart.readyMs = r1 - levelStart.t0
+      if (gfxStats) { try { console.info(`[renderer] level ${levelStart.level} start: build ${levelStart.buildMs.toFixed(1)} ms (renderer ${levelStart.gfxMs.toFixed(1)}), first frame ${levelStart.firstMs.toFixed(1)} ms, ready after ${levelStart.readyMs.toFixed(1)} ms`) } catch { /* ignore */ } }
+    }
+    if (gfxStats) gfxStats.frame(rawMs, r1 - r0)
     lastWorkMs = performance.now() - w0                                   // this frame's callback cost: the controller's headroom signal
    } catch (e) {
     // A per-frame error must never permanently freeze the game: log it (first

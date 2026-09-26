@@ -154,10 +154,16 @@ function renderSkyLegacy(fs, buf32) {
   }
 }
 
+// does c * e stay inside (-1, 256) for every e in [e0, e1]? (a product is monotonic in each operand, so the ends decide)
+function inByte(c, e0, e1) { const lo = c * e0, hi = c * e1; return (lo < hi ? lo : hi) > -1 && (lo < hi ? hi : lo) < 256 }
+
 const TAU = Math.PI * 2
 const FIX = 256                                   // azimuth lerp fraction bits (8)
 
-export function renderSky(fs, buf32) {
+// nlo (optional, from the world pass): when given, a sky pixel (x, y) above the horizon row is covered by a wall exactly when -y < nlo[x]
+// (gfx-world.js castColumns, its one-sided form), and a 2x2 block whose four pixels are all covered is not computed at all: the wall pass
+// overwrites every one of them, so the frame is the same to the byte.
+export function renderSky(fs, buf32, nlo = null) {
   if (!(fs.quality && fs.quality.lightDetail > 0)) { renderSkyLegacy(fs, buf32); return }
   const { W, H, HH, skyRgb, fogRgb } = fs
   const last = Math.min(HH, H - 1)
@@ -215,25 +221,38 @@ export function renderSky(fs, buf32) {
   // ── fill: rows in pairs, columns in pairs (a 2x2 block per evaluation). Walking up from the horizon row, so the horizon row itself is
   // always evaluated (it must equal the fog fill below it exactly) and the row above it is the copy. ──
   const ampB = cfg.ampB
+  // the cloud term's range: d0 and d1 are lerps of strip bytes (0..255), and every operation below is monotonic in each operand, so the
+  // same arithmetic on the corners bounds every block's value (the per-row test below then knows no channel can leave a byte)
+  const tA = 128 + ampB * 128, tB = -127 + ampB * -127, tC = 128 + ampB * -127, tD = -127 + ampB * 128
+  const tMax = Math.max(tA, tB, tC, tD), tMin = Math.min(tA, tB, tC, tD)
+  const Wp = W >> 1                                                  // blocks whose right pixel is inside the row
   for (let y = last; y >= 0; y -= 2) {
     const rowOff = y * W
     const jA = rowJ[y], jB = rowJ2[y]
     const r0 = rowR[y], g0 = rowG[y], b0 = rowB[y], A = rowA[y]
+    const skip = nlo !== null && y >= 1 && y < HH, k1 = 1 - y          // the pair's upper row y-1 covered (so y is too): k1 < nlo[x]
+    const K = A * (1 / 128)
+    const s0 = tMin * K, s1 = tMax * K, e0 = 1 + (s0 < s1 ? s0 : s1), e1 = 1 + (s0 < s1 ? s1 : s0)
+    // no clamp when every channel stays inside (-1, 256): there `v | 0` is already what the clamp would give
+    const free = inByte(r0, e0, e1) && inByte(g0, e0, e1) && inByte(b0, e0, e1)
     for (let i = 0; i < Wh; i++) {
+      if (skip && k1 < nlo[2 * i] && (2 * i + 1 >= W || k1 < nlo[2 * i + 1])) continue
       const a0 = strip[jA + col0[i]], a1 = strip[jA + col1[i]]
       const d0 = a0 + (((a1 - a0) * colF[i]) >> 8)
       const c0 = strip[jB + cb0[i]], c1 = strip[jB + cb1[i]]
       const d1 = c0 + (((c1 - c0) * cbF[i]) >> 8)
       // thick cloud (dense) darkens the sky, thin cloud lets it through; both layers swing about their mean
-      const sh = ((128 - d0) + ampB * (128 - d1)) * (A * (1 / 128))
+      const sh = ((128 - d0) + ampB * (128 - d1)) * K
       const r = r0 * (1 + sh), g = g0 * (1 + sh), b = b0 * (1 + sh)
-      const px = (255 << 24)
-        | ((b > 255 ? 255 : b < 0 ? 0 : b) | 0) << 16
-        | ((g > 255 ? 255 : g < 0 ? 0 : g) | 0) << 8
-        | ((r > 255 ? 255 : r < 0 ? 0 : r) | 0)
+      const px = free
+        ? (255 << 24) | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
+        : (255 << 24)
+          | ((b > 255 ? 255 : b < 0 ? 0 : b) | 0) << 16
+          | ((g > 255 ? 255 : g < 0 ? 0 : g) | 0) << 8
+          | ((r > 255 ? 255 : r < 0 ? 0 : r) | 0)
       const x = 2 * i
       buf32[rowOff + x] = px
-      if (x + 1 < W) buf32[rowOff + x + 1] = px
+      if (i < Wp) buf32[rowOff + x + 1] = px
     }
     if (y >= 1) buf32.copyWithin(rowOff - W, rowOff, rowOff + W)
   }

@@ -9,7 +9,7 @@
 import { GlError } from './gfx-gl-util.js'
 
 // Bump when the GL passes / the validator change enough that a cached "this device renders correctly" no longer speaks for the new code.
-export const GPU_BUILD_ID = 'm2-3'
+export const GPU_BUILD_ID = 'm2-4'
 export const VALIDATION_STORAGE_KEY = 'backrooms:gpu-validated'
 export const VALIDATION_GRID = Object.freeze({ w: 64, h: 36 })      // the frame is compared as this many colour blocks
 

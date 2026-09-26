@@ -27,10 +27,10 @@
 //
 // Import-safe in Node: `document` is only touched inside createCpuRenderer().
 import { hexToRgb, levelKey } from './gfx-util.js'
-import { buildTexturesMemo, buildGrain } from './gfx-textures.js'
+import { buildTexturesMemo, buildGrain, resolvePalette } from './gfx-textures.js'
 import { renderWorld } from './gfx-world.js'
 import { drawSprites, prewarmSprites } from './gfx-sprites.js'
-import { createPostState, seedParticles, buildVignette, composeFrame } from './gfx-post.js'
+import { createPostState, fitParticles, composeFrame, releasePost } from './gfx-post.js'
 import { createLight } from './gfx-light.js'
 import { qualityFor } from './gfx-quality.js'
 import { buildFrameState } from './gfx-frame.js'
@@ -45,7 +45,7 @@ export function createCpuRenderer(canvas, config, renderOpts = {}, worldHooks = 
   // can differ cell-to-cell. Absent (procedural levels) → every wall is '0'.
   const materialAt = worldHooks.materialAt || null
 
-  const fogRgb  = hexToRgb(config.palette.fog)
+  const fogRgb  = hexToRgb(resolvePalette(config.palette, levelKey(config)).fog)   // a palette missing its fog hex uses the level's own
   const baseFog = config.fogDistance
   // Whether the drop-ceiling fluorescent panels light up. Levels set lights:false
   // (Pipe Dreams, Electrical Station) to go dark — honoured in the ceiling pass
@@ -73,7 +73,7 @@ export function createCpuRenderer(canvas, config, renderOpts = {}, worldHooks = 
     return qOver
   }
 
-  // grain phase, particle field, vignette and grain pattern live in the post-stage state
+  // grain phase, particle field, the lazily built legacy vignette and the grain pattern live in the post-stage state
   const post = createPostState(config)
 
   // low-res world buffer + its own 2D context
@@ -85,27 +85,26 @@ export function createCpuRenderer(canvas, config, renderOpts = {}, worldHooks = 
   let img = null, buf32 = null
   let RW = 0, RH = 0, winW = 0, winH = 0, curScale = 0
 
-  // (Re)allocate the low-res buffers when the canvas size or the tier's render scale changes. The vignette and the
-  // particle field only depend on the canvas size, so a scale change alone does not re-seed them (no visible pop).
+  // (Re)allocate the low-res buffers only when the internal size (canvas size x the tier's render scale) really changes. The particle field
+  // follows the CANVAS size: seeded on the first frame, only rescaled by a resize (fitParticles), untouched by a scale / tier change — no pop.
+  // The legacy vignette is not built here at all: the legacy path builds it lazily when it first draws (gfx-post.js ensureLegacyVignette).
   function ensureBuffers(W, H, scale) {
-    const sizeChanged = !(winW === W && winH === H)
-    if (!sizeChanged && scale === curScale && img) return
+    if (winW === W && winH === H && scale === curScale && img) return
     winW = W; winH = H; curScale = scale
-    RW = Math.max(1, Math.round(W * scale))
-    RH = Math.max(1, Math.round(H * scale))
-    world.width = RW; world.height = RH
-    img = wctx.createImageData(RW, RH)
-    buf32 = new Uint32Array(img.data.buffer)
-    zbuffer = new Float32Array(RW)
-
-    if (sizeChanged || !post.vignette) {
-      post.vignette = buildVignette(W, H)
-      seedParticles(post, winW, winH)
+    const rw = Math.max(1, Math.round(W * scale)), rh = Math.max(1, Math.round(H * scale))
+    if (rw !== RW || rh !== RH || !img) {
+      RW = rw; RH = rh
+      world.width = RW; world.height = RH
+      img = wctx.createImageData(RW, RH)
+      buf32 = new Uint32Array(img.data.buffer)
+      zbuffer = new Float32Array(RW)
     }
+    fitParticles(post, W, H)
   }
 
   // timing (optional): { t, dt } real seconds since the start / since the previous frame, from the game loop
   function render(player, isWallFn, flicker, entities = [], fogMul = 1, lights = {}, timing = null) {
+    if (disposed) return
     frame++
     const fog = baseFog * fogMul
     const quality = currentQuality()
@@ -127,5 +126,18 @@ export function createCpuRenderer(canvas, config, renderOpts = {}, worldHooks = 
     composeFrame(ctx, wctx, world, fs, post, namePlates)
   }
 
-  return { render }
+  // Release every canvas this renderer owns now (renderer.js disposes the old level's renderer before building the next one, and the GPU
+  // validation's throwaway reference disposes its own): their backing stores go back at once, not at the next GC. Idempotent; a later render
+  // draws nothing.
+  let disposed = false
+  function dispose() {
+    if (disposed) return
+    disposed = true
+    releasePost(post)
+    world.width = 0; world.height = 0; grainCanvas.width = 0; grainCanvas.height = 0
+    img = null; buf32 = null; zbuffer = null
+  }
+
+  // `post` is exposed read-only for the unit tests and tools (the particle field, the lazily built canvases); nothing in the game reads it
+  return { render, dispose, get post() { return post } }
 }

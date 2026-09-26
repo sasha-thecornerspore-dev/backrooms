@@ -20,8 +20,8 @@
 //
 // Resources: every intermediate target is allocated lazily and reused (bloom chain 1/2, 1/4, 1/8 + a 1/32 grid; RGBA16F when the device can render to
 // it, else RGBA8), reallocated only when the internal size changes. No JS allocation per frame. Any failure throws GlError.
-import { GlError, compileProgram, createTexture2D, createFramebuffer, FULLSCREEN_VS } from './gfx-gl-util.js'
-import { createPostState, seedParticles, flickerOverlayAlpha, drawNameplates, drawCrosshair, veilColors, VEIL_A, uiScaleOf } from './gfx-post.js'
+import { GlError, startProgram, finishProgram, programReady, createTexture2D, createFramebuffer, FULLSCREEN_VS } from './gfx-gl-util.js'
+import { createPostState, fitParticles, flickerOverlayAlpha, drawNameplates, drawCrosshair, veilColors, VEIL_A, uiScaleOf } from './gfx-post.js'
 import {
   postPlan, bloomSizes, grainTilePixels, legacyGrainPixels, grainOffsetModern, grainOffsetLegacy, gainFor, glowPulse, newOverlayMemo, overlayUnchanged, overlayRemember,
   GRAIN_TILE, LEGACY_TILE, LEGACY_GRAIN_ALPHA, LEGACY_VIGNETTE,
@@ -37,43 +37,80 @@ export function createPostPass(env) {
   const ropts = env.ropts || {}
   const doc = canvas.ownerDocument || (typeof document !== 'undefined' ? document : null)
 
-  // ── programs (a missing / optimised-away uniform is a GlError HERE, not a silent no-op at draw time) ──
-  const P = Object.create(null)
-  const build = (name, vs, fsSrc) => {
-    const p = compileProgram(gl, vs, fsSrc, `post.${name}`)
-    for (const n of UNIFORMS[name]) if (!(n in p.u)) throw new GlError('post', `${name}: uniform ${n} is not active in the compiled program`)
-    P[name] = p
-    return p
+  // ── programs ──
+  // All nine are QUEUED here (startProgram: compile + link requested, nothing asked back, so nothing blocks) and COLLECTED later (finishProgram +
+  // the uniform check + the static uniforms): at their first use, or earlier by the first frame that finds them finished (programReady). With
+  // KHR_parallel_shader_compile the driver compiles them in parallel with everything else the renderer does meanwhile (the other passes, the first
+  // frame's CPU work); without it the first status query blocks, as compileProgram did. Failure semantics are the same as before: every program must
+  // compile, link and expose its uniforms (a missing / optimised-away uniform is a GlError, never a silent no-op at draw time) — it is only reported
+  // when the program is collected, i.e. by the first render() rather than by createPostPass, and gfx-gl.js treats a render() GlError exactly like a
+  // creation one (the CPU renderer takes over, remembered for the session and by the persisted marker).
+  const SOURCES = {
+    down: [FULLSCREEN_VS, DOWN_FS], grid: [FULLSCREEN_VS, GRID_FS], bright: [FULLSCREEN_VS, BRIGHT_FS], blur: [FULLSCREEN_VS, BLUR_FS],
+    wide: [FULLSCREEN_VS, WIDE_FS], compose: [FULLSCREEN_VS, COMPOSE_FS], up: [FULLSCREEN_VS, UP_FS], lights: [FULLSCREEN_VS, LIGHTS_FS],
+    particles: [PARTICLE_VS, PARTICLE_FS],
   }
+  const P = Object.create(null)                                    // collected: name -> { prog, u, label }
+  const queued = new Map()                                         // compiling: name -> the startProgram handle
+  const parallel = gl.getExtension('KHR_parallel_shader_compile')
+  const dropQueued = () => {
+    for (const q of queued.values()) { try { gl.deleteShader(q.vs); gl.deleteShader(q.fs); gl.deleteProgram(q.prog) } catch { /* context gone */ } }
+    queued.clear()
+  }
+  try {
+    for (const name in SOURCES) queued.set(name, startProgram(gl, SOURCES[name][0], SOURCES[name][1], `post.${name}`))
+  } catch (e) { dropQueued(); throw e }
   let overlay = null, ovCtx = null, ovDirty = false, ovW = '', ovH = '', ovT = ''
   const ovMemo = newOverlayMemo()                                  // what the overlay currently shows (see overlayUnchanged)
   const own = { tex: [], fbo: [], buf: [], vao: [] }          // everything created below, for dispose()
-  try {
-    build('down', FULLSCREEN_VS, DOWN_FS); build('grid', FULLSCREEN_VS, GRID_FS); build('bright', FULLSCREEN_VS, BRIGHT_FS)
-    build('blur', FULLSCREEN_VS, BLUR_FS); build('wide', FULLSCREEN_VS, WIDE_FS); build('compose', FULLSCREEN_VS, COMPOSE_FS)
-    build('up', FULLSCREEN_VS, UP_FS); build('lights', FULLSCREEN_VS, LIGHTS_FS); build('particles', PARTICLE_VS, PARTICLE_FS)
-  } catch (e) { for (const k in P) gl.deleteProgram(P[k].prog); throw e }
 
   const post = createPostState(env.config)
   const A = post.atmos
 
-  // ── static uniforms (the atmosphere is fixed per renderer, exactly as on the CPU) ──
-  gl.useProgram(P.down.prog); gl.uniform1i(P.down.u.uSrc, 0)
-  gl.useProgram(P.grid.prog); gl.uniform1i(P.grid.u.uSrc, 0)
-  gl.useProgram(P.blur.prog); gl.uniform1i(P.blur.u.uSrc, 0)
-  gl.useProgram(P.wide.prog); gl.uniform1i(P.wide.u.uSrc, 0)
-  gl.useProgram(P.bright.prog); gl.uniform1i(P.bright.u.uSrc, 0); gl.uniform1i(P.bright.u.uAvg, 1)
-  gl.uniform3f(P.bright.u.uP, A.bloom.thr, A.bloom.knee, A.bloom.tintMix)
-  gl.uniform3f(P.bright.u.uTint, A.bloom.tint[0], A.bloom.tint[1], A.bloom.tint[2])
+  // ── static uniforms (the atmosphere is fixed per renderer, exactly as on the CPU), set once when each program is collected ──
   const gain = gainFor(A.grade), { V, D } = veilColors(A.grade)
-  gl.useProgram(P.compose.prog)
-  gl.uniform1i(P.compose.u.uSrc, 0); gl.uniform1i(P.compose.u.uHalo, 1); gl.uniform1i(P.compose.u.uWide, 2); gl.uniform1i(P.compose.u.uTile, 3)
-  gl.uniform2f(P.compose.u.uBloomGain, A.bloom.gain, A.bloom.gain * A.bloom.wide)
-  gl.uniform3f(P.compose.u.uGain, gain[0], gain[1], gain[2])
-  gl.uniform3f(P.compose.u.uVeilV, V[0] / 255, V[1] / 255, V[2] / 255); gl.uniform3f(P.compose.u.uVeilD, D[0] / 255, D[1] / 255, D[2] / 255)
-  gl.uniform3f(P.compose.u.uVeil, A.vig.depth, A.vig.from, VEIL_A)
-  gl.useProgram(P.up.prog); gl.uniform1i(P.up.u.uLow, 0)
-  gl.useProgram(P.particles.prog); gl.uniform1i(P.particles.u.uTiny, 0)
+  const INIT = {
+    down: (u) => { gl.uniform1i(u.uSrc, 0) },
+    grid: (u) => { gl.uniform1i(u.uSrc, 0) },
+    blur: (u) => { gl.uniform1i(u.uSrc, 0) },
+    wide: (u) => { gl.uniform1i(u.uSrc, 0) },
+    bright: (u) => {
+      gl.uniform1i(u.uSrc, 0); gl.uniform1i(u.uAvg, 1)
+      gl.uniform3f(u.uP, A.bloom.thr, A.bloom.knee, A.bloom.tintMix)
+      gl.uniform3f(u.uTint, A.bloom.tint[0], A.bloom.tint[1], A.bloom.tint[2])
+    },
+    compose: (u) => {
+      gl.uniform1i(u.uSrc, 0); gl.uniform1i(u.uHalo, 1); gl.uniform1i(u.uWide, 2); gl.uniform1i(u.uTile, 3)
+      gl.uniform2f(u.uBloomGain, A.bloom.gain, A.bloom.gain * A.bloom.wide)
+      gl.uniform3f(u.uGain, gain[0], gain[1], gain[2])
+      gl.uniform3f(u.uVeilV, V[0] / 255, V[1] / 255, V[2] / 255); gl.uniform3f(u.uVeilD, D[0] / 255, D[1] / 255, D[2] / 255)
+      gl.uniform3f(u.uVeil, A.vig.depth, A.vig.from, VEIL_A)
+    },
+    up: (u) => { gl.uniform1i(u.uLow, 0) },
+    lights: () => {},
+    particles: (u) => { gl.uniform1i(u.uTiny, 0) },
+  }
+  // The program `name`, collected now if it is still queued (blocks until its compile is done). Leaves it the CURRENT program. Throws GlError.
+  function prog(name) {
+    let p = P[name]
+    if (!p) {
+      const q = queued.get(name)
+      if (!q) throw new GlError('post', `${name}: the program failed earlier and is not available`)
+      queued.delete(name)
+      p = finishProgram(q)                                        // (deletes everything and throws GlError on a compile / link failure)
+      for (const n of UNIFORMS[name]) if (!(n in p.u)) { gl.deleteProgram(p.prog); throw new GlError('post', `${name}: uniform ${n} is not active in the compiled program`) }
+      P[name] = p
+      gl.useProgram(p.prog); INIT[name](p.u)
+      return p
+    }
+    gl.useProgram(p.prog)
+    return p
+  }
+  // collect whatever the driver has finished (a status query that will not block), off the critical path; without the extension this collects
+  // them all on the first frame
+  function collectReady() {
+    for (const [name, q] of queued) if (programReady(q, parallel)) prog(name)
+  }
 
   // ── textures ──
   const track = (t) => { own.tex.push(t); return t }
@@ -191,13 +228,13 @@ export function createPostPass(env) {
   }
 
   // ── frame state that lives across frames ──
-  let lastFrame = -1, sceneSeen = null, seededW = 0, seededH = 0, lastPlan = null
+  let lastFrame = -1, sceneSeen = null, lastPlan = null
   const PLAN = {}, GO = [0, 0]
   const glowRgb = [0, 0, 0]
 
   function setTarget(t, w, h) { gl.bindFramebuffer(gl.FRAMEBUFFER, t ? t.fbo : null); gl.viewport(0, 0, w, h) }
   function bind(unit, tex) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, tex) }
-  function pass(name, dst) { gl.useProgram(P[name].prog); setTarget(dst, dst.w, dst.h) }
+  function pass(name, dst) { prog(name); setTarget(dst, dst.w, dst.h) }
 
   // ── bloom: the bright pass on the tiny frame, blurred twice (tight + wide), in bl.Pb / bl.M ──
   function runBloom(fs, sceneTex) {
@@ -218,9 +255,8 @@ export function createPostPass(env) {
   }
 
   function compose(dst, src, b, doBloom, doGrade, plan, fs) {
-    const c = P.compose
     const tile = plan.grain ? tileFor(!plan.modern) : dummy      // (created BEFORE the binds: creating a texture binds it to the active unit)
-    gl.useProgram(c.prog); setTarget(dst, dst.w, dst.h)
+    const c = prog('compose'); setTarget(dst, dst.w, dst.h)
     bind(0, src)
     bind(1, doBloom ? b.Pb.tex : dummy); bind(2, doBloom ? b.M.tex : dummy)
     const grain = plan.grain && !(plan.steam && !doGrade)         // the steam split: grain belongs to the second half
@@ -237,8 +273,7 @@ export function createPostPass(env) {
 
   function drawInstances(vao, n, additive, rgb, tw, th, flick, useLuma, tiny) {
     if (!n) return
-    const p = P.particles
-    gl.useProgram(p.prog)
+    const p = prog('particles')
     gl.enable(gl.BLEND)
     if (additive) gl.blendFunc(gl.SRC_ALPHA, gl.ONE); else gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
     gl.uniform3f(p.u.uColor, rgb[0], rgb[1], rgb[2])
@@ -255,6 +290,7 @@ export function createPostPass(env) {
 
   function render(fs, world, nameplates) {
     const plates = nameplates || NONE
+    if (queued.size) collectReady()
     const W = fs.W, H = fs.H, cw = canvas.width, ch = canvas.height
     const plan = lastPlan = postPlan(fs, post, PLAN)
     const advance = fs.frame !== lastFrame          // a re-draw of the same frame (the Polaroid's capture) must not step the simulations again
@@ -269,8 +305,8 @@ export function createPostPass(env) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
     }
 
-    // the particle field: seeded per canvas size (as the CPU does), stepped once per frame
-    if (post.count && (seededW !== fs.OW || seededH !== fs.OH)) { seededW = fs.OW; seededH = fs.OH; seedParticles(post, fs.OW, fs.OH) }
+    // the particle field: seeded on the first frame, only RESCALED by a canvas resize (as the CPU does: fitParticles), stepped once per frame
+    fitParticles(post, fs.OW, fs.OH)
     if (plan.parts && advance) {
       if (plan.modern) stepModern(post, fs, plan.steam ? fs.W / fs.OW : 1, sink); else stepLegacy(post, fs, sink)
       uploadParticles()
@@ -295,9 +331,8 @@ export function createPostPass(env) {
     }
 
     // the visible frame
-    const up = P.up
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch)
-    gl.useProgram(up.prog); bind(0, final)
+    const up = prog('up'); bind(0, final)
     gl.uniform2f(up.u.uOut, cw, ch); gl.uniform2f(up.u.uLowRes, W, H)
     gl.uniform1f(up.u.uFlick, 1 - flickerOverlayAlpha(fs))
     if (plan.modern) gl.uniform3f(up.u.uVig, 0, 1, 2); else gl.uniform3f(up.u.uVig, LEGACY_VIGNETTE.depth, LEGACY_VIGNETTE.r0 * ch, LEGACY_VIGNETTE.r1 * ch)
@@ -312,8 +347,7 @@ export function createPostPass(env) {
     const lights = fs.lights, handled = fs.handled || NOT_HANDLED
     const flash = !!(lights && lights.flashlight && !handled.flashlight), glow = lights && lights.glow && !handled.glow ? lights.glow : null
     if (flash || glow) {
-      const l = P.lights
-      gl.useProgram(l.prog); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE)
+      const l = prog('lights'); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE)
       gl.uniform2f(l.u.uOut, cw, ch); gl.uniform1i(l.u.uFlash, flash ? 1 : 0)
       if (glow) { glowRgb[0] = glow[0] / 255; glowRgb[1] = glow[1] / 255; glowRgb[2] = glow[2] / 255; gl.uniform4f(l.u.uGlow, glowRgb[0], glowRgb[1], glowRgb[2], 0.20 * glowPulse(fs.t)) }
       else gl.uniform4f(l.u.uGlow, 0, 0, 0, 0)
@@ -324,11 +358,12 @@ export function createPostPass(env) {
     drawOverlay(fs, plates)
   }
 
-  function resize(OW, OH) { if (OW !== seededW || OH !== seededH) { seededW = OW; seededH = OH; if (post.count) seedParticles(post, OW, OH) } }
+  function resize(OW, OH) { fitParticles(post, OW, OH) }
 
   function dispose() {
     try {
       for (const k in P) gl.deleteProgram(P[k].prog)
+      dropQueued()
       for (const t of own.tex) gl.deleteTexture(t)
       for (const f of own.fbo) gl.deleteFramebuffer(f)
       for (const b of own.buf) gl.deleteBuffer(b)

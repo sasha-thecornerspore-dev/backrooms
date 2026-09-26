@@ -5,11 +5,12 @@
 // Instance record (INST floats): three vec4 attributes
 //   A = (cx, cy, halfL, halfW)      centre in TARGET pixels from the top-left, half extent along the direction and across it
 //   B = (dx, dy, kind, mainKind)    unit direction (a spark streak's heading; (1, 0) for everything else), the shape, and for a glow the kind it rides on
-//   C = (a0, lb, g, 0)              alpha before the light term, the light term (airLight without the frame's brightness), the glowstick share
+//   C = (a0, lb, g, cap)            alpha before the light term, the light term (airLight without the frame's brightness), the glowstick share,
+//                                   and the ceiling of the lit alpha (steam: gfx-post.js steamLimits; 0 = none)
 // The shader finishes the alpha exactly as gfx-post.js does: L = lb * (0.55 + 0.9 * frameLuma) when the bloom pass measured the frame (else lb),
-// alpha = a0 * min(cap, L * k) for dust / steam, and min(1, alpha) * flicker. `sc` scales everything from visible-canvas pixels to the target
+// alpha = a0 * min(cap, L * k) for dust / steam, then min(alpha, C.w) when C.w > 0 (steam), and min(1, alpha) * flicker. `sc` scales everything from visible-canvas pixels to the target
 // (W / OW for the steam the CPU draws into the low-res frame, 1 for everything else).
-import { airLight, uiScaleOf } from './gfx-post.js'
+import { airLight, uiScaleOf, steamLimits, particleFieldLive } from './gfx-post.js'
 import { hexToRgb, mulberry32 } from './gfx-util.js'
 
 export const K_DUST = 0, K_STEAM = 1, K_SPARK = 2, K_DISC = 3, K_STREAK = 4, K_GLOW = 5
@@ -20,6 +21,7 @@ const smooth = (a, b, x) => { const t = x <= a ? 0 : x >= b ? 1 : (x - a) / (b -
 const mix = (a, b, t) => a + (b - a) * t
 const wrapPi = (a) => { a = (a + Math.PI) % (2 * Math.PI); if (a < 0) a += 2 * Math.PI; return a - Math.PI }
 const LIT = { L: 0, g: 0 }
+const STEAM_LIM = { r: 0, a: 0 }
 
 // Two growable Float32Arrays (normal source-over instances, additive instances) and how many records each holds. Reused every frame.
 export function createSink(count) {
@@ -27,11 +29,11 @@ export function createSink(count) {
   return { N: new Float32Array(n * INST), A: new Float32Array(n * 2 * INST), nN: 0, nA: 0, cap: n, kind: 'dust', rgb: [1, 1, 1], glow: null, glowRgb: [1, 1, 1] }
 }
 
-function put(buf, n, cx, cy, hL, hW, dx, dy, kind, mk, a0, lb, g) {
+function put(buf, n, cx, cy, hL, hW, dx, dy, kind, mk, a0, lb, g, aCap = 0) {
   const o = n * INST
   buf[o] = cx; buf[o + 1] = cy; buf[o + 2] = hL; buf[o + 3] = hW
   buf[o + 4] = dx; buf[o + 5] = dy; buf[o + 6] = kind; buf[o + 7] = mk
-  buf[o + 8] = a0; buf[o + 9] = lb; buf[o + 10] = g; buf[o + 11] = 0
+  buf[o + 8] = a0; buf[o + 9] = lb; buf[o + 10] = g; buf[o + 11] = aCap
 }
 
 // the sprite colour: the field's colour pulled toward the fog by the level's `temper` (ensureSprites), truncated to bytes, as 0..1
@@ -49,9 +51,13 @@ function grow(sink, n) {
   sink.N = new Float32Array(n * INST); sink.A = new Float32Array(n * 2 * INST); sink.cap = n
 }
 
+// (H4-1) a degenerate canvas (below FIELD_MIN on a side) neither steps nor draws the field, as on the CPU (gfx-post.js drawParticles): no records
+function idle(sink) { sink.nN = 0; sink.nA = 0; return sink }
+
 // ── the modern field: motion + instance records (drawParticlesModern, line for line) ────────────────────────────────────────
 export function stepModern(post, fs, sc, sink) {
   const { OW, OH, t, lights } = fs
+  if (!particleFieldLive(OW, OH)) return idle(sink)
   const { pcfg, particles } = post
   const A = post.atmos.part
   const dt = Math.min(0.1, fs.dt || 1 / 60)
@@ -112,12 +118,15 @@ export function stepModern(post, fs, sc, sink) {
       put(Ad, nA++, p.x * sc, p.y * sc, r * sc, r * sc, 1, 0, K_SPARK, 0, alpha, 1, 0)
       continue
     }
-    let cap, k
+    let cap, k, aCap = 0
     if (rise) {
       const u = 1 - p.y / OH
       const fade = smooth(-0.02, 0.12, u) * Math.pow(Math.max(0, 1 - u), 0.7)
       a0 = 0.27 * (0.5 + 0.5 * z) * fade * A.alpha * p.a
       r = baseSize * (3.4 + 4.4 * z) * (1 + 0.9 * u) * p.s
+      const lim = steamLimits(z, OH, STEAM_LIM)               // V9: the same near-wisp ceilings as the CPU
+      if (r > lim.r) r = lim.r
+      aCap = lim.a
       kind = K_STEAM; cap = 1.6; k = 1.1
     } else {
       const bokeh = z > 0.92
@@ -127,9 +136,9 @@ export function stepModern(post, fs, sc, sink) {
     }
     // cull what cannot reach 0.004 whatever the frame's brightness does to the light term (the shader culls the rest)
     if (a0 * Math.min(cap, lb * k * LUMA_HI) < 0.004) continue
-    if (rise) put(N, nN++, p.x * sc, p.y * sc, r * 0.75 * sc, r * 1.4 * sc, 1, 0, kind, 0, a0, lb, lit.g)
+    if (rise) put(N, nN++, p.x * sc, p.y * sc, r * 0.75 * sc, r * 1.4 * sc, 1, 0, kind, 0, a0, lb, lit.g, aCap)
     else put(N, nN++, p.x * sc, p.y * sc, r * sc, r * sc, 1, 0, kind, 0, a0, lb, lit.g)
-    if (glowCol && lit.g > 0.08) put(Ad, nA++, p.x * sc, p.y * sc, r * sc, r * sc, 1, 0, K_GLOW, kind, a0, lb, lit.g)
+    if (glowCol && lit.g > 0.08) put(Ad, nA++, p.x * sc, p.y * sc, r * sc, r * sc, 1, 0, K_GLOW, kind, a0, lb, lit.g, aCap)
   }
   sink.nN = nN; sink.nA = nA
   return sink
@@ -138,6 +147,7 @@ export function stepModern(post, fs, sc, sink) {
 // ── the legacy field: 45 plain dots (drawParticlesLegacy) ──────────────────────────────────────────────────────────────────
 export function stepLegacy(post, fs, sink) {
   const { OW, OH } = fs
+  if (!particleFieldLive(OW, OH)) return idle(sink)
   const { pcfg, particles } = post
   const k = Math.min(0.1, fs.dt) * 60
   const col = pcfg.color || [225, 220, 200]

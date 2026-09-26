@@ -559,6 +559,19 @@
     const startStatus = document.getElementById('start-status')
     const canvas = document.getElementById('c')
 
+    // ── ?gfxbench=1: the device benchmark (gfx-bench.js; docs/gfx-device-testing.md) takes the page INSTEAD of the title and the game. Nothing
+    //    below runs — no saved run is read, no pref is written, no audio, no attract mode: the module waits here for good (its card links back). ──
+    if (new URLSearchParams(location.search).has('gfxbench')) {
+      let bench = null
+      try { bench = await import('./gfx-bench.js') } catch (e) { startStatus.textContent = `the benchmark could not load: ${e && e.message ? e.message : e}` }
+      const mode = bench ? bench.benchMode(location.search) : null
+      if (mode) {
+        startEl.style.display = 'none'
+        await bench.startBench(document, window, { mode, canvas })
+        await new Promise(() => {})
+      }
+    }
+
     // every way into the game goes through here: the attract mode (its own #attract canvas) is disposed BEFORE initGame runs.
     // gfx-attract.js is loaded lazily and optionally (a failed or missing module just means a plain title page, never a dead menu).
     let attractMod = null

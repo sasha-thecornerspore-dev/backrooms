@@ -31,6 +31,7 @@
 //     with the palette colour.
 //   * Seeded per tile (mulberry32 + hash-free fixed seeds): identical for every player, no Math.random anywhere.
 import { hexToRgb, clamp255, mulberry32 } from './gfx-util.js'
+import { LEVELS } from './levels.js'
 
 
 const TS = 64            // texture tile size (px per world cell)
@@ -532,7 +533,9 @@ function lobbyFloor(pal) {
   const rnd = mulberry32(0xA1000002)
   const tone = fbm(0xA1201, [[16, 16, 1], [8, 8, 0.5]])
   const nap = fbm(0xA1202, [[32, 2, 1], [16, 4, 0.6]])
-  const tB = [f[0] * 1.16, f[1] * 1.02, f[2] * 0.80]                // the second tone of the two-tone weave
+  // the second tone of the two-tone weave: a lighter, slightly yellower shade of the floor's own colour (it was a redder, more saturated
+  // orange, which blotched the lobby's mono-yellow). Palette-relative: a wish-drifted floor drifts it along.
+  const tB = [f[0] * 1.12, f[1] * 1.15, f[2] * 1.05]
   for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
     const j = y * TS + x, i = j * 3
     const t = sstep(-0.16, 0.16, tone[j])
@@ -571,7 +574,7 @@ function lobbyFloor(pal) {
   const V = {
     wearH: makeVariant(S, EDGE, EDGE, wear('h', 31, 11, 0xA1C101)),
     wearV: makeVariant(S, EDGE, EDGE, wear('v', 29, 10, 0xA1C102)),
-    stainA: makeVariant(S, EDGE, EDGE, blotch(0xA1C103, 30, 34, 12, [0.62, 0.58, 0.52], 0.95)),
+    stainA: makeVariant(S, EDGE, EDGE, blotch(0xA1C103, 30, 34, 12, [0.64, 0.63, 0.57], 0.95)),      // a damp patch: darker, the floor's own hue (not red-brown)
     stainB: makeVariant(S, EDGE, EDGE, (T) => { blotch(0xA1C104, 22, 24, 9, [0.70, 0.72, 0.60], 0.9)(T); blotch(0xA1C105, 40, 42, 7, [0.68, 0.72, 0.60], 0.9)(T) }),
     matted: makeVariant(S, EDGE, EDGE, (T) => {
       const r = mulberry32(0xA1C106)
@@ -637,7 +640,21 @@ function lobbyCeil(pal) {
   return { base, slots: weighted([[base, 15], [V.stainA, 1], [V.stainB, 1], [V.missing, 1]]) }
 }
 
-// the emissive ceiling panel: aluminium frame, a prismatic lens and three lit tubes (mean brightness stays that of the legacy panel)
+// the emissive ceiling panel: aluminium frame, a prismatic diffuser over four lit tubes (mean brightness stays that of the legacy panel).
+// The tubes show through the diffuser as soft, low-contrast bands: a plateau over each tube with smooth shoulders, +-1.9% around the mean.
+// They used to be hard 7.5% steps, and a panel seen from underneath magnifies one texel to dozens of pixels, so every step fanned out into
+// a hard radial band across the top of the frame. The lamp holders at the tube ends fade in the same way.
+const TUBE_PERIOD = 16, TUBE_C = 3, TUBE_AMP = 0.0375, PANEL_MEAN = (6 * 1.0 + 10 * 0.925) / 16     // the old tube / gap pattern's contrast and mean
+const TUBE_P = (() => {
+  const p = new Float32Array(TUBE_PERIOD)
+  for (let t = 0; t < TUBE_PERIOD; t++) {
+    let d = Math.abs(t + 0.5 - TUBE_C); if (d > TUBE_PERIOD / 2) d = TUBE_PERIOD - d
+    p[t] = 1 - sstep(1.5, 4.5, d)                                    // 1 over the tube, 0 between tubes, a smooth 3-texel shoulder
+  }
+  const m = p.reduce((s, v) => s + v, 0) / TUBE_PERIOD
+  for (let t = 0; t < TUBE_PERIOD; t++) p[t] = PANEL_MEAN + TUBE_AMP * (p[t] - m)
+  return p
+})()
 function fluorescentPanel(col = [250, 247, 224], dirt = 0) {
   const T = new Float32Array(NT * 3)
   const rnd = mulberry32(0xA1000004)
@@ -647,10 +664,10 @@ function fluorescentPanel(col = [250, 247, 224], dirt = 0) {
     let b
     if (e < 4) b = e === 3 ? 0.9 : 0.76 - dirt * 0.1                // frame with a lit inner lip
     else {
-      const ty = ((y - 8) % 16 + 16) % 16
-      b = ty < 6 ? 1.0 : 0.925                                        // tubes vs. the gaps between them
-      if (x < 8 || x > TS - 9) b *= 0.86                              // lamp holders
-      if (((x >> 1) + (y >> 1)) & 1) b *= 0.985                       // prismatic lens
+      b = TUBE_P[((y - 8) % TUBE_PERIOD + TUBE_PERIOD) % TUBE_PERIOD]     // the tubes through the diffuser
+      const hx = Math.min(x, TS - 1 - x)                              // lamp holders at both ends: darker, fading into the diffuser
+      b *= 1 - 0.12 * (1 - sstep(5, 9, hx + 0.5))
+      if (((x >> 1) + (y >> 1)) & 1) b *= 0.99                        // prismatic lens
     }
     const n = (rnd() - 0.5) * 3
     T[i] = col[0] * b + n; T[i + 1] = col[1] * b + n; T[i + 2] = col[2] * b + n
@@ -2047,6 +2064,7 @@ function resolveSurfaces(levelKey, look) {
 // Build the surfaces of a TexSet: wall (material '0') + optional per-material tiles, ceiling, floor and the light panel, each as
 // a flat Uint8 RGB array of length ts*ts*3, plus the variant lists.
 export function buildTextures(palette, materials = null, look = null, levelKey = 'legacy') {
+  palette = resolvePalette(palette, levelKey)
   const surf = resolveSurfaces(levelKey, look)
   if (!surf) return buildLegacyTextures(palette, materials, look)      // legacy / hand-built configs: byte-identical to before
   // the original tiles, only for a surface that has no style (a partial `look` on a hand-built config)
@@ -2072,6 +2090,22 @@ export function buildTextures(palette, materials = null, look = null, levelKey =
     }
   }
   return tex
+}
+
+// The palette the tiles are built from, with every key the art reads present and parsable. A config whose palette lacks a hex (or has
+// one hexToRgb cannot read) must not throw here: the missing entry falls back to the level's own stock palette entry (levels.js), and
+// for a hand-built config with no level identity to a neutral default. A complete palette is returned as is (same object).
+export const PALETTE_KEYS = Object.freeze(['wall', 'ceiling', 'floor', 'fog'])
+const NEUTRAL_PALETTE = Object.freeze({ wall: '#A0A0A0', ceiling: '#B4B4B4', floor: '#505050', fog: '#C8C8C8' })
+const hexOk = (h) => typeof h === 'string' && !Number.isNaN(parseInt(h.replace('#', ''), 16))
+export function resolvePalette(palette, levelKey = 'legacy') {
+  const p = palette && typeof palette === 'object' ? palette : {}
+  if (p === palette && PALETTE_KEYS.every((k) => hexOk(p[k]))) return palette
+  const lvl = LEVELS.find((l) => String(l.id) === levelKey)
+  const stock = (lvl && lvl.config && lvl.config.palette) || {}
+  const out = { ...p }
+  for (const k of PALETTE_KEYS) if (!hexOk(out[k])) out[k] = hexOk(stock[k]) ? stock[k] : NEUTRAL_PALETTE[k]
+  return out
 }
 
 // buildTextures, memoised by (levelKey, palette, materials, look) in a small bounded map: a TexSet is read-only (the stages

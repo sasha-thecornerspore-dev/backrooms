@@ -42,7 +42,7 @@
 // flash faster than WCAG 2.3.1 allows however the game's state machine behaves: a dwell gate lets the event level change at most
 // ~1.3 times a second, a low-pass (fast attack, slower release) shapes the edges, each dimmed emitter flutters at ~1 Hz, and the
 // whole-frame ambient dip is bounded at AMBIENT_DIP_MAX (< 0.5) and shrinks with the comfort preference (reduceFlicker).
-import { hash2, levelKey } from './gfx-util.js'
+import { hash2, hash2Legacy, levelKey } from './gfx-util.js'
 
 const NO_TINT = Object.freeze([1, 1, 1])
 
@@ -228,11 +228,13 @@ const STEADY_BAND = 0.1        // the game's steady state wanders in rawFlicker 
 const HOLD_HIGH = 0.45, HOLD_LOW = 0.3   // dwell times of the event gate (seconds): a rise-and-fall cycle takes at least 0.75 s
 export function eventIntensity(rawFlicker) { return clamp01(((1 - rawFlicker) - STEADY_BAND) / (1 - STEADY_BAND)) }
 
-// smooth per-panel value noise in 0..1, evaluated at time t (seconds); the lattice hash gives every panel its own phase
+// smooth per-panel value noise in 0..1, evaluated at time t (seconds); the lattice hash gives every panel its own phase.
+// h is itself a full-range hash, beyond the range where the old double-multiply hash2 was exact, so this keeps that frozen
+// construction (hash2Legacy): the flutter of every panel stays exactly what it was. Only the CPU evaluates it (the GPU gets the levels).
 function panelNoise(h, t, hz) {
   const x = t * hz + ((h >>> 12) & 1023) * 0.0977
   const k = Math.floor(x), f = x - k
-  const a = hash2(h, k, 0x9e37) / 4294967296, b = hash2(h, k + 1, 0x9e37) / 4294967296
+  const a = hash2Legacy(h, k, 0x9e37) / 4294967296, b = hash2Legacy(h, k + 1, 0x9e37) / 4294967296
   const s = f * f * (3 - 2 * f)
   return a + (b - a) * s
 }
@@ -288,6 +290,16 @@ export function lmEdgeFade(dc, RL) {
 }
 export const LM_FADE_CELLS = LM_FADE
 
+// createLight's periodic pool tiles depend on two numbers only, and nothing writes them once built (the world pass and the GPU upload
+// read them): a light created again for the same recipe (a level re-entered, the GPU path's first-frame CPU reference, a swap to the CPU
+// renderer) takes the same arrays instead of re-running ~37k kernel evaluations per tile.
+const TILE_MEMO = new Map()
+function memoTile(key, build) {
+  let v = TILE_MEMO.get(key)
+  if (v === undefined) { if (TILE_MEMO.size >= 32) TILE_MEMO.clear(); v = build(); TILE_MEMO.set(key, v) }
+  return v
+}
+
 // ── the light object ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 export function createLight(config, worldHooks) {
   const S = resolveLighting(config)
@@ -310,10 +322,10 @@ export function createLight(config, worldHooks) {
   const lamps = S.mode === 'lamps'
   const windows = S.mode === 'daylight' && S.windows && S.windows.strength > 0
   const emitters = lamps || windows
-  const floorT = buildPanelTile(panels ? range : 0, S.radius)
-  const ceilRange = panels ? Math.max(0, (S.peak - S.ambient) * S.pool * 0.7) : 0
-  const ceilT = buildPanelTile(ceilRange, Math.min(1.9, S.radius * 1.3))
-  const wallPanel = buildWallPool(S.radius * 0.95)
+  const floorR = panels ? range : 0, ceilRange = panels ? Math.max(0, (S.peak - S.ambient) * S.pool * 0.7) : 0, ceilRad = Math.min(1.9, S.radius * 1.3)
+  const floorT = memoTile('p' + floorR + '|' + S.radius, () => buildPanelTile(floorR, S.radius))
+  const ceilT = memoTile('p' + ceilRange + '|' + ceilRad, () => buildPanelTile(ceilRange, ceilRad))
+  const wallPanel = memoTile('w' + S.radius * 0.95, () => buildWallPool(S.radius * 0.95))
   const surf = {}                                        // ts → buildSurfaceTables (the tile size is only known at the first frame)
   // the strength of one emitter at its centre, in the units of `pool` (lamps: the level's range; windows: their own strength)
   const emitRange = lamps ? range : windows ? S.windows.strength : 0
@@ -465,12 +477,14 @@ export function createLight(config, worldHooks) {
   }
   // Per light cell: the (up to LM_MAXL nearest) lamps in reach and each one's static weight per sample (kernel × visibility × strength),
   // so a flicker event can re-mix the lightmap with the lamps' current levels without redoing any visibility test.
-  const cellN = new Uint8Array(LMC * LMC)
-  const cellId = new Int16Array(LMC * LMC * LM_MAXL)
-  const cellW = new Float32Array(LMC * LMC * LM_MAXL * 16)
+  // (only a level with emitters has a lightmap: these are ~0.5 MB, so a panel level does not allocate them)
+  const cellN = emitters ? new Uint8Array(LMC * LMC) : null
+  const cellId = emitters ? new Int16Array(LMC * LMC * LM_MAXL) : null
+  const cellW = emitters ? new Float32Array(LMC * LMC * LM_MAXL * 16) : null
   const exd = new Float32Array(96)
   function gatherCell(lcx, lcy, slot) {
     lmTagX[slot] = lcx; lmTagY[slot] = lcy
+    lastLv[slot * LM_MAXL] = NaN                    // gathered, not mixed: the next re-mix must write this cell
     const rc = lmReachCells
     const mx = lcx + 0.5, my = lcy + 0.5
     let n = 0
@@ -517,7 +531,11 @@ export function createLight(config, worldHooks) {
     }
   }
   const cellIdTmp = new Int16Array(96)
-  // re-mix the lightmap of every cell in view with the lamps' current levels (F.lampLev, indexed by the lamp's occupancy slot)
+  // per light cell, the levels of its lamps its samples were last re-mixed with (NaN: gathered since), and scratch for one cell's levels
+  const lastLv = emitters ? new Float32Array(LMC * LMC * LM_MAXL).fill(NaN) : null, lvTmp = new Float64Array(LM_MAXL), accTmp = new Float64Array(16)
+  // re-mix the lightmap of every cell in view with the lamps' current levels (F.lampLev, indexed by the lamp's occupancy slot). A cell whose
+  // lamps all have the very levels it was last mixed with already holds exactly what the mix would write (most cells, while only a few
+  // lamps gutter), so it is skipped; the others sum their lamps in the same order as always.
   function remixLightmap(fs, lampLev) {
     const p = fs.player
     const pcx = Math.floor(p.x), pcy = Math.floor(p.y)
@@ -527,13 +545,20 @@ export function createLight(config, worldHooks) {
         const slot = ((lcy & (LMC - 1)) << 5) | (lcx & (LMC - 1))
         const n = cellN[slot]
         if (n === 0) continue
+        const base = slot * LM_MAXL
+        let same = true
+        for (let k = 0; k < n; k++) { const v = lampLev[cellId[base + k]]; lvTmp[k] = v; if (v !== lastLv[base + k]) same = false }
+        if (same) continue
+        for (let k = 0; k < n; k++) lastLv[base + k] = lvTmp[k]
+        // lamp by lamp over the cell's 16 samples (each sample still sums its lamps in order k = 0, 1, ...)
+        accTmp.fill(0)
+        for (let k = 0; k < n; k++) {
+          const l = lvTmp[k], wb = (base + k) * 16
+          for (let si = 0; si < 16; si++) accTmp[si] += l * cellW[wb + si]
+        }
         for (let j = 0; j < LM_N; j++) {
-          for (let i = 0; i < LM_N; i++) {
-            const si = j * LM_N + i
-            let acc = 0
-            for (let k = 0; k < n; k++) acc += lampLev[cellId[slot * LM_MAXL + k]] * cellW[(slot * LM_MAXL + k) * 16 + si]
-            lm[(((lcy * LM_N + j) & (LMS - 1)) << 7) | ((lcx * LM_N + i) & (LMS - 1))] = acc
-          }
+          const row = ((lcy * LM_N + j) & (LMS - 1)) << 7
+          for (let i = 0; i < LM_N; i++) lm[row | ((lcx * LM_N + i) & (LMS - 1))] = accTmp[j * LM_N + i]
         }
       }
     }
@@ -581,11 +606,14 @@ export function createLight(config, worldHooks) {
   const hzOf = (fs) => (fs.comfort && fs.comfort.reduceFlicker ? 0.55 : 1.1)
 
   // the level of the emitter at (cx, cy) under the state of the last prepared frame (or `fs` when it is not that one)
+  // (the view direction's cosine and sine are memoised by angle: a frame asks for hundreds of emitters under one player angle)
+  let memoA = NaN, memoC = 1, memoS = 0
   function levelRaw(cx, cy, fs) {
     const e = fs === lastFs ? eSmooth : eventFor(fs)
     if (e <= 0.002) return 1
     const p = fs.player || { x: cx, y: cy, angle: 0 }
-    return panelDim(cx, cy, e, aheadOf(cx, cy, p.x, p.y, Math.cos(p.angle), Math.sin(p.angle), fs.fog || 16), fs.t || 0, depthOf(fs), hzOf(fs))
+    if (!Object.is(p.angle, memoA)) { memoA = p.angle; memoC = Math.cos(memoA); memoS = Math.sin(memoA) }
+    return panelDim(cx, cy, e, aheadOf(cx, cy, p.x, p.y, memoC, memoS, fs.fog || 16), fs.t || 0, depthOf(fs), hzOf(fs))
   }
   // the same, pulled toward 1 by the frame's flicker budget (F.dimS, see prepare) so the frame mean keeps to the comfort floor
   function levelFor(cx, cy, fs) {
@@ -676,6 +704,29 @@ export function createLight(config, worldHooks) {
     return null
   }
 
+  // ── the flicker budget (per frame, while an event is in flight) ──
+  // the emitters in front of the player, and near, are the ones that show (and they are the first to go), so they weigh the most
+  function viewWeight(cx, cy, fog) {
+    const dx = cx + 0.5 - F.px, dy = cy + 0.5 - F.py
+    const front = clamp01((dx * F.ca + dy * F.sa) / (Math.sqrt(dx * dx + dy * dy) + 1e-6) * 0.7 + 0.3)     // 1 dead ahead .. 0 behind
+    return front * Math.max(0.05, 1 - Math.sqrt(dx * dx + dy * dy) / (fog + 3))
+  }
+  // the frame's luminance lost when every emitter (level v) is dimmed to 1 - s(1-v): emitShare x (1 - weighted mean of level^gamma)
+  function lossAt(s, vals, wts, n, wsum) { let a = 0; for (let i = 0; i < n; i++) a += wts[i] * POW_LUM[((1 - s * (1 - vals[i])) * 255 + 0.5) | 0]; return emitShare * (1 - a / wsum) }
+  // The largest s in 0..1 such that dimming every emitter that way costs the frame at most `allowed` of its luminance.
+  // vals/wts: the emitters' raw levels and view weights. (Functions of createLight, not of the frame: prepare() allocates nothing.)
+  function budget(vals, wts, n, allowed) {
+    if (allowed >= 1) return 1
+    let wsum = 0
+    for (let i = 0; i < n; i++) wsum += wts[i]
+    if (!(wsum > 0)) return 1
+    if (lossAt(1, vals, wts, n, wsum) <= allowed) return 1
+    let lo = 0, hi = 1
+    for (let k = 0; k < 8; k++) { const mid = (lo + hi) / 2; if (lossAt(mid, vals, wts, n, wsum) <= allowed) lo = mid; else hi = mid }
+    return lo
+  }
+  const NO_LIGHTS = Object.freeze({})
+
   // ── per frame ──
   light.prepare = (fs, tex, isWallFn, materialAt) => {
     const ld = (fs.quality && fs.quality.lightDetail) | 0
@@ -714,25 +765,6 @@ export function createLight(config, worldHooks) {
     F.dimS = 1
     const gLin = Math.pow(F.gdip, LUM_GAMMA)
     const allowed = T > 0 ? Math.max(0, 1 - T / gLin) : 1         // the share of the frame's luminance the emitters may lose
-    // the emitters in front of the player, and near, are the ones that show (and they are the first to go), so they weigh the most
-    const viewWeight = (cx, cy) => {
-      const dx = cx + 0.5 - F.px, dy = cy + 0.5 - F.py
-      const front = clamp01((dx * F.ca + dy * F.sa) / (Math.sqrt(dx * dx + dy * dy) + 1e-6) * 0.7 + 0.3)     // 1 dead ahead .. 0 behind
-      return front * Math.max(0.05, 1 - Math.sqrt(dx * dx + dy * dy) / (fs.fog + 3))
-    }
-    // The largest s in 0..1 such that dimming every emitter (level v) to 1 - s(1-v) costs the frame at most `allowed` of its luminance.
-    // vals/wts: the emitters' raw levels and view weights; the loss is emitShare x (1 - weighted mean of level^gamma).
-    const budget = (vals, wts, n) => {
-      if (allowed >= 1) return 1
-      let wsum = 0
-      for (let i = 0; i < n; i++) wsum += wts[i]
-      if (!(wsum > 0)) return 1
-      const loss = (s) => { let a = 0; for (let i = 0; i < n; i++) a += wts[i] * POW_LUM[((1 - s * (1 - vals[i])) * 255 + 0.5) | 0]; return emitShare * (1 - a / wsum) }
-      if (loss(1) <= allowed) return 1
-      let lo = 0, hi = 1
-      for (let k = 0; k < 8; k++) { const mid = (lo + hi) / 2; if (loss(mid) <= allowed) lo = mid; else hi = mid }
-      return lo
-    }
 
     // panel level grid (only while an event is in flight; a steady frame carries no grid)
     F.dimmed = false
@@ -748,17 +780,17 @@ export function createLight(config, worldHooks) {
         for (let i = 0; i < N; i++) {
           const cx = 2 * (F.levI0 + i), cy = 2 * (F.levJ0 + j)
           F.lev[j * N + i] = levelRaw(cx, cy, fs)
-          levW[j * N + i] = viewWeight(cx, cy)
+          levW[j * N + i] = viewWeight(cx, cy, fs.fog)
         }
       }
-      const s = budget(F.lev, levW, N * N)
+      const s = budget(F.lev, levW, N * N, allowed)
       F.dimS = s
       for (let i = 0; i < N * N; i++) { if (s < 1) F.lev[i] = 1 - s * (1 - F.lev[i]); if (F.lev[i] < lo) lo = F.lev[i] }
       F.dimmed = lo < 0.97
     }
 
     // the player's own lights
-    const lt = fs.lights || {}
+    const lt = fs.lights || NO_LIGHTS
     F.flash = !!lt.flashlight
     F.glow = Array.isArray(lt.glow) && ld >= 2
     F.flash = F.flash && ld >= 2
@@ -778,10 +810,10 @@ export function createLight(config, worldHooks) {
             const so = slotOf(cx, cy)
             if (cellLamp[so] !== 1) continue
             lampLev[so] = levelRaw(cx, cy, fs)
-            bV[n] = lampLev[so]; bW[n] = viewWeight(cx, cy); n++
+            bV[n] = lampLev[so]; bW[n] = viewWeight(cx, cy, fs.fog); n++
           }
         }
-        const s = budget(bV, bW, n)
+        const s = budget(bV, bW, n, allowed)
         F.dimS = s
         for (let cy = pcy - R; cy <= pcy + R; cy++) {
           for (let cx = pcx - R; cx <= pcx + R; cx++) {

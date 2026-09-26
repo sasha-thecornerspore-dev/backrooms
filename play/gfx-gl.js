@@ -30,12 +30,14 @@
 //     note and an npc a few cells ahead, flashlight on, in the real world — independent of what is on screen) is drawn by the GPU passes at a small size, compared with a
 //     throwaway CPU render of the same frame, and a black / garbage / flipped / mis-exposed / sprite-less picture throws GlError('validate'). A pass
 //     is remembered per (device, build) in localStorage and in memory for the session. A tiny canvas, a hidden page or a black reference defers the
-//     check to a later render call (VALIDATE_AT) instead of failing.
+//     check to a later render call (VALIDATE_AT) instead of failing. info.validation: 'pending' | 'running' | 'passed' | 'cached' | 'off' | 'skipped'
+//     | 'failed' (the picture did not match: GlError('validate')) | 'error' (the validation frame itself threw — a shader / program / GL error or a
+//     lost context — and that error is rethrown unchanged, with its own stage).
 // renderOpts hooks for tests and the harness — HONOURED ONLY in a test run (isTestRun(): the harness sets globalThis.__backroomsTestRun before the game
 // script runs; a player cannot): __failGl = 'create' | 'frame' | 'frame:N' | 'lost' | 'validate' forces that failure; gpuValidate true|false forces the
 // validation on|off; allowSoftwareGl lets the harness use SwiftShader.
 import { hexToRgb, levelKey } from './gfx-util.js'
-import { buildTextures, texturesMemoSize, clearTexturesMemo } from './gfx-textures.js'
+import { buildTextures, texturesMemoSize, clearTexturesMemo, resolvePalette } from './gfx-textures.js'
 import { createLight } from './gfx-light.js'
 import { qualityFor, isSoftwareGl } from './gfx-quality.js'
 import { buildFrameState } from './gfx-frame.js'
@@ -133,16 +135,18 @@ export function createGlRenderer(canvas, config, renderOpts = {}, worldHooks = {
     // ── 3. everything the passes share ──
     LEVEL_KEY = levelKey(config)
     materialAt = worldHooks.materialAt || null
-    fogRgb = hexToRgb(config.palette.fog)
+    fogRgb = hexToRgb(resolvePalette(config.palette, LEVEL_KEY).fog)
     skyRgb = config.sky ? hexToRgb(config.sky) : null
     lightsOn = config.lights !== false
     tex = (deps.buildTextures || buildTextures)(config.palette, config.materials, config.look, LEVEL_KEY)
     light = (deps.createLight || createLight)(config, worldHooks)
     tri = fullscreenTriangle(gl)
     Object.assign(env, { gl, canvas: glCanvas, tex, light, materialAt, tri })
+    // the post pass only queues its programs (gfx-gl-post.js), so it goes first: with KHR_parallel_shader_compile its nine programs then compile
+    // while the world pass uploads its tile array and tables and the sprite pass builds its atlas
+    post = (P.post || createPostPass)(env)
     world = (P.world || createWorldPass)(env)
     sprites = (P.sprites || createSpritePass)(env)
-    post = (P.post || createPostPass)(env)
   } catch (e) {
     const err = asFailure(e instanceof GlError || e instanceof GpuUnavailable ? e : new GlError('init', String(e && e.message || e)))
     teardown()
@@ -273,7 +277,12 @@ export function createGlRenderer(canvas, config, renderOpts = {}, worldHooks = {
       validationMs = nowMs() - t0
       if (measure && gpuFrame) { try { validationFrames = { gpu: png(gpuFrame, true), cpu: png(ref, false) } } catch { /* ignore */ } }
       if (measure && e instanceof GlError && e.stage === 'validate') { validationMetrics = e.metrics || null; validation = 'measured-fail'; return }
-      validation = 'failed'; throw asFailure(e)
+      // Only a picture that does not match is a FAILED validation. Anything else thrown while drawing the synthetic frame — a post program that
+      // fails to compile or link when it is first collected here (programs are collected lazily), a GL error, a lost context — is that failure,
+      // with its own stage (persisted or session-only as usual in renderer.js); the check itself could not finish: 'error', not 'failed'.
+      const err = asFailure(e)
+      validation = err instanceof GlError && err.stage === 'validate' ? 'failed' : 'error'
+      throw err
     }
   }
 

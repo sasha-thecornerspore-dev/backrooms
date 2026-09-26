@@ -74,8 +74,8 @@ uint hash2u(int a, int b, uint c) {
 
 // MODULO. h % n on a full 32-bit value is only exact where the GPU divides in integers; some parts lower it through an fp32 reciprocal (exact below
 // 2^24). Splitting h into 16-bit halves keeps every intermediate small (< 2^24 for any n up to 4096), so the result is exact everywhere (the formula is
-// proved against JS % in test/gfx-gl-fix-r2.test.js). NOTE: the CPU's hash2 (gfx-util.js) multiplies in doubles and loses exactness beyond |cell| ~ 3.4e6,
-// so past that the CPU and this hash pick different variants (about 4 days of walking straight; out of scope, cosmetic).
+// proved against JS % in test/gfx-gl-fix-r2.test.js). The CPU's hash2 (gfx-util.js) wraps in 32 bits exactly like this one (Math.imul), so the two pick
+// the same variant on every cell, at any distance from the origin.
 uint modExact(uint h, uint n) {
   n = max(n, 1u);
   return (((h >> 16u) % n) * (65536u % n) + (h & 65535u) % n) % n;
@@ -293,7 +293,7 @@ vec3 flatPixel(float x, float y) {
     c = tileAt(f, layer, gx, gy, nearK).rgb * L + add;
   }
   if (lampC) {                                              // a lamp fixture: a bright bulb inside a dark cage ring, soft-edged
-    vec2 pd = vec2(tt) - HT;
+    vec2 pd = f * uTSf - HT;                                // from the sub-texel position, as the CPU does: a smooth ring, not a blocky one
     float t = dot(pd, pd) / (0.0169 * uTSf * uTSf);
     if (t < 1.0) {
       float cov = t < 0.8 ? 1.0 : (1.0 - t) * 5.0;

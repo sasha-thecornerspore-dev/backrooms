@@ -1,5 +1,7 @@
 // renderer.js — the public entry point. game.js calls createRenderer(canvas, config, renderOpts, worldHooks) and then
 // render(player, isWallFn, flicker, entities, fogMul, lights, timing) every frame. It picks a backend:
+// isWallFn may declare the chunk its closure hands the cache (isWallFn.pcx / .pcy, and .evictRadius when the level overrides 3): the rays then
+// ask through a per-frame memo (gfx-world.js memoSafe). Undeclared, every ask goes to the cache: the same pixels, only slower.
 //
 //   'cpu'  gfx-cpu.js  the hand-written raycaster on Canvas2D — always available, always the fallback
 //   'gpu'  gfx-gl.js   the WebGL2 backend (only ever chosen when a real GPU is probed; never software GL)
@@ -14,6 +16,9 @@
 //   kind       'cpu' | 'gpu' (a getter: it changes if the GPU path is abandoned)
 //   why        the reason string of the current choice (pickRenderer's, or gpu-failed-<stage>), for the log / a debug overlay
 //   info       the backend's diagnostics (GPU: renderer string, caps, validation state) or null
+//   fallbacks  how many times a GPU path was abandoned for the CPU this session (every renderer built by the same factory: the stats overlay)
+//   failure    null, or { stage, persisted } once THIS renderer abandoned its GPU path (persisted = it wrote the 24 h crash marker): the benchmark
+//              reads it so that a failure its own run caused stays recorded
 //   capture()  a PNG data URL of the visible frame — the Polaroid reads the frame through this (a GL canvas is only readable when re-drawn);
 //              if the GPU frame could not be read the renderer swaps to the CPU and the CPU draws the same frame for the capture
 //   noteFrame(rawMs, { budgetMs, atFloor })   the game loop feeds the REAL frame interval; the GPU health monitor (gfx-quality.js) may downgrade
@@ -35,6 +40,7 @@ import {
 export const GPU_AUTO = false
 
 const MARKER_KEY = 'backrooms:gpu-marker'
+export const GPU_MARKER_KEY = MARKER_KEY          // the crash-loop marker's localStorage key (gfx-bench.js leaves it as it found it: createMarkerGuard)
 // failure stages that are transient by nature: the GPU path is dropped for this session only, nothing is persisted
 const SESSION_ONLY_STAGES = new Set(['context', 'health', 'disposed'])
 // the marker is also cleared after this many healthy frames spread over at least this long (a slow GPU takes long to reach CRASH_HEALTHY_FRAMES)
@@ -59,6 +65,7 @@ export function createRendererWith(overrides = {}) {
   const D = { ...defaultDeps, ...overrides }
   let sessionOff = null            // once set, no renderer built by this factory tries the GPU again (a lost context, a slow GPU, any failure)
   let probeMemo = null             // the WebGL probe runs at most once per session (each run creates and releases a throwaway context)
+  let fallbacks = 0                // GPU paths abandoned (creation or later) by the renderers of this factory
 
   const readMarker = () => { try { const s = D.storage(); return s ? JSON.parse(s.getItem(MARKER_KEY) || 'null') : null } catch { return null } }
   const writeMarker = (m) => { try { const s = D.storage(); if (!s) return; if (m) s.setItem(MARKER_KEY, JSON.stringify(m)); else s.removeItem(MARKER_KEY) } catch { /* private mode: no breaker, the try/catch fallbacks still hold */ } }
@@ -81,6 +88,7 @@ export function createRendererWith(overrides = {}) {
     const allowSoftware = isTestRun() && !!renderOpts.allowSoftwareGl
 
     let impl = null, kind = 'cpu', healthy = 0, marker = null, armedPrev = null, disposed = false, health = null, lastArgs = null, firstOkAt = 0, unhook = null
+    let failure = null               // { stage, persisted } once THIS renderer abandoned the GPU path (persisted: giveUp wrote the 24 h block)
     let why = urlOverride === 'cpu' ? 'url-cpu' : renderOpts.renderer === 'cpu' ? 'pref-cpu' : 'auto-cpu-until-verified'
     const explicit = urlOverride === 'gpu' ? 'gpu' : (pref === 'gpu' || pref === 'auto' ? pref : null)
 
@@ -91,6 +99,8 @@ export function createRendererWith(overrides = {}) {
       D.warn(lostCtx ? '[renderer] the WebGL context was lost: this session stays on the CPU renderer' : `[renderer] GPU path abandoned (${stage}):`, err && err.message ? err.message : err)
       const transient = lostCtx || SESSION_ONLY_STAGES.has((err && err.stage) || stage) || (err && err.name === 'GpuUnavailable')
       sessionOff = why = `gpu-failed-${lostCtx ? 'context' : stage}`
+      fallbacks++
+      failure = { stage: lostCtx ? 'context' : stage, persisted: !transient }
       if (!transient) writeMarker({ armedAt: now, count: CRASH_LIMIT })
       else if (marker) writeMarker(armedPrev)                 // this instance armed the marker but the failure is not a crash: put it back
       clearMarker()
@@ -176,6 +186,8 @@ export function createRendererWith(overrides = {}) {
       get kind() { return kind },
       get why() { return why },
       get info() { return impl && impl.info ? impl.info : null },
+      get fallbacks() { return fallbacks },
+      get failure() { return failure },
       capture() {
         if (disposed) return null
         if (kind === 'gpu' && impl.capture) {

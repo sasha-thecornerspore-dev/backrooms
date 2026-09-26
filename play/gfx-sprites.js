@@ -7,6 +7,10 @@
 //     premultiplied RGBA texture with a mip chain, a world-space rectangle (x0..x1 across, y0..y1 up from the floor, in
 //     wall heights: 1.0 = floor to ceiling) and a blend mode (0 over, 1 screen). The atlas is keyed by
 //     (kind, name, variant, state, anim frame, facing); see frameIndex()/frameKey() and getFrame().
+//   * ONE PLAN, TWO BACKENDS. planSprites(fs, entities) decides everything about what is drawn (cull, cap, order, pose, warp,
+//     colour, fog, light, rim, dissolve, nameplates) and returns a list of drawable records, one per layer (section 6). The CPU
+//     pass drawSprites() blits those records (section 7); the GPU pass (gfx-gl-sprites-plan.js) turns the SAME records into
+//     instances. Nothing about a sprite is decided twice, so the two paths cannot drift.
 //   * drawSprites(buf32, zbuffer, fs, entities) blits layers into the world buffer BEFORE it is put on the canvas:
 //     per-COLUMN depth test against the z-buffer for every kind (runs of visible columns, see visibleRuns), colour fogged
 //     toward the fog colour exactly like a wall texel, lit by fs.light (ambient 1 when it is missing or disabled), dimmed
@@ -28,14 +32,17 @@
 //               sight sightType; item itemType; player/npc name angle chatText hp; enemy variant state dir stagger; apparition
 //               variant vx vy. (`key` is passed through for the WebGL path; the CPU art varies from `rot` and position.)
 //     returns   the remote-player nameplate records {sx, y, name, alpha, speech, hp} (a reused array; read it this frame).
+//   planSprites(fs, entities) -> { recs, count, sprites, plates }     the same decisions without a buffer (the GPU pass builds on it; the
+//               record layout is in section 6). The plan is module state: read it before the next planSprites / drawSprites call.
 //   Frames are built lazily (a few ms each). A miss is built synchronously unless this call has already spent GEN_BUDGET_MS, in which
-//   case that sprite waits a frame; the first sight of a thing also queues its other poses, and the first draw of a level queues that
-//   level's whole cast, one frame per call (skipped when the frame budget is tight). prewarmSprites(levelConfig) builds a level's
-//   frames up front if the caller prefers a loading-time cost.
+//   case that sprite waits a frame; the first sight of a thing also queues its other poses. prewarmSprites(levelConfig) builds the head of
+//   the level's list up front (both backends call it at creation) and queues the rest, built one frame per call in the background (skipped
+//   when the frame budget is tight); a level drawn without it queues a built-in list for its key on its first draw. Queueing a DIFFERENT level's
+//   list first drops the previous level's unbuilt tail (warmForLevel), so each level starts with a fresh queue on both backends.
 //
 // Every exported pure helper is covered by test/gfx-sprites.test.js.
 
-import { hash2, mulberry32 } from './gfx-util.js'
+import { hash2, hash2Legacy, mulberry32, levelKey } from './gfx-util.js'
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // 1. TABLES
@@ -479,9 +486,25 @@ export function glowSeg(P, ax, ay, bx, by, wid, r, g, b, a) {
 // 4. LAYERS AND THE ATLAS
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // packLayer turns a paint into a Layer: premultiplied ABGR Uint32 mips (little-endian, the same packing as buf32), an
-// optional rim plane (Uint8, 128 = none, >128 = edge facing right, <128 = facing left), and the placement rect.
+// optional rim plane (Uint8, 128 = none, >128 = edge facing right, <128 = facing left), each texel row's opaque span (rs, see
+// rowSpans), and the placement rect. A mip is { w, h, px, rim, rs }.
 //   opts: mode 0 over | 1 screen; emit 0..1 (1 = not dimmed by scene light or flicker); fogK 0..1 (how much fog acts on
 //         it: 1 = like a wall, less = a beacon that carries through fog); floor (a flat decal); rimK (takes rim light)
+
+// Per texel row, the columns [c0, c1) that hold any texel with alpha > 0 (c0 = c1 = 0: an empty row), as an Int32Array of 2 * h. The
+// blitter never reads outside a row's span: every texel there is transparent.
+export function rowSpans(px, w, h) {
+  const rs = new Int32Array(h * 2)
+  for (let y = 0; y < h; y++) {
+    const o = y * w
+    let a = 0, b = w
+    while (a < w && (px[o + a] >>> 24) === 0) a++
+    if (a === w) continue
+    while ((px[o + b - 1] >>> 24) === 0) b--
+    rs[y * 2] = a; rs[y * 2 + 1] = b
+  }
+  return rs
+}
 
 function packMip(P) {
   const { w, h, px } = P
@@ -514,7 +537,7 @@ function halve(m) {
       }
     }
   }
-  return { w, h, px, rim }
+  return { w, h, px, rim, rs: rowSpans(px, w, h) }
 }
 
 // Crop a paint to the box that holds any paint (plus a pixel of margin) and shrink the world rect to match, so the blitter never
@@ -550,7 +573,7 @@ export function packLayer(P0, x0_, x1_, y0_, y1_, o = {}) {
   } else if (o.rim) {
     rim = new Uint8Array(P.w * P.h).fill(128)
   }
-  const mips = [{ w: P.w, h: P.h, px, rim }]
+  const mips = [{ w: P.w, h: P.h, px, rim, rs: rowSpans(px, P.w, P.h) }]
   let m = mips[0]
   while (m.w >= 8 && m.h >= 8) { m = halve(m); mips.push(m) }
   return { x0, x1, y0, y1, mips, mode: o.mode | 0, emit: o.emit || 0, fogK: o.fogK ?? 1, floor: !!o.floor, rimK: o.rimK || 0, alpha: o.alpha ?? 1 }
@@ -670,7 +693,9 @@ const LEVEL_SPRITES = {
   '∅': { props: ['trash', 'tire', 'weeds', 'box'], items: ['polaroid'], creatures: [] },
 }
 let LAST_LEVEL = null
+const LEVEL_QUEUED = new Set()     // level keys whose own config list was queued (prewarmSprites / queueLevelSprites): LEVEL_SPRITES is not needed
 function queueLevel(key) {
+  if (LEVEL_QUEUED.has(key)) return
   const L = LEVEL_SPRITES[key]
   if (!L) return
   for (const c of L.creatures) warmPush(['creature', c, 0, 0, 0, FACING_FRONT])
@@ -682,15 +707,12 @@ function queueLevel(key) {
   if (L.sights) for (const t of Object.keys(SIGHT_SPEC)) warmPush(['sight', t, 0, 0, 0, 0])
 }
 
-// Build every frame a level can show, up front (synchronous). game.js may call this at level load with the level config
-// to move the (few ms per frame) generation cost off the first sighting; `maxMs` stops early. Returns frames built.
-export function prewarmSprites(config, maxMs = 400) {
-  const t0 = typeof performance !== 'undefined' ? performance.now() : 0
-  const before = FRAMES_BUILT
+// The frames a level can show, from its CONFIG, most important first (a cut drops the tail): the exit, notes and machines, the first
+// pose of each creature (idle, then chase), one variant of each prop and item, then the other prop variants and creature poses, then
+// (levels 0-3) the landmark sights.
+const SIGHT_LEVELS = { '0': 1, '1': 1, '2': 1, '3': 1 }
+function levelJobs(c) {
   const jobs = []
-  const c = config || {}
-  // most important first (a cut at maxMs drops the tail): the exit, notes and machines, the first pose of each creature
-  // (idle, then chase), one variant of each prop and item, then the other prop variants and creature poses
   if (c.exit || c.exitAt) jobs.push(['exit', 'portal', 0, 0, 0, 0])
   if (c.scraps && c.scraps.denom !== 0) jobs.push(['note', 'unread', 0, 0, 0, 0], ['note', 'read', 0, 0, 0, 0])
   if (c.machines && c.machines.denom !== 0) jobs.push(['machine', 'lit', 0, 0, 0, 0], ['machine', 'spent', 0, 0, 0, 0])
@@ -702,16 +724,60 @@ export function prewarmSprites(config, maxMs = 400) {
   for (const t of (c.items && c.items.types) || []) jobs.push(['item', ITEM_COLORS[t] ? t : 'radio', 0, 0, 0, 0])
   for (const t of (c.props && c.props.types) || []) for (let v = 1; v < 3; v++) jobs.push(['prop', PROP_SPEC[t] ? t : 'box', v, 0, 0, 0])
   for (const v of cast) for (const s of [2, 3]) jobs.push(['creature', v, 0, s, 0, FACING_FRONT])
-  for (let i = 0; i < jobs.length; i++) {
+  if (SIGHT_LEVELS[levelKey(c)]) for (const t of Object.keys(SIGHT_SPEC)) jobs.push(['sight', t, 0, 0, 0, 0])
+  return jobs
+}
+
+// HS-1: the queue is module state shared by every renderer, but its jobs belong to ONE level. When a level's list is queued for a level other
+// than the one the queue was last filled for (a new renderer on another level: CPU or GPU, the queue is shared), the old level's unbuilt tail is
+// dropped first, so the new level's first seconds build the new level's frames. Jobs for a sprite the new level lists too (a creature's other
+// poses, a prop's variants) are kept, behind the new level's own list. The same level queued again (both backends' creation paths, a re-run)
+// keeps everything. Timing only: every frame is built on demand anyway, so what is drawn does not change.
+let WARM_LEVEL = null
+function warmForLevel(key, jobs) {
+  if (key === WARM_LEVEL) return null
+  const had = WARM_LEVEL !== null
+  WARM_LEVEL = key
+  if (!had || WARMQ.length === 0) return null
+  const names = new Set(jobs.map((j) => j[0] + '|' + j[1]))
+  const keep = WARMQ.filter((a) => names.has(a[0] + '|' + a[1]))
+  WARMQ.length = 0; WARMQ_KEYS.clear()
+  return keep
+}
+// a snapshot of the background queue (tests / tools): [kind, name, v, state, anim, facing] per job, in build order
+export function warmQueue() { return WARMQ.map((a) => a.slice()) }
+
+// Build a level's frames up front (synchronous), as far as `maxMs` allows, and queue the rest for the background (built one frame per
+// draw call, CPU and GPU alike). Both backends call it at creation with the level config, so the (few ms per frame) generation cost is
+// off the first sighting. Returns frames built.
+export function prewarmSprites(config, maxMs = 400) {
+  const t0 = typeof performance !== 'undefined' ? performance.now() : 0
+  const before = FRAMES_BUILT
+  const jobs = levelJobs(config || {})
+  const keep = config ? warmForLevel(levelKey(config), jobs) : null
+  let i = 0
+  for (; i < jobs.length; i++) {
     const j = jobs[i]
     if (i > 0 && typeof performance !== 'undefined' && performance.now() - t0 > maxMs) break     // the first (most important) job always runs
     getFrame(j[0], j[1], j[2], j[3], j[4], j[5])
   }
+  for (; i < jobs.length; i++) warmPush(jobs[i])
+  if (keep) for (const a of keep) warmPush(a)
+  if (config) LEVEL_QUEUED.add(levelKey(config))
   return FRAMES_BUILT - before
+}
+// Queue a level's whole list for the background without building anything now.
+export function queueLevelSprites(config) {
+  if (!config) return
+  const jobs = levelJobs(config)
+  const keep = warmForLevel(levelKey(config), jobs)
+  for (const j of jobs) warmPush(j)
+  if (keep) for (const a of keep) warmPush(a)
+  LEVEL_QUEUED.add(levelKey(config))
 }
 
 export function atlasStats() { return { frames: FRAMES_BUILT, bytes: TEX_BYTES } }
-export function resetAtlas() { for (const k of Object.keys(ATLAS)) delete ATLAS[k]; FRAMES_BUILT = 0; TEX_BYTES = 0; WARMQ.length = 0; WARMQ_KEYS.clear(); LAST_LEVEL = null; WARM_WAIT = 0; MOTION.length = 0 }
+export function resetAtlas() { for (const k of Object.keys(ATLAS)) delete ATLAS[k]; FRAMES_BUILT = 0; TEX_BYTES = 0; WARMQ.length = 0; WARMQ_KEYS.clear(); LAST_LEVEL = null; LEVEL_QUEUED.clear(); WARM_WAIT = 0; MOTION.length = 0; WARM_LEVEL = null }
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // 5. THE ART
@@ -722,7 +788,9 @@ function strHash(s) {
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) }
   return h >>> 0
 }
-const seedOf = (name, a = 0, b = 0, c = 0) => hash2(strHash(name), (a * 16 + b) * 8 + c, 0x9e37)
+// strHash is a full-range uint32, outside the range the pre-Math.imul hash2 was exact in: the frozen legacy construction keeps every sprite's art
+// exactly as it has always been drawn (gfx-util.js hash2Legacy)
+const seedOf = (name, a = 0, b = 0, c = 0) => hash2Legacy(strHash(name), (a * 16 + b) * 8 + c, 0x9e37)
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t) }
 
 // ── creature and person canvas ──
@@ -2128,8 +2196,28 @@ registerGenerator('sight', (name, v, s, anim, facing) => {
 // @@SIGHTS-END@@
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
-// 6. THE BLITTER
+// 6. THE SPRITE PLAN — what is drawn, decided once for both backends
 // ════════════════════════════════════════════════════════════════════════════════════════════════
+// planSprites(fs, entities) turns the entity list into DRAWABLE RECORDS, one per layer to draw, in paint order: far to near, and within a
+// sprite its ground shadow first, then its layers in art order. Every decision about WHAT is drawn lives here and nowhere else — cull, the
+// MAXS cap and its priority, the far-to-near sort, per-kind frame / pose / facing / mirror, pulses and warps, light / tint / fog / flicker
+// terms, rim, dissolve, the remote players' motion records, nameplates, frame generation and the background warm queue — and both backends
+// consume the same records: the CPU blitter below (drawSprites = planSprites + blit) and the GPU instance builder (gfx-gl-sprites-plan.js).
+//
+// RECORD (reused objects, valid until the next planSprites call; numbers are the blitter's own doubles, never rounded):
+//   si               the sprite's ordinal in this plan: a sprite's records are contiguous (a backend that cannot draw one of them drops the sprite)
+//   lay, mip         the layer, and the mip pickMip() chose for its on-screen height;  shadow: the layer is the soft ground shadow (shadowLayer())
+//   X0 X1 Yt Yb      the screen rect in the internal W x H frame, rows from the top
+//   xa xb ya yb      the whole-pixel box the layer can touch (the warp's sideways pad included), clipped to the frame; never empty
+//   depth, mirror    perpendicular depth (what the z-buffer holds); the art is flipped left-right
+//   A, screen        the layer's alpha; the blend mode (screen = a self-lit glow, screen-blended; otherwise lit 'over')
+//   mr mg mb         the reflected-colour multipliers: alpha x light x (1 - fog) x flicker x the light / palette tints
+//   fr fg fb         the fog term (0..1 of the fog colour, weighted by the fog fraction and alpha; added per texel times its alpha)
+//   lean swayA swayP rippleA rippleP      the runtime warp (all 0 for a floor decal)
+//   cm0 cmK cmX      the sideways lit face: cm = max(0.15, cm0 + cmK * (x - cmX))
+//   rim rimS rimB rimR rimG rimBl         edge light from the nearest emitter (rim: on for this layer; it also needs the mip's rim plane)
+//   dith dx dy dph   the "coming apart in the light" dissolve
+// The per-frame cost is one pass over the entities; nothing is allocated per frame once the pools have grown (records, nameplates, the sort).
 
 const SIN_N = 1024
 const SINT = new Float32Array(SIN_N)
@@ -2141,205 +2229,36 @@ const DITH = new Uint8Array(4096)
 { const r = mulberry32(0xd17e7); for (let i = 0; i < 4096; i++) DITH[i] = (r() * 255) | 0 }
 
 // per-frame context (module state: the sprite pass is single-threaded and non-reentrant)
-let CW = 0, CH = 0, CHH = 0, BUF = null, ZB = null
+let CW = 0, CH = 0, CHH = 0
 let FOGR = 0, FOGG = 0, FOGB = 0        // fog colour * flicker, 0..255
 let FLICK = 1, TNOW = 0, REDUCE = false
 let HARM_R = 1, HARM_G = 1, HARM_B = 1  // palette harmony tint
 let LIGHT = null, LIGHT_ON = false
 let CAMX = 0, CAMY = 0, CAMA = 0, CA = 1, SAN = 0
-let FLASH = false, FOGD = 16
+let FLASH = false
 
 // per-sprite state
 const S = {
+  sx: 0, fwd: 1, side: 0,
   A: 1, L: 1, tr: 1, tg: 1, tb: 1, fogT: 0, lift: 0,
   lean: 0, swayA: 0, swayP: 0, rippleA: 0, rippleP: 0, dith: 0, dx: 0, dy: 0,
   cm0: 1, cmK: 0, hasRim: false, rimS: 0, rimB: 0, rimR: 0, rimG: 0, rimB2: 0, rimK: 0,
 }
 
-// the blit job (one layer): set by setLayer, read by blitRect
-const J = {
-  mr: 1, mg: 1, mb: 1, fr: 0, fg: 0, fb: 0, A: 1, screen: false,
-  lean: 0, swayA: 0, swayP: 0, rippleA: 0, rippleP: 0,
-  rim: false, rimS: 0, rimB: 0, rimR: 0, rimG: 0, rimBl: 0,
-  cm0: 1, cmK: 0, cmX: 0, dith: 0, dx: 0, dy: 0, dph: 0,
-}
-let RUNS = new Int32Array(2048)
-
-function growRuns(n) { if (RUNS.length < n * 2 + 4) RUNS = new Int32Array(n * 2 + 64) }
-
-// Blit one texture (a mip) into the world buffer over the screen rect [X0,X1) x [Yt,Yb), z-tested per column against
-// `depth`, honouring the job's warp / rim / dissolve. Rows outer for cache locality; columns come as visible runs; the texel
-// column advances incrementally (mirroring runs the same walk backwards). Three inner loops: screen-blended glow, the plain
-// lit over-blend (the common case), and the full one (rim light / dissolve).
-function blitRect(mip, X0, X1, Yt, Yb, depth, mirror) {
-  const sw = X1 - X0, sh = Yb - Yt
-  if (sw < 0.6 || sh < 0.6) return
-  const warp = J.lean !== 0 || J.swayA !== 0 || J.rippleA !== 0
-  const pad = warp ? Math.ceil(Math.abs(J.lean) + Math.abs(J.swayA) + Math.abs(J.rippleA)) + 1 : 0
-  let xa = Math.floor(X0 - pad), xb = Math.ceil(X1 + pad)
-  if (xa < 0) xa = 0
-  if (xb > CW) xb = CW
-  let ya = Math.floor(Yt), yb = Math.ceil(Yb)
-  if (ya < 0) ya = 0
-  if (yb > CH) yb = CH
-  if (xb <= xa || yb <= ya) return
-  growRuns((xb - xa) >> 1)
-  const nr = visibleRuns(ZB, xa, xb, depth, RUNS)
-  if (nr === 0) return
-
-  const tw = mip.w, th = mip.h, tpx = mip.px
-  const rimP = J.rim ? mip.rim : null
-  const sxF = tw / sw, syF = th / sh
-  const buf = BUF, W = CW
-  const mr = J.mr, mg = J.mg, mb = J.mb, fr = J.fr, fg = J.fg, fb = J.fb, A255 = J.A / 255
-  const opaqueA = J.A >= 0.9999
-  const fr255 = 255 * fr, fg255 = 255 * fg, fb255 = 255 * fb
-  const screen = J.screen
-  const cm0 = J.cm0, cmK = J.cmK, cmX = J.cmX
-  const useCm = cmK !== 0 || cm0 !== 1
-  const dith0 = J.dith, ddx = J.dx, ddy = J.dy, dph = J.dph
-  const rimS = J.rimS, rimB = J.rimB, rimR = J.rimR, rimG = J.rimG, rimBl = J.rimBl
-  const plain = rimP === null && dith0 === 0
-  const txMax = tw - 1
-  // 8.8 fixed point for the two hot loops: integer multiplies, no float<->int conversions per pixel
-  const A256 = (J.A * 256) | 0
-  const mri = (mr * 256) | 0, mgi = (mg * 256) | 0, mbi = (mb * 256) | 0
-  const fri = (fr * 256) | 0, fgi = (fg * 256) | 0, fbi = (fb * 256) | 0
-  const fr255i = (fr255 * 256) | 0, fg255i = (fg255 * 256) | 0, fb255i = (fb255 * 256) | 0
-  const dtf = mirror ? -sxF : sxF
-
-  for (let y = ya; y < yb; y++) {
-    let ty = ((y + 0.5 - Yt) * syF) | 0
-    if (ty >= th) ty = th - 1
-    const rowT = ty * tw
-    let rx0 = X0
-    if (warp) {
-      const v = (Yb - (y + 0.5)) / sh
-      rx0 += J.lean * v * v + J.swayA * sinc(J.swayP + v * 0.55) * v + J.rippleA * sinc(J.rippleP + v * 2.4) * (1 - v * 0.55)
-    }
-    const xl = Math.ceil(rx0 - 0.5), xr = Math.ceil(rx0 + sw - 0.5)
-    // the dissolve comes in drifting bands, not an even speckle
-    const dith = dith0 > 0 ? dith0 * (0.25 + 1.5 * (0.5 + 0.5 * sinc(y * 0.021 + dph))) : 0
-    const rowB = y * W
-    for (let r = 0; r < nr; r++) {
-      let xs = RUNS[r * 2], xe = RUNS[r * 2 + 1]
-      if (xs < xl) xs = xl
-      if (xe > xr) xe = xr
-      if (xs >= xe) continue
-      let tf = mirror ? tw - (xs + 0.5 - rx0) * sxF : (xs + 0.5 - rx0) * sxF
-      if (screen) {
-        for (let x = xs; x < xe; x++) {
-          let tx = tf | 0
-          tf += dtf
-          if (tx > txMax) tx = txMax
-          else if (tx < 0) tx = 0
-          const p = tpx[rowT + tx]
-          if ((p >>> 24) === 0) continue
-          let s0 = mri
-          if (useCm) { let cm = cm0 + cmK * (x - cmX); if (cm < 0.15) cm = 0.15; s0 = (mri * cm) | 0 }
-          const bi = rowB + x, d = buf[bi]
-          const dr = d & 255, dg = (d >> 8) & 255, db = (d >> 16) & 255
-          // screen: d + s * (255 - d) / 255, with s the glow intensity scaled by the layer's strength
-          let r2 = dr + ((((p & 255) * s0) >> 8) * (255 - dr) * 257 >> 16), g2 = dg + (((((p >> 8) & 255) * s0) >> 8) * (255 - dg) * 257 >> 16), b2 = db + (((((p >> 16) & 255) * s0) >> 8) * (255 - db) * 257 >> 16)
-          if (r2 > 255) r2 = 255
-          if (g2 > 255) g2 = 255
-          if (b2 > 255) b2 = 255
-          buf[bi] = (255 << 24) | (b2 << 16) | (g2 << 8) | r2
-        }
-      } else if (plain) {
-        for (let x = xs; x < xe; x++) {
-          let tx = tf | 0
-          tf += dtf
-          if (tx > txMax) tx = txMax
-          else if (tx < 0) tx = 0
-          const p = tpx[rowT + tx]
-          const a = p >>> 24
-          if (a === 0) continue
-          let mrc = mri, mgc = mgi, mbc = mbi
-          if (useCm) { let cm = cm0 + cmK * (x - cmX); if (cm < 0.15) cm = 0.15; const ci = (cm * 256) | 0; mrc = (mri * ci) >> 8; mgc = (mgi * ci) >> 8; mbc = (mbi * ci) >> 8 }
-          const bi = rowB + x
-          let r2, g2, b2
-          if (a === 255 && opaqueA) {
-            r2 = ((p & 255) * mrc + fr255i + 128) >> 8; g2 = (((p >> 8) & 255) * mgc + fg255i + 128) >> 8; b2 = (((p >> 16) & 255) * mbc + fb255i + 128) >> 8
-          } else {
-            const d = buf[bi], ki = 256 - ((a * A256) >> 8)
-            r2 = ((d & 255) * ki + (p & 255) * mrc + a * fri + 128) >> 8
-            g2 = (((d >> 8) & 255) * ki + ((p >> 8) & 255) * mgc + a * fgi + 128) >> 8
-            b2 = (((d >> 16) & 255) * ki + ((p >> 16) & 255) * mbc + a * fbi + 128) >> 8
-          }
-          if (r2 > 255) r2 = 255
-          if (g2 > 255) g2 = 255
-          if (b2 > 255) b2 = 255
-          buf[bi] = (255 << 24) | (b2 << 16) | (g2 << 8) | r2
-        }
-      } else {
-        for (let x = xs; x < xe; x++) {
-          let tx = tf | 0
-          tf += dtf
-          if (tx > txMax) tx = txMax
-          else if (tx < 0) tx = 0
-          const ti = rowT + tx
-          const p = tpx[ti]
-          const a = p >>> 24
-          if (a === 0) continue
-          let cm = 1
-          if (useCm) { cm = cm0 + cmK * (x - cmX); if (cm < 0.15) cm = 0.15 }
-          const bi = rowB + x
-          const d = buf[bi]
-          let ak = a * A255, dk = 1
-          if (dith > 0 && DITH[(((x >> 1) + ddx) & 63) | ((((y >> 1) + ddy) & 63) << 6)] < (rimP !== null ? dith * (0.15 + 2.7 * (rimP[ti] > 128 ? rimP[ti] - 128 : 128 - rimP[ti]) * (1 / 127)) : dith)) { dk = 0.55; ak *= 0.55 }   // it erodes from its outline inward
-          const k = 1 - ak
-          const m0 = cm * dk
-          let r2 = (d & 255) * k + (p & 255) * mr * m0 + a * fr * dk
-          let g2 = ((d >> 8) & 255) * k + ((p >> 8) & 255) * mg * m0 + a * fg * dk
-          let b2 = ((d >> 16) & 255) * k + ((p >> 16) & 255) * mb * m0 + a * fb * dk
-          if (rimP !== null) {
-            const rv = rimP[ti] - 128
-            const e = (mirror ? -rv : rv) * rimS + (rv < 0 ? -rv : rv) * rimB
-            if (e > 0) { r2 += rimR * e; g2 += rimG * e; b2 += rimBl * e }
-          }
-          if (r2 > 255) r2 = 255
-          if (g2 > 255) g2 = 255
-          if (b2 > 255) b2 = 255
-          buf[bi] = (255 << 24) | (b2 << 16) | (g2 << 8) | r2
-        }
-      }
-    }
+// the records (one hidden class: every field is created here, in this order)
+function newRecord() {
+  return {
+    si: 0, lay: null, mip: null, shadow: false,
+    X0: 0, X1: 0, Yt: 0, Yb: 0, xa: 0, xb: 0, ya: 0, yb: 0, depth: 0, mirror: false,
+    A: 1, screen: false, mr: 1, mg: 1, mb: 1, fr: 0, fg: 0, fb: 0,
+    lean: 0, swayA: 0, swayP: 0, rippleA: 0, rippleP: 0,
+    cm0: 1, cmK: 0, cmX: 0, rim: false, rimS: 0, rimB: 0, rimR: 0, rimG: 0, rimBl: 0,
+    dith: 0, dx: 0, dy: 0, dph: 0,
   }
 }
-
-// Configure the job's colour terms for a layer of the current sprite (S) at the current fog.
-//   aMul: a per-layer alpha multiplier (pulses, fades). A layer that is not `emit`ting is lit by the scene light and dimmed
-//   by the flicker; an emissive one is not (eyes, beacons, glass). Fog acts on both, scaled by the layer's fogK.
-function setLayerColour(lay, aMul) {
-  const emit = lay.emit
-  const f = S.fogT * lay.fogK
-  const A = S.A * lay.alpha * aMul
-  J.A = A
-  const lit = (S.L + (1 - S.L) * emit) * (FLICK + (1 - FLICK) * emit) * (1 - f)
-  if (lay.mode === 1) {
-    J.screen = true
-    J.mr = J.mg = J.mb = A * lit
-    J.fr = J.fg = J.fb = 0
-  } else {
-    J.screen = false
-    // the scene's light tint and the palette harmony tint colour what a layer REFLECTS: an emissive layer (beam, eyes, glass,
-    // the cold-blue cue of other people) makes its own colour, so both are mixed toward 1 by the layer's emit
-    const ke = 1 - emit
-    J.mr = A * lit * (1 + (S.tr - 1) * ke) * (1 + (HARM_R - 1) * ke)
-    J.mg = A * lit * (1 + (S.tg - 1) * ke) * (1 + (HARM_G - 1) * ke)
-    J.mb = A * lit * (1 + (S.tb - 1) * ke) * (1 + (HARM_B - 1) * ke)
-    // the fog term is added per pixel weighted by the texel's alpha (a * fr): a body fogs toward the fog colour exactly
-    // like a wall texel would
-    J.fr = FOGR * f * A * (1 / 255)
-    J.fg = FOGG * f * A * (1 / 255)
-    J.fb = FOGB * f * A * (1 / 255)
-  }
-}
-
-// ════════════════════════════════════════════════════════════════════════════════════════════════
-// 7. THE SPRITE PASS
-// ════════════════════════════════════════════════════════════════════════════════════════════════
+const RECS = []
+let NREC = 0
+let SI = 0                               // the ordinal of the sprite being planned
 
 const MAXS = 384
 const SE = new Array(MAXS)
@@ -2349,8 +2268,10 @@ const SL = new Float32Array(MAXS)       // lateral offset in world units (+ = sc
 const SK = new Float32Array(MAXS)       // eviction key when over the cap: squared distance, x0.05 for anything but a prop
 const POOL = []                          // reused nameplate records
 const PLATES = []
+// the plan planSprites returns (reused): recs[0 .. count) in paint order, `sprites` drawn things, the nameplates, the frame width it was made for
+const PLAN = { recs: RECS, count: 0, sprites: 0, plates: PLATES, W: 0 }
 
-const LAYA = new Float32Array(12).fill(1)   // per-layer alpha multipliers a drawer may set for the next drawFrame
+const LAYA = new Float32Array(12).fill(1)   // per-layer alpha multipliers a drawer may set for the next planFrame
 function resetLayA() { LAYA.fill(1) }
 
 // a per-sprite phase from the position (things that never move: items, notes, machines)
@@ -2365,16 +2286,18 @@ function normRim(n) {
   S.rimR = (n.r || 0) * sc; S.rimG = (n.g || 0) * sc; S.rimB2 = (n.b || 0) * sc
 }
 
-function sampleLight(x, y, fwd, side) {
+// (the sprite's place is in S — fwd, side — not in arguments; see G)
+function sampleLight(e) {
   let L = 1, tr = 1, tg = 1, tb = 1
   if (LIGHT_ON) {
-    const l = typeof LIGHT.at === 'function' ? LIGHT.at(x, y) : 1
+    const l = typeof LIGHT.at === 'function' ? LIGHT.at(e.x, e.y) : 1
     if (l > 0) L = l < 0.12 ? 0.12 : l > 1.6 ? 1.6 : l
-    const t = typeof LIGHT.tint === 'function' ? LIGHT.tint(x, y) : null
+    const t = typeof LIGHT.tint === 'function' ? LIGHT.tint(e.x, e.y) : null
     if (t) { tr = t[0]; tg = t[1]; tb = t[2] }
   }
   if (FLASH) {
-    const off = Math.abs(side) / fwd
+    const fwd = S.fwd
+    const off = Math.abs(S.side) / fwd
     const cone = off < 0.55 ? 1 - off / 0.55 : 0
     const range = fwd < 10 ? 1 - fwd / 10 : 0
     L += 0.4 * cone * range
@@ -2383,7 +2306,7 @@ function sampleLight(x, y, fwd, side) {
 }
 
 // Rim light from the nearest emitter: which edge catches it (side), how much a backlight rims both (back), what colour.
-function setRim(e, fwd, rimOn = true) {
+function setRim(e, rimOn = true) {
   S.hasRim = false
   if (!LIGHT_ON || typeof LIGHT.nearest !== 'function') return
   const n = LIGHT.nearest(e.x, e.y)
@@ -2400,18 +2323,18 @@ function setRim(e, fwd, rimOn = true) {
   S.hasRim = rimOn && k > 0.05
   // a lit face on the side toward the emitter: a gentle horizontal gradient across the body
   S.cm0 = 1 + 0.06 * k
-  S.cmK = side * k * 0.3 / Math.max(6, 0.12 * (CH / fwd))
+  S.cmK = side * k * 0.3 / Math.max(6, 0.12 * (CH / S.fwd))
 }
 
-function initSprite(e, fwd, side, fogT, alpha) {
-  S.A = alpha; S.fogT = fogT; S.lift = 0
+function initSprite(e, alpha) {
+  S.A = alpha; S.lift = 0
   S.lean = 0; S.swayA = 0; S.swayP = 0; S.rippleA = 0; S.rippleP = 0
   S.dith = 0; S.dx = 0; S.dy = 0
   S.hasRim = false; S.cm0 = 1; S.cmK = 0
-  sampleLight(e.x, e.y, fwd, side)
+  sampleLight(e)
 }
 
-// ── drawing one layer / one frame ──
+// ── planning one layer / one frame ──
 let SHADOW = null
 function shadowLayer() {
   if (SHADOW) return SHADOW
@@ -2420,74 +2343,122 @@ function shadowLayer() {
     for (let x = 0; x < N; x++) {
       const d = hyp((x + 0.5 - N / 2) / (N / 2), (y + 0.5 - N / 2) / (N / 2))
       if (d >= 1) continue
-      const a = Math.pow(1 - d, 1.25) * 0.9
-      const j = (y * N + x) * 4
-      P.px[j + 3] = a
+      P.px[(y * N + x) * 4 + 3] = shadowAlpha(d)
     }
   }
   return (SHADOW = packLayer(P, -1, 1, -0.85, 0.85, { floor: true }))
 }
+// The shadow layer's shape, for a backend that evaluates it analytically (the GPU): a disc of radius 1 over the layer rect, alpha
+// (1 - d)^1.25 * 0.9. The CPU blits the packed texture above; both are this function.
+export function shadowAlpha(d) { return d >= 1 ? 0 : Math.pow(1 - d, 1.25) * 0.9 }
 
-function drawLayer(lay, cx, floorY, unit, depth, mirror, sc, lift, aMul) {
+// One layer of the current sprite (S) at the current fog -> a record, or nothing when it cannot show (faded out, sub-pixel, off-frame).
+//   aMul: a per-layer alpha multiplier (pulses, fades). A layer that is not `emit`ting is lit by the scene light and dimmed by the flicker;
+//   an emissive one is not (eyes, beacons, glass). Fog acts on both, scaled by the layer's fogK.
+// The frame being planned (planFrame / planShadow fill it, planLayer reads it): passed in an object, not as arguments, because V8 boxes every
+// double argument of a call it does not inline — a heap number per argument per layer, every frame.
+const G = { cx: 0, floorY: 0, unit: 0, depth: 0, mirror: false, sc: 1, lift: 0, aMul: 1 }
+function planLayer(lay) {
+  const cx = G.cx, floorY = G.floorY, unit = G.unit, depth = G.depth, mirror = G.mirror, sc = G.sc, lift = G.lift, aMul = G.aMul
   if (aMul <= 0.003) return
-  setLayerColour(lay, aMul)
-  if (J.A < 0.003) return
-  const flat0 = lay.emit >= 0.99
-  J.cm0 = flat0 ? 1 : S.cm0; J.cmK = flat0 ? 0 : S.cmK; J.cmX = cx
-  J.dith = S.dith; J.dx = S.dx; J.dy = S.dy; J.dph = TNOW * 0.35
-  J.rim = S.hasRim && lay.rimK > 0
-  if (J.rim) { J.rimS = S.rimS * lay.rimK; J.rimB = S.rimB * lay.rimK; J.rimR = S.rimR; J.rimG = S.rimG; J.rimBl = S.rimB2 }
-  let X0, X1, Yt, Yb
+  const emit = lay.emit
+  const f = S.fogT * lay.fogK
+  const A = S.A * lay.alpha * aMul
+  if (A < 0.003) return
+  let X0, X1, Yt, Yb, lean = 0, swayA = 0, swayP = 0, rippleA = 0, rippleP = 0
   if (lay.floor) {
-    J.lean = 0; J.swayA = 0; J.rippleA = 0
     const cxo = ((lay.x0 + lay.x1) * 0.5) * sc * (mirror ? -1 : 1), hw = (lay.x1 - lay.x0) * 0.5 * sc
     X0 = cx + (cxo - hw) * unit; X1 = cx + (cxo + hw) * unit
     const zN = Math.max(0.25, depth + lay.y0 * sc), zF = depth + lay.y1 * sc
     Yb = CHH + CH / (2 * zN); Yt = CHH + CH / (2 * zF)
   } else {
-    J.lean = S.lean; J.swayA = S.swayA; J.swayP = S.swayP; J.rippleA = S.rippleA; J.rippleP = S.rippleP
+    lean = S.lean; swayA = S.swayA; swayP = S.swayP; rippleA = S.rippleA; rippleP = S.rippleP
     let a0 = lay.x0 * sc, a1 = lay.x1 * sc
     if (mirror) { const t = -a0; a0 = -a1; a1 = t }
     X0 = cx + a0 * unit; X1 = cx + a1 * unit
     Yb = floorY - (lay.y0 * sc + lift) * unit; Yt = floorY - (lay.y1 * sc + lift) * unit
   }
-  blitRect(lay.mips[pickMip(lay.mips, Yb - Yt)], X0, X1, Yt, Yb, depth, mirror)
+  const sw = X1 - X0, sh = Yb - Yt
+  if (sw < 0.6 || sh < 0.6) return
+  const pad = lean !== 0 || swayA !== 0 || rippleA !== 0 ? Math.ceil(Math.abs(lean) + Math.abs(swayA) + Math.abs(rippleA)) + 1 : 0
+  let xa = Math.floor(X0 - pad), xb = Math.ceil(X1 + pad)
+  if (xa < 0) xa = 0
+  if (xb > CW) xb = CW
+  let ya = Math.floor(Yt), yb = Math.ceil(Yb)
+  if (ya < 0) ya = 0
+  if (yb > CH) yb = CH
+  if (xb <= xa || yb <= ya) return
+
+  const r = NREC < RECS.length ? RECS[NREC] : (RECS[NREC] = newRecord())
+  NREC++
+  r.si = SI; r.lay = lay; r.mip = lay.mips[pickMip(lay.mips, sh)]; r.shadow = lay === SHADOW
+  r.X0 = X0; r.X1 = X1; r.Yt = Yt; r.Yb = Yb; r.xa = xa; r.xb = xb; r.ya = ya; r.yb = yb; r.depth = depth; r.mirror = mirror
+  r.A = A
+  const lit = (S.L + (1 - S.L) * emit) * (FLICK + (1 - FLICK) * emit) * (1 - f)
+  if (lay.mode === 1) {
+    r.screen = true
+    r.mr = r.mg = r.mb = A * lit
+    r.fr = r.fg = r.fb = 0
+  } else {
+    r.screen = false
+    // the scene's light tint and the palette harmony tint colour what a layer REFLECTS: an emissive layer (beam, eyes, glass, the cold-blue
+    // cue of other people) makes its own colour, so both are mixed toward 1 by the layer's emit
+    const ke = 1 - emit
+    r.mr = A * lit * (1 + (S.tr - 1) * ke) * (1 + (HARM_R - 1) * ke)
+    r.mg = A * lit * (1 + (S.tg - 1) * ke) * (1 + (HARM_G - 1) * ke)
+    r.mb = A * lit * (1 + (S.tb - 1) * ke) * (1 + (HARM_B - 1) * ke)
+    // the fog term is added per pixel weighted by the texel's alpha (a * fr): a body fogs toward the fog colour exactly like a wall texel would
+    r.fr = FOGR * f * A * (1 / 255)
+    r.fg = FOGG * f * A * (1 / 255)
+    r.fb = FOGB * f * A * (1 / 255)
+  }
+  r.lean = lean; r.swayA = swayA; r.swayP = swayP; r.rippleA = rippleA; r.rippleP = rippleP
+  const flat0 = emit >= 0.99
+  r.cm0 = flat0 ? 1 : S.cm0; r.cmK = flat0 ? 0 : S.cmK; r.cmX = cx
+  r.dith = S.dith; r.dx = S.dx; r.dy = S.dy; r.dph = TNOW * 0.35
+  r.rim = S.hasRim && lay.rimK > 0
+  if (r.rim) { r.rimS = S.rimS * lay.rimK; r.rimB = S.rimB * lay.rimK; r.rimR = S.rimR; r.rimG = S.rimG; r.rimBl = S.rimB2 }
+  else { r.rimS = 0; r.rimB = 0; r.rimR = 0; r.rimG = 0; r.rimBl = 0 }
 }
 
-function drawFrame(fr, cx, floorY, unit, depth, mirror, sc, lift) {
+function planFrame(fr, cx, floorY, unit, depth, mirror, sc, lift) {
   const layers = fr.layers
-  for (let i = 0; i < layers.length; i++) drawLayer(layers[i], cx, floorY, unit, depth, mirror, sc, lift, LAYA[i])
+  G.cx = cx; G.floorY = floorY; G.unit = unit; G.depth = depth; G.mirror = mirror; G.sc = sc; G.lift = lift
+  for (let i = 0; i < layers.length; i++) { G.aMul = LAYA[i]; planLayer(layers[i]) }
 }
 
 // the soft ground shadow: a flat ellipse in the floor plane, foreshortened by the view
-function drawShadow(cx, depth, unit, radius, opacity) {
+function planShadow(cx, depth, unit, radius, opacity) {
   if (opacity < 0.02) return
-  drawLayer(shadowLayer(), cx, 0, unit, depth, false, radius, 0, opacity)
+  G.cx = cx; G.floorY = 0; G.unit = unit; G.depth = depth; G.mirror = false; G.sc = radius; G.lift = 0; G.aMul = opacity
+  planLayer(shadowLayer())
 }
 
-// ── per-kind drawers: (entity, screen x, perpendicular depth, fog fraction, lateral offset) ──
+// ── per-kind planners: (entity); its screen x, perpendicular depth, fog fraction and lateral offset are in S (sx fwd fogT side) ──
 const VARIANTS = 3
 
-function drawProp(e, sx, fwd, fogT, side) {
+function planProp(e) {
+  const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const spec = PROP_SPEC[e.type]
   const name = spec ? e.type : 'box'
   const sp = spec || PROP_SPEC.box
   const rot = e.rot || 0
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, fwd, side, fogT, 1)
-  const vh = variantHash(rot)
-  const tj = 1 + 0.07 * unitJitter(rot, 11), hj = 1 + 0.04 * unitJitter(rot, 12)
+  initSprite(e, 1)
+  const rq = Math.round(rot * 65536)                // variantHash(rot) / unitJitter(rot, salt), inline
+  const vh = hash2(rq, 0x51ed, 3)
+  const tj = 1 + 0.07 * ((hash2(rq, 11, 7) / 4294967296) * 2 - 1), hj = 1 + 0.04 * ((hash2(rq, 12, 7) / 4294967296) * 2 - 1)
   S.tr *= tj * hj; S.tg *= tj; S.tb *= tj / hj
-  const sc = 1 + 0.06 * unitJitter(rot, 13)
-  if (sp.lean) S.lean = unitJitter(rot, 17) * 0.028 * unit
+  const sc = 1 + 0.06 * ((hash2(rq, 13, 7) / 4294967296) * 2 - 1)
+  if (sp.lean) S.lean = ((hash2(rq, 17, 7) / 4294967296) * 2 - 1) * 0.028 * unit
   const sw = PROP_SWAY[name]
   if (sw) { S.swayA = sw * unit; S.swayP = TNOW * (REDUCE ? 0.25 : 0.5) + (vh & 255) / 255 }
-  setRim(e, fwd, false)                       // a lit side, from the nearest emitter (no rim on furniture)
+  setRim(e, false)                       // a lit side, from the nearest emitter (no rim on furniture)
   const fr = frameFor('prop', name, vh % VARIANTS, 0, 0, 0)
   if (fr === null) return
   resetLayA()
-  if (!sp.decal) drawShadow(sx, fwd, unit, sp.w * 0.56 * sc, 0.5)
-  drawFrame(fr, sx, floorY, unit, fwd, (vh & 0x100) !== 0, sc, 0)
+  if (!sp.decal) planShadow(sx, fwd, unit, sp.w * 0.56 * sc, 0.5)
+  planFrame(fr, sx, floorY, unit, fwd, (vh & 0x100) !== 0, sc, 0)
 }
 const PROP_SWAY = { plant: 0.010, weeds: 0.020 }
 
@@ -2519,7 +2490,8 @@ function creatureMotion(sIx, spec, phase, unit) {
   return sc
 }
 
-function drawCreature(e, sx, fwd, fogT, side) {
+function planCreature(e) {
+  const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const app = e.kind === undefined && e.vx !== undefined
   const name = FIG[e.variant] ? e.variant : 'shade'
   const spec = FIG[name]
@@ -2535,10 +2507,10 @@ function drawCreature(e, sx, fwd, fogT, side) {
     else if (facing === FACING_SIDE) mirror = headsRight(e, CAMA)
   }
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, fwd, side, fogT, spec.thin ? (0.36 + 0.03 * sinc(TNOW * 0.21 + phase)) : 1)
+  initSprite(e, spec.thin ? (0.36 + 0.03 * sinc(TNOW * 0.21 + phase)) : 1)
   const sc = creatureMotion(sIx, spec, phase, unit) * 1
   if (spec.thin) { S.swayA = 0.012 * unit; S.swayP = TNOW * 0.4 + phase; S.rippleA = 0.02 * unit; S.rippleP = TNOW * 1.3 + phase * 3; S.lift = 0.004 * sinc(TNOW * 0.35 + phase) + 0.01 }
-  setRim(e, fwd)
+  setRim(e)
   if (sIx === 3) { S.hasRim = true; S.rimR = 232; S.rimG = 240; S.rimB2 = 255; S.rimS = 0; S.rimB = 0.5 / 127 }   // reeling in the ward's light: a pale edge, whatever the room's lamps do
   const fr = frameFor('creature', name, 0, sIx, anim, facing)
   if (fr === null) return
@@ -2551,15 +2523,16 @@ function drawCreature(e, sx, fwd, fogT, side) {
     const bank = (((TNOW * (REDUCE ? 1.5 : 4) + phase * 3) | 0) % 3)
     for (let i = 2; i < fr.layers.length; i++) LAYA[i] = i - 2 === bank ? (sIx === 1 ? 1.2 : 1) : 0
   }
-  drawShadow(sx, fwd, unit, spec.w * 0.52, spec.thin ? 0.22 : 0.5)
-  drawFrame(fr, sx, floorY, unit, fwd, mirror, sc, S.lift || 0)
+  planShadow(sx, fwd, unit, spec.w * 0.52, spec.thin ? 0.22 : 0.5)
+  planFrame(fr, sx, floorY, unit, fwd, mirror, sc, S.lift || 0)
   S.lift = 0
 }
 
-function drawItem(e, sx, fwd, fogT, side) {
+function planItem(e) {
+  const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const type = ITEM_COLORS[e.itemType] ? e.itemType : 'radio'
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, fwd, side, fogT, 1)
+  initSprite(e, 1)
   const ph = posPhase(e)
   const fr = frameFor('item', type, 0, 0, 0, 0)
   if (fr === null) return
@@ -2568,13 +2541,14 @@ function drawItem(e, sx, fwd, fogT, side) {
   LAYA[0] = pulse
   const lift = 0.014 + 0.010 * sinc(TNOW * 0.5 + ph)
   S.swayA = 0.006 * unit; S.swayP = TNOW * 0.4 + ph
-  drawShadow(sx, fwd, unit, 0.1, 0.42 - lift * 6)
-  drawFrame(fr, sx, floorY, unit, fwd, false, 1, lift)
+  planShadow(sx, fwd, unit, 0.1, 0.42 - lift * 6)
+  planFrame(fr, sx, floorY, unit, fwd, false, 1, lift)
 }
 
-function drawNote(e, sx, fwd, fogT, side) {
+function planNote(e) {
+  const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, fwd, side, fogT, 1)
+  initSprite(e, 1)
   const ph = posPhase(e)
   const fr = frameFor('note', e.read ? 'read' : 'unread', 0, 0, 0, 0)
   if (fr === null) return
@@ -2582,41 +2556,44 @@ function drawNote(e, sx, fwd, fogT, side) {
   if (!e.read) LAYA[0] = 0.72 + 0.28 * sinc(TNOW * 0.32 + ph)
   const lift = 0.36 + 0.014 * sinc(TNOW * 0.4 + ph)
   S.swayA = 0.010 * unit; S.swayP = TNOW * 0.33 + ph; S.lean = 0.008 * unit * sinc(TNOW * 0.27 + ph)
-  drawShadow(sx, fwd, unit, 0.06, 0.20)
-  drawFrame(fr, sx, floorY, unit, fwd, false, 1, lift)
+  planShadow(sx, fwd, unit, 0.06, 0.20)
+  planFrame(fr, sx, floorY, unit, fwd, false, 1, lift)
 }
 
-function drawMachine(e, sx, fwd, fogT, side) {
+function planMachine(e) {
+  const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, fwd, side, fogT, 1)
-  setRim(e, fwd, false)
+  initSprite(e, 1)
+  setRim(e, false)
   const fr = frameFor('machine', e.vended ? 'spent' : 'lit', 0, 0, 0, 0)
   if (fr === null) return
   resetLayA()
   if (!e.vended) LAYA[1] = 0.9 + 0.1 * sinc(TNOW * 0.9 + posPhase(e)) * (REDUCE ? 0.3 : 1)
-  drawShadow(sx, fwd, unit, MACHINE_SPEC.w * 0.6, 0.5)
-  drawFrame(fr, sx, floorY, unit, fwd, false, 1, 0)
+  planShadow(sx, fwd, unit, MACHINE_SPEC.w * 0.6, 0.5)
+  planFrame(fr, sx, floorY, unit, fwd, false, 1, 0)
 }
 
-function drawSight(e, sx, fwd, fogT, side) {
+function planSight(e) {
+  const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const t = SIGHT_SPEC[e.sightType] ? e.sightType : 'mannequin'
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, fwd, side, fogT, 1)
+  initSprite(e, 1)
   let anim = 0, facing = 0
   if (t === 'tvwall') { const b = ((TNOW * (REDUCE ? 1.5 : 5)) | 0) % 4; anim = b & 1; facing = b >> 1 }   // four static banks
-  setRim(e, fwd, false)
+  setRim(e, false)
   const fr = frameFor('sight', t, 0, 0, anim, facing)
   if (fr === null) return
   resetLayA()
   const ph = posPhase(e)
   if (t === 'payphone') { S.swayA = 0.004 * unit; S.swayP = TNOW * 0.3 + ph }
-  drawShadow(sx, fwd, unit, SIGHT_SPEC[t].w * 0.5, 0.5)
-  drawFrame(fr, sx, floorY, unit, fwd, false, 1, 0)
+  planShadow(sx, fwd, unit, SIGHT_SPEC[t].w * 0.5, 0.5)
+  planFrame(fr, sx, floorY, unit, fwd, false, 1, 0)
 }
 
-function drawExit(e, sx, fwd, fogT, side) {
+function planExit(e) {
+  const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, fwd, side, fogT, 1)
+  initSprite(e, 1)
   const ph = posPhase(e)
   const pulse = 0.55 + 0.45 * sinc(TNOW * 0.35 + ph)
   const fr = frameFor('exit', 'portal', 0, 0, ((TNOW * (REDUCE ? 0.8 : 1.4)) | 0) & 1, 0)
@@ -2627,13 +2604,13 @@ function drawExit(e, sx, fwd, fogT, side) {
   LAYA[1] = 0.62 + 0.38 * pulse
   LAYA[3] = 0.7 + 0.3 * pulse
   S.swayA = 0.004 * unit; S.swayP = TNOW * 0.5 + ph
-  drawShadow(sx, fwd, unit, EXIT_SPEC.w * 0.7, 0.45)
-  drawFrame(fr, sx, floorY, unit, fwd, false, 1, 0)
+  planShadow(sx, fwd, unit, EXIT_SPEC.w * 0.7, 0.45)
+  planFrame(fr, sx, floorY, unit, fwd, false, 1, 0)
 }
 
 // a co-op player's motion is inferred from position changes between frames (the entity objects are rebuilt every frame)
 // Records are matched by the entity's id/key when it has one; otherwise by name and the nearest record within a couple of units
-// (two unnamed remote players both arrive as 'wanderer'), each record claimed at most once per drawSprites call.
+// (two unnamed remote players both arrive as 'wanderer'), each record claimed at most once per planSprites call.
 const MOTION = []
 let FRAME_N = 0
 function playerMoving(e) {
@@ -2662,27 +2639,28 @@ function playerMoving(e) {
   return m.mv > 0
 }
 
-// test hook: the motion verdicts for one frame's remote players at time t (what drawSprites asks per player)
+// test hook: the motion verdicts for one frame's remote players at time t (what planSprites asks per player)
 export function motionProbe(players, t) { TNOW = t; FRAME_N++; return players.map(playerMoving) }
 
-function drawPerson(e, sx, fwd, fogT, side, isNpc) {
+function planPerson(e, isNpc) {
+  const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const spec = isNpc ? PERSON.npc : PERSON.player
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, fwd, side, fogT, isNpc ? 0.94 : 0.97)
+  initSprite(e, isNpc ? 0.94 : 0.97)
   let facing = FACING_FRONT
   if (!isNpc && e.angle !== undefined && Math.abs(wrapAngle(e.angle - Math.atan2(CAMY - e.y, CAMX - e.x))) > (2 * Math.PI) / 3) facing = FACING_BACK
   const moving = !isNpc && playerMoving(e)
   const ph = posPhase(e)
   const anim = moving ? ((TNOW * 2.4 + ph) * 2 | 0) & 1 : 0
   if (moving) { S.swayA = 0.014 * unit; S.swayP = TNOW * 1.2 + ph } else { S.swayA = (isNpc ? 0.006 : 0.008) * unit; S.swayP = TNOW * 0.3 + ph }
-  setRim(e, fwd)
+  setRim(e)
   const fr = frameFor('person', isNpc ? 'npc' : 'player', 0, moving ? 1 : 0, anim, FACING_FRONT)
   if (fr === null) return
   resetLayA()
   if (facing === FACING_BACK) for (let i = 1; i < fr.layers.length; i++) LAYA[i] = 0.35     // seen from behind the lamp is mostly hidden
   const lift = moving ? 0.008 * Math.abs(sinc(TNOW * 1.2 + ph)) : 0
-  drawShadow(sx, fwd, unit, spec.w * 0.55, 0.45)
-  drawFrame(fr, sx, floorY, unit, fwd, false, 1, lift)
+  planShadow(sx, fwd, unit, spec.w * 0.55, 0.45)
+  planFrame(fr, sx, floorY, unit, fwd, false, 1, lift)
   if (e.name) {
     let p = POOL[PLATES.length]
     if (!p) { p = POOL[PLATES.length] = { sx: 0, y: 0, name: '', alpha: 1, speech: undefined, hp: undefined } }
@@ -2693,19 +2671,21 @@ function drawPerson(e, sx, fwd, fogT, side, isNpc) {
 
 let ERR_LOGGED = 0
 
-// Sort far-to-near, cull what is behind the player / off-screen / beyond the fog, and dispatch each entity to its drawer.
-// Returns the nameplate records for the post stage (empty when there are no remote players).
-export function drawSprites(buf32, zbuffer, fs, entities) {
+// planSprites(fs, entities) -> PLAN { recs, count, sprites, plates }    (reused: read it before the next call)
+// Sort far-to-near, cull what is behind the player / off-screen / beyond the fog, and plan each entity's layers. `fs` needs W H HH fog fogRgb
+// flicker t dt hf player light lights comfort levelKey opts (see the file header); the z-buffer is NOT needed — occlusion is the backend's
+// per-column (CPU) or per-pixel (GPU) test against the depth in each record.
+export function planSprites(fs, entities) {
   PLATES.length = 0
-  if (!entities || entities.length === 0) return PLATES
+  NREC = 0; PLAN.count = 0; PLAN.sprites = 0
+  if (!entities || entities.length === 0) return PLAN
   const { W, H, HH, fog, player } = fs
-  BUF = buf32; ZB = zbuffer; CW = W; CH = H; CHH = HH
+  CW = W; CH = H; CHH = HH
   GEN_MS = 0
   FRAME_N++
   if (fs.levelKey !== LAST_LEVEL) { LAST_LEVEL = fs.levelKey; queueLevel(fs.levelKey) }
   CAMX = player.x; CAMY = player.y; CAMA = player.angle
   CA = Math.cos(CAMA); SAN = Math.sin(CAMA)
-  FOGD = fog
   // at the lit tiers the flicker is already carried spatially by the light model (light.at()), so a second global dip here
   // would blink sprites to half brightness while the world barely moves: FLICK stays 1 and the fog colour is unscaled
   FLICK = (fs.flicker == null || (fs.light && fs.light.enabled === true) || (fs.handled && fs.handled.flicker)) ? 1 : fs.flicker
@@ -2759,19 +2739,21 @@ export function drawSprites(buf32, zbuffer, fs, entities) {
   const halfW = W / 2
   for (let i = 0; i < n; i++) {
     const e = SE[i], fwd = SF[i], lat = SL[i]
-    const fogT = fwd >= fog ? 1 : fwd / fog
-    const sx = halfW + (Math.atan2(lat, fwd) / HF) * halfW
+    S.fogT = fwd >= fog ? 1 : fwd / fog
+    S.sx = halfW + (Math.atan2(lat, fwd) / HF) * halfW
+    S.fwd = fwd; S.side = lat
+    SI = i
     try {
       const k = e.kind
-      if (k === 'item') drawItem(e, sx, fwd, fogT, lat)
-      else if (k === 'prop') drawProp(e, sx, fwd, fogT, lat)
-      else if (k === 'exit') drawExit(e, sx, fwd, fogT, lat)
-      else if (k === 'note') drawNote(e, sx, fwd, fogT, lat)
-      else if (k === 'machine') drawMachine(e, sx, fwd, fogT, lat)
-      else if (k === 'sight') drawSight(e, sx, fwd, fogT, lat)
-      else if (k === 'player') drawPerson(e, sx, fwd, fogT, lat, false)
-      else if (k === 'npc') drawPerson(e, sx, fwd, fogT, lat, true)
-      else if (k === undefined && (e.variant !== undefined || e.type !== undefined)) drawCreature(e, sx, fwd, fogT, lat)   // enemies and apparitions carry no kind; an unknown kind is not a creature
+      if (k === 'item') planItem(e)
+      else if (k === 'prop') planProp(e)
+      else if (k === 'exit') planExit(e)
+      else if (k === 'note') planNote(e)
+      else if (k === 'machine') planMachine(e)
+      else if (k === 'sight') planSight(e)
+      else if (k === 'player') planPerson(e, false)
+      else if (k === 'npc') planPerson(e, true)
+      else if (k === undefined && (e.variant !== undefined || e.type !== undefined)) planCreature(e)   // enemies and apparitions carry no kind; an unknown kind is not a creature
     } catch (err) {
       if (ERR_LOGGED++ < 3 && typeof console !== 'undefined') console.error('gfx-sprites: draw failed for ' + (e && (e.kind || e.variant)) + ': ' + (err && err.stack || err))
     }
@@ -2781,5 +2763,279 @@ export function drawSprites(buf32, zbuffer, fs, entities) {
   // time-sliced, not dt-gated: at most one background frame per call, only when this call built (almost) nothing itself, and
   // WARM_WAIT spreads the expensive ones out, so a slow device warms up too, at a few ms per frame amortised
   else if (WARMQ.length > 0 && GEN_MS < 4) { try { warmStep(fs.dt > 0.024) } catch (err) { WARMQ.length = 0; WARMQ_KEYS.clear() } }
-  return PLATES
+  PLAN.count = NREC; PLAN.sprites = n; PLAN.W = W
+  return PLAN
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// 7. THE CPU BLITTER — the plan's records into the low-res world buffer
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+
+let BUF = null, ZB = null, BW = 0          // the frame being blitted into: buffer, z-buffer, row stride
+let RUNS = new Int32Array(2048)
+function growRuns(n) { if (RUNS.length < n * 2 + 4) RUNS = new Int32Array(n * 2 + 64) }
+// per-blit column tables, indexed by x - xa (grown, never shrunk): the texel column of each screen column, and the lit-face terms
+let TXT = new Int32Array(1024)
+let CMR = new Int32Array(1024), CMG = new Int32Array(1024), CMB = new Int32Array(1024)
+let CMF = new Float64Array(1024)
+function growCols(n) {
+  if (TXT.length >= n) return
+  const m = n + 256
+  TXT = new Int32Array(m); CMR = new Int32Array(m); CMG = new Int32Array(m); CMB = new Int32Array(m); CMF = new Float64Array(m)
+}
+// the first x in [lo, hi) whose texel column is >= v (TXT non-decreasing over [lo, hi)), or hi; firstLT: < v, TXT non-increasing
+function firstGE(lo, hi, off, v) { while (lo < hi) { const m = (lo + hi) >> 1; if (TXT[m - off] >= v) hi = m; else lo = m + 1 } return lo }
+function firstLT(lo, hi, off, v) { while (lo < hi) { const m = (lo + hi) >> 1; if (TXT[m - off] < v) hi = m; else lo = m + 1 } return lo }
+
+// Blit one record (a layer's mip) into the world buffer over its screen rect, z-tested per column against its depth, honouring the warp /
+// rim / dissolve. Rows outer for cache locality; columns come as visible runs; the texel column advances incrementally (tf += dtf from the
+// run's first column; mirroring runs the same walk backwards). Three blends: screen (a glow), plain (the lit over-blend, the common case) and
+// full (rim light / dissolve). What makes it cheap, without changing a byte:
+//   * each texel row's opaque span [c0, c1) (mip.rs): an empty texel row is skipped, and the columns whose texel lies outside the span —
+//     they could only read a transparent texel — are not visited (the texel column is monotonic along a run)
+//   * an UNWARPED screen / plain layer samples the same texel columns on every row: the walk is done once per blit into TXT, and each row's
+//     run is trimmed to the span by binary search on it. A warped row (or the rare unwarped rim / dissolve layer) walks inline: the columns
+//     before the span are stepped over with the same additions (so the walk stays exact) and the walk stops two columns after it has passed
+//     the span (the margin covers the rounding of the accumulated steps)
+//   * the lit-face gradient depends on the column only: tabulated once per blit
+//   * texels and buffer pixels are read as int32 (`| 0`): the bitwise maths is the same, and V8 boxes a uint32 read above 2^31 into a heap
+//     number, per pixel
+function blitRecord(r) {
+  const X0 = r.X0, Yt = r.Yt, Yb = r.Yb, depth = r.depth, mirror = r.mirror
+  const xa = r.xa, xb = r.xb, ya = r.ya, yb = r.yb
+  const sw = r.X1 - X0, sh = Yb - Yt
+  const lean = r.lean, swayA = r.swayA, swayP = r.swayP, rippleA = r.rippleA, rippleP = r.rippleP
+  const warp = lean !== 0 || swayA !== 0 || rippleA !== 0
+  growRuns((xb - xa) >> 1)
+  const nr = visibleRuns(ZB, xa, xb, depth, RUNS)
+  if (nr === 0) return
+
+  const mip = r.mip
+  const tw = mip.w, th = mip.h, tpx = mip.px, rs = mip.rs
+  const rimP = r.rim ? mip.rim : null
+  const sxF = tw / sw, syF = th / sh
+  const buf = BUF, W = BW
+  const mr = r.mr, mg = r.mg, mb = r.mb, fr = r.fr, fg = r.fg, fb = r.fb, A255 = r.A / 255
+  const opaqueA = r.A >= 0.9999
+  const fr255 = 255 * fr, fg255 = 255 * fg, fb255 = 255 * fb
+  const screen = r.screen
+  const cm0 = r.cm0, cmK = r.cmK, cmX = r.cmX
+  const useCm = cmK !== 0 || cm0 !== 1
+  const dith0 = r.dith, ddx = r.dx, ddy = r.dy, dph = r.dph
+  const rimS = r.rimS, rimB = r.rimB, rimR = r.rimR, rimG = r.rimG, rimBl = r.rimBl
+  const plain = rimP === null && dith0 === 0
+  const txMax = tw - 1
+  // 8.8 fixed point for the two hot loops: integer multiplies, no float<->int conversions per pixel
+  const A256 = (r.A * 256) | 0
+  const mri = (mr * 256) | 0, mgi = (mg * 256) | 0, mbi = (mb * 256) | 0
+  const fri = (fr * 256) | 0, fgi = (fg * 256) | 0, fbi = (fb * 256) | 0
+  const fr255i = (fr255 * 256) | 0, fg255i = (fg255 * 256) | 0, fb255i = (fb255 * 256) | 0
+  const dtf = mirror ? -sxF : sxF
+
+  // the lit-face gradient depends on the column only: once per blit, not per pixel
+  growCols(xb - xa)
+  if (useCm) {
+    for (let x = xa; x < xb; x++) {
+      let cm = cm0 + cmK * (x - cmX)
+      if (cm < 0.15) cm = 0.15
+      const i = x - xa
+      if (screen) CMR[i] = (mri * cm) | 0
+      else if (plain) { const ci = (cm * 256) | 0; CMR[i] = (mri * ci) >> 8; CMG[i] = (mgi * ci) >> 8; CMB[i] = (mbi * ci) >> 8 }
+      else CMF[i] = cm
+    }
+  }
+
+  // an unwarped screen / plain layer: every row walks the same texel columns, so the walk is done once here, run by run
+  const useTxt = !warp && (screen || plain)
+  if (useTxt) {
+    const xl = Math.ceil(X0 - 0.5), xr = Math.ceil(X0 + sw - 0.5)
+    for (let q = 0; q < nr; q++) {
+      let xs = RUNS[q * 2], xe = RUNS[q * 2 + 1]
+      if (xs < xl) xs = xl
+      if (xe > xr) xe = xr
+      if (xs >= xe) continue
+      let tf = mirror ? tw - (xs + 0.5 - X0) * sxF : (xs + 0.5 - X0) * sxF
+      for (let x = xs; x < xe; x++) {
+        let tx = tf | 0
+        tf += dtf
+        if (tx > txMax) tx = txMax
+        else if (tx < 0) tx = 0
+        TXT[x - xa] = tx
+      }
+    }
+  }
+
+  for (let y = ya; y < yb; y++) {
+    let ty = ((y + 0.5 - Yt) * syF) | 0
+    if (ty >= th) ty = th - 1
+    // the texel row's opaque columns [c0, c1): an empty texel row draws nothing
+    let c0 = 0, c1 = tw
+    if (rs !== undefined) { c0 = rs[ty * 2]; c1 = rs[ty * 2 + 1]; if (c1 <= c0) continue }
+    const rowT = ty * tw
+    let rx0 = X0
+    if (warp) {
+      const v = (Yb - (y + 0.5)) / sh
+      rx0 += lean * v * v + swayA * sinc(swayP + v * 0.55) * v + rippleA * sinc(rippleP + v * 2.4) * (1 - v * 0.55)
+    }
+    const xl = Math.ceil(rx0 - 0.5), xr = Math.ceil(rx0 + sw - 0.5)
+    // the dissolve comes in drifting bands, not an even speckle
+    const dith = dith0 > 0 ? dith0 * (0.25 + 1.5 * (0.5 + 0.5 * sinc(y * 0.021 + dph))) : 0
+    const rowB = y * W
+    for (let q = 0; q < nr; q++) {
+      let xs = RUNS[q * 2], xe = RUNS[q * 2 + 1]
+      if (xs < xl) xs = xl
+      if (xe > xr) xe = xr
+      if (xs >= xe) continue
+      if (useTxt) {
+        if (mirror) { xs = firstLT(xs, xe, xa, c1); xe = firstLT(xs, xe, xa, c0) } else { xs = firstGE(xs, xe, xa, c0); xe = firstGE(xs, xe, xa, c1) }
+        if (screen) {
+          for (let x = xs; x < xe; x++) {
+            const p = tpx[rowT + TXT[x - xa]] | 0
+            if ((p >>> 24) === 0) continue
+            const s0 = useCm ? CMR[x - xa] : mri
+            const bi = rowB + x, d = buf[bi] | 0
+            const dr = d & 255, dg = (d >> 8) & 255, db = (d >> 16) & 255
+            // screen: d + s * (255 - d) / 255, with s the glow intensity scaled by the layer's strength
+            let r2 = dr + ((((p & 255) * s0) >> 8) * (255 - dr) * 257 >> 16), g2 = dg + (((((p >> 8) & 255) * s0) >> 8) * (255 - dg) * 257 >> 16), b2 = db + (((((p >> 16) & 255) * s0) >> 8) * (255 - db) * 257 >> 16)
+            if (r2 > 255) r2 = 255
+            if (g2 > 255) g2 = 255
+            if (b2 > 255) b2 = 255
+            buf[bi] = (255 << 24) | (b2 << 16) | (g2 << 8) | r2
+          }
+        } else {                                             // plain (a TXT layer is screen or plain)
+          for (let x = xs; x < xe; x++) {
+            const p = tpx[rowT + TXT[x - xa]] | 0
+            const a = p >>> 24
+            if (a === 0) continue
+            let mrc = mri, mgc = mgi, mbc = mbi
+            if (useCm) { const i = x - xa; mrc = CMR[i]; mgc = CMG[i]; mbc = CMB[i] }
+            const bi = rowB + x
+            let r2, g2, b2
+            if (a === 255 && opaqueA) {
+              r2 = ((p & 255) * mrc + fr255i + 128) >> 8; g2 = (((p >> 8) & 255) * mgc + fg255i + 128) >> 8; b2 = (((p >> 16) & 255) * mbc + fb255i + 128) >> 8
+            } else {
+              const d = buf[bi] | 0, ki = 256 - ((a * A256) >> 8)
+              r2 = ((d & 255) * ki + (p & 255) * mrc + a * fri + 128) >> 8
+              g2 = (((d >> 8) & 255) * ki + ((p >> 8) & 255) * mgc + a * fgi + 128) >> 8
+              b2 = (((d >> 16) & 255) * ki + ((p >> 16) & 255) * mbc + a * fbi + 128) >> 8
+            }
+            if (r2 > 255) r2 = 255
+            if (g2 > 255) g2 = 255
+            if (b2 > 255) b2 = 255
+            buf[bi] = (255 << 24) | (b2 << 16) | (g2 << 8) | r2
+          }
+        }
+        continue
+      }
+      let tf = mirror ? tw - (xs + 0.5 - rx0) * sxF : (xs + 0.5 - rx0) * sxF
+      // trim the walk to the span: step over the columns before it (exactly, without reading texels), stop two columns after it
+      if (mirror) {
+        if (c1 <= txMax && tf >= c1) { let k = Math.floor((tf - c1) / sxF) - 1; if (k > xe - xs) k = xe - xs; for (let i = 0; i < k; i++) tf += dtf; if (k > 0) xs += k }
+        if (c0 > 0 && tf >= c0) { const n = xs + Math.floor((tf - c0) / sxF) + 3; if (n < xe) xe = n }
+      } else {
+        if (c0 > 0 && tf < c0) { let k = Math.ceil((c0 - tf) / sxF) - 2; if (k > xe - xs) k = xe - xs; for (let i = 0; i < k; i++) tf += dtf; if (k > 0) xs += k }
+        if (c1 <= txMax && tf < c1) { const n = xs + Math.ceil((c1 - tf) / sxF) + 2; if (n < xe) xe = n }
+      }
+      if (screen) {
+        for (let x = xs; x < xe; x++) {
+          let tx = tf | 0
+          tf += dtf
+          if (tx > txMax) tx = txMax
+          else if (tx < 0) tx = 0
+          const p = tpx[rowT + tx] | 0
+          if ((p >>> 24) === 0) continue
+          const s0 = useCm ? CMR[x - xa] : mri
+          const bi = rowB + x, d = buf[bi] | 0
+          const dr = d & 255, dg = (d >> 8) & 255, db = (d >> 16) & 255
+          // screen: d + s * (255 - d) / 255, with s the glow intensity scaled by the layer's strength
+          let r2 = dr + ((((p & 255) * s0) >> 8) * (255 - dr) * 257 >> 16), g2 = dg + (((((p >> 8) & 255) * s0) >> 8) * (255 - dg) * 257 >> 16), b2 = db + (((((p >> 16) & 255) * s0) >> 8) * (255 - db) * 257 >> 16)
+          if (r2 > 255) r2 = 255
+          if (g2 > 255) g2 = 255
+          if (b2 > 255) b2 = 255
+          buf[bi] = (255 << 24) | (b2 << 16) | (g2 << 8) | r2
+        }
+      } else if (plain) {
+        for (let x = xs; x < xe; x++) {
+          let tx = tf | 0
+          tf += dtf
+          if (tx > txMax) tx = txMax
+          else if (tx < 0) tx = 0
+          const p = tpx[rowT + tx] | 0
+          const a = p >>> 24
+          if (a === 0) continue
+          let mrc = mri, mgc = mgi, mbc = mbi
+          if (useCm) { const i = x - xa; mrc = CMR[i]; mgc = CMG[i]; mbc = CMB[i] }
+          const bi = rowB + x
+          let r2, g2, b2
+          if (a === 255 && opaqueA) {
+            r2 = ((p & 255) * mrc + fr255i + 128) >> 8; g2 = (((p >> 8) & 255) * mgc + fg255i + 128) >> 8; b2 = (((p >> 16) & 255) * mbc + fb255i + 128) >> 8
+          } else {
+            const d = buf[bi] | 0, ki = 256 - ((a * A256) >> 8)
+            r2 = ((d & 255) * ki + (p & 255) * mrc + a * fri + 128) >> 8
+            g2 = (((d >> 8) & 255) * ki + ((p >> 8) & 255) * mgc + a * fgi + 128) >> 8
+            b2 = (((d >> 16) & 255) * ki + ((p >> 16) & 255) * mbc + a * fbi + 128) >> 8
+          }
+          if (r2 > 255) r2 = 255
+          if (g2 > 255) g2 = 255
+          if (b2 > 255) b2 = 255
+          buf[bi] = (255 << 24) | (b2 << 16) | (g2 << 8) | r2
+        }
+      } else {
+        for (let x = xs; x < xe; x++) {
+          let tx = tf | 0
+          tf += dtf
+          if (tx > txMax) tx = txMax
+          else if (tx < 0) tx = 0
+          const ti = rowT + tx
+          const p = tpx[ti] | 0
+          const a = p >>> 24
+          if (a === 0) continue
+          const cm = useCm ? CMF[x - xa] : 1
+          const bi = rowB + x
+          const d = buf[bi] | 0
+          let ak = a * A255, dk = 1
+          if (dith > 0 && DITH[(((x >> 1) + ddx) & 63) | ((((y >> 1) + ddy) & 63) << 6)] < (rimP !== null ? dith * (0.15 + 2.7 * (rimP[ti] > 128 ? rimP[ti] - 128 : 128 - rimP[ti]) * (1 / 127)) : dith)) { dk = 0.55; ak *= 0.55 }   // it erodes from its outline inward
+          const k = 1 - ak
+          const m0 = cm * dk
+          let r2 = (d & 255) * k + (p & 255) * mr * m0 + a * fr * dk
+          let g2 = ((d >> 8) & 255) * k + ((p >> 8) & 255) * mg * m0 + a * fg * dk
+          let b2 = ((d >> 16) & 255) * k + ((p >> 16) & 255) * mb * m0 + a * fb * dk
+          if (rimP !== null) {
+            const rv = rimP[ti] - 128
+            const e = (mirror ? -rv : rv) * rimS + (rv < 0 ? -rv : rv) * rimB
+            if (e > 0) { r2 += rimR * e; g2 += rimG * e; b2 += rimBl * e }
+          }
+          if (r2 > 255) r2 = 255
+          if (g2 > 255) g2 = 255
+          if (b2 > 255) b2 = 255
+          buf[bi] = (255 << 24) | (b2 << 16) | (g2 << 8) | r2
+        }
+      }
+    }
+  }
+}
+
+// Blit a plan (planSprites' result, for a frame of plan.W columns) into the world buffer, every record in paint order. A record the blitter
+// cannot draw (a malformed mip) drops the rest of its sprite, as a planning failure does.
+export function blitPlan(buf32, zbuffer, plan) {
+  const n = plan.count, recs = plan.recs
+  if (n === 0) return
+  BUF = buf32; ZB = zbuffer; BW = plan.W
+  let skip = -1
+  for (let i = 0; i < n; i++) {
+    const r = recs[i]
+    if (r.si === skip) continue
+    try { blitRecord(r) } catch (err) {
+      skip = r.si
+      if (ERR_LOGGED++ < 3 && typeof console !== 'undefined') console.error('gfx-sprites: blit failed: ' + (err && err.stack || err))
+    }
+  }
+  BUF = null; ZB = null      // do not retain the frame's buffers
+}
+
+// The CPU sprite pass: plan (section 6), then blit. Returns the nameplate records for the post stage (empty when there are no people).
+export function drawSprites(buf32, zbuffer, fs, entities) {
+  const P = planSprites(fs, entities)
+  blitPlan(buf32, zbuffer, P)
+  return P.plates
 }

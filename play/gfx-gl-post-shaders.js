@@ -199,7 +199,7 @@ precision highp int;
 precision highp sampler2D;
 layout(location = 0) in vec4 aA;      // cx, cy, halfL, halfW  (target px, from the top-left)
 layout(location = 1) in vec4 aB;      // dx, dy, kind, mainKind
-layout(location = 2) in vec4 aC;      // a0, lb, g
+layout(location = 2) in vec4 aC;      // a0, lb, g, the lit alpha's ceiling (0 = none)
 uniform vec2 uTarget;                 // the target's size in px
 uniform float uFlick;
 uniform int uUseLuma;                 // 1 when the bloom pass measured the frame this frame
@@ -224,6 +224,7 @@ void main() {
   float mk = kind > 4.5 ? aB.w : kind;                         // a glow is judged by the light term of the mote it rides on
   float a0 = aC.x;
   float alpha0 = mk < 0.5 ? a0 * min(1.7, L) : (mk < 1.5 ? a0 * min(1.6, L * 1.1) : a0);
+  if (aC.w > 0.0) alpha0 = min(alpha0, aC.w);                // steam near the camera (V9, gfx-post.js steamLimits)
   float alpha = kind > 4.5 ? min(1.0, alpha0 * aC.z * 0.9) : min(1.0, alpha0);
   vAlpha = alpha * uFlick;
   vec2 hh = aA.zw + ((kind > 2.5 && kind < 4.5) ? vec2(1.0) : vec2(0.0));     // the antialiased shapes (dot, streak) get a 1 px rim to fade in

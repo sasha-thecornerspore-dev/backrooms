@@ -61,7 +61,8 @@ export function wallLayer(plan, hit, mat) {
 }
 
 // The GLSL hash2 (uint arithmetic), spelled out in JS with Math.imul so a test can pin it against gfx-util.js hash2: the shader uses this to pick a
-// floor / ceiling variant per cell. `a * 2654435761` in hash2 is a double product, exact for |a| < 2^21, so it equals a 32-bit wrapping multiply.
+// floor / ceiling variant per cell. gfx-util.js hash2 multiplies with Math.imul too, so the two are equal for every 32-bit input (the CPU and the GPU
+// pick the same variant on every cell, however far the player walks).
 export function hash2Ref(a, b, c = 0) {
   let h = (Math.imul(a, 2654435761 | 0) ^ Math.imul(b, 2246822519 | 0) ^ Math.imul(c, 3266489917 | 0)) >>> 0
   h ^= h >>> 16; h = Math.imul(h, 0x45d9f3b) >>> 0
