@@ -110,6 +110,10 @@
     .modal-box input { display:block;width:100%;box-sizing:border-box;background:#0a0a05;border:1px solid #4a3a1a;color:#c9ba72;font-family:monospace;font-size:14px;padding:8px;margin-bottom:12px; }
     .modal-btns { display:flex;gap:12px;margin-top:16px; }
     .modal-btns button { background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:14px;padding:8px 20px;cursor:pointer; }
+    /* the settings panel outgrew short windows (1280x720 and below): its CLOSE row sticks to the bottom of the scrolling box */
+    #settings-modal .modal-box { padding-bottom:0; }
+    #settings-modal .modal-foot { position:sticky;bottom:0;z-index:1;background:#1a1508;margin-top:24px;padding:14px 0 18px;border-top:1px solid #3a2f14;box-shadow:0 -10px 14px -8px #0009; }
+    #settings-modal .modal-foot .modal-btns { margin-top:0; }
     #join-status { color:#a09060;font-family:monospace;font-size:13px;margin-top:12px;min-height:20px; }
 
     /* ── HUD: everything that must stay legible over a scene of ANY brightness sits on a translucent plate ── */
@@ -118,7 +122,7 @@
       display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none;
     }
     /* the plates: wall-yellow notice panels on the lobby, dark ink panels below it, an inset hairline inside each */
-    #hud-plate, #exit-compass, #msg, #hint, #presence-hint, #item-hint,
+    #hud-plate, #exit-compass, #lan-badge, #msg, #hint, #presence-hint, #item-hint,
     #hotbar .slot, #btn-discard, body #btn-settings {
       background: var(--hud-plate); border: 1px solid var(--hud-edge); box-shadow: var(--hud-shadow);
       outline: 1px solid var(--hud-hair); outline-offset: -4px;
@@ -150,6 +154,12 @@
       font: 700 12px var(--mono); letter-spacing: 0.08em; white-space: pre;
       pointer-events: none; opacity: 0; transition: opacity 0.4s;
     }
+    /* HOST LAN: the address + room a friend types into JOIN LAN, kept in view while hosting */
+    #lan-badge {
+      padding: 5px 12px 5px 10px; border-left: 3px solid var(--hud-cool);
+      font: 700 11px var(--mono); letter-spacing: 0.06em; white-space: pre; pointer-events: none;
+    }
+    #lan-badge[hidden] { display: none; }
     #player-name {
       background: rgba(20,16,6,0.66); border: 1px solid #6a5a2a; color: var(--text);
       font: 14px var(--mono); padding: 10px 14px; width: 260px; max-width: 86vw;
@@ -444,10 +454,12 @@
       <div id="locate-row" style="display:none;margin-top:12px;">
         <button id="btn-locate" style="background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:13px;padding:8px 16px;cursor:pointer;letter-spacing:2px;">locate your body ⌖</button>
       </div>
-      <div class="modal-btns" style="margin-top:24px;">
-        <button id="settings-close">CLOSE</button>
+      <div class="modal-foot">
+        <div class="modal-btns">
+          <button id="settings-close" title="save and close (esc)">CLOSE</button>
+        </div>
+        <div id="version-line" style="color:#6a5a2a;font-family:monospace;font-size:11px;margin-top:12px;letter-spacing:2px;"></div>
       </div>
-      <div id="version-line" style="color:#6a5a2a;font-family:monospace;font-size:11px;margin-top:16px;letter-spacing:2px;"></div>
     </div>
   </div>
 
@@ -510,6 +522,7 @@
       <button id="btn-discard" title="drop the selected item (x)">✕ discard</button>
     </div>
     <div id="exit-compass"></div>
+    <div id="lan-badge" hidden></div>
   </div>
   <div id="chat-stack">
     <div id="chat-log"></div>
@@ -640,7 +653,11 @@
     nameInput.addEventListener('input', () => setPref('playerName', nameInput.value.slice(0, 24)))
     const getName = () => (nameInput.value.trim() || 'wanderer').slice(0, 24)
 
+    // one connection attempt at a time: a double click on HOST / ENTER must not join the room twice (or start the game twice)
+    let mpBusy = false
     async function startMultiplayer(serverUrl, roomId, statusEl) {
+      if (mpBusy) return
+      mpBusy = true
       const st = statusEl || joinStatus
       st.textContent = 'connecting...'
       try {
@@ -655,6 +672,7 @@
         await initGame(canvas, { worldSeed, mpClient, anchor })
       } catch (e) {
         st.textContent = `failed: ${e.message || 'could not connect'}`
+        mpBusy = false                                   // (a started game keeps it set: there is no second start)
       }
     }
 
@@ -668,11 +686,31 @@
       joinModal.style.display = 'flex'
     }
 
+    // HOST LAN (desktop): main starts one server on port 8765 (another port only if 8765 is taken)
+    // and returns { port, url, room }; the host joins its own server, and the joinable address +
+    // room stay in the HUD so a friend can type them into JOIN LAN. Without the desktop bridge
+    // (the PWA) a page cannot host, so this joins a server already running on this machine.
+    const LAN_ROOM = 'backrooms'
     document.getElementById('btn-host').onclick = async () => {
       startStatus.textContent = 'starting local server...'
       try {
-        const port = await window.backrooms?.startLocalServer?.() ?? 8765
-        await startMultiplayer(`ws://localhost:${port}`, 'local')
+        const r = await window.backrooms?.startLocalServer?.()
+        const info = typeof r === 'number' ? { port: r } : (r || {})
+        const port = info.port ?? 8765
+        const room = info.room || LAN_ROOM
+        const badge = document.getElementById('lan-badge')
+        const lines = !window.backrooms
+          ? null
+          : info.url
+            ? [`HOSTING · JOIN LAN → ${info.url}`, `room ${room}`]
+            : [`HOSTING · port ${port} · room ${room}`, 'no network address found']
+        if (lines) {
+          startStatus.textContent = lines.join(' · ')
+          badge.textContent = lines.join('\n')
+          badge.hidden = false
+        }
+        await startMultiplayer(`ws://localhost:${port}`, room, startStatus)
+        if (startEl.style.display !== 'none') badge.hidden = true   // still on the title: the join failed
       } catch (e) {
         startStatus.textContent = `host failed: ${e.message}`
       }
@@ -778,12 +816,25 @@
     document.getElementById('btn-locate').onclick = () => {
       if (currentAnchor) window.backrooms?.openExternal?.(bodyUrl(currentAnchor))
     }
-    document.getElementById('settings-close').onclick = async () => {
+    // one save-and-close path for the CLOSE button, Esc and a click on the dimmed backdrop
+    async function closeSettings() {
       const autoUpdate = document.getElementById('chk-autoupdate').checked
       const softwareRender = document.getElementById('chk-software').checked
       await window.backrooms?.saveSettings?.({ autoUpdate, softwareRender })
       settingsMod.style.display = 'none'
     }
+    const settingsOpen = () => settingsMod.style.display !== 'none'
+    document.getElementById('settings-close').onclick = closeSettings
+    // backdrop: only a press that STARTS on the backdrop counts (dragging a slider out of the box must not close it)
+    let settingsDownOnBackdrop = false
+    settingsMod.addEventListener('pointerdown', (e) => { settingsDownOnBackdrop = e.target === settingsMod })
+    settingsMod.addEventListener('click', (e) => { if (e.target === settingsMod && settingsDownOnBackdrop) closeSettings() })
+    // Esc: caught before the game's own key handling (window, capture phase) so it only closes the panel
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !settingsOpen()) return
+      e.preventDefault(); e.stopPropagation()
+      closeSettings()
+    }, true)
     document.getElementById('btn-restart')?.addEventListener('click', () => {
       window.backrooms?.restartNow?.()
     })

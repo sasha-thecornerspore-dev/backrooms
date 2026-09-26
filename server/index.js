@@ -54,7 +54,8 @@ function handleLeave(room, roomId, playerId) {
   }
 }
 
-export function createServer(port = PORT) {
+// host is optional: omitted = every interface (what LAN hosting needs); tests pass '127.0.0.1'.
+export function createServer(port = PORT, host) {
   const http = createHttpServer()
   const wss = new WebSocketServer({ server: http })
 
@@ -107,7 +108,21 @@ export function createServer(port = PORT) {
     ws.on('error', () => { if (playerId && room) handleLeave(room, roomId, playerId) })
   })
 
-  return new Promise((resolve) => http.listen(port, () => resolve(http)))
+  // A listen failure (e.g. EADDRINUSE) rejects instead of hanging forever. ws re-emits the http
+  // server's 'error' on the WebSocketServer, which throws when nothing listens there, so the
+  // same handler sits on both while listening.
+  return new Promise((resolve, reject) => {
+    const onError = (e) => {
+      http.off('error', onError); wss.off('error', onError)
+      wss.close()
+      reject(e)
+    }
+    http.on('error', onError); wss.on('error', onError)
+    http.listen(port, host, () => {
+      http.off('error', onError); wss.off('error', onError)
+      resolve(http)
+    })
+  })
 }
 
 // start when run directly

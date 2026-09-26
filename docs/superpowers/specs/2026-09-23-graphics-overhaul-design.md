@@ -10,9 +10,7 @@ Two milestones, in order:
 - **M2 — a WebGL2 backend** on the same data (textures, light model, sprite atlas), with the CPU renderer kept as the
   fallback and a kill switch.
 
-Branch: `feat/gfx-overhaul` (worktree `../backrooms-gfx`), cut from `feat/beacon-t0`. **Do not push the development branches
-as-is** (see the repo privacy notes). Shipping the PWA = `tools/build-play.sh`
-into the gh-pages `play/` dir, which copies only files.
+Shipping the PWA = `tools/build-play.sh` into the gh-pages `play/` dir.
 
 ## What the recon found (facts to design against)
 
@@ -57,8 +55,8 @@ into the gh-pages `play/` dir, which copies only files.
    `src/renderer/*.js` flat). Every new file must be added to both `SHELL` lists (`src/sw.js` and the heredoc in
    `tools/build-play.sh`) and the cache name bumped. New modules must be **import-safe in Node** (no `document`/`window`
    at module scope) so their pure parts can be unit-tested with vitest.
-9. **ARG safety.** The polaroid capture (`canvas.toDataURL`), the radio/beacon/scraps visuals and the canonical answer
-   chain must keep working. Do not open `tools/author/` or any answers/queue files.
+9. **Keep the extras working.** The polaroid capture (`canvas.toDataURL`) and the radio/beacon/scraps visuals must keep
+   working.
 
 ## Module map (all flat files in `src/renderer/`)
 

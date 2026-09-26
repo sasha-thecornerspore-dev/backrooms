@@ -1,12 +1,14 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import os from 'os'
 import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'fs'
 import https from 'https'
 import electronUpdater from 'electron-updater'
 const { autoUpdater } = electronUpdater
 import { readSettings, writeSettings } from './settings.js'
 import { fireBeacon } from './webhook.js'
+import { createLanHost, lanUrl, LAN_ROOM } from './lan.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -74,6 +76,7 @@ ipcMain.handle('submit-wish', async (_event, text) => {
 
 let mainWindow = null
 let lastBeaconAt = 0
+let lanHost = null   // the one HOST LAN server for this app run (see lan.js)
 
 function createWindowAndTrack() {
   mainWindow = new BrowserWindow({
@@ -165,14 +168,24 @@ app.whenReady().then(() => {
       return { ok: false, reason: e.code || e.message }
     }
   })
+  // HOST LAN: one server per app run on port 8765 (a free port only if 8765 is taken), in the
+  // room JOIN LAN defaults to. The renderer shows the returned url + room so a friend can join.
   ipcMain.handle('start-local-server', async () => {
-    const { createServer } = await import('../server/index.js')
-    const s = await createServer(0)
-    return s.address().port
+    if (!lanHost) {
+      const { createServer } = await import('../server/index.js')
+      if (!lanHost) lanHost = createLanHost({ createServer })
+    }
+    const port = await lanHost.start()
+    logLine(`lan host listening on port ${port}`)
+    return { port, url: lanUrl(os.networkInterfaces(), port), room: LAN_ROOM }
   })
   let updateDownloaded = false
   ipcMain.on('restart-now', () => { if (updateDownloaded) autoUpdater.quitAndInstall() })
 
+  // an offline launch, a rate limit or a missing app-update.yml is not a crash: log the code only
+  // (network error messages can embed hosts) and never let it reach the unhandledRejection handler
+  const updateFailed = (e) => logLine(`update check failed: ${e?.code || e?.message || e}`)
+  autoUpdater.on('error', updateFailed)
   autoUpdater.on('update-downloaded', () => {
     updateDownloaded = true
     const settings = readSettings(settingsPath)
@@ -193,7 +206,8 @@ app.whenReady().then(() => {
   createWindowAndTrack()
   // Check for updates silently on launch (only runs in production builds)
   if (app.isPackaged) {
-    autoUpdater.checkForUpdatesAndNotify()
+    autoUpdater.checkForUpdatesAndNotify().catch(updateFailed)
   }
 })
 app.on('window-all-closed', () => app.quit())
+app.on('before-quit', () => { if (lanHost) lanHost.close().catch(() => {}) })
