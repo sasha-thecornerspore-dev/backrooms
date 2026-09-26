@@ -127,6 +127,38 @@ describe('use & selection', () => {
   })
 })
 
+describe('tools (read on every press, never consumed)', () => {
+  function withTool() {
+    const sys = makeSystem()
+    sys.inventory.length = 0
+    sys.inventory.push({ type: 'plumb', tool: true }, { type: 'glowstick' })
+    return sys
+  }
+
+  it('grant carries the tool flag through to the inventory', () => {
+    const sys = makeSystem()
+    sys.inventory.length = 0
+    expect(sys.grant('plumb', { tool: true })).toEqual({ ok: true })
+    expect(sys.inventory[0]).toEqual({ type: 'plumb', tool: true })
+  })
+
+  it('a tool reads on every press and is never spliced away', () => {
+    const sys = withTool()
+    sys.select(0)
+    expect(sys.useSelected()).toEqual({ type: 'plumb', tool: true })
+    expect(sys.useSelected()).toEqual({ type: 'plumb', tool: true })   // still there
+    expect(sys.inventory).toHaveLength(2)
+    expect(sys.inventory[0]).toEqual({ type: 'plumb', tool: true })
+  })
+
+  it('discard still removes a tool (unlike use, which only reads it)', () => {
+    const sys = withTool()
+    sys.select(0)
+    expect(sys.discardSelected()).toEqual({ type: 'plumb' })
+    expect(sys.inventory.map(i => i.type)).toEqual(['glowstick'])
+  })
+})
+
 describe('discard', () => {
   function loaded(types) {
     const sys = makeSystem(openWorld, { items: { density: 1, types: ['glowstick'] } })

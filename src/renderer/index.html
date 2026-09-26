@@ -2,38 +2,108 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>The Backrooms</title>
+  <!-- PWA (active when served over http(s); inert under Electron file://) -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#c9ba72">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
     canvas { display: block; }
 
+    /* ── the world's own UI vocabulary (docs/manual.html): a dark ink page, wall-yellow notice panels with an inset
+       hairline, monospace placards, a warm glow. Colour roles stay: green = HP / glowstick, violet = sanity, red = hurt
+       only, cool blue = other people and instruments. Every colour is a token so the per-level themes only swap variables. ── */
+    :root {
+      --ink: #0e0c07; --ink-2: #15110a; --wall: #c8b870; --wall-deep: #94824a; --glow: #efe7c4; --carpet: #3a2c17;
+      --text: #e7dcb2; --text-dim: #a2966b; --ink-on-wall: #191305; --beacon: #a8d4ec;
+      --mono: 'Courier New', monospace;
+    }
+    /* HUD tokens. The default (and Level 0) is the lobby look: dark ink on translucent wall-yellow notice plates.
+       game.js sets body[data-level] to '0'..'3' | '∅' whenever a level is built; the dark levels swap to light ink on dark plates. */
+    body {
+      --hud-plate: rgba(200,184,112,0.86);  --hud-plate-hi: rgba(208,194,126,0.93);
+      --hud-ink: #191305;   --hud-dim: #36290a;   --hud-edge: #3a2c17;   --hud-hair: rgba(25,19,5,0.34);
+      --hud-slot: #15100a;  --hud-cool: #1d4e78;  --hud-sel: #fbf6df;    --hud-sel-edge: #191305;
+      --hud-shadow: 0 3px 10px rgba(0,0,0,0.32);  --hud-glow: 0 1px 0 rgba(255,255,255,0.28);
+    }
+    body[data-level="∅"] {   /* overcast daylight: a municipal notice sheet */
+      --hud-plate: rgba(228,224,210,0.88);  --hud-plate-hi: rgba(234,231,219,0.94);
+      --hud-ink: #1a1812;   --hud-dim: #37332a;   --hud-edge: #5f594c;   --hud-hair: rgba(26,24,18,0.32);
+      --hud-cool: #21506f;  --hud-sel: #ffffff;   --hud-sel-edge: #1a1812;
+    }
+    body[data-level="1"] {   /* grey concrete, sodium-green light */
+      --hud-plate: rgba(17,19,14,0.76);     --hud-plate-hi: rgba(15,17,12,0.86);
+      --hud-ink: #e8e6d3;   --hud-dim: #c3c1a9;   --hud-edge: #5a5d4b;   --hud-hair: rgba(232,230,211,0.17);
+      --hud-cool: #a7cddd;  --hud-sel: rgba(58,62,46,0.95);  --hud-sel-edge: #e8e6d3;
+      --hud-shadow: 0 3px 12px rgba(0,0,0,0.5);   --hud-glow: 0 0 6px rgba(226,224,190,0.22);
+    }
+    body[data-level="2"] {   /* rust and pipe-dark, one amber lamp */
+      --hud-plate: rgba(24,15,9,0.78);      --hud-plate-hi: rgba(20,12,7,0.88);
+      --hud-ink: #f1e3c5;   --hud-dim: #d0bb95;   --hud-edge: #70492d;   --hud-hair: rgba(241,227,197,0.17);
+      --hud-cool: #a8d4ec;  --hud-sel: rgba(78,50,28,0.95);  --hud-sel-edge: #f1e3c5;
+      --hud-shadow: 0 3px 12px rgba(0,0,0,0.55);  --hud-glow: 0 0 6px rgba(240,190,110,0.22);
+    }
+    body[data-level="3"] {   /* blue-black metal, cold arcs */
+      --hud-plate: rgba(8,11,18,0.8);       --hud-plate-hi: rgba(6,9,15,0.9);
+      --hud-ink: #e0eaf6;   --hud-dim: #adbdd2;   --hud-edge: #3d4c66;   --hud-hair: rgba(200,222,255,0.17);
+      --hud-cool: #9fd0ff;  --hud-sel: rgba(38,52,80,0.95);  --hud-sel-edge: #e0eaf6;
+      --hud-shadow: 0 3px 12px rgba(0,0,0,0.6);   --hud-glow: 0 0 6px rgba(150,200,255,0.24);
+    }
+
+    /* ── title screen: a dark ink page. When gfx-attract.js is running (#start.has-attract) the page goes translucent and
+       the real renderer glides down a lobby corridor behind it (#attract, its OWN canvas — never #c). ── */
+    #attract { display: none; position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 99; background: var(--ink); pointer-events: none; }
     #start {
-      position: fixed; inset: 0;
-      background: #c9ba72;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 24px; z-index: 100;
+      position: fixed; inset: 0; z-index: 100; padding: 24px 16px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+      color: var(--text); font-family: var(--mono);
+      background: radial-gradient(120% 90% at 50% 34%, #241d0c 0%, var(--ink) 66%);
+    }
+    #start.has-attract {
+      background:
+        radial-gradient(68% 56% at 50% 46%, rgba(10,8,3,0.62) 0%, rgba(10,8,3,0.42) 56%, rgba(10,8,3,0.05) 100%),
+        linear-gradient(to bottom, rgba(10,8,3,0.42) 0%, rgba(10,8,3,0) 18%, rgba(10,8,3,0) 74%, rgba(10,8,3,0.5) 100%);
+    }
+    #start .placard {
+      font: 11px var(--mono); letter-spacing: 0.42em; text-transform: uppercase; text-align: center;
+      color: var(--ink-on-wall); background: var(--wall); padding: 6px 14px 5px; border: 1px solid var(--carpet);
+      box-shadow: 0 2px 0 rgba(0,0,0,0.4);
     }
     #start h1, .title {
-      font-size: clamp(28px, 5vw, 60px);
-      color: #2a1e00; letter-spacing: 10px;
-      text-shadow: 3px 3px 0 #a09040;
-      font-family: 'Courier New', monospace;
+      font-size: clamp(30px, 7vw, 76px); font-weight: 700; letter-spacing: 0.16em; text-align: center; text-wrap: balance;
+      color: var(--glow); font-family: var(--mono);
+      text-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 22px rgba(0,0,0,0.7), 0 0 38px rgba(239,231,196,0.22);
+      animation: title-flick 9s infinite steps(1);
     }
+    @keyframes title-flick { 0%,94%,100% { opacity: 1; } 95% { opacity: 0.6; } 96% { opacity: 1; } 97% { opacity: 0.74; } 98% { opacity: 1; } }
     #start p, .sub {
-      color: #4a3800; max-width: 380px; text-align: center;
-      line-height: 1.9; font-size: 13px; opacity: 0.85;
+      color: #d4c99d; max-width: 380px; text-align: center; font-style: italic;
+      line-height: 1.9; font-size: 14px; text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+      background: rgba(10,8,3,0.7); padding: 4px 16px 5px; border: 1px solid rgba(138,122,58,0.35);
     }
     #start button {
-      background: #2a1e00; color: #c9ba72;
-      border: 2px solid #5a4810;
-      padding: 14px 44px; font: 15px 'Courier New', monospace;
-      letter-spacing: 6px; cursor: pointer;
+      position: relative; cursor: pointer; font: 700 14px var(--mono); letter-spacing: 0.3em; padding: 13px 26px;
+      color: var(--glow); background: rgba(14,12,7,0.74); border: 1px solid #8a7a3a; text-shadow: 0 0 8px rgba(239,231,196,0.25);
     }
-    #start button:hover { background: #5a4810; }
-    .btns { display:flex; gap:24px; justify-content:center; margin-top:40px; }
-    .btns button { background:none; border:1px solid #8a7a3a; color:#c9ba72; font-family:monospace; font-size:18px; padding:10px 28px; cursor:pointer; letter-spacing:2px; }
-    .btns button:hover { background:#8a7a3a22; }
+    #start button:hover { background: rgba(58,44,23,0.88); border-color: var(--wall); }
+    #start button:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
+    /* the two ways in (a fresh run / a saved one) are the notice panels: wall-yellow, dark ink, inset hairline */
+    #start #btn-solo, #start #btn-continue {
+      color: var(--ink-on-wall); text-shadow: none; border-color: var(--carpet);
+      background: linear-gradient(180deg, var(--wall), var(--wall-deep));
+      box-shadow: 0 8px 26px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.16);
+      outline: 1px solid rgba(25,19,5,0.3); outline-offset: -5px;
+    }
+    #start #btn-solo:hover, #start #btn-continue:hover { background: linear-gradient(180deg, #d8c982, #a4925a); }
+    #start #btn-solo:focus-visible, #start #btn-continue:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
+    .btns { display:flex; flex-wrap:wrap; gap:14px 22px; justify-content:center; margin-top:26px; max-width:100%; padding:0 16px; box-sizing:border-box; }
+    /* narrow screens: every start button stays on screen (they used to overflow both edges, hiding SOLO) */
+    @media (max-width: 700px) { #start .btns { gap:12px; margin-top:16px; } #start .btns button { padding:12px 18px; letter-spacing:3px; font-size:14px; } #start .placard { letter-spacing: 0.2em; font-size: 10px; } }
+    @media (max-height: 560px) { #start { justify-content:flex-start; overflow-y:auto; padding:16px 0 24px; gap:14px; } }
+    @media (prefers-reduced-motion: reduce) { #start h1, .title { animation: none; } }
     #join-modal { position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;z-index:100; }
     .modal-box { background:#1a1508;border:1px solid #8a7a3a;padding:40px;min-width:360px;max-height:88vh;overflow-y:auto; }
     .modal-title { color:#c9ba72;font-family:monospace;font-size:20px;letter-spacing:4px;margin-bottom:24px; }
@@ -42,119 +112,149 @@
     .modal-btns button { background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:14px;padding:8px 20px;cursor:pointer; }
     #join-status { color:#a09060;font-family:monospace;font-size:13px;margin-top:12px;min-height:20px; }
 
+    /* ── HUD: everything that must stay legible over a scene of ANY brightness sits on a translucent plate ── */
+    #hud-cluster {
+      position: fixed; top: max(10px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left));
+      display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none;
+    }
+    /* the plates: wall-yellow notice panels on the lobby, dark ink panels below it, an inset hairline inside each */
+    #hud-plate, #exit-compass, #msg, #hint, #presence-hint, #item-hint,
+    #hotbar .slot, #btn-discard, body #btn-settings {
+      background: var(--hud-plate); border: 1px solid var(--hud-edge); box-shadow: var(--hud-shadow);
+      outline: 1px solid var(--hud-hair); outline-offset: -4px;
+      color: var(--hud-ink); text-shadow: var(--hud-glow);
+    }
+    #hud-plate { min-width: 232px; padding: 8px 12px 10px; }
     #hud {
-      position: fixed; top: 12px; left: 14px;
-      color: #14110a; font-size: 12px; font-weight: bold;
-      line-height: 1.7; pointer-events: none; white-space: pre;
-      text-shadow: 0 0 5px rgba(255,255,255,0.55);
+      color: var(--hud-ink); font: 700 11px/1.5 var(--mono); letter-spacing: 0.14em; text-transform: uppercase;
+      white-space: pre; padding-bottom: 6px; margin-bottom: 3px; border-bottom: 1px solid var(--hud-hair); pointer-events: none;
     }
-    /* hit points */
-    #hp-wrap {
-      position: fixed; top: 34px; left: 14px;
-      display: flex; align-items: center; gap: 8px; pointer-events: none;
+    #hud:empty { display: none; }
+    /* hit points / sanity: analog gauges — a dark slot, the fill drawn by game.js (green / violet, red only when it is low) */
+    #hp-wrap, #san-wrap { display: flex; align-items: center; gap: 8px; margin-top: 6px; pointer-events: none; }
+    #hp-label, #san-label {
+      color: var(--hud-ink); font: 700 11px var(--mono); letter-spacing: 0.16em;
+      min-width: 34px; display: inline-block; text-shadow: var(--hud-glow);
     }
-    #hp-label { color: #14110a; font-size: 10px; letter-spacing: 2px; font-weight: bold;
-      text-shadow: 0 0 5px rgba(255,255,255,0.55); }
-    #hp-bar {
-      width: 150px; height: 8px; background: rgba(0,0,0,0.35);
-      border: 1px solid rgba(0,0,0,0.5); box-shadow: 0 0 4px rgba(255,255,255,0.35);
-    }
-    #hp-fill { height: 100%; width: 100%; background: rgba(60,150,70,0.85); transition: width 0.2s, background 0.4s; }
-    #hp-label, #san-label { min-width: 32px; display: inline-block; }
-    #san-wrap {
-      position: fixed; top: 52px; left: 14px;
-      display: flex; align-items: center; gap: 8px; pointer-events: none;
-    }
-    #san-label { color: #14110a; font-size: 10px; letter-spacing: 2px; font-weight: bold;
-      text-shadow: 0 0 5px rgba(255,255,255,0.55); }
-    #san-bar { width: 150px; height: 8px; background: rgba(0,0,0,0.35);
-      border: 1px solid rgba(0,0,0,0.5); box-shadow: 0 0 4px rgba(255,255,255,0.35); }
+    #hp-bar, #san-bar { width: 150px; height: 10px; padding: 1px; background: var(--hud-slot); border: 1px solid var(--hud-edge); }
+    #hp-fill  { height: 100%; width: 100%; background: rgba(60,150,70,0.85);   transition: width 0.2s, background 0.4s; }
     #san-fill { height: 100%; width: 100%; background: rgba(120,112,185,0.82); transition: width 0.2s, background 0.4s; }
     #insanity {
       position: fixed; inset: 0; opacity: 0; pointer-events: none; z-index: 40;
       background: radial-gradient(ellipse at center, rgba(40,0,42,0) 28%, rgba(28,0,40,0.88) 100%);
       transition: opacity 0.6s;
     }
+    /* the exit compass is an INSTRUMENT: it carries the cool-blue rule (the exit's own beam is cold blue) */
     #exit-compass {
-      position: fixed; top: 74px; left: 14px;
-      color: #14110a; font-size: 12px; font-weight: bold; letter-spacing: 1px;
+      padding: 5px 12px 5px 10px; border-left: 3px solid var(--hud-cool);
+      font: 700 12px var(--mono); letter-spacing: 0.08em; white-space: pre;
       pointer-events: none; opacity: 0; transition: opacity 0.4s;
-      text-shadow: 0 0 5px rgba(255,255,255,0.6);
     }
     #player-name {
-      background: rgba(20,16,6,0.6); border: 1px solid #6a5a2a; color: #e8d9a0;
-      font: 14px 'Courier New', monospace; padding: 10px 14px; width: 260px;
+      background: rgba(20,16,6,0.66); border: 1px solid #6a5a2a; color: var(--text);
+      font: 14px var(--mono); padding: 10px 14px; width: 260px; max-width: 86vw;
       text-align: center; letter-spacing: 1px; margin-bottom: 6px; outline: none;
     }
-    #player-name:focus { border-color: #c9ba72; }
-    #chat-log {
-      position: fixed; left: 16px; bottom: 96px; max-width: 46vw;
-      font: 13px 'Courier New', monospace; pointer-events: none; opacity: 0;
-      transition: opacity 0.4s; text-shadow: 0 1px 3px rgba(0,0,0,0.95); z-index: 55;
+    #player-name::placeholder { color: var(--text-dim); }
+    #player-name:focus { border-color: var(--wall); box-shadow: 0 0 0 1px rgba(200,184,112,0.4); }
+
+    /* chat: other people are cool blue, always on a dark plate whatever the level */
+    #chat-stack {
+      position: fixed; left: 16px; bottom: 150px; z-index: 55; max-width: min(46vw, 560px);
+      display: flex; flex-direction: column; align-items: flex-start; gap: 4px; pointer-events: none;
     }
-    #chat-log .chat-line { color: #eef2fa; margin: 3px 0; line-height: 1.35; }
+    #chat-log {
+      max-width: 100%; font: 13px var(--mono); pointer-events: none; opacity: 0;
+      transition: opacity 0.4s; text-shadow: 0 1px 3px rgba(0,0,0,0.95);
+    }
+    #chat-log:not(:empty) {
+      background: rgba(7,10,18,0.8); border: 1px solid #3d4c66; padding: 7px 12px;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.5); outline: 1px solid rgba(200,222,255,0.16); outline-offset: -4px;
+    }
+    #chat-log .chat-line { color: #eef2fa; margin: 3px 0; line-height: 1.4; }
     #chat-log .chat-line b { font-weight: bold; margin-right: 6px; }
-    #chat-log .chat-me  { font-style: italic; margin: 3px 0; }
-    #chat-log .chat-sys { color: #b7ad86; font-style: italic; margin: 3px 0; opacity: 0.8; }
+    #chat-log .chat-me  { font-style: italic; margin: 3px 0; line-height: 1.4; }
+    #chat-log .chat-sys { color: #c7c0a2; font-style: italic; margin: 3px 0; line-height: 1.4; }
     #chat-typing {
-      position: fixed; left: 16px; bottom: 74px; z-index: 56;
-      color: #9fd0ff; font: italic 12px 'Courier New', monospace; opacity: 0;
+      padding: 2px 9px;
+      color: #a9d4ff; font: italic 12px var(--mono); opacity: 0; background: rgba(7,10,18,0.78);
       transition: opacity 0.3s; text-shadow: 0 1px 3px rgba(0,0,0,0.9); pointer-events: none;
     }
+    #chat-typing:empty { display: none; }
     #chat-input {
-      position: fixed; left: 16px; bottom: 66px; width: 44vw;
-      background: rgba(10,12,18,0.9); border: 1px solid #6a7a9a; color: #eef2fa;
-      font: 14px 'Courier New', monospace; padding: 9px 13px; outline: none; z-index: 60;
+      position: fixed; left: 16px; bottom: 96px; width: min(40vw, 460px);
+      background: rgba(10,12,18,0.92); border: 1px solid #6a7a9a; color: #eef2fa;
+      font: 14px var(--mono); padding: 9px 13px; outline: none; z-index: 60;
       box-shadow: 0 0 18px rgba(80,140,220,0.25);
     }
     #chat-input:focus { border-color: #9fd0ff; }
+    #chat-input::placeholder { color: #9aa6ba; }
+
+    /* centre messages — the building speaking. A notice, not a caption. */
     #msg {
-      position: fixed; top: 38%; left: 50%; transform: translateX(-50%);
-      color: #14110a; font-size: 14px; font-weight: bold; opacity: 0;
-      text-align: center; pointer-events: none;
-      line-height: 1.9; letter-spacing: 2px; white-space: pre;
-      text-shadow: 0 0 8px rgba(255,255,255,0.7), 0 1px 2px rgba(255,255,255,0.5);
-      transition: opacity 1.5s;
+      position: fixed; top: 34%; left: 50%; transform: translateX(-50%);
+      width: max-content; max-width: min(92vw, 640px); padding: 13px 24px 14px;
+      background: var(--hud-plate-hi);
+      font: 700 14px/1.8 var(--mono); letter-spacing: 0.12em; text-align: center; white-space: pre-wrap;
+      opacity: 0; pointer-events: none; transition: opacity 1.5s;
     }
     #hint {
-      position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-      color: #14110a; font-size: 10px; font-weight: bold;
-      letter-spacing: 2px; pointer-events: none;
-      text-shadow: 0 0 5px rgba(255,255,255,0.55);
-      animation: hintfade 15s ease-in forwards;
+      position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+      width: max-content; max-width: min(94vw, 700px); padding: 5px 14px 6px; text-align: center; text-wrap: balance;
+      color: var(--hud-dim); font: 700 10.5px/1.7 var(--mono); letter-spacing: 0.1em; pointer-events: none;
+      opacity: 0;
     }
-    @keyframes hintfade { 0%,55% { opacity: 0.85; } 100% { opacity: 0; } }
+    #hint span { white-space: nowrap; }
+    /* the controls line fades out 15 s after the GAME starts (body[data-level] appears when a level is built), not 15 s after the page loads */
+    body[data-level] #hint { animation: hintfade 15s ease-in forwards; }
+    /* nothing of the in-game HUD shows until a level exists: the title screen sits over it and, while the attract fades in, would let empty plates show through */
+    body:not([data-level]) #hud-cluster { visibility: hidden; }
+    @keyframes hintfade { 0%,55% { opacity: 0.94; } 100% { opacity: 0; } }
     #wish-dialog {
       position: fixed; inset: 0;
-      background: rgba(0,0,0,0.7);
+      background: rgba(0,0,0,0.72);
       display: flex; align-items: center; justify-content: center;
       z-index: 50;
     }
     #wish-inner {
-      background: #1a1500; border: 1px solid #5a4810;
+      background: var(--ink-2); border: 1px solid #6a5424; box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+      outline: 1px solid rgba(200,184,112,0.2); outline-offset: -5px;
       padding: 32px; max-width: 420px; width: 90%;
       display: flex; flex-direction: column; gap: 16px;
     }
-    #wish-prompt { color: #c9ba72; font-size: 13px; letter-spacing: 2px; }
+    #wish-prompt { color: var(--wall); font-size: 13px; letter-spacing: 2px; }
     #wish-text {
-      background: #0a0900; color: #c9ba72; border: 1px solid #3a2a00;
-      font: 13px 'Courier New', monospace; padding: 10px; resize: none;
+      background: #0a0900; color: var(--text); border: 1px solid #4a3a10;
+      font: 13px var(--mono); padding: 10px; resize: none;
       letter-spacing: 1px; line-height: 1.7;
     }
-    #wish-text:focus { outline: none; border-color: #c9ba72; }
+    #wish-text:focus { outline: none; border-color: var(--wall); }
     #wish-actions { display: flex; gap: 12px; }
     #wish-actions button {
-      background: #2a1e00; color: #c9ba72; border: 1px solid #5a4810;
-      padding: 8px 20px; font: 12px 'Courier New', monospace;
+      background: #2a1e00; color: var(--wall); border: 1px solid #6a5424;
+      padding: 8px 20px; font: 12px var(--mono);
       letter-spacing: 4px; cursor: pointer;
     }
-    #wish-actions button:hover { background: #5a4810; }
-    #wish-response { color: rgba(180,160,60,0.6); font-size: 11px; letter-spacing: 2px; min-height: 18px; }
+    #wish-actions button:hover { background: #5a4810; color: var(--glow); }
+    #wish-response { color: #b9a862; font-size: 11px; letter-spacing: 2px; min-height: 18px; }
+    /* found-scrap reading card — aged paper, with the notice panel's inset hairline */
+    #note-card { position: fixed; inset: 0; background: rgba(0,0,0,0.74);
+      display: flex; align-items: center; justify-content: center; z-index: 55; }
+    #note-inner {
+      background: #e6ddc4; color: #241c0c; border: 1px solid #b8a878;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6), inset 0 0 60px rgba(150,130,80,0.22);
+      outline: 1px solid rgba(36,28,12,0.24); outline-offset: -6px;
+      padding: 34px 30px 20px; max-width: 460px; width: 86%;
+      font: 15px/1.85 var(--mono); letter-spacing: 0.3px;
+      transform: rotate(-0.6deg); cursor: pointer;
+    }
+    #note-text { white-space: pre-wrap; }
+    #note-foot { margin-top: 20px; font-size: 11px; letter-spacing: 2px; color: #54461f; }
+    #note-hint { margin-top: 6px; font-size: 10px; letter-spacing: 2px; color: #5c4d26; }
     #presence-hint {
-      position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
-      color: #14110a; font-size: 11px; font-weight: bold;
-      letter-spacing: 4px; pointer-events: none;
-      text-shadow: 0 0 5px rgba(255,255,255,0.55);
+      position: fixed; bottom: 140px; left: 50%; transform: translateX(-50%);
+      padding: 5px 16px 6px; font: 700 11px var(--mono);
+      letter-spacing: 0.32em; pointer-events: none; white-space: nowrap;
       transition: opacity 0.5s;
     }
     #btn-settings { position:fixed;top:16px;right:16px;background:none;border:none;color:#6a5a2a;font-size:22px;cursor:pointer;z-index:10; }
@@ -166,41 +266,47 @@
     .set-hint { font-size:10px; opacity:0.5; letter-spacing:1px; }
     #anchor-wrap { display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px; }
     #anchor-input {
-      width: 340px; background:#00000018; border:1px solid #8a7a3a; color:#2a1e00;
-      font: 12px 'Courier New', monospace; padding:8px 10px; letter-spacing:1px;
+      width: min(460px, 90vw); background: rgba(14,12,7,0.72); border: 1px solid #6a5a2a; color: var(--text);
+      font: 12px var(--mono); padding: 9px 12px; letter-spacing: 0.5px; text-overflow: ellipsis;
     }
-    #anchor-input::placeholder { color:#4a380099; }
-    #anchor-input:focus { outline:none; border-color:#2a1e00; }
-    #anchor-status { color:#4a3800; font-size:11px; letter-spacing:2px; min-height:14px; opacity:0.8; }
-    #hotbar {
-      position: fixed; bottom: 44px; left: 50%; transform: translateX(-50%);
-      display: flex; gap: 6px; align-items: center; pointer-events: none;
+    #anchor-input::placeholder { color: var(--text-dim); }
+    #anchor-input:focus { outline: none; border-color: var(--wall); box-shadow: 0 0 0 1px rgba(200,184,112,0.4); }
+    #anchor-status { color: var(--text-dim); font-size: 11px; letter-spacing: 2px; min-height: 14px; text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
+    /* settings gear: lifted above the title screen (it sat UNDER #start and was unreachable there), on a plate like the rest */
+    body #btn-settings {
+      top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); z-index: 101;
+      width: 38px; height: 38px; padding: 0; font-size: 21px; line-height: 1; cursor: pointer;
+      color: var(--hud-ink); background: var(--hud-plate);
     }
+    body #btn-settings:hover { color: var(--hud-cool); }
+    body #btn-settings:focus-visible { outline: 2px solid var(--hud-cool); outline-offset: 2px; }
+    /* the item dock: six slots (game.js rewrites #hotbar's innerHTML) and the discard button, on plates */
+    #hotbar-dock {
+      position: fixed; bottom: 62px; left: 0; right: 0; height: 32px;
+      display: flex; justify-content: center; align-items: center; pointer-events: none;
+    }
+    #hotbar { display: flex; gap: 5px; align-items: center; pointer-events: none; }
     #hotbar .slot {
-      width: 64px; height: 30px; border: 1px solid rgba(0,0,0,0.4);
-      color: #14110a; font: bold 10px 'Courier New', monospace;
-      display: flex; align-items: center; justify-content: center; gap: 4px;
-      letter-spacing: 1px; background: rgba(228,222,200,0.55); cursor: pointer;
-      pointer-events: auto;
+      width: 72px; height: 32px; padding: 0 2px;
+      font: 700 10px var(--mono); display: flex; align-items: center; justify-content: center; gap: 4px;
+      letter-spacing: 0.04em; cursor: pointer; pointer-events: auto; overflow: hidden; white-space: nowrap;
     }
-    #hotbar .slot.sel { border-color: #14110a; background: rgba(240,236,214,0.85); box-shadow: 0 0 6px rgba(255,255,255,0.4); }
-    #hotbar .slot .num { font-size: 8px; opacity: 0.55; }
+    #hotbar .slot.sel { background: var(--hud-sel); border-color: var(--hud-sel-edge); box-shadow: 0 0 0 1px var(--hud-sel-edge), var(--hud-shadow); outline-color: transparent; }
+    #hotbar .slot .num { font-size: 9px; opacity: 0.8; }
     #btn-discard {
-      position: fixed; bottom: 44px; left: 50%; transform: translateX(218px);
-      pointer-events: auto; cursor: pointer;
-      background: rgba(205,55,45,0.2); border: 1px solid rgba(150,40,35,0.75);
-      color: #3a0d0a; font: bold 10px 'Courier New', monospace; letter-spacing: 2px;
-      height: 30px; padding: 0 12px;
+      position: absolute; left: calc(50% + 240px); height: 32px; padding: 0 12px;
+      font: 700 10.5px var(--mono); letter-spacing: 0.14em; cursor: pointer; pointer-events: auto;
     }
-    #btn-discard:hover { background: rgba(205,55,45,0.34); }
+    #btn-discard:hover { background: var(--hud-sel); }
+    #btn-discard:focus-visible, #hotbar .slot:focus-visible { outline: 2px solid var(--hud-cool); outline-offset: 2px; }
     #item-hint {
-      position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%);
-      color: #14110a; font-size: 12px; font-weight: bold;
-      letter-spacing: 3px; pointer-events: none;
-      text-shadow: 0 0 6px rgba(255,255,255,0.6);
+      position: fixed; bottom: 104px; left: 50%; transform: translateX(-50%);
+      padding: 5px 16px 6px; width: max-content; max-width: 92vw; text-align: center;
+      font: 700 12px var(--mono); letter-spacing: 0.22em; pointer-events: none;
       transition: opacity 0.4s;
     }
-    /* combat + transition overlays */
+    #item-hint:empty { display: none; }
+    /* combat + transition overlays. #fade covers the HUD too: on touch the HUD is lifted above the controls (below). */
     #hurt {
       position: fixed; inset: 0; opacity: 0; pointer-events: none; z-index: 38;
       background: radial-gradient(ellipse at center, rgba(140,0,0,0) 45%, rgba(150,0,0,0.75) 100%);
@@ -208,15 +314,50 @@
     }
     #fade {
       position: fixed; inset: 0; background: #000; opacity: 0;
-      pointer-events: none; z-index: 45; transition: opacity 0.55s;
+      pointer-events: none; z-index: 49; transition: opacity 0.55s;
     }
+    body #stamina-wrap { background: var(--hud-slot); border-color: var(--hud-edge); }
+    body #stamina-fill { background: rgba(214,200,132,0.8); }
+
+    /* ── touch (any size): the keyboard cheat-sheet is no use, so the bottom of the screen is given back to the dock and the prompts ── */
+    @media (pointer: coarse) {
+      #hint { display: none; }
+      #hotbar-dock { bottom: 16px; }
+      #item-hint { bottom: 60px; }
+      #presence-hint { bottom: 96px; }
+      #chat-stack { bottom: 108px; }
+    }
+    /* short screens (a landscape phone): the newest chat lines win, older ones clip rather than climb into the centre message */
+    @media (max-height: 460px) { #chat-stack { max-height: 30vh; overflow: hidden; justify-content: flex-end; } }
+    /* ── phones (portrait): the item dock moves up under the gauges; the controls own the bottom corners ── */
+    @media (max-width: 700px) {
+      #hud-plate { min-width: 0; }
+      #hotbar-dock { position: static; height: auto; display: flex; gap: 4px; width: calc(100vw - 24px); }
+      #hotbar { flex: 1; min-width: 0; gap: 3px; }
+      #hotbar .slot { flex: 1 1 0; min-width: 0; width: auto; height: 38px; padding: 0; flex-direction: column; gap: 1px; font-size: 9px; letter-spacing: -0.03em; }
+      #hotbar .slot .num { font-size: 8px; line-height: 1; }
+      #btn-discard { position: static; flex: 0 0 auto; width: 30px; height: 38px; padding: 0; font-size: 0; }
+      #btn-discard::before { content: '✕'; font-size: 14px; }
+      #hint { display: none; }
+      #item-hint { bottom: 178px; left: 12px; transform: none; max-width: calc(100vw - 112px); text-align: left; letter-spacing: 0.1em; }
+      #presence-hint { bottom: 214px; left: 12px; transform: none; }
+      #chat-stack { bottom: 252px; max-width: calc(100vw - 120px); }
+      #chat-input { bottom: 12px; width: calc(100vw - 32px); }
+      #msg { top: 30%; letter-spacing: 0.06em; padding: 11px 16px 12px; }
+    }
+    /* touch: the HUD (gauges, compass, item dock) sits above the on-screen controls (z 46) so the slots can be tapped */
+    @media (pointer: coarse) { #hud-cluster { z-index: 47; } }
+    /* touch.js injects its own rules at runtime (a .touch-btn is a 42%-dark disc: its cream label measured 2.5:1 over the bright lobby);
+       this wins on specificity, leaves the pressed state alone, and gives the labels a plate that holds AA over any scene */
+    body #touch-ui .touch-btn:not(.down) { background: rgba(20,16,6,0.74); color: #f2e8c4; }
     #stamina-wrap {
       position: fixed; bottom: 18px; left: 14px; width: 120px; height: 4px;
       background: rgba(0,0,0,0.4); border: 1px solid rgba(138,122,58,0.3);
       opacity: 0; transition: opacity 0.6s; pointer-events: none;
     }
     #stamina-fill { height: 100%; width: 100%; background: rgba(200,185,110,0.55); }
-    #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 40; }
+    /* the polaroid flash: warm off-white (not pure #fff), ramped to a soft peak by game.js firePolaroid() — never instant */
+    #flash { position: fixed; inset: 0; background: #f2ecd6; opacity: 0; pointer-events: none; z-index: 40; }
   </style>
   <script>
     // Early renderer-error capture → main log (before modules load), so any
@@ -260,6 +401,43 @@
       <label class="toggle-row"><span>Creatures <span class="set-hint">below level 0</span></span><input type="checkbox" id="set-creatures"/></label>
       <label class="toggle-row"><span>Can take damage <span class="set-hint">peaceful = off</span></span><input type="checkbox" id="set-damage"/></label>
 
+      <div class="set-section">GRAPHICS &amp; COMFORT</div>
+      <label class="toggle-row">
+        <span>Graphics quality <span class="set-hint">auto adapts to your device; classic shading is the plainest, fastest light</span></span>
+        <select id="set-quality" style="background:#0a0a05;border:1px solid #4a3a1a;color:#c9ba72;font-family:monospace;font-size:14px;padding:4px 6px;">
+          <option value="auto">auto</option>
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+          <option value="legacy">classic shading</option>
+        </select>
+      </label>
+      <label class="toggle-row"><span>Reduce flicker <span class="set-hint">softer light dips &amp; camera flash</span></span><input type="checkbox" id="set-reduceflicker"/></label>
+      <label class="toggle-row">
+        <span>Frame-rate limit <span class="set-hint">saves battery &amp; heat</span></span>
+        <select id="set-fpscap" style="background:#0a0a05;border:1px solid #4a3a1a;color:#c9ba72;font-family:monospace;font-size:14px;padding:4px 6px;">
+          <option value="0">none</option>
+          <option value="60">60 fps</option>
+          <option value="30">30 fps</option>
+        </select>
+      </label>
+      <label class="toggle-row"><span>Sharp on high-DPI screens <span class="set-hint" id="set-hidpi-hint">uses more power</span></span><input type="checkbox" id="set-hidpi"/></label>
+
+      <div class="set-section">SIGNAL / BEACON</div>
+      <label class="toggle-row">
+        <span>Beacon effect <span class="set-hint">B fires your own webhook</span></span>
+        <select id="set-beacon-effect">
+          <option value="off">off</option>
+          <option value="ntfy">ntfy.sh topic</option>
+          <option value="discord">discord webhook</option>
+          <option value="custom">custom https url</option>
+        </select>
+      </label>
+      <label class="toggle-row">
+        <span>Beacon target <span class="set-hint">topic or https url</span></span>
+        <input type="text" id="set-beacon-webhook" spellcheck="false" style="width:200px;"/>
+      </label>
+
       <div id="update-ready-msg" style="display:none;color:#c9ba72;font-family:monospace;font-size:13px;margin-top:12px;">
         update ready — <button id="btn-restart" style="background:none;border:none;color:#c9ba72;cursor:pointer;font-family:monospace;text-decoration:underline;">restart now</button>
       </div>
@@ -273,7 +451,9 @@
     </div>
   </div>
 
+  <canvas id="attract" aria-hidden="true"></canvas>
   <div id="start">
+    <div class="placard" aria-hidden="true">property of ██████ · do not remove</div>
     <div class="title">THE BACKROOMS</div>
     <div class="sub">level 0. somewhere. you are here.</div>
     <input id="player-name" type="text" placeholder="your name" maxlength="24" spellcheck="false"/>
@@ -310,7 +490,7 @@
       <div style="color:#a09060;font-family:monospace;font-size:12px;margin-bottom:12px;max-width:340px;line-height:1.5;">
         pick a room code and share it with your friend. you'll both fall into the same world — anywhere, no setup.
       </div>
-      <input id="online-room" type="text" value="" placeholder="room code (e.g. jeff-and-maddie)" spellcheck="false"/>
+      <input id="online-room" type="text" value="" placeholder="room code (e.g. yellow-lamp-42)" spellcheck="false"/>
       <div class="modal-btns">
         <button id="online-cancel">CANCEL</button>
         <button id="online-connect">ENTER ▶</button>
@@ -319,19 +499,27 @@
     </div>
   </div>
 
-  <div id="hud"></div>
-  <div id="chat-log"></div>
-  <div id="chat-typing"></div>
-  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote)" spellcheck="false" style="display:none"/>
-  <div id="hp-wrap"><span id="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div></div></div>
-  <div id="san-wrap"><span id="san-label">SAN</span><div id="san-bar"><div id="san-fill"></div></div></div>
-  <div id="exit-compass"></div>
+  <div id="hud-cluster">
+    <div id="hud-plate">
+      <div id="hud"></div>
+      <div id="hp-wrap"><span id="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div></div></div>
+      <div id="san-wrap"><span id="san-label">SAN</span><div id="san-bar"><div id="san-fill"></div></div></div>
+    </div>
+    <div id="hotbar-dock">
+      <div id="hotbar"></div>
+      <button id="btn-discard" title="drop the selected item (x)">✕ discard</button>
+    </div>
+    <div id="exit-compass"></div>
+  </div>
+  <div id="chat-stack">
+    <div id="chat-log"></div>
+    <div id="chat-typing"></div>
+  </div>
+  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file …)" spellcheck="false" style="display:none"/>
   <div id="msg"></div>
-  <div id="hint">wasd move · shift run · mouse look · f take / no-clip · q use · x drop · 1-6 slots · e speak · enter chat · l light · m music</div>
+  <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x drop</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span></div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
   <div id="item-hint" style="opacity:0"></div>
-  <div id="hotbar"></div>
-  <button id="btn-discard" title="drop the selected item (x)">✕ discard</button>
   <div id="stamina-wrap"><div id="stamina-fill"></div></div>
   <div id="insanity"></div>
   <div id="hurt"></div>
@@ -349,6 +537,14 @@
     </div>
   </div>
 
+  <div id="note-card" style="display:none">
+    <div id="note-inner">
+      <p id="note-text"></p>
+      <p id="note-foot"></p>
+      <div id="note-hint">tap · e · esc — put it back</div>
+    </div>
+  </div>
+
   <script type="module">
     import { initGame } from './game.js'
     import { createMultiplayerClient } from '../net/client.js'
@@ -362,6 +558,42 @@
     const joinStatus = document.getElementById('join-status')
     const startStatus = document.getElementById('start-status')
     const canvas = document.getElementById('c')
+
+    // ── ?gfxbench=1: the device benchmark (gfx-bench.js; docs/gfx-device-testing.md) takes the page INSTEAD of the title and the game. Nothing
+    //    below runs — no saved run is read, no pref is written, no audio, no attract mode: the module waits here for good (its card links back). ──
+    if (new URLSearchParams(location.search).has('gfxbench')) {
+      let bench = null
+      try { bench = await import('./gfx-bench.js') } catch (e) { startStatus.textContent = `the benchmark could not load: ${e && e.message ? e.message : e}` }
+      const mode = bench ? bench.benchMode(location.search) : null
+      if (mode) {
+        startEl.style.display = 'none'
+        await bench.startBench(document, window, { mode, canvas })
+        await new Promise(() => {})
+      }
+    }
+
+    // every way into the game goes through here: the attract mode (its own #attract canvas) is disposed BEFORE initGame runs.
+    // gfx-attract.js is loaded lazily and optionally (a failed or missing module just means a plain title page, never a dead menu).
+    let attractMod = null
+    function hideStart() {
+      try { attractMod && attractMod.stopAttract() } catch { /* never block the game on the title's backdrop */ }
+      startEl.style.display = 'none'
+    }
+
+    // ── title screen: a moving picture of the lobby behind the menu. It runs on #attract (never #c), skips itself on low-end touch
+    //    devices and holds one still frame under prefers-reduced-motion; if it cannot start the plain ink page stays. ──
+    const attractEl = document.getElementById('attract')
+    const titleUp = () => startEl.style.display !== 'none'
+    const whenIdle = (fn) => (window.requestIdleCallback ? window.requestIdleCallback(fn, { timeout: 800 }) : setTimeout(fn, 60))
+    whenIdle(() => {
+      if (!titleUp()) return
+      import('./gfx-attract.js').then((m) => {
+        if (!titleUp()) return
+        attractMod = m
+        return m.startAttract(attractEl, { shouldRun: titleUp, onStop: () => startEl.classList.remove('has-attract') })
+          .then((on) => { if (on && titleUp()) startEl.classList.add('has-attract') })
+      }).catch(() => {})
+    })
 
     // ── anchor — no-clip from a real place ──
     const anchorInput = document.getElementById('anchor-input')
@@ -396,7 +628,7 @@
 
     async function startSolo() {
       const anchor = takeAnchor()
-      startEl.style.display = 'none'
+      hideStart()
       await initGame(canvas, anchor
         ? { worldSeed: anchorSeed(anchor.lat, anchor.lng), anchor }
         : {})
@@ -419,7 +651,7 @@
         const { worldSeed } = await mpClient.connect(roomId, requestedSeed, getName())
         joinModal.style.display = 'none'
         document.getElementById('online-modal').style.display = 'none'
-        startEl.style.display = 'none'
+        hideStart()
         await initGame(canvas, { worldSeed, mpClient, anchor })
       } catch (e) {
         st.textContent = `failed: ${e.message || 'could not connect'}`
@@ -483,7 +715,7 @@
         // on this path, so a resumed anchored run had a working drift HUD but a
         // hidden, dead "locate your body" button.
         const anchor = applyIdentity({ anchor: savedRun.anchor ?? null })
-        startEl.style.display = 'none'
+        hideStart()
         await initGame(canvas, { worldSeed: savedRun.worldSeed ?? null, anchor, resume: savedRun })
       }
     }
@@ -497,6 +729,19 @@
     prefRange('set-ambiencevol', 'ambienceVolume')
     prefChk('set-grain', 'grain');       prefChk('set-particles', 'particles');    prefChk('set-crosshair', 'crosshair');    prefChk('set-headbob', 'headBob')
     prefRange('set-sens', 'mouseSensitivity'); prefChk('set-creatures', 'creatures'); prefChk('set-damage', 'damage')
+    // graphics & comfort — prefs.js validates every value; game.js applies them live (quality, fps cap, DPR, flicker)
+    document.getElementById('set-quality').addEventListener('change', e => setPref('graphicsQuality', e.target.value))
+    document.getElementById('set-fpscap').addEventListener('change', e => setPref('fpsCap', +e.target.value))
+    prefChk('set-reduceflicker', 'reduceFlicker'); prefChk('set-hidpi', 'hiDpi')
+    document.getElementById('set-beacon-effect').addEventListener('change', e => setPref('beaconEffect', e.target.value))
+    document.getElementById('set-beacon-webhook').addEventListener('input', e => setPref('beaconWebhook', e.target.value.slice(0, 300)))
+    // Classic shading ignores the DPR canvas (gfx-quality.js rebuild: useDpr = hiDpi && mode !== 'legacy'), so say so and disable it there
+    const syncHiDpi = (q) => {
+      const off = q === 'legacy', chk = document.getElementById('set-hidpi'), hint = document.getElementById('set-hidpi-hint')
+      chk.disabled = off; chk.parentElement.style.opacity = off ? '0.5' : ''
+      hint.textContent = off ? 'not used with classic shading' : 'uses more power'
+    }
+    document.getElementById('set-quality').addEventListener('change', e => syncHiDpi(e.target.value))
     function loadPrefsIntoPanel() {
       const p = getPrefs()
       document.getElementById('set-music').checked      = p.music
@@ -510,6 +755,13 @@
       document.getElementById('set-sens').value         = p.mouseSensitivity
       document.getElementById('set-creatures').checked  = p.creatures
       document.getElementById('set-damage').checked     = p.damage
+      document.getElementById('set-quality').value      = p.graphicsQuality
+      document.getElementById('set-reduceflicker').checked = p.reduceFlicker
+      document.getElementById('set-fpscap').value       = String(p.fpsCap)
+      document.getElementById('set-hidpi').checked      = p.hiDpi
+      syncHiDpi(p.graphicsQuality)
+      document.getElementById('set-beacon-effect').value  = p.beaconEffect
+      document.getElementById('set-beacon-webhook').value = p.beaconWebhook
     }
 
     document.getElementById('btn-settings').onclick = async () => {
@@ -539,6 +791,17 @@
     window.backrooms?.onUpdateReady?.(() => {
       document.getElementById('update-ready-msg').style.display = 'block'
     })
+  </script>
+
+  <script>
+    // Register the PWA service worker — only over http(s). Under Electron the
+    // page loads from file://, where service workers are unsupported, so this
+    // is skipped and the desktop build is unaffected.
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((e) => console.warn('sw register failed', e))
+      })
+    }
   </script>
 </body>
 </html>

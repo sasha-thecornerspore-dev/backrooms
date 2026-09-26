@@ -1,0 +1,217 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>gfx post parity</title>
+<style>html, body { margin: 0; background: #000; overflow: hidden } canvas { display: block }</style>
+</head>
+<body>
+<script>
+// determinism shims (a classic script, before any module): Math.random is seeded, and the clock is stepped by hand
+(function () {
+  function mulberry32(seed) {
+    let s = seed >>> 0
+    return function () {
+      s += 0x6D2B79F5
+      let t = Math.imul(s ^ (s >>> 15), 1 | s)
+      t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+  }
+  let rnd = mulberry32(1)
+  Math.random = function () { return rnd() }
+  const realNow = performance.now.bind(performance)
+  let t = 0
+  window.__gfx = {
+    realNow, seed(n) { rnd = mulberry32(n) },
+    clockOn() { t = 0; performance.now = () => t; Date.now = () => 1700000000000 + t }, tick(ms = 1000 / 60) { t += ms },
+  }
+})()
+</script>
+
+<script type="module">
+// post-parity.html — POST-STAGE parity: the CPU renderer's own world + sprite buffer is shaded twice, once by gfx-post.js composeFrame (Canvas2D)
+// and once by the GPU post pass (gfx-gl-post.js) fed the SAME buffer as its scene texture, with the same frame state, the same particle field and the
+// same clock. Whatever differs is the post pass. (Driven by post-parity.cjs.)
+import * as S from './scenes.js'
+
+const G = window.__gfx
+let T = null
+
+async function load(srcUrl, worldJson) {
+  const imp = (f) => import(new URL(f, srcUrl).href)
+  const [renderer, world, levels, fixedmap, nullmap, decor, items, entities, frame, gworld, gsprites, gtex, glight, gpost, gq, gutil, gglutil, ggl] = await Promise.all([
+    imp('renderer.js'), imp('world.js'), imp('levels.js'), imp('fixedmap.js'), imp('level-null-map.js'), imp('decor.js'), imp('items.js'), imp('entities.js'),
+    imp('gfx-frame.js'), imp('gfx-world.js'), imp('gfx-sprites.js'), imp('gfx-textures.js'), imp('gfx-light.js'), imp('gfx-post.js'), imp('gfx-quality.js'), imp('gfx-util.js'),
+    imp('gfx-gl-util.js'), imp('gfx-gl-post.js'),
+  ])
+  const mods = {
+    createRenderer: renderer.createRenderer, DEFAULT_CONFIG: world.DEFAULT_CONFIG, CHUNK_SIZE: world.CHUNK_SIZE, createChunkCache: world.createChunkCache,
+    levelConfig: levels.levelConfig, LEVELS: levels.LEVELS, createFixedMap: fixedmap.createFixedMap,
+    NULL_MAP: nullmap.NULL_MAP, NULL_SPAWN: nullmap.NULL_SPAWN, NULL_EXIT: nullmap.NULL_EXIT,
+    createDecorSystem: decor.createDecorSystem, SIGHT_TYPES: decor.SIGHT_TYPES, createItemSystem: items.createItemSystem, createEntitySystem: entities.createEntitySystem,
+  }
+  return { mods, base: { ...mods.DEFAULT_CONFIG, ...(worldJson || {}) }, frame, gworld, gsprites, gtex, glight, gpost, gq, gutil, gglutil, ggl }
+}
+
+const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c }
+
+function stats(a, b, n, OW, OH) {
+  // mean and 99th percentile of the absolute per-channel difference (0..255), plus each side's mean per channel
+  let sum = 0
+  const hist = new Uint32Array(256)
+  const ma = [0, 0, 0], mb = [0, 0, 0]
+  for (let i = 0; i < n; i++) {
+    for (let c = 0; c < 3; c++) {
+      const d = Math.abs(a[i * 4 + c] - b[i * 4 + c])
+      sum += d; hist[d]++; ma[c] += a[i * 4 + c]; mb[c] += b[i * 4 + c]
+    }
+  }
+  const tot = n * 3
+  let acc = 0, p99 = 0, p999 = 0
+  for (let d = 0; d < 256; d++) { acc += hist[d]; if (!p99 && acc >= tot * 0.99) p99 = d; if (!p999 && acc >= tot * 0.999) p999 = d }
+  // signed mean difference (gpu - cpu) in the centre box and in the outer ring (the vignette's zone): a bias shows up as a non-zero here
+  const zone = (x0, y0, x1, y1) => { let d = 0, c = 0; for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y * OW + x) * 4; d += (b[i] - a[i]) + (b[i + 1] - a[i + 1]) + (b[i + 2] - a[i + 2]); c += 3 } return +(d / c).toFixed(2) }
+  const bias = { centre: zone(OW * 0.4 | 0, OH * 0.4 | 0, OW * 0.6 | 0, OH * 0.6 | 0), ring: zone(0, 0, OW, OH * 0.1 | 0) }
+  return { bias, mean: sum / tot, p99, p999, cpuMean: ma.map((v) => +(v / n).toFixed(2)), gpuMean: mb.map((v) => +(v / n).toFixed(2)) }
+}
+
+// the whole GPU renderer (gfx-gl.js: world + sprites + this post pass) built straight from createGlRenderer, bypassing renderer.js and its crash-loop marker
+async function runGl(id, { quality, size: sizeIn, frames, ropts }) {
+  const scene = S.SCENES.find((s) => s.id === id)
+  const size = sizeIn || scene.size || S.DEFAULT_SIZE
+  const { mods, base } = T
+  G.seed(S.RNG_SEED); G.clockOn()
+  const spec = scene.build({ mods, base, size })
+  const ro = { ...(spec.renderOpts || S.RENDER_OPTS), allowSoftwareGl: true }
+  if (quality) ro.qualityTier = quality
+  if (ropts) Object.assign(ro, ropts)
+  const canvas = mk(size.w, size.h); document.body.appendChild(canvas)
+  const mod = await import(new URL('gfx-gl.js', T.srcUrl).href)
+  const r = mod.createGlRenderer(canvas, spec.cfg, ro, spec.hooks || {})
+  const pcx = Math.floor(spec.player.x / mods.CHUNK_SIZE), pcy = Math.floor(spec.player.y / mods.CHUNK_SIZE)
+  const isWall = (wx, wy) => spec.cache.isWall(wx, wy, pcx, pcy)
+  const N = frames || (scene.warmup ?? S.WARMUP_FRAMES) + 1
+  for (let i = 0; i < N; i++) { G.tick(); r.render(spec.player, isWall, spec.flicker ?? 1, spec.entities || [], spec.fogMul ?? 1, spec.lights || {}, spec.timing || null) }
+  // a live resolution change (the adaptive controller's renderScale, then a canvas resize): every intermediate target must follow, with no GL error
+  const glc = document.querySelector('canvas[data-gfx=gl]'), gl = glc.getContext('webgl2')
+  let resizeErr = null
+  if (ropts && ropts.__resize) {
+    ro.renderScale = 0.42
+    for (let i = 0; i < 3; i++) { G.tick(); r.render(spec.player, isWall, spec.flicker ?? 1, spec.entities || [], spec.fogMul ?? 1, spec.lights || {}, spec.timing || null) }
+    canvas.width = 640; canvas.height = 360; ro.renderScale = 0.75
+    for (let i = 0; i < 3; i++) { G.tick(); r.render(spec.player, isWall, spec.flicker ?? 1, spec.entities || [], spec.fogMul ?? 1, spec.lights || {}, spec.timing || null) }
+    resizeErr = gl.getError()
+  }
+  const png = r.capture()
+  const canvases = [...document.querySelectorAll('canvas')].map((c) => ({ gfx: c.dataset.gfx || '', w: c.width, h: c.height, pos: c.style.position, pe: c.style.pointerEvents }))
+  r.dispose()
+  const left = document.querySelectorAll('canvas[data-gfx]').length
+  canvas.remove(); G.clockOn()
+  return { png, canvases, leftAfterDispose: left, resizeErr }
+}
+
+window.__pp = {
+  runGl,
+  async init({ srcUrl, worldJson }) { T = await load(srcUrl, worldJson); T.srcUrl = srcUrl; return { scenes: S.SCENES.map((s) => s.id) } },
+
+  // one scene: `frames` identical-clock frames on both pipelines, the last one compared
+  async run(id, { quality, size: sizeIn, frames, ropts, gpuOpts }) {
+    const scene = S.SCENES.find((s) => s.id === id)
+    if (!scene) throw new Error('unknown scene ' + id)
+    const size = sizeIn || scene.size || S.DEFAULT_SIZE
+    const { mods, base, frame, gworld, gsprites, gtex, glight, gpost, gq, gutil, gglutil, ggl } = T
+    G.seed(S.RNG_SEED); G.clockOn()
+    const spec = scene.build({ mods, base, size })
+    const ro = { ...(spec.renderOpts || S.RENDER_OPTS) }
+    if (quality) ro.qualityTier = quality
+    if (ropts) Object.assign(ro, ropts)
+    const config = spec.cfg, hooks = spec.hooks || {}
+    const pcx = Math.floor(spec.player.x / mods.CHUNK_SIZE), pcy = Math.floor(spec.player.y / mods.CHUNK_SIZE)
+    const isWall = (wx, wy) => spec.cache.isWall(wx, wy, pcx, pcy)
+    const OW = size.w, OH = size.h
+    const fogRgb = gutil.hexToRgb(config.palette.fog), skyRgb = config.sky ? gutil.hexToRgb(config.sky) : null
+    const LEVEL_KEY = gutil.levelKey(config)
+    const tex = gtex.buildTexturesMemo(config.palette, config.materials, config.look, LEVEL_KEY)
+    const light = glight.createLight(config, hooks)
+    const quality_ = gq.qualityFor(ro.qualityTier)
+    const scale = ro.renderScale >= 0.3 && ro.renderScale <= 1 ? ro.renderScale : quality_.scale
+    const q = scale === quality_.scale ? quality_ : Object.freeze({ ...quality_, scale })
+    const W = Math.max(1, Math.round(OW * q.scale)), H = Math.max(1, Math.round(OH * q.scale))
+
+    // ── the CPU pipeline (gfx-cpu.js, unrolled) ──
+    const cpuCanvas = mk(OW, OH), ctx = cpuCanvas.getContext('2d', { alpha: false })
+    const world = mk(W, H), wctx = world.getContext('2d', { alpha: false })
+    const img = wctx.createImageData(W, H), buf32 = new Uint32Array(img.data.buffer), zbuffer = new Float32Array(W)
+    const post = gpost.createPostState(config)
+    post.grainPattern = wctx.createPattern(gtex.buildGrain(), 'repeat')
+    post.vignette = gpost.buildVignette(OW, OH)
+    gpost.seedParticles(post, OW, OH)
+
+    // ── the GPU post pass ──
+    const glCanvas = mk(OW, OH)
+    const gl = glCanvas.getContext('webgl2', { alpha: false, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: false })
+    if (!gl) throw new Error('no webgl2')
+    const tri = gglutil.fullscreenTriangle(gl)
+    const env = { gl, canvas: glCanvas, overlay: null, config, tex, light, caps: {}, ropts: { ...ro, ...(gpuOpts || null) }, tri }
+    const pass = ggl.createPostPass(env)
+    pass.resize(OW, OH)
+    const gs = pass.state
+    gs.particles.length = 0
+    for (const p of post.particles) gs.particles.push({ ...p })
+    const tmp = { particles: [], count: 0 }; gpost.seedParticles(tmp, OW, OH); gs.rng = tmp.rng      // a fresh stream identical to the CPU's (seeded from the size)
+    const sceneTex = gl.createTexture()
+    gl.bindTexture(gl.TEXTURE_2D, sceneTex)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, W, H, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    const gworldObj = { W, H, sceneTex }
+
+    const N = frames || (scene.warmup ?? S.WARMUP_FRAMES) + 1
+    let fs = null, plates = null, msGpu = 0
+    for (let i = 0; i < N; i++) {
+      G.tick()
+      fs = frame.buildFrameState({
+        W, H, OW, OH, fog: config.fogDistance * (spec.fogMul ?? 1), fogRgb, fogMul: spec.fogMul ?? 1, flicker: spec.flicker ?? 1, frame: i + 1, timing: spec.timing || null,
+        player: spec.player, lights: spec.lights || {}, lightsOn: config.lights !== false, hasSky: !!skyRgb, skyRgb, light, quality: q, opts: ro, levelKey: LEVEL_KEY, look: config.look,
+      })
+      gworld.renderWorld(fs, tex, light, isWall, hooks.materialAt || null, buf32, zbuffer)
+      plates = gsprites.drawSprites(buf32, zbuffer, fs, spec.entities || [])
+      wctx.putImageData(img, 0, 0)
+      // the same frame, unmodified, as the GPU pass's scene (uploaded bottom-up)
+      gl.bindTexture(gl.TEXTURE_2D, sceneTex)
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true)
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, img.data)
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false)
+      gpost.composeFrame(ctx, wctx, world, fs, post, plates)
+      const t0 = G.realNow()
+      pass.render(fs, gworldObj, plates)
+      if (i === N - 1) { gl.finish(); msGpu = G.realNow() - t0 }
+    }
+    // read the GPU result in the task that drew it: GL canvas + the 2D overlay on top, as gfx-gl.js capture() does
+    const cmp = mk(OW, OH), cg = cmp.getContext('2d')
+    cg.drawImage(glCanvas, 0, 0)
+    if (env.overlay) cg.drawImage(env.overlay, 0, 0, OW, OH)
+    const gpuData = cg.getImageData(0, 0, OW, OH).data
+    const cpuData = ctx.getImageData(0, 0, OW, OH).data
+    const st = stats(cpuData, gpuData, OW * OH, OW, OH)
+    // an amplified difference image (x4, centred grey) for looking at
+    const dimg = cg.createImageData(OW, OH)
+    for (let i = 0; i < OW * OH; i++) for (let c = 0; c < 3; c++) dimg.data[i * 4 + c] = Math.max(0, Math.min(255, 128 + (gpuData[i * 4 + c] - cpuData[i * 4 + c]) * 4));
+    for (let i = 0; i < OW * OH; i++) dimg.data[i * 4 + 3] = 255
+    cg.putImageData(dimg, 0, 0)
+    const diffUrl = cmp.toDataURL('image/png')
+    cg.putImageData(new ImageData(new Uint8ClampedArray(gpuData), OW, OH), 0, 0)
+    const gpuUrl = cmp.toDataURL('image/png')
+    const cpuUrl = cpuCanvas.toDataURL('image/png')
+    const info = { plan: { ...pass.plan }, precision: pass.precision, tier: q, W, H, msGpu }
+    const err = gl.getError()
+    pass.dispose(); tri.dispose()
+    try { const lose = gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext() } catch { /* ignore */ }
+    G.clockOn()
+    return { cpu: cpuUrl, gpu: gpuUrl, diff: diffUrl, stats: st, info, glError: err }
+  },
+}
+</script>
+</body>
+</html>

@@ -116,9 +116,19 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
       item.on = !item.on
       return { type: 'radio', on: item.on }
     }
+    // tools (e.g. the plumb) take a reading on every press and are never consumed
+    if (item.tool) return { type: item.type, tool: true }
     inventory.splice(selected, 1)
     if (selected >= inventory.length && selected > 0) selected = inventory.length - 1
-    return { type: item.type }
+    return { type: item.type, ...(item.sour ? { sour: true } : {}) }
+  }
+
+  // Put an item straight into the inventory (a vending machine dispensing, say).
+  // `extra` carries per-item flags, e.g. { sour: true } for tainted water.
+  function grant(type, extra = {}) {
+    if (inventory.length >= MAX_SLOTS) return { ok: false, reason: 'full' }
+    inventory.push({ type, ...extra })
+    return { ok: true }
   }
 
   // Drop the selected item out of the inventory entirely. Returns the removed
@@ -147,7 +157,7 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
   }
 
   return {
-    update, getWorldItems, nearestItem, pickUp,
+    update, getWorldItems, nearestItem, pickUp, grant,
     select, getSelected, useSelected, discardSelected, isRadioOn, enterLevel,
     inventory,
     get selected() { return selected },

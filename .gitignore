@@ -9,3 +9,11 @@ _chattest.mjs
 .claude/
 .wrangler/
 relay/.wrangler/
+# local secret token files — never commit
+.backrooms-cf-token*
+*cf-token*
+*.token
+
+# graphics harness output (regenerated; never commit)
+tools/gfx/out/
+tools/gfx/baseline/

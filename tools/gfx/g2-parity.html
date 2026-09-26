@@ -1,0 +1,167 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>g2 sprite parity</title></head>
+<body>
+<script>
+// same determinism shim as harness.html: seeded Math.random
+(function () {
+  function mulberry32(seed) { let s = seed >>> 0; return function () { s += 0x6D2B79F5; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
+  let rnd = mulberry32(1); Math.random = () => rnd()
+  window.__seed = (n) => { rnd = mulberry32(n) }
+})()
+</script>
+<script type="module">
+import * as S from './scenes.js'
+
+// Sprite-only parity rig (builder G2): the CPU blitter (gfx-sprites.js drawSprites) and the GPU pass (gfx-gl-sprites.js) draw the SAME entity list,
+// over the SAME backdrop, with the SAME z-buffer and the SAME frame state, so the difference is the sprites and nothing else.
+async function loadTree(srcUrl, worldJson) {
+  const imp = (f) => import(new URL(f, srcUrl).href)
+  const [world, levels, fixedmap, nullmap, decor, items, entities, raycaster, util, frame, light, quality, textures, sprites, glutil, glsprites] = await Promise.all([
+    imp('world.js'), imp('levels.js'), imp('fixedmap.js'), imp('level-null-map.js'), imp('decor.js'), imp('items.js'), imp('entities.js'),
+    imp('raycaster.js'), imp('gfx-util.js'), imp('gfx-frame.js'), imp('gfx-light.js'), imp('gfx-quality.js'), imp('gfx-textures.js'), imp('gfx-sprites.js'),
+    imp('gfx-gl-util.js'), imp('gfx-gl-sprites.js'),
+  ])
+  const mods = {
+    DEFAULT_CONFIG: world.DEFAULT_CONFIG, CHUNK_SIZE: world.CHUNK_SIZE, createChunkCache: world.createChunkCache,
+    levelConfig: levels.levelConfig, LEVELS: levels.LEVELS, createFixedMap: fixedmap.createFixedMap,
+    NULL_MAP: nullmap.NULL_MAP, NULL_SPAWN: nullmap.NULL_SPAWN, NULL_EXIT: nullmap.NULL_EXIT,
+    createDecorSystem: decor.createDecorSystem, SIGHT_TYPES: decor.SIGHT_TYPES, createItemSystem: items.createItemSystem, createEntitySystem: entities.createEntitySystem,
+  }
+  return { mods, base: { ...mods.DEFAULT_CONFIG, ...(worldJson || {}) }, castRay: raycaster.castRay, util, frame, light, quality, textures, sprites, glutil, glsprites }
+}
+
+let T = null
+window.__init = async ({ srcUrl, worldJson }) => { T = await loadTree(srcUrl, worldJson); return S.SCENES.map((s) => s.id) }
+
+function backdrop(W, H, HH, zb) {
+  // a flat, readable stand-in: pale ceiling, mid floor, darker wall bands where a wall is in range
+  const px = new Uint8Array(W * H * 4)
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4
+    let r, g, b
+    const z = zb[x]
+    const wh = z < 1e8 ? H / Math.max(0.001, z) : 0
+    const wt = HH - wh / 2
+    if (y >= wt && y < wt + wh) { r = 96; g = 92; b = 70 }
+    else if (y < HH) { const k = y / HH; r = 200 - 30 * k; g = 196 - 30 * k; b = 150 - 20 * k }
+    else { const k = (y - HH) / (H - HH); r = 120 - 50 * k; g = 104 - 44 * k; b = 66 - 30 * k }
+    px[i] = r; px[i + 1] = g; px[i + 2] = b; px[i + 3] = 255
+  }
+  return px
+}
+
+function png(bytes, W, H) {
+  const c = document.createElement('canvas'); c.width = W; c.height = H
+  const g = c.getContext('2d'); const id = g.createImageData(W, H); id.data.set(bytes); g.putImageData(id, 0, 0)
+  return c.toDataURL('image/png').replace(/^data:image\/png;base64,/, '')
+}
+
+window.__run = async ({ id, tier, size, t, reduce, flicker, atlas }) => {
+  const scene = S.SCENES.find((s) => s.id === id)
+  if (!scene) throw new Error('unknown scene ' + id)
+  const { mods, base } = T
+  window.__seed(S.RNG_SEED)
+  const spec = scene.build({ mods, base, size })
+  const cfg = spec.cfg
+  const ropts = { ...(spec.renderOpts || S.RENDER_OPTS), qualityTier: tier }
+  if (reduce) ropts.reduceFlicker = true
+  const quality = T.quality.qualityFor(tier)
+  const OW = size.w, OH = size.h
+  const W = Math.max(1, Math.round(OW * quality.scale)), H = Math.max(1, Math.round(OH * quality.scale))
+  const LEVEL_KEY = T.util.levelKey(cfg)
+  const fogRgb = T.util.hexToRgb(cfg.palette.fog)
+  const tex = T.textures.buildTextures(cfg.palette, cfg.materials, cfg.look, LEVEL_KEY)
+  const light = T.light.createLight(cfg, spec.hooks || {})
+  const player = spec.player
+  const pcx = Math.floor(player.x / mods.CHUNK_SIZE), pcy = Math.floor(player.y / mods.CHUNK_SIZE)
+  const isWall = (wx, wy) => spec.cache.isWall(wx, wy, pcx, pcy)
+  const fs = T.frame.buildFrameState({
+    W, H, OW, OH, fog: cfg.fogDistance * (spec.fogMul ?? 1), fogRgb, fogMul: spec.fogMul ?? 1, flicker: flicker != null ? flicker : (spec.flicker ?? 1), frame: 9,
+    timing: { t, dt: 1 / 60 }, player, lights: spec.lights || {}, lightsOn: cfg.lights !== false, hasSky: !!cfg.sky, skyRgb: cfg.sky ? T.util.hexToRgb(cfg.sky) : null,
+    light, quality, opts: ropts, levelKey: LEVEL_KEY, look: cfg.look,
+  })
+  // z-buffer exactly as the world pass fills it
+  const zb = new Float32Array(W), rayMax = Math.min(96, Math.ceil(fs.fog) + 3)
+  for (let col = 0; col < W; col++) {
+    const angle = player.angle - fs.hf + (col / W) * fs.fov
+    const hit = T.castRay(player.x, player.y, angle, isWall, rayMax)
+    zb[col] = hit.dist >= rayMax ? 1e9 : hit.dist * Math.cos(angle - player.angle)
+  }
+  if (fs.quality.lightDetail >= 1 && tex.ts >= 32 && tex.ts <= 128 && fs.fog <= 120) light.prepare(fs, tex, isWall, spec.hooks && spec.hooks.materialAt)
+  const bd = backdrop(W, H, fs.HH, zb)
+  const entities = spec.entities || []
+
+  // ── CPU ──
+  for (let i = 0; i < 40; i++) T.sprites.drawSprites(new Uint32Array(W * H), zb, fs, entities)     // warm: build every frame (the build budget spreads it over calls)
+  const cpu32 = new Uint32Array(bd.buffer.slice(0))
+  const tc0 = performance.now()
+  const plates = T.sprites.drawSprites(cpu32, zb, fs, entities)
+  const cpuMs = performance.now() - tc0
+  const cpuPlates = plates.map((p) => ({ ...p }))
+  const cpu = new Uint8Array(cpu32.buffer)
+
+  // ── GPU ──
+  const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H
+  const gl = canvas.getContext('webgl2', { alpha: false, antialias: false, depth: false, preserveDrawingBuffer: true })
+  if (!gl) throw new Error('no webgl2')
+  const mk = (w, h, internal, format, type, data, filt) => {
+    const tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx)
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, w, h, 0, format, type, data)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filt); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filt)
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+    return tx
+  }
+  const flip = new Uint8Array(W * H * 4)
+  for (let y = 0; y < H; y++) flip.set(bd.subarray(y * W * 4, (y + 1) * W * 4), (H - 1 - y) * W * 4)
+  const sceneTex = mk(W, H, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, flip, gl.NEAREST)
+  const sceneFbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo)
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0)
+  const cols = new Float32Array(W * 2 * 4); for (let x = 0; x < W; x++) cols[x * 4] = zb[x]
+  const colsTex = mk(W, 2, gl.RGBA32F, gl.RGBA, gl.FLOAT, cols, gl.NEAREST)
+  const caps = { maxTexture: gl.getParameter(gl.MAX_TEXTURE_SIZE) }
+  const pass = T.glsprites.createSpritePass({ gl, caps, config: cfg, ropts: atlas ? { spriteAtlasSize: atlas } : {} })
+  const world = { W, H, sceneFbo, colsTex, sceneTex, zb }
+  const run = () => {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo); gl.bindTexture(gl.TEXTURE_2D, sceneTex)
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, flip)
+    return pass.render(fs, entities, world)
+  }
+  for (let i = 0; i < 6; i++) run()         // warm (atlas uploads, frame builds)
+  const tg0 = performance.now()
+  const gplates = run()
+  gl.finish()
+  const gpuMs = performance.now() - tg0
+  const gplatesC = gplates.map((p) => ({ ...p }))
+  const raw = new Uint8Array(W * H * 4)
+  gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, raw)
+  const gpu = new Uint8Array(W * H * 4)
+  for (let y = 0; y < H; y++) gpu.set(raw.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4)
+
+  // ── compare over the sprite region (pixels either side changed) ──
+  const diff = new Uint8Array(W * H * 4)
+  let n = 0, sum = 0, sumSq = 0, covBoth = 0, cpuOnly = 0, gpuOnly = 0
+  const hist = new Uint32Array(256)
+  for (let i = 0; i < W * H; i++) {
+    const j = i * 4
+    let cd = 0, gd = 0
+    for (let c = 0; c < 3; c++) { cd = Math.max(cd, Math.abs(cpu[j + c] - bd[j + c])); gd = Math.max(gd, Math.abs(gpu[j + c] - bd[j + c])) }
+    const cs = cd > 2, gs = gd > 2
+    if (cs || gs) {
+      n++
+      if (cs && gs) covBoth++; else if (cs) cpuOnly++; else gpuOnly++
+      for (let c = 0; c < 3; c++) { const d = Math.abs(cpu[j + c] - gpu[j + c]); sum += d; sumSq += d * d; hist[d]++ }
+    }
+    const dm = Math.max(Math.abs(cpu[j] - gpu[j]), Math.abs(cpu[j + 1] - gpu[j + 1]), Math.abs(cpu[j + 2] - gpu[j + 2]))
+    const v = Math.min(255, dm * 4)
+    diff[j] = v; diff[j + 1] = v; diff[j + 2] = v; diff[j + 3] = 255
+  }
+  const tot = n * 3
+  let acc = 0, p99 = 0, p90 = 0
+  for (let d = 0; d < 256; d++) { acc += hist[d]; if (!p90 && acc >= 0.90 * tot) p90 = d; if (!p99 && acc >= 0.99 * tot) { p99 = d; break } }
+  const stats = { id, tier, W, H, spritePixels: n, mean: +(sum / Math.max(1, tot)).toFixed(2), rms: +Math.sqrt(sumSq / Math.max(1, tot)).toFixed(2), p90, p99, both: covBoth, cpuOnly, gpuOnly, cpuMs: +cpuMs.toFixed(2), gpuMs: +gpuMs.toFixed(2), platesCpu: cpuPlates.length, lit: !!light.enabled, atlas: pass.stats }
+  stats.platesEqual = JSON.stringify(cpuPlates) === JSON.stringify(gplatesC)
+  pass.dispose()
+  return { stats, cpuPng: png(cpu, W, H), gpuPng: png(gpu, W, H), diffPng: png(diff, W, H) }
+}
+</script>
+</body></html>
