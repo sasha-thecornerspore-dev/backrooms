@@ -218,8 +218,10 @@ export function createGlRenderer(canvas, config, renderOpts = {}, worldHooks = {
     const memo = texturesMemoSize()
     let rr = null
     try {
+      // settleFrame reads this canvas back several times: ask for a readback-friendly context up front (the first getContext
+      // call fixes the attributes, and the CPU renderer's own getContext('2d', { alpha: false }) then gets this same context)
+      const g2 = c.getContext('2d', { alpha: false, willReadFrequently: true })
       rr = (deps.createCpuRenderer || createCpuRenderer)(c, config, { ...opts, renderer: 'cpu' }, worldHooks)
-      const g2 = c.getContext('2d')
       // drawn until it stops changing: a sprite whose lazy build did not fit this call's budget appears on a later call (settleFrame)
       const st = settleFrame(() => {
         rr.render(syn.player, syn.isWall, syn.flicker, syn.entities, syn.fogMul, syn.lights, VALIDATE_TIMING)

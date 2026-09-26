@@ -620,9 +620,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const rKey = (c, s) => 'cs.case.' + c + '.' + s
   const rSolved = (c, s) => { try { return localStorage.getItem(rKey(c, s)) === '1' } catch (e) { return false } }
   let recoverManifest = null, recoverIndex = null
+  // The desktop app runs from file://, where ../recover/ does not exist: there the live manifests are read from the public
+  // site, the same https origin /play/ is served from (GitHub Pages sends Access-Control-Allow-Origin: *). The PWA keeps
+  // its relative, same-origin path exactly as before.
+  const RECOVER_REMOTE = typeof location !== 'undefined' && location.protocol === 'file:'
+  const RECOVER_BASE = RECOVER_REMOTE ? 'https://backrooms.thecornerspore.dev/recover/cases/' : '../recover/cases/'
   async function loadIndex() {
     if (recoverIndex) return recoverIndex
-    const r = await fetch('../recover/cases/index.json', { cache: 'no-store' })
+    const r = await fetch(RECOVER_BASE + 'index.json', { cache: 'no-store' })
     if (!r.ok) throw new Error('no index')
     recoverIndex = (await r.json()).cases || []
     return recoverIndex
@@ -630,7 +635,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   async function loadCase(id) {
     const want = id || rOpenCase()
     if (recoverManifest && recoverManifest.id === want) return recoverManifest
-    const r = await fetch('../recover/cases/' + want + '.json', { cache: 'no-store' })
+    const r = await fetch(RECOVER_BASE + want + '.json', { cache: 'no-store' })
     if (!r.ok) throw new Error('no case')
     recoverManifest = await r.json()
     return recoverManifest
@@ -679,7 +684,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
             setTimeout(() => showMessage(((m.reward && m.reward.key) || 'the case is read.') + ' — open the board at /recover/.'), 3000)
         } else showMessage('the file does not answer to that.')
       } else showMessage('the file does not recognise that. try /recover, /cases or /file <answer>.')
-    } catch (e) { showMessage('the file could not be opened from here.') }
+    } catch (e) {
+      // desktop: a fetch that never reached the site (offline, DNS, blocked) says so plainly
+      if (RECOVER_REMOTE && e && e.name === 'TypeError') showMessage('no signal. the file is kept online —\nconnect to the internet and try again.')
+      else showMessage('the file could not be opened from here.')
+    }
   }
   if (mpClient) {
     mpClient.onChat(addChatLine)
