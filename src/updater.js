@@ -44,7 +44,7 @@ export function createUpdateController({
   autoUpdater.autoInstallOnAppQuit = canInstall
   autoUpdater.on('error', failed)
   autoUpdater.on('checking-for-update', () => emit({ state: 'checking' }))
-  autoUpdater.on('update-not-available', () => emit({ state: 'up-to-date' }))
+  autoUpdater.on('update-not-available', () => { log('update check: up to date'); emit({ state: 'up-to-date' }) })
   autoUpdater.on('update-available', (info) => {
     const version = info?.version
     log(`update available: v${version}`)
