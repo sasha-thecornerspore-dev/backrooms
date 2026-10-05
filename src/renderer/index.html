@@ -269,6 +269,11 @@
     }
     #btn-settings { position:fixed;top:16px;right:16px;background:none;border:none;color:#6a5a2a;font-size:22px;cursor:pointer;z-index:10; }
     #btn-settings:hover { color:#c9ba72; }
+    .update-btn { background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:12px;padding:4px 10px;cursor:pointer;letter-spacing:1px;white-space:nowrap; }
+    .update-btn:hover { border-color:#c9ba72; }
+    .update-btn:disabled { opacity:0.4;cursor:default; }
+    #update-toast { position:fixed;bottom:16px;left:16px;display:none;align-items:center;gap:12px;background:#1a1508ee;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:13px;padding:8px 12px;z-index:150; }
+    #update-toast-close { background:none;border:none;color:#6a5a2a;cursor:pointer;font-family:monospace;font-size:14px; }
     .toggle-row { display:flex;align-items:center;justify-content:space-between;color:#c9ba72;font-family:monospace;font-size:15px;margin:8px 0;gap:16px; }
     .toggle-row input[type=range] { width:150px; accent-color:#c9ba72; }
     .toggle-row input[type=checkbox] { accent-color:#c9ba72; width:16px; height:16px; cursor:pointer; }
@@ -385,14 +390,23 @@
 <body>
   <canvas id="c"></canvas>
   <button id="btn-settings" title="settings">⚙</button>
+  <div id="update-toast"><span id="update-toast-text"></span><button id="update-toast-action" class="update-btn"></button><button id="update-toast-close" title="dismiss">✕</button></div>
 
   <div id="settings-modal" style="display:none;position:fixed;inset:0;background:#0008;align-items:center;justify-content:center;z-index:200;">
     <div class="modal-box">
       <div class="modal-title">SETTINGS</div>
-      <label class="toggle-row">
-        <span>Auto-update</span>
-        <input type="checkbox" id="chk-autoupdate" checked/>
+      <label class="toggle-row desktop-update">
+        <span>Updates <span class="set-hint">automatic installs when you quit</span></span>
+        <select id="set-updatemode" style="background:#0a0a05;border:1px solid #4a3a1a;color:#c9ba72;font-family:monospace;font-size:14px;padding:4px 6px;">
+          <option value="auto">automatic</option>
+          <option value="notify">ask before downloading</option>
+          <option value="manual">only when i check</option>
+        </select>
       </label>
+      <div class="toggle-row desktop-update">
+        <span id="update-status" style="font-size:12px;opacity:0.8;"></span>
+        <button id="btn-update-action" class="update-btn">check for updates</button>
+      </div>
       <label class="toggle-row">
         <span>Software rendering<br><span style="font-size:11px;opacity:0.6;">fixes freezing on some GPUs · restart to apply</span></span>
         <input type="checkbox" id="chk-software"/>
@@ -448,9 +462,6 @@
         <input type="text" id="set-beacon-webhook" spellcheck="false" style="width:200px;"/>
       </label>
 
-      <div id="update-ready-msg" style="display:none;color:#c9ba72;font-family:monospace;font-size:13px;margin-top:12px;">
-        update ready — <button id="btn-restart" style="background:none;border:none;color:#c9ba72;cursor:pointer;font-family:monospace;text-decoration:underline;">restart now</button>
-      </div>
       <div id="locate-row" style="display:none;margin-top:12px;">
         <button id="btn-locate" style="background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:13px;padding:8px 16px;cursor:pointer;letter-spacing:2px;">locate your body ⌖</button>
       </div>
@@ -803,8 +814,8 @@
     }
 
     document.getElementById('btn-settings').onclick = async () => {
-      const s = await window.backrooms?.getSettings?.() ?? { autoUpdate: true, softwareRender: false }
-      document.getElementById('chk-autoupdate').checked = s.autoUpdate
+      const s = await window.backrooms?.getSettings?.() ?? { updateMode: 'auto', softwareRender: false }
+      document.getElementById('set-updatemode').value = s.updateMode || (s.autoUpdate === false ? 'notify' : 'auto')
       document.getElementById('chk-software').checked = !!s.softwareRender
       loadPrefsIntoPanel()
       try {
@@ -818,9 +829,9 @@
     }
     // one save-and-close path for the CLOSE button, Esc and a click on the dimmed backdrop
     async function closeSettings() {
-      const autoUpdate = document.getElementById('chk-autoupdate').checked
+      const updateMode = document.getElementById('set-updatemode').value
       const softwareRender = document.getElementById('chk-software').checked
-      await window.backrooms?.saveSettings?.({ autoUpdate, softwareRender })
+      await window.backrooms?.saveSettings?.({ updateMode, softwareRender })
       settingsMod.style.display = 'none'
     }
     const settingsOpen = () => settingsMod.style.display !== 'none'
@@ -835,13 +846,45 @@
       e.preventDefault(); e.stopPropagation()
       closeSettings()
     }, true)
-    document.getElementById('btn-restart')?.addEventListener('click', () => {
-      window.backrooms?.restartNow?.()
-    })
-    // listen for update-ready from main
-    window.backrooms?.onUpdateReady?.(() => {
-      document.getElementById('update-ready-msg').style.display = 'block'
-    })
+    // ── updates: one status line + one action button in settings, mirrored by a small corner toast
+    // whenever there is something to act on (a new version to download, or one ready to install) ──
+    const UPDATE_VIEW = {
+      idle:          { text: '',                                    action: 'check for updates', run: 'check' },
+      checking:      { text: 'checking…',                           action: 'check for updates', run: null },
+      'up-to-date':  { text: 'you have the latest version',         action: 'check again',       run: 'check' },
+      available:     { text: (s) => `v${s.version} is available`,   action: (s) => s.manual ? 'open download page' : 'download', run: 'download', toast: true },
+      downloading:   { text: (s) => `downloading v${s.version ?? ''}… ${s.percent ?? 0}%`, action: 'downloading', run: null },
+      downloaded:    { text: (s) => `v${s.version} is ready`,       action: 'restart now',       run: 'restart', toast: true },
+      error:         { text: (s) => `update check failed (${s.error})`, action: 'try again',     run: 'check' },
+      unsupported:   { text: 'updates are off in dev builds',       action: 'check for updates', run: null },
+    }
+    let updateToastDismissed = null   // the state+version the player closed the toast on
+    function runUpdate(run) {
+      if (run === 'check') window.backrooms?.checkForUpdates?.()
+      else if (run === 'download') window.backrooms?.downloadUpdate?.()
+      else if (run === 'restart') window.backrooms?.restartNow?.()
+    }
+    function renderUpdateStatus(s) {
+      const view = UPDATE_VIEW[s?.state] || UPDATE_VIEW.idle
+      const val = (v) => (typeof v === 'function' ? v(s) : v)
+      document.getElementById('update-status').textContent = val(view.text)
+      const btn = document.getElementById('btn-update-action')
+      btn.textContent = val(view.action)
+      btn.disabled = !view.run
+      btn.onclick = () => runUpdate(view.run)
+      const key = `${s?.state}:${s?.version}`
+      const toast = document.getElementById('update-toast')
+      toast.style.display = view.toast && updateToastDismissed !== key ? 'flex' : 'none'
+      document.getElementById('update-toast-text').textContent = val(view.text)
+      const tbtn = document.getElementById('update-toast-action')
+      tbtn.textContent = val(view.action)
+      tbtn.onclick = () => runUpdate(view.run)
+      document.getElementById('update-toast-close').onclick = () => { updateToastDismissed = key; toast.style.display = 'none' }
+    }
+    // the web/PWA build updates itself through the service worker — no updater rows there
+    if (!window.backrooms) document.querySelectorAll('.desktop-update').forEach((el) => { el.style.display = 'none' })
+    window.backrooms?.onUpdateStatus?.(renderUpdateStatus)
+    window.backrooms?.getUpdateStatus?.().then(renderUpdateStatus).catch(() => {})
   </script>
 
   <script>

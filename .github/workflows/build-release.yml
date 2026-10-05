@@ -1,15 +1,88 @@
 name: Build & Release
 
+# push to main  -> build Windows / Linux / macOS installers into a DRAFT release, publish it once
+#                  every required asset has landed (updaters never see a half-uploaded release)
+# pull request  -> build all three the same way, attach them to the run as artifacts, publish nothing
+# manual run    -> same as a pull request (a dry run of the installers from any branch)
+
 on:
   push:
     branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
-  release:
-    runs-on: windows-latest
+  prepare:
+    runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      tag:     ${{ steps.guard.outputs.tag }}
+      build:   ${{ steps.guard.outputs.build }}
+      publish: ${{ steps.guard.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v5
 
+      # Skip only when this version is already fully PUBLISHED.
+      # A leftover draft from a failed run is NOT skipped — the build re-uploads into the same
+      # draft (--clobber), so releases stay repairable. Docs-only pushes after a good release
+      # just skip cleanly.
+      - name: Check for existing release
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          TAG="v$VER"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "Not a push to main — building installers without publishing."
+            echo "build=true"    >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          IS_DRAFT=$(gh release view "$TAG" --repo "${{ github.repository }}" --json isDraft -q .isDraft 2>/dev/null || echo "missing")
+          if [ "$IS_DRAFT" = "false" ]; then
+            echo "Release $TAG is already published — skipping build."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$IS_DRAFT" = "missing" ]; then
+            gh release create "$TAG" --draft --title "$VER" --notes "" --target "${{ github.sha }}" --repo "${{ github.repository }}"
+          fi
+          echo "Draft $TAG ready — building."
+          echo "build=true"   >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            assets: "dist/*.exe dist/*.exe.blockmap dist/latest.yml"
+          - os: ubuntu-latest
+            platform: linux
+            assets: "dist/*.AppImage dist/*.deb dist/latest-linux.yml"
+          # macOS builds are ad-hoc signed (no Apple Developer ID yet): they run after the player
+          # clears Gatekeeper once, and the app points mac players at the release page instead of
+          # self-installing. A mac-only failure must not hold back the Windows/Linux release.
+          - os: macos-latest
+            platform: mac
+            assets: "dist/*.dmg dist/*.zip dist/*.zip.blockmap dist/latest-mac.yml"
+            optional: true
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.optional == true }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v5
 
@@ -22,76 +95,81 @@ jobs:
       # optional native/WASM deps, which trips `npm ci`. install reconciles it.
       - run: npm install --no-audit --no-fund
 
-      # Skip only when this version is already fully PUBLISHED.
-      # A leftover draft from a failed run is NOT skipped — electron-builder
-      # reuses the draft and we retry the upload, so releases stay repairable.
-      # (docs-only pushes to main after a good release just skip cleanly.)
-      - name: Check for existing release
-        id: guard
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="v$(node -p "require('./package.json').version")"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          IS_DRAFT=$(gh release view "$TAG" --repo "${{ github.repository }}" --json isDraft -q .isDraft 2>/dev/null || echo "missing")
-          if [ "$IS_DRAFT" = "false" ]; then
-            echo "Release $TAG is already published — skipping build."
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No published release for $TAG (state: $IS_DRAFT) — building."
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
+      # the suite is platform-neutral; once is enough (Linux, the same runner wish-auto tests on)
+      - if: matrix.platform == 'linux'
+        run: npm test
 
+      # only release builds carry the wish token; PR/dry-run installers submit wishes as a silent no-op
       - name: Write build config
-        if: steps.guard.outputs.exists == 'false'
+        if: needs.prepare.outputs.publish == 'true'
         shell: bash
         run: |
           echo '{"wishToken":"${{ secrets.ISSUES_TOKEN }}","githubOwner":"${{ github.repository_owner }}","githubRepo":"backrooms"}' > src/build-config.json
 
-      - name: Build & sign installer
-        if: steps.guard.outputs.exists == 'false'
+      - name: Build & sign installer (Windows)
+        if: matrix.platform == 'win'
         env:
-          GH_TOKEN:          ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK:          ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD:  ${{ secrets.CSC_KEY_PASSWORD }}
-        run: npm run release
+          CSC_LINK:         ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: npm run dist:win
 
-      # electron-builder's own upload of the large installer is flaky (it can exit
-      # while the .exe is still in flight, leaving only the blockmap). Re-upload the
-      # installer, blockmap and latest.yml explicitly with dashed names (matching
-      # what electron-builder writes into latest.yml) so the release is complete.
-      - name: Ensure installer assets uploaded
-        if: steps.guard.outputs.exists == 'false'
+      - name: Build installers (Linux)
+        if: matrix.platform == 'linux'
+        run: npm run dist:linux
+
+      # CSC_* is deliberately NOT passed here: it holds the Windows .pfx, which macOS signing would reject
+      - name: Build installers (macOS)
+        if: matrix.platform == 'mac'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:mac
+
+      - name: Bundle server
+        if: matrix.platform == 'linux'
+        run: npx esbuild server/index.js --bundle --platform=node --format=esm --outfile=dist/backrooms-server.js --external:ws
+
+      - name: Collect assets
+        id: assets
+        shell: bash
+        run: |
+          shopt -s nullglob
+          FILES=()
+          for pat in ${{ matrix.assets }}; do
+            matches=( $pat )
+            if [ ${#matches[@]} -eq 0 ]; then echo "::error::no file matched $pat"; exit 1; fi
+            FILES+=( "${matches[@]}" )
+          done
+          [ "${{ matrix.platform }}" = "linux" ] && FILES+=( dist/backrooms-server.js )
+          printf '%s\n' "${FILES[@]}"
+          { echo 'files<<EOF'; printf '%s\n' "${FILES[@]}"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+
+      - name: Upload to draft release
+        if: needs.prepare.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VER=$(node -p "require('./package.json').version")
-          cp "dist/The Backrooms Setup ${VER}.exe"          "dist/The-Backrooms-Setup-${VER}.exe"
-          cp "dist/The Backrooms Setup ${VER}.exe.blockmap" "dist/The-Backrooms-Setup-${VER}.exe.blockmap"
-          gh release upload "v${VER}" \
-            "dist/The-Backrooms-Setup-${VER}.exe" \
-            "dist/The-Backrooms-Setup-${VER}.exe.blockmap" \
-            "dist/latest.yml" \
-            --clobber --repo "${{ github.repository }}"
+          mapfile -t FILES <<< "${{ steps.assets.outputs.files }}"
+          gh release upload "${{ needs.prepare.outputs.tag }}" "${FILES[@]}" --clobber --repo "${{ github.repository }}"
 
-      - name: Bundle server
-        if: steps.guard.outputs.exists == 'false'
-        run: npx esbuild server/index.js --bundle --platform=node --format=esm --outfile=dist/backrooms-server.js --external:ws
+      - name: Attach installers to the run
+        if: needs.prepare.outputs.publish != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backrooms-${{ matrix.platform }}
+          path: ${{ steps.assets.outputs.files }}
+          retention-days: 14
 
-      - name: Upload server to release
-        if: steps.guard.outputs.exists == 'false'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ steps.guard.outputs.tag }}" dist/backrooms-server.js --clobber --repo "${{ github.repository }}"
-
-      # Publish only after every asset (installer, latest.yml, blockmap, server)
-      # has landed. Until now the release was a draft, invisible to updaters.
+  # Publish only after every required asset has landed. Until now the release was a draft, invisible
+  # to updaters. (macOS is optional — see the matrix — so a mac-only failure still publishes.)
+  publish:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.publish == 'true' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
       - name: Publish the release
-        if: steps.guard.outputs.exists == 'false'
-        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ steps.guard.outputs.tag }}" --draft=false --latest --repo "${{ github.repository }}"
+        run: gh release edit "${{ needs.prepare.outputs.tag }}" --draft=false --latest --repo "${{ github.repository }}"

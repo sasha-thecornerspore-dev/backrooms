@@ -40,7 +40,7 @@ vi.mock('electron', () => {
 vi.mock('electron-updater', async () => {
   const { EventEmitter } = await import('events')
   const autoUpdater = new EventEmitter()
-  autoUpdater.checkForUpdatesAndNotify = vi.fn(() => {
+  autoUpdater.checkForUpdates = vi.fn(() => {
     const e = Object.assign(new Error('ENOENT: no such file, open C:\\somewhere\\app-update.yml'), { code: 'ENOENT' })
     return Promise.reject(e)
   })
@@ -73,7 +73,7 @@ afterAll(async () => {
 
 describe('update check (PKG-1)', () => {
   it('logs "update check failed: <code>" and raises no unhandled rejection', () => {
-    expect(h.updater.checkForUpdatesAndNotify).toHaveBeenCalledTimes(1)
+    expect(h.updater.checkForUpdates).toHaveBeenCalledTimes(1)
     const log = existsSync(logFile) ? readFileSync(logFile, 'utf8') : ''
     expect(log).toContain('update check failed: ENOENT')
     expect(log).not.toContain('unhandledRejection')

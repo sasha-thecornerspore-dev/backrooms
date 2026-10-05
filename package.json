@@ -1,6 +1,6 @@
 {
   "name": "backrooms",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "The Backrooms — infinite procedural horror maze",
   "author": "Corner Spore",
   "main": "src/main.js",
@@ -9,8 +9,11 @@
     "start": "electron .",
     "test": "vitest run",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "release": "electron-builder --publish always"
+    "dist": "electron-builder --publish never",
+    "release": "electron-builder --publish always",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:linux": "electron-builder --linux --publish never",
+    "dist:mac": "electron-builder --mac --publish never"
   },
   "devDependencies": {
     "electron": "^39.8.5",
@@ -41,7 +44,39 @@
     "nsis": {
       "oneClick": true,
       "perMachine": false,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "artifactName": "The-Backrooms-Setup-${version}.${ext}"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon-512.png",
+      "category": "Game",
+      "maintainer": "Corner Spore <71096603+sasha-thecornerspore-dev@users.noreply.github.com>",
+      "artifactName": "The-Backrooms-${version}-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icon-512.png",
+      "category": "public.app-category.games",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "artifactName": "The-Backrooms-${version}-${arch}.${ext}"
     },
     "publish": {
       "provider": "github",
