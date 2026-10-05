@@ -45,9 +45,24 @@ everything in one place: controls, how to read your instruments, the four-floor 
 
 ## install
 
-download the latest installer from [releases](../../releases/latest) and run it. the game auto-updates when new versions ship (you can turn that off in settings ⚙ — you'll get a quiet "restart now" prompt instead).
+download the installer for your system from [releases](../../releases/latest) and run it.
 
-**windows:** `The Backrooms Setup x.x.x.exe`
+| system | file | notes |
+|--------|------|-------|
+| **windows** | `The-Backrooms-Setup-x.x.x.exe` | one-click install, desktop shortcut |
+| **linux** | `The-Backrooms-x.x.x-x86_64.AppImage` | `chmod +x` it and run — updates itself |
+| **linux (debian/ubuntu)** | `The-Backrooms-x.x.x-amd64.deb` | `sudo apt install ./The-Backrooms-x.x.x-amd64.deb` |
+| **macos** | `The-Backrooms-x.x.x-universal.dmg` | intel + apple silicon. not notarized yet: the first time, right-click the app → **open**, or run `xattr -cr "/Applications/The Backrooms.app"` |
+
+### updates
+
+settings ⚙ → **updates** picks how new versions arrive:
+
+- **automatic** (default) — checks at launch and every few hours, downloads quietly, installs when you quit. a small **restart now** prompt appears if you want it sooner.
+- **ask before downloading** — checks the same way, but only tells you a new version exists; nothing downloads until you click **download**.
+- **only when i check** — never checks on its own. use **check for updates** in settings whenever you like.
+
+**check for updates** works in every mode. on macos the app tells you about new versions and opens the download page (unsigned mac builds can't replace themselves).
 
 ---
 
@@ -127,7 +142,7 @@ hit the gear ⚙ (top-right) for the control panel. everything added is optional
 | creatures | turn every entity off for pure liminal exploration |
 | can take damage | off for a peaceful, no-stakes wander |
 
-auto-update and software rendering live in the same panel.
+update mode (automatic / ask / manual), **check for updates**, and software rendering live in the same panel.
 
 ---
 
@@ -177,7 +192,7 @@ descend and the world changes around you: the palette, the fog, the clutter, and
 npm install
 npm start        # run in dev
 npm test         # run unit tests
-npm run dist     # build installer (requires CSC_LINK, CSC_KEY_PASSWORD env vars)
+npm run dist     # build installers for this OS into dist/ (windows signing uses CSC_LINK, CSC_KEY_PASSWORD)
 ```
 
 ---

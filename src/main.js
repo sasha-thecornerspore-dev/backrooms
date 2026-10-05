@@ -7,6 +7,7 @@ import https from 'https'
 import electronUpdater from 'electron-updater'
 const { autoUpdater } = electronUpdater
 import { readSettings, writeSettings } from './settings.js'
+import { createUpdateController, RELEASES_URL } from './updater.js'
 import { fireBeacon } from './webhook.js'
 import { createLanHost, lanUrl, LAN_ROOM } from './lan.js'
 
@@ -121,7 +122,10 @@ app.whenReady().then(() => {
   const settingsPath = path.join(app.getPath('userData'), 'settings.json')
 
   ipcMain.handle('get-settings', () => readSettings(settingsPath))
-  ipcMain.handle('save-settings', (_e, settings) => writeSettings(settingsPath, settings))
+  ipcMain.handle('save-settings', (_e, settings) => {
+    writeSettings(settingsPath, settings)
+    updates.applyMode()   // switching to/from 'manual' starts or stops the background checks
+  })
   ipcMain.handle('get-version', () => app.getVersion())
 
   // renderer diagnostics — surface renderer-side errors/stalls into the log file
@@ -179,22 +183,19 @@ app.whenReady().then(() => {
     logLine(`lan host listening on port ${port}`)
     return { port, url: lanUrl(os.networkInterfaces(), port), room: LAN_ROOM }
   })
-  let updateDownloaded = false
-  ipcMain.on('restart-now', () => { if (updateDownloaded) autoUpdater.quitAndInstall() })
-
-  // an offline launch, a rate limit or a missing app-update.yml is not a crash: log the code only
-  // (network error messages can embed hosts) and never let it reach the unhandledRejection handler
-  const updateFailed = (e) => logLine(`update check failed: ${e?.code || e?.message || e}`)
-  autoUpdater.on('error', updateFailed)
-  autoUpdater.on('update-downloaded', () => {
-    updateDownloaded = true
-    const settings = readSettings(settingsPath)
-    if (settings.autoUpdate) {
-      autoUpdater.quitAndInstall()
-    } else {
-      mainWindow?.webContents.send('update-ready')
-    }
+  // updates: auto / notify / manual (see updater.js); the renderer shows the status and drives check/download/restart
+  const updates = createUpdateController({
+    autoUpdater,
+    getMode: () => readSettings(settingsPath).updateMode,
+    send: (status) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('update-status', status) },
+    log: logLine,
+    openReleases: () => shell.openExternal(RELEASES_URL),
+    enabled: app.isPackaged,   // dev builds have no app-update.yml to check against
   })
+  ipcMain.handle('update-status', () => updates.getStatus())
+  ipcMain.handle('update-check', () => updates.check())
+  ipcMain.handle('update-download', () => updates.download())
+  ipcMain.on('restart-now', () => updates.restart())
 
   logLine(`backrooms v${app.getVersion()} starting (hardwareAccel=${hwAccel})`)
 
@@ -204,10 +205,7 @@ app.whenReady().then(() => {
   })
 
   createWindowAndTrack()
-  // Check for updates silently on launch (only runs in production builds)
-  if (app.isPackaged) {
-    autoUpdater.checkForUpdatesAndNotify().catch(updateFailed)
-  }
+  updates.start()   // checks on launch unless the player chose 'manual'
 })
 app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => { if (lanHost) lanHost.close().catch(() => {}) })

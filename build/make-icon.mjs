@@ -1,4 +1,4 @@
-// Generates build/icon.ico (256x256, PNG-compressed) — an endless yellow corridor.
+// Generates build/icon.ico (256x256, PNG-compressed) + icon-256.png / icon-512.png — an endless yellow corridor.
 // Run: node build/make-icon.mjs
 import { deflateSync } from 'node:zlib'
 import { writeFileSync } from 'node:fs'
@@ -95,20 +95,34 @@ function chunk(type, data) {
   out.writeUInt32BE(crc32(out.subarray(4, 8 + data.length)), 8 + data.length)
   return out
 }
-const ihdr = Buffer.alloc(13)
-ihdr.writeUInt32BE(S, 0); ihdr.writeUInt32BE(S, 4)
-ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0
-const raw = Buffer.alloc(S * (S * 4 + 1))
-for (let y = 0; y < S; y++) {
-  raw[y * (S * 4 + 1)] = 0
-  Buffer.from(px.buffer, y * S * 4, S * 4).copy(raw, y * (S * 4 + 1) + 1)
+function encodePng(pixels, size) {
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4)
+  ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0
+  const raw = Buffer.alloc(size * (size * 4 + 1))
+  for (let y = 0; y < size; y++) {
+    raw[y * (size * 4 + 1)] = 0
+    Buffer.from(pixels.buffer, y * size * 4, size * 4).copy(raw, y * (size * 4 + 1) + 1)
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw, { level: 9 })),
+    chunk('IEND', Buffer.alloc(0)),
+  ])
 }
-const png = Buffer.concat([
-  Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
-  chunk('IHDR', ihdr),
-  chunk('IDAT', deflateSync(raw, { level: 9 })),
-  chunk('IEND', Buffer.alloc(0)),
-])
+const png = encodePng(px, S)
+
+// macOS and Linux want at least 512x512: a 2x nearest-neighbour upscale of the same corridor
+const S2 = S * 2
+const px2 = new Uint8Array(S2 * S2 * 4)
+for (let y = 0; y < S2; y++) {
+  for (let x = 0; x < S2; x++) {
+    const src = ((y >> 1) * S + (x >> 1)) * 4, dst = (y * S2 + x) * 4
+    px2[dst] = px[src]; px2[dst + 1] = px[src + 1]; px2[dst + 2] = px[src + 2]; px2[dst + 3] = px[src + 3]
+  }
+}
+const png512 = encodePng(px2, S2)
 
 // ── ICO wrap (single 256x256 PNG entry) ──
 const ico = Buffer.alloc(22 + png.length)
@@ -126,4 +140,5 @@ png.copy(ico, 22)
 
 writeFileSync(join(__dirname, 'icon.ico'), ico)
 writeFileSync(join(__dirname, 'icon-256.png'), png)
-console.log(`icon.ico ${ico.length} bytes, icon-256.png ${png.length} bytes`)
+writeFileSync(join(__dirname, 'icon-512.png'), png512)
+console.log(`icon.ico ${ico.length} bytes, icon-256.png ${png.length} bytes, icon-512.png ${png512.length} bytes`)
