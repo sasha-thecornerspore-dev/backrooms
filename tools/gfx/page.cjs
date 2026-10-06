@@ -23,7 +23,15 @@
 //   --ropts JSON       extra renderOpts for the game (globalThis.__backroomsRenderOpts, set before the page's scripts run TOGETHER WITH the test-run marker
 //                      globalThis.__backroomsTestRun = true: without the marker the game and the GL backend ignore the hook), e.g. the GPU path on
 //                      SwiftShader: --ropts '{"renderer":"gpu","allowSoftwareGl":true}' (with --prefs '{"renderer":"gpu"}' it is the same as the pref)
-//   --eval JS          run this JS in the page (after everything else, before the capture); console.log shows with --verbose
+//   --eval JS          run this JS in the page (after everything else, before the capture); console.log shows with --verbose.
+//                      May be repeated: the statements run in order, each followed by --pump N frames
+//   --pump N           force N frames (capturePage + 20 ms each) after every --eval statement, and once before the capture when there is
+//                      no --eval / --drive. A hidden window runs requestAnimationFrame only on demand, so a keydown + keyup dispatched
+//                      inside ONE --eval never reaches the game loop (the key is set and cleared between frames); split them instead:
+//                      --eval "window.dispatchEvent(new KeyboardEvent('keydown',{code:'Tab'}))" --eval "...('keyup',{code:'Tab'}))" --pump 3
+//   --drive FILE       a .cjs / .mjs module exporting async (ctx) => {}: a key sequence driven from the main process, frames interleaved,
+//                      ctx = { exec, pump, key(type, code, repeat), tap(code, frames), hold(code, frames), state, sleep, log, wc, errors }
+//                      (runs after the --eval statements; push onto ctx.errors to fail the run)
 //   --memory GB        navigator.deviceMemory to report under --phone/--touch (2 = the attract mode skips itself)
 //   --visible          park a real window off-screen instead of a hidden one (rAF runs at the display rate: for live frame-rate checks)
 //   --query Q          append a query string to the page URL, e.g. --query '?gfxbench=quick' (the device benchmark) or '?gfxstats=1'
@@ -31,7 +39,10 @@
 //                      SwiftShader (the GPU path still needs --prefs '{"renderer":"gpu"}' or the benchmark; no allowSoftwareGl needed)
 //   --timeout S        watchdog seconds (default 90)      --verbose  step log + page console      --keep-userdata  keep the temp profile
 //
-// Prints "[page error] ..." for every console error / uncaught exception; exit code 1 if there were any.
+// Prints "[page error] ..." for every console error / uncaught exception; exit code 1 if there were any. With --start / --level the page's
+// window.backrooms.logError (the Electron preload's IPC bridge, absent here) is stubbed to console.error before the game is entered, so an
+// exception the game loop catches per frame surfaces as "[page error] [loop] ..." too; the loop's stall watchdog is only a warning (a hidden
+// window stalls by design while nothing forces frames).
 // The window is hidden (show:false, backgroundThrottling:false); webContents.capturePage() returns real pixels for it on this
 // setup (a second DevTools Page.captureScreenshot did not return), so that is what is used. The DevTools protocol is only
 // used for phone / reduced-motion emulation.
@@ -43,12 +54,14 @@ const { pathToFileURL } = require('url')
 
 function parseArgs(argv) {
   const val = {}, flags = new Set()
-  const valued = new Set(['w', 'h', 'out', 'src', 'level', 'theme', 'attract-t', 'wait', 'eval', 'timeout', 'memory', 'prefs', 'ropts', 'query'])
+  const valued = new Set(['w', 'h', 'out', 'src', 'level', 'theme', 'attract-t', 'wait', 'timeout', 'memory', 'prefs', 'ropts', 'query', 'pump', 'drive'])
+  const multi = new Set(['eval'])   // may be repeated: collected in order
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i]
     if (!t.startsWith('--')) continue
     const k = t.slice(2)
-    if (valued.has(k)) val[k] = argv[++i]
+    if (multi.has(k)) (val[k] = val[k] || []).push(argv[++i])
+    else if (valued.has(k)) val[k] = argv[++i]
     else flags.add(k)
   }
   return { val, flags }
@@ -62,6 +75,8 @@ const outPng = val.out ? path.resolve(val.out) : null
 const srcDir = path.resolve(val.src || path.join(__dirname, '..', '..', 'src', 'renderer'))
 const levelArg = val.level
 const wantStart = flags.has('start') || levelArg !== undefined
+const evals = val.eval || []
+const pumpN = Number(val.pump || 0)
 const errors = []
 const log = (...a) => process.stderr.write(a.join(' ') + '\n')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -136,6 +151,16 @@ async function main() {
   }
   // a hidden window only paints on demand: the first capture after a DOM change can return the previous frame, so take a throwaway one first
   const snap = async () => { for (let i = 0; i < 3; i++) { wc.invalidate(); await wc.capturePage(); await sleep(200) } return (await wc.capturePage()).toPNG() }
+  // --pump / --drive: the game loop only advances when a frame is forced, so key events are interleaved with captures the way a real
+  // display would deliver them (a held key repeats every 8 frames like a real keyboard; tap = down, n frames, up)
+  const pump = async (n) => { for (let i = 0; i < n; i++) { await wc.capturePage(); await sleep(20) } }
+  const key = (type, code, repeat = false) => exec(`window.dispatchEvent(new KeyboardEvent(${JSON.stringify(type)}, { code: ${JSON.stringify(code)}, key: ${JSON.stringify(code)}, repeat: ${!!repeat}, bubbles: true, cancelable: true })); 0`)
+  const tap = async (code, frames = 2) => { await key('keydown', code); await pump(frames); await key('keyup', code) }
+  const hold = async (code, frames) => { await key('keydown', code); for (let i = 0; i < frames; i++) { if (i % 8 === 7) await key('keydown', code, true); await pump(1) } await key('keyup', code) }
+  // what a driver usually wants to look at between steps
+  const state = () => exec(`(() => { const g = (id) => document.getElementById(id); const t = (id) => (g(id) || {}).textContent; const o = (id) => (g(id) || { style: {} }).style.opacity
+    return { hud: t('hud'), msg: [t('msg'), o('msg')], hint: [t('item-hint'), o('item-hint')], compass: [t('exit-compass'), o('exit-compass')], map: (g('map-card') || { style: {} }).style.display, foot: t('map-foot'),
+      stam: (g('stamina-fill') || { style: {} }).style.width, hp: (g('hp-fill') || { style: {} }).style.width, san: (g('san-fill') || { style: {} }).style.width, hotbar: (t('hotbar') || '').replace(/\\s+/g, ' ').trim(), locked: !!document.pointerLockElement } })()`)
   const url = pathToFileURL(path.join(srcDir, 'index.html')).href + (val.query ? (val.query.startsWith('?') ? val.query : '?' + val.query) : ''); step('loading ' + url)
   const loaded = () => new Promise((res) => wc.once('did-finish-load', res))
 
@@ -185,6 +210,10 @@ async function main() {
   }
 
   if (wantStart) {
+    // game.js swallows a per-frame exception into window.backrooms?.logError (the preload's IPC bridge, which this sandboxed page does not
+    // have): bridge it to console.error so a caught exception still fails the run. The loop's stall watchdog (every 4 s without a frame)
+    // is expected here — nothing forces frames while we sleep or after freeze() — so it stays a warning.
+    await exec(`if (!window.backrooms) window.backrooms = { logError: (m) => (/STALLED/.test(String(m)) ? console.warn : console.error)('[loop] ' + m) }; 0`)
     if (levelArg !== undefined) await exec(`document.getElementById('btn-continue').click()`)
     else await exec(`document.getElementById('btn-solo').click()`)
     let up = false
@@ -219,7 +248,17 @@ async function main() {
     })()`)
     await sleep(200)
   }
-  if (val.eval) { await exec(val.eval); await sleep(200) }
+  if (pumpN && !evals.length && !val.drive) await pump(pumpN)   // just let the game run N frames before the capture
+  for (const js of evals) { await exec(js); if (pumpN) await pump(pumpN); else await sleep(200) }
+  if (val.drive) {
+    const file = path.resolve(val.drive)
+    let drive
+    try { drive = require(file) } catch (e) { if (e.code !== 'ERR_REQUIRE_ESM') throw e; drive = (await import(pathToFileURL(file).href)).default }
+    if (typeof drive !== 'function') throw new Error('--drive: ' + file + ' must export a function (module.exports / export default)')
+    step('drive ' + file)
+    await drive({ exec, pump, key, tap, hold, state, sleep, log, wc, errors, flags, val })
+    await sleep(200)
+  }
 
   if (flags.has('measure') && !flags.has('demo')) await freeze()
   step('capturing')
