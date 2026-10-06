@@ -6,10 +6,14 @@ import { startUpdater } from './updater.js'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
+import { evKindOk, evFrameOk, evBucket } from './evguard.js'
+import { createEvLog } from './evlog.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const PORT = parseInt(process.env.PORT ?? '8765', 10)
+// the keep/drop log is the owner's explicit opt-in: `node index.js --evlog` or EV_LOG=1
+const EV_LOG = process.argv.includes('--evlog') || process.env.EV_LOG === '1'
 
 const rooms = new Map()  // roomId → { worldSeed, players: Map<id,{ws,x,y,angle}>, expireTimer }
 
@@ -32,11 +36,11 @@ function startBroadcastLoop(room) {
   }, 50)  // 20Hz
 }
 
-function getOrCreateRoom(roomId, seedOverride = null) {
+function getOrCreateRoom(roomId, seedOverride = null, evlog = false) {
   if (!rooms.has(roomId)) {
     let worldSeed = seedOverride ?? seed32()
     if (worldSeed === 0) worldSeed = 1
-    rooms.set(roomId, { worldSeed, players: new Map(), expireTimer: null, _ticker: null })
+    rooms.set(roomId, { worldSeed, players: new Map(), expireTimer: null, _ticker: null, log: evlog ? createEvLog({ max: 64, perName: 6 }) : null })
   }
   const room = rooms.get(roomId)
   if (room.expireTimer) { clearTimeout(room.expireTimer); room.expireTimer = null }
@@ -55,7 +59,9 @@ function handleLeave(room, roomId, playerId) {
 }
 
 // host is optional: omitted = every interface (what LAN hosting needs); tests pass '127.0.0.1'.
-export function createServer(port = PORT, host) {
+// opts.evlog turns the keep/drop log on for rooms this server creates (default: the --evlog flag / EV_LOG=1).
+export function createServer(port = PORT, host, opts = {}) {
+  const evlog = opts.evlog ?? EV_LOG
   const http = createHttpServer()
   const wss = new WebSocketServer({ server: http })
 
@@ -75,11 +81,16 @@ export function createServer(port = PORT, host) {
         const seedOverride = Number.isInteger(requested) && requested > 0 && requested <= 0xFFFFFFFF
           ? requested
           : null
-        room = getOrCreateRoom(roomId, seedOverride)
+        room = getOrCreateRoom(roomId, seedOverride, evlog)
         playerId = uuid()
         const name = String(msg.name || 'wanderer').slice(0, 24)
+        // first = no OTHER live socket in the room at join. Not "room is new": the
+        // room (and its world) outlives its last player for 30 s; whoever walks
+        // into the empty room walked in, they did not drop in on anyone.
+        const first = room.players.size === 0
         room.players.set(playerId, { ws, x: 0, y: 0, angle: 0, name })
-        ws.send(JSON.stringify({ type: 'welcome', playerId, worldSeed: room.worldSeed, roomId }))
+        ws.send(JSON.stringify({ type: 'welcome', playerId, worldSeed: room.worldSeed, roomId, first }))
+        if (room.log) for (const f of room.log.replay()) ws.send(JSON.stringify({ ...f, replay: true }))
         broadcast(room, { type: 'joined', id: playerId, name }, playerId)
         startBroadcastLoop(room)
         return
@@ -101,6 +112,21 @@ export function createServer(port = PORT, host) {
       if (msg.type === 'typing' && playerId && room) {
         const p = room.players.get(playerId)
         if (p) broadcast(room, { type: 'typing', id: playerId, name: p.name, on: !!msg.on }, playerId)
+        return
+      }
+
+      // one generic relayed event — mirrored textually in relay/relay.js. The server
+      // never inspects kind semantics or payload: size, spelling, rate, attach, forward.
+      if (msg.type === 'ev' && playerId && room) {
+        if (!evFrameOk(raw)) return
+        const kind = typeof msg.kind === 'string' ? msg.kind : ''
+        if (!evKindOk(kind)) return
+        const p = room.players.get(playerId)
+        if (!p || !evBucket(p, Date.now())) return
+        const out = { type: 'ev', id: playerId, name: p.name, kind, payload: msg.payload, t: Date.now() }
+        if (room.log && typeof msg.keep === 'string') room.log.keep(msg.keep.slice(0, 48), p.name, out)
+        else if (room.log && typeof msg.drop === 'string') room.log.drop(msg.drop.slice(0, 48))
+        broadcast(room, out, playerId)
       }
     })
 
@@ -128,7 +154,7 @@ export function createServer(port = PORT, host) {
 // start when run directly
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
   createServer().then(s => {
-    console.log(`backrooms server on :${s.address().port}`)
+    console.log(`backrooms server on :${s.address().port}${EV_LOG ? ' (ev log on)' : ''}`)
     const { version } = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'))
     startUpdater(version, 'sasha-thecornerspore-dev/backrooms')
   })
