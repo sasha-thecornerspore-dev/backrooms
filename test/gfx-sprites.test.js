@@ -8,7 +8,7 @@ import {
   STATES, FACINGS, FACING_FRONT, FACING_BACK, FACING_SIDE, ANIM_FRAMES, PROP_SPEC, FIG, PERSON, ITEM_COLORS, SIGHT_SPEC,
   stateIndex, creatureState, apparitionState, animFrame, entityPhase, wrapAngle, headingRel, creatureFacing, headsRight,
   frameIndex, frameKey, variantHash, propVariant, unitJitter, visibleRuns, pickMip,
-  getFrame, resetAtlas, atlasStats, drawSprites, packLayer, createPaint, prewarmSprites, NEAR_STATIC, planSprites,
+  getFrame, resetAtlas, atlasStats, drawSprites, packLayer, createPaint, prewarmSprites, NEAR_STATIC, planSprites, motionProbe,
 } from '../src/renderer/gfx-sprites.js'
 
 const sha = (a) => createHash('sha256').update(Buffer.from(a.buffer, a.byteOffset, a.byteLength)).digest('hex')
@@ -519,6 +519,65 @@ describe('drawSprites: entity kinds, nameplates, robustness', () => {
     const c = scene({ opts: { spriteLightOverride: emitter } }); drawSprites(c.buf, c.z, c.fs, [enemy({ variant: 'shade', x: 3, y: 0 })])
     expect(sha(b.buf)).not.toBe(sha(a.buf))
     expect(sha(c.buf)).toBe(sha(b.buf))
+  })
+})
+
+// A remote player's heartbeat fields (game.js ENTITY_FILLS.player: st / lit / thin / origin / status / seen) reach planPerson: thin and not
+// seen draws at the drop-in's faint 0.36, down halves it and adds ' · down' to the plate (never to e.name: the motion records key on it), a
+// lit friend's reflected colour warms. A legacy peer (none of the fields) draws exactly as before.
+describe('planSprites: a remote player\'s heartbeat fields', () => {
+  // one player 4 ahead, planned alone; the records are copied out (the plan is reused)
+  const plan = (over) => {
+    const e = { kind: 'player', x: 4, y: 0.3, name: 'maddie', angle: Math.PI, hp: 100, ...over }
+    const P = planSprites(scene().fs, [e])
+    const recs = []
+    for (let i = 0; i < P.count; i++) { const r = P.recs[i]; recs.push({ A: r.A, mr: r.mr, mg: r.mg, mb: r.mb, screen: r.screen, emit: r.lay.emit }) }
+    return { e, recs, plates: P.plates.map((p) => ({ name: p.name })) }
+  }
+  // the body's alpha relative to a plain player's, record by record (the shadow rides the same alpha)
+  const ratios = (over) => { const a = plan({}).recs, b = plan(over).recs; expect(b.length).toBe(a.length); return b.map((r, i) => r.A / a[i].A) }
+
+  it('a legacy peer (no fields) and an ok, unlit, not-thin friend plan identically', () => {
+    const a = plan({}), b = plan({ st: 'ok', lit: false, thin: false, origin: null, status: 'notice-mailed', seen: false })
+    expect(b.recs).toEqual(a.recs)
+    expect(b.plates).toEqual([{ name: 'maddie' }])
+  })
+
+  it('thin and not seen: alpha 0.36 + 0.03·sinc(t·0.21 + ph) against the plain 0.97; seen by a friend: 0.97 again', () => {
+    const r = ratios({ thin: true, seen: false })
+    expect(r.length).toBeGreaterThan(1)
+    for (const k of r) { expect(k).toBeGreaterThanOrEqual(0.33 / 0.97 - 1e-9); expect(k).toBeLessThanOrEqual(0.39 / 0.97 + 1e-9) }
+    expect(Math.max(...r) - Math.min(...r)).toBeLessThan(1e-9)               // one alpha for the whole sprite
+    for (const k of ratios({ thin: true, seen: true })) expect(k).toBeCloseTo(1, 9)
+  })
+
+  it('down: half the alpha, and the plate reads "maddie · down" while e.name and the motion record stay "maddie"', () => {
+    for (const k of ratios({ st: 'down' })) expect(k).toBeCloseTo(0.5, 9)
+    const { e, plates } = plan({ st: 'down', x: 4.2 })
+    expect(plates).toEqual([{ name: 'maddie · down' }])
+    expect(e.name).toBe('maddie')
+    // the motion record planSprites keyed is still found by the bare name: a 1 u step 0.5 s later reads as moving
+    expect(motionProbe([{ name: 'maddie', x: 5.2, y: 0.3 }], scene().fs.t + 0.5)).toEqual([true])
+  })
+
+  it('lit: the reflected colour warms (red kept, green x0.92, blue x0.7, mixed toward 1 by each layer\'s emit); alpha unchanged', () => {
+    const a = plan({}).recs, b = plan({ lit: true }).recs
+    let n = 0
+    for (let i = 0; i < a.length; i++) {
+      expect(b[i].A).toBeCloseTo(a[i].A, 12)
+      if (a[i].screen || !(a[i].mr > 0)) continue
+      const ke = 1 - a[i].emit
+      if (ke > 0.5) n++
+      expect(b[i].mr / a[i].mr).toBeCloseTo(1, 9)
+      expect(b[i].mg / a[i].mg).toBeCloseTo(1 + (0.92 - 1) * ke, 9)
+      expect(b[i].mb / a[i].mb).toBeCloseTo(1 + (0.7 - 1) * ke, 9)
+    }
+    expect(n).toBeGreaterThan(0)                                            // the body reflects: it does warm
+  })
+
+  it('a lost soul never takes the fields (npc alpha 0.94, plate as given)', () => {
+    const P = planSprites(scene().fs, [{ kind: 'npc', x: 4, y: 0, name: 'a lost soul', key: 'l', thin: true, st: 'down', lit: true }])
+    expect(P.plates.map((p) => p.name)).toEqual(['a lost soul'])
   })
 })
 

@@ -110,9 +110,11 @@ export function createEntityAssembler() {
     poolSize(cat) { return pools[cat] ? pools[cat].length : 0 },
   }
 }
-// the record fills: field for field (and in the order of) the object literals game.js used to build every frame
+// the record fills: field for field (and in the order of) the object literals game.js used to build every frame. A remote player's six
+// trailing fields are the friend's heartbeat as the event bus merged it onto the record (evbus.js mergeRemote; blanked for a stale one,
+// absent for a legacy peer) — gfx-sprites planPerson draws them: faint when thin and unseen, halved and 'name · down' when down, warm when lit
 export const ENTITY_FILLS = Object.freeze({
-  player:  (r, p) => { r.x = p.x; r.y = p.y; r.kind = 'player'; r.name = p.name || 'wanderer'; r.angle = p.angle; r.chatText = p.chatText; r.hp = p.hp },
+  player:  (r, p) => { r.x = p.x; r.y = p.y; r.kind = 'player'; r.name = p.name || 'wanderer'; r.angle = p.angle; r.chatText = p.chatText; r.hp = p.hp; r.st = p.st; r.lit = p.lit; r.thin = !!p.thin; r.origin = p.origin; r.status = p.status; r.seen = !!p.seen },
   npc:     (r, n) => { r.x = n.x; r.y = n.y; r.kind = 'npc'; r.name = 'a lost soul'; r.key = n.key },
   prop:    (r, p) => { r.x = p.x; r.y = p.y; r.kind = 'prop'; r.type = p.type; r.rot = p.rot; r.key = p.key },
   exit:    (r, e) => { r.x = e.x; r.y = e.y; r.kind = 'exit'; r.target = e.target; r.key = e.key },
@@ -1431,6 +1433,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
 
   const entityAsm = createEntityAssembler(), EF = ENTITY_FILLS
+  // the remote players drawn this frame: ONE reused array refilled once per frame (the net block) from the players list. getRemotePlayers
+  // hands fresh copies, so a record's fields may be written here without touching the client's own
+  const remoteOnFloor = []
+  function fillRemotes() {
+    remoteOnFloor.length = 0
+    if (!mpClient) return
+    const list = mpClient.getRemotePlayers()
+    for (let i = 0; i < list.length; i++) remoteOnFloor.push(list[i])
+  }
   // what the things know about you this frame (hunt.js / variants.js ctx): ONE object, mutated per frame, never rebuilt. `player` is the
   // live object (where they look for you), hf the half field of view (watched() == drawn on screen), damage the floor's contact damage,
   // lures the dropped talking radios (tactics.computeLures hands back one reused array; recomputed when the items changed or every 0.5 s)
@@ -1780,6 +1791,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
     netTimer += dt
     if (mpClient?.isConnected() && netTimer >= 0.05) { netTimer = 0; mpClient.sendPos(player.x, player.y, player.angle, player.hp) }
+    fillRemotes()                           // the remote players drawn this frame (one list, refilled once)
     // ── the things: what they know about you this frame, then one update; the threat record it returns drives contact damage, the
     //    heartbeat and sanity (no second pass over the list). Creatures can be switched off entirely (pure liminal exploration;
     //    creaturesOn was read at the top of the frame): the record is then reset, so everything below reads zero. ──
@@ -1866,7 +1878,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // from pooled records every frame instead of fresh objects (createEntityAssembler: same fields, same values, same order as before)
     entityAsm.begin()
     if (creaturesOn) entityAsm.pass(level.entitySys.getEntities())
-    if (mpClient) entityAsm.add('player', mpClient.getRemotePlayers(), EF.player)
+    if (mpClient) entityAsm.add('player', remoteOnFloor, EF.player)
     entityAsm.add('npc', level.decor.getNpcs(), EF.npc)
     entityAsm.add('prop', level.decor.getProps(), EF.prop)
     entityAsm.add('exit', level.decor.getExits(), EF.exit)

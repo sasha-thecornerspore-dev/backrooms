@@ -2647,18 +2647,23 @@ function playerMoving(e) {
 // test hook: the motion verdicts for one frame's remote players at time t (what planSprites asks per player)
 export function motionProbe(players, t) { TNOW = t; FRAME_N++; return players.map(playerMoving) }
 
+// A remote player's heartbeat fields (game.js ENTITY_FILLS.player; undefined / false for a legacy peer, which draws exactly as before):
+// thin and not seen by a friend's polaroid -> a faint drifting 0.36 (the drop-in's alpha), down -> half of that, lit (their own light on)
+// -> a warm cast, and a down friend's plate reads 'name · down' — built into the plate, never written back to e.name (the motion records
+// key on the name).
 function planPerson(e, isNpc) {
   const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const spec = isNpc ? PERSON.npc : PERSON.player
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, isNpc ? 0.94 : 0.97)
+  const ph = posPhase(e)
+  initSprite(e, isNpc ? 0.94 : (e.thin && !e.seen ? 0.36 + 0.03 * sinc(TNOW * 0.21 + ph) : 0.97) * (e.st === 'down' ? 0.5 : 1))
   let facing = FACING_FRONT
   if (!isNpc && e.angle !== undefined && Math.abs(wrapAngle(e.angle - Math.atan2(CAMY - e.y, CAMX - e.x))) > (2 * Math.PI) / 3) facing = FACING_BACK
   const moving = !isNpc && playerMoving(e)
-  const ph = posPhase(e)
   const anim = moving ? ((TNOW * 2.4 + ph) * 2 | 0) & 1 : 0
   if (moving) { S.swayA = 0.014 * unit; S.swayP = TNOW * 1.2 + ph } else { S.swayA = (isNpc ? 0.006 : 0.008) * unit; S.swayP = TNOW * 0.3 + ph }
   setRim(e)
+  if (!isNpc && e.lit) { S.tg *= 0.92; S.tb *= 0.7 }     // their light is on: the reflected colour warms (red kept, green 0.92, blue 0.7)
   const fr = frameFor('person', isNpc ? 'npc' : 'player', 0, moving ? 1 : 0, anim, FACING_FRONT)
   if (fr === null) return
   resetLayA()
@@ -2669,7 +2674,7 @@ function planPerson(e, isNpc) {
   if (e.name) {
     let p = POOL[PLATES.length]
     if (!p) { p = POOL[PLATES.length] = { sx: 0, y: 0, name: '', alpha: 1, speech: undefined, hp: undefined } }
-    p.sx = sx; p.y = floorY - (spec.h + lift + 0.03) * unit; p.name = e.name; p.alpha = (1 - fogT) * 0.96; p.speech = e.chatText; p.hp = e.hp
+    p.sx = sx; p.y = floorY - (spec.h + lift + 0.03) * unit; p.name = !isNpc && e.st === 'down' ? e.name + ' · down' : e.name; p.alpha = (1 - fogT) * 0.96; p.speech = e.chatText; p.hp = e.hp
     PLATES.push(p)
   }
 }

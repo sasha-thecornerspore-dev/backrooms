@@ -8,7 +8,8 @@ import { mulberry32 } from '../src/renderer/gfx-util.js'
 
 // the assembly exactly as game.js wrote it before the pooling (verbatim maps, same spread order)
 function legacyAssemble(w) {
-  const remoteEntities = w.mp ? w.remote.map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle, chatText: p.chatText, hp: p.hp })) : []
+  // (the six trailing fields are a friend's heartbeat as the event bus merges it onto the record: undefined / false for a legacy peer)
+  const remoteEntities = w.mp ? w.remote.map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle, chatText: p.chatText, hp: p.hp, st: p.st, lit: p.lit, thin: !!p.thin, origin: p.origin, status: p.status, seen: !!p.seen })) : []
   const propEntities = w.props.map(p => ({ x: p.x, y: p.y, kind: 'prop', type: p.type, rot: p.rot, key: p.key }))
   const exitEntities = w.exits.map(e => ({ x: e.x, y: e.y, kind: 'exit', target: e.target, key: e.key }))
   const npcEntities  = w.npcs.map(n => ({ x: n.x, y: n.y, kind: 'npc', name: 'a lost soul', key: n.key }))
@@ -44,7 +45,11 @@ function randomWorld(rnd) {
   const xy = () => ({ x: rnd() * 40 - 20, y: rnd() * 40 - 20 })
   return {
     mp: rnd() < 0.6, creaturesOn: rnd() < 0.7,
-    remote: list(4, (i) => ({ ...xy(), name: rnd() < 0.3 ? '' : `w${i}`, angle: rnd() * 6, chatText: rnd() < 0.5 ? null : 'hi', hp: n(100), id: 'extra-field-not-forwarded' })),
+    remote: list(4, (i) => ({
+      ...xy(), name: rnd() < 0.3 ? '' : `w${i}`, angle: rnd() * 6, chatText: rnd() < 0.5 ? null : 'hi', hp: n(100), id: 'extra-field-not-forwarded',
+      // a friend whose heartbeat the bus merged (st / lit / thin / origin / status / seen), or a legacy peer without any of them
+      ...(rnd() < 0.6 ? { st: ['ok', 'down', 'kneel'][n(3)], lit: rnd() < 0.5, thin: rnd() < 0.3, origin: [null, 'tenant', 'unnamed'][n(3)], status: ['notice-mailed', 'extension'][n(2)], seen: rnd() < 0.2, legacy: false } : {}),
+    })),
     enemies: list(5, (i) => ({ ...xy(), type: 'stalker', variant: 'smiler', state: 'idle', dir: 0, stagger: 0, key: `e${i}` })),
     npcs: list(3, (i) => ({ ...xy(), key: `n${i}`, line: 'x' })),
     props: list(60, (i) => ({ ...xy(), type: ['chair', 'box', 'drum'][i % 3], rot: n(4), key: `p${i}` })),
