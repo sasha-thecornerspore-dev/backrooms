@@ -36,6 +36,7 @@ export const LEVELS = [
       scraps: { denom: 5 },   // the lobby — the most-trodden floor, the most notes
       machines: { denom: 16 },   // a little more civilization near the surface
       dress: { denom: 2 },       // offices: cabinets along a wall, chairs round a box (dress.js)
+      haunts: { denom: 14 },     // the lobby is barely haunted: chairs that have been moved (haunts.js)
       exit:  { target: 1, denom: 4, label: 'no-clip deeper',
                hint: 'the walls are thin here — no-clip through a torn corner and you fall out of the lobby.' },
       messages: [
@@ -72,6 +73,7 @@ export const LEVELS = [
       items: { density: 5, types: ['almond-water', 'glowstick', 'bandage', 'polaroid', 'radio'] },
       props: { density: 4, types: ['pallet', 'barrel', 'crate', 'couch', 'cart', 'box'] },
       dress: { denom: 2 },       // storerooms: crates in a corner, a pallet by the door
+      haunts: { denom: 8 },      // a figure where you were, your own light
       exit:  { target: 2, denom: 4, label: 'descend',
                hint: 'find a hole in the floor or a stairwell down — the pipes are below.' },
       messages: [
@@ -108,6 +110,7 @@ export const LEVELS = [
       props: { density: 5, types: ['pipe', 'valve', 'drum', 'toolbox', 'vent', 'crate'] },
       scraps: { denom: 9 },   // fewer make it this deep, and fewer stop to write
       dress: { denom: 3 },       // pump rooms: drums along one wall, a valve on the other
+      haunts: { denom: 8 },      // running water that keeps pace
       exit:  { target: 3, denom: 5, label: 'descend',
                hint: 'follow the pipes to a service hatch, then drop into the dark below.' },
       messages: [
@@ -143,6 +146,7 @@ export const LEVELS = [
       props: { density: 5, types: ['transformer', 'cabinet-e', 'spool', 'sign', 'drum'] },
       scraps: { denom: 9 },
       dress: { denom: 3 },       // switch rooms: panel cabinets round the walls, a transformer in the corner
+      haunts: { denom: 8 },      // a knock from inside a panel cabinet
       exit:  { target: 0, denom: 5, label: 'climb out',
                hint: 'a door humming with current — through it, the lobby waits again.' },
       messages: [
@@ -197,6 +201,7 @@ export const LEVELS = [
       machines: { denom: 0 },
       sights: { denom: 0 },
       dress: { denom: 0 },    // the yard is dressed by hand, not by the lobby's furniture
+      haunts: { denom: 0 },   // the block is wrong in its own way; nothing placed haunts it
       exit:  { target: 0, denom: 1, label: 'no-clip out',
                hint: 'the front doors are sealed with block. the only way out is the gap the paperwork left.' },
       messages: [
@@ -233,6 +238,7 @@ export function levelConfig(base, index) {
     machines: merge('machines'),
     sights:   merge('sights'),
     dress:    merge('dress'),    // room dressing (dress.js): absence means denom 0
+    haunts:   merge('haunts'),   // placed hauntings (haunts.js): absence means denom 0
     exit:     { ...(c.exit ?? {}) },
     // level messages replace the base atmospheric set
     messages: c.messages ?? base?.messages ?? [],

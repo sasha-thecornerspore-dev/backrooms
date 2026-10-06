@@ -61,6 +61,15 @@ describe('levels', () => {
     expect(levelConfig({ dress: { denom: 9, extra: 1 } }, 1).dress).toEqual({ denom: 2, extra: 1 })   // the level's denom wins, base keys kept
   })
 
+  it('ships a haunts denom per level: 14, 8, 8, 8 and 0 for ∅; levelConfig merges haunts', () => {
+    expect(LEVELS.map(l => l.config.haunts)).toEqual([{ denom: 14 }, { denom: 8 }, { denom: 8 }, { denom: 8 }, { denom: 0 }])
+    expect([0, 1, 2, 3, 4].map(i => levelConfig(DEFAULT_CONFIG, i).haunts.denom)).toEqual([14, 8, 8, 8, 0])
+    // DEFAULT_CONFIG stays untouched: no haunts key, and absence merges to {} (which the pass reads as 0)
+    expect('haunts' in DEFAULT_CONFIG).toBe(false)
+    expect(levelConfig({}, 0).haunts).toEqual({ denom: 14 })
+    expect(levelConfig({ haunts: { denom: 9, extra: 1 } }, 1).haunts).toEqual({ denom: 8, extra: 1 })   // the level's denom wins, base keys kept
+  })
+
   it('addresses ∅ at index 4 and wraps past it', () => {
     expect(levelConfig(DEFAULT_CONFIG, 4).levelIndex).toBe('∅')   // ∅ is index 4
     expect(levelConfig(DEFAULT_CONFIG, 5).levelIndex).toBe(0)     // wraps back to the lobby
