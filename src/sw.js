@@ -6,7 +6,7 @@
 const CACHE = 'backrooms-pwa-v9'
 const SHELL = [
   '/renderer/index.html',
-  '/renderer/game.js', '/renderer/touch.js', '/renderer/scraps.js', '/renderer/events.js', '/renderer/anchor.js', '/renderer/items.js', '/renderer/save.js',
+  '/renderer/game.js', '/renderer/touch.js', '/renderer/scraps.js', '/renderer/events.js', '/renderer/anchor.js', '/renderer/items.js', '/renderer/tactics.js', '/renderer/save.js',
   '/renderer/world.js', '/renderer/decor.js', '/renderer/fixedmap.js', '/renderer/level-null-map.js',
   '/renderer/levels.js', '/renderer/raycaster.js', '/renderer/renderer.js', '/renderer/entities.js',
   '/renderer/gfx-util.js', '/renderer/gfx-textures.js', '/renderer/gfx-world.js', '/renderer/gfx-sprites.js', '/renderer/gfx-post.js', '/renderer/gfx-cpu.js', '/renderer/gfx-sky.js', '/renderer/gfx-light.js', '/renderer/gfx-quality.js', '/renderer/gfx-attract.js',

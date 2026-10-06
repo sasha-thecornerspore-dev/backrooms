@@ -51,7 +51,7 @@ cat > "$DEST"/sw.js <<JS
 const CACHE = 'backrooms-play-v${PLAY_SW_VERSION}'
 const SHELL = [
   './', 'index.html',
-  'game.js', 'touch.js', 'scraps.js', 'events.js', 'anchor.js', 'items.js', 'save.js', 'world.js', 'decor.js',
+  'game.js', 'touch.js', 'scraps.js', 'events.js', 'anchor.js', 'items.js', 'tactics.js', 'save.js', 'world.js', 'decor.js',
   'fixedmap.js', 'level-null-map.js', 'levels.js', 'raycaster.js', 'renderer.js',
   'gfx-util.js', 'gfx-textures.js', 'gfx-world.js', 'gfx-sprites.js', 'gfx-post.js', 'gfx-cpu.js', 'gfx-sky.js', 'gfx-light.js', 'gfx-quality.js', 'gfx-attract.js',
   'gfx-frame.js', 'gfx-gl-g4-validate.js', 'gfx-gl-post-math.js', 'gfx-gl-post-particles.js', 'gfx-gl-post-shaders.js', 'gfx-gl-sprites-atlas.js', 'gfx-gl-sprites-plan.js', 'gfx-gl.js', 'gfx-gl-util.js', 'gfx-gl-world.js', 'gfx-gl-world-data.js', 'gfx-gl-world-shader.js', 'gfx-gl-sprites.js', 'gfx-gl-post.js', 'gfx-stats.js', 'gfx-bench.js',
