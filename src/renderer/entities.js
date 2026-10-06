@@ -1,6 +1,14 @@
 import { CHUNK_SIZE } from './world.js'
+import { specFor } from './variants.js'
+import { stepAI, separate, createThreat, createNoiseField, floodNoise, lineOfSight, DISPEL_S } from './hunt.js'
+import { creatureRadius } from './collide.js'
 
 const MAX_ENTITIES = 20
+const DISPEL_MAX = 64          // dispelledUntil entries kept (oldest dropped)
+const NOISE_SLOTS = 8
+const GATE_CHUNKS = 3          // Chebyshev chunk distance within which the hunt path runs in full
+const LOS_BUDGET = 6           // line-of-sight walks per frame
+const EMPTY_OPTS = {}
 
 function hash(a, b) {
   let h = (a * 2654435761 ^ b * 2246822519) >>> 0
@@ -19,15 +27,33 @@ function shouldSpawn(cx, cy, spawnDenom) {
 }
 
 // Advance one entity along e.dir at `speed`, sliding along walls (turn 90° on a
-// blocked axis). Shared by the normal AI and the ward-stagger flee.
-function moveEntity(e, speed, dt, isWallFn, playerCx, playerCy) {
+// blocked axis). Shared by the normal AI and the ward-stagger flee. Returns true when
+// either axis was refused. With `obstacles` (collide.forEntities) a step that lands
+// inside a body is refused too — unless the creature already stands inside one, which
+// may always step (it has to be able to leave).
+export function moveEntity(e, speed, dt, isWallFn, playerCx, playerCy, obstacles = null, rObst = 0) {
   const nx = e.x + Math.cos(e.dir) * speed * dt
   const ny = e.y + Math.sin(e.dir) * speed * dt
   const origX = e.x, origY = e.y
-  const canX = !isWallFn(Math.floor(nx), Math.floor(origY), playerCx, playerCy)
-  const canY = !isWallFn(Math.floor(origX), Math.floor(ny), playerCx, playerCy)
+  let canX = !isWallFn(Math.floor(nx), Math.floor(origY), playerCx, playerCy)
+  let canY = !isWallFn(Math.floor(origX), Math.floor(ny), playerCx, playerCy)
+  if (obstacles !== null && (canX || canY) && (nx !== origX || ny !== origY)
+      && obstacles.blocked(canX ? nx : origX, canY ? ny : origY, rObst) && !obstacles.blocked(origX, origY, rObst)) {
+    canX = false; canY = false
+  }
   if (canX) e.x = nx; else e.dir += Math.PI * 0.5
   if (canY) e.y = ny; else e.dir -= Math.PI * 0.5
+  return !canX || !canY
+}
+
+let NEXT_ID = 1
+// the hunt-path record (hunt.js lazily completes it with its own working fields)
+function huntShape(e) {
+  e.id = NEXT_ID++
+  e.ai = 'roam'; e.percT = 0; e.lostT = 0; e.huntT = 0; e.searchT = 0; e.blockedT = 0; e.holdT = 0; e.burstT = 0
+  e.steer = 1; e.steerT = 0; e.staggerBlockedT = 0
+  e.lastSeenX = null; e.lastSeenY = null; e.tx = null; e.ty = null; e.searchN = 0; e.pending = 0
+  return e
 }
 
 function makeEntity(cx, cy, stalkerDenom, variants) {
@@ -35,7 +61,7 @@ function makeEntity(cx, cy, stalkerDenom, variants) {
   const type = rng() < 1 / stalkerDenom ? 'stalker' : 'wanderer'
   const list = (variants && variants[type] && variants[type].length) ? variants[type] : ['shade']
   const variant = list[(rng() * list.length) | 0]
-  return {
+  return huntShape({
     x: cx * CHUNK_SIZE + CHUNK_SIZE / 2 + (rng() - 0.5) * 4,
     y: cy * CHUNK_SIZE + CHUNK_SIZE / 2 + (rng() - 0.5) * 4,
     type,
@@ -47,12 +73,23 @@ function makeEntity(cx, cy, stalkerDenom, variants) {
     wardHits: 0,    // wards it has absorbed; enough of them and it comes apart
     chunkCx: cx,
     chunkCy: cy,
-  }
+  })
 }
 
-export function createEntitySystem(config, isWallFn) {
+// createEntitySystem(config, isWallFn, deps = null)
+//   deps = { obstacles: collide.forEntities | null, grid: { floor(ix, iy), setPlayerChunk } | null, now: () => seconds }
+//   update(dt, player, pcx, pcy, ctxOrAggroMul) -> threat: a number or undefined fifth argument runs the legacy step
+//   verbatim (obstacles never consulted); an object (game.js's aiCtx) runs the hunt path (hunt.stepAI).
+export function createEntitySystem(config, isWallFn, deps = null) {
   const entities = []
+  const pendingList = []         // injected followers still arriving (not in getEntities())
+  const gated = []               // this frame's near entities, for separation
   const spawnedChunks = new Set()
+  const dispelledUntil = new Map()   // "cx,cy" -> clock second it may spawn again
+  const obstacles = deps?.obstacles ?? null
+  const grid = deps?.grid ?? null
+  let tSum = 0
+  const clock = deps?.now ?? (() => tSum)
 
   // Per-level rules. Defaults match the historic single-level behaviour so
   // any caller without an `entities` block (e.g. unit tests) keeps spawning.
@@ -62,7 +99,18 @@ export function createEntitySystem(config, isWallFn) {
   const stalkerDenom = Math.max(1, ent.stalkerDenom ?? 4)
   const chaseRange  = ent.chaseRange ?? 24
   const fleeRange   = ent.fleeRange ?? 6
+  const damage      = ent.damage ?? 16
   const variants    = { stalker: ent.stalkerVariants || ['shade'], wanderer: ent.wandererVariants || ['shade'] }
+
+  const threat = createThreat()
+  const field = createNoiseField()
+  const ring = []
+  for (let i = 0; i < NOISE_SLOTS; i++) ring.push({ x: 0, y: 0, L: 0, t: 0 })
+  let ringN = 0, woke = 0, huntMode = false, rr = 0
+  // the hunt path reads cells through the grid reader (no key string per ask); without one, isWallFn at the cell centre
+  const env = { dt: 0, now: 0, pcx: 0, pcy: 0, player: null, ctx: null, isWall: null, floor: null, obstacles, field, losBudget: LOS_BUDGET, damage, helpers: null, threat }
+  env.floor = grid ? (ix, iy) => grid.floor(ix, iy) : (ix, iy) => !isWallFn(ix + 0.5, iy + 0.5, env.pcx, env.pcy)
+  env.isWall = (ix, iy) => !env.floor(ix, iy)
 
   function evict(playerCx, playerCy) {
     const radius = (config?.chunkEvictRadius ?? 3) + 2
@@ -78,12 +126,16 @@ export function createEntitySystem(config, isWallFn) {
   function trySpawnAround(playerCx, playerCy) {
     if (!enabled) return
     const r = config?.chunkEvictRadius ?? 3
+    const now = clock()
     for (let dx = -r; dx <= r; dx++) {
       for (let dy = -r; dy <= r; dy++) {
-        if (entities.length >= MAX_ENTITIES) return
+        if (entities.length + pendingList.length >= MAX_ENTITIES) return
         const cx = playerCx + dx, cy = playerCy + dy
         const key = `${cx},${cy}`
         if (spawnedChunks.has(key)) continue
+        // the dispel sticks: a chunk whose presence came apart stays empty until its clock runs out
+        const until = dispelledUntil.get(key)
+        if (until !== undefined && now < until) continue
         spawnedChunks.add(key)
         if (shouldSpawn(cx, cy, spawnDenom)) entities.push(makeEntity(cx, cy, stalkerDenom, variants))
       }
@@ -134,29 +186,101 @@ export function createEntitySystem(config, isWallFn) {
     moveEntity(e, speed, dt, isWallFn, playerCx, playerCy)
   }
 
-  function update(dt, player, playerCx, playerCy, aggroMul = 1) {
+  // beyond the gate a thing only wanders: the legacy two-probe step at its roam speed, forgetting any hunt
+  function farRoam(e, spec, dt, playerCx, playerCy) {
+    e.ai = 'roam'
+    if (e.stagger > 0) e.stagger = Math.max(0, e.stagger - dt)
+    e.dirTimer -= dt
+    if (e.dirTimer <= 0) {
+      e.dir = ((e.dir + 1.3 + (e.x * 7 + e.y * 13) % 2.0)) % (Math.PI * 2)
+      e.dirTimer = 3 + ((Math.abs(e.x * 17 + e.y * 31) % 4))
+    }
+    moveEntity(e, spec.roam, dt, isWallFn, playerCx, playerCy)
+    e.state = 'idle'
+  }
+
+  // the legacy frame fills the record the way game.js used to read the list: the nearest unstaggered stalker
+  function legacyThreat(player) {
+    threat.reset()
+    for (let i = 0; i < entities.length; i++) {
+      const e = entities[i]
+      if (e.type !== 'stalker' || e.stagger > 0) continue
+      const dx = e.x - player.x, dy = e.y - player.y
+      const d = Math.sqrt(dx * dx + dy * dy)
+      if (d < threat.nearest) { threat.nearest = d; threat.nearestEntity = e }
+    }
+    threat.hunted = threat.nearest < 10
+    if (threat.nearest < 0.62) { threat.dmg = damage; threat.dmgKind = 'contact' }
+  }
+
+  function huntUpdate(dt, player, playerCx, playerCy, ctx) {
+    threat.begin()
+    env.dt = dt; env.now = clock(); env.pcx = playerCx; env.pcy = playerCy; env.player = player; env.ctx = ctx
+    env.losBudget = LOS_BUDGET
+    if (grid && typeof grid.setPlayerChunk === 'function') grid.setPlayerChunk(playerCx, playerCy)
+    if (ctx.player !== player) ctx.player = player            // the variants look for you through ctx.player
+    if (ctx.damage === undefined) ctx.damage = damage
+    gated.length = 0
+    const n = entities.length
+    // a rotating start shares the line-of-sight budget round-robin
+    for (let k = 0; k < n; k++) {
+      const e = entities[(rr + k) % n]
+      const spec = specFor(e.variant)
+      const ecx = Math.floor(e.x / CHUNK_SIZE), ecy = Math.floor(e.y / CHUNK_SIZE)
+      if (Math.abs(ecx - playerCx) <= GATE_CHUNKS && Math.abs(ecy - playerCy) <= GATE_CHUNKS) {
+        gated.push(e)
+        stepAI(e, dt, ctx, spec, env, threat)
+      } else farRoam(e, spec, dt, playerCx, playerCy)
+    }
+    rr = n > 0 ? (rr + 1) % n : 0
+    if (obstacles !== null && gated.length > 1) separate(gated, env)
+    threat.end()
+  }
+
+  function update(dt, player, playerCx, playerCy, ctxOrAggroMul = 1) {
+    tSum += dt
     evict(playerCx, playerCy)
     trySpawnAround(playerCx, playerCy)
-    for (const e of entities) stepEntity(e, dt, player, isWallFn, playerCx, playerCy, aggroMul)
+    if (typeof ctxOrAggroMul === 'object' && ctxOrAggroMul !== null) { huntMode = true; huntUpdate(dt, player, playerCx, playerCy, ctxOrAggroMul) }
+    else {
+      huntMode = false
+      for (const e of entities) stepEntity(e, dt, player, isWallFn, playerCx, playerCy, ctxOrAggroMul)
+      legacyThreat(player)
+    }
+    // followers arrive after their beat (they step from the next frame on)
+    for (let i = pendingList.length - 1; i >= 0; i--) {
+      const e = pendingList[i]
+      e.pending -= dt
+      if (e.pending <= 0) { e.pending = 0; pendingList.splice(i, 1); entities.push(e); woke++ }
+    }
+    return threat
   }
 
   function getEntities() { return entities }
 
+  function setDispelled(key, until) {
+    if (!dispelledUntil.has(key) && dispelledUntil.size >= DISPEL_MAX) dispelledUntil.delete(dispelledUntil.keys().next().value)
+    dispelledUntil.set(key, until)
+  }
+
   // The ward — the player's only way to fight back. A shove of will and light in
   // the direction they face: presences inside a cone are knocked back and left
   // reeling (staggered), unable to chase or strike. Warding the same presence
-  // enough times disperses it entirely. Returns { hit, dispelled } counts.
-  function ward(player, opts = {}) {
+  // enough times disperses it entirely — and the chunk it came from stays empty
+  // for DISPEL_S. A creature caught in its turning opening takes the hit twice.
+  // Returns the reused { hit, dispelled, opening }.
+  const wardRes = { hit: 0, dispelled: 0, opening: 0 }
+  function ward(player, opts = EMPTY_OPTS) {
     const range       = opts.range       ?? 2.6
     const halfCone    = (opts.cone       ?? Math.PI * 0.7) / 2   // total arc, split L/R of facing
     const knockback   = opts.knockback   ?? 1.7
-    const staggerTime = opts.staggerTime ?? 2.6
-    const dispelAt    = opts.dispelAt    ?? 3
+    const hits        = opts.hits        ?? 1
     const facing      = player.angle ?? 0
     const pcx = Math.floor(player.x / CHUNK_SIZE)
     const pcy = Math.floor(player.y / CHUNK_SIZE)
+    const now = clock()
 
-    let hit = 0, dispelled = 0
+    wardRes.hit = 0; wardRes.dispelled = 0; wardRes.opening = 0
     for (let i = entities.length - 1; i >= 0; i--) {
       const e = entities[i]
       const dx = e.x - player.x, dy = e.y - player.y
@@ -167,24 +291,162 @@ export function createEntitySystem(config, isWallFn) {
       a = Math.atan2(Math.sin(a), Math.cos(a))   // normalise to (-π, π]
       if (Math.abs(a) > halfCone) continue
 
-      // shove it away from the player, one axis at a time so walls stop it
+      const spec        = specFor(e.variant)
+      const staggerTime = opts.staggerTime ?? spec.staggerT
+      const dispelAt    = opts.dispelAt    ?? spec.dispelAt
+      const kb          = knockback * (e.ai === 'windup' || e.ai === 'lunge' ? spec.wardMul : 1)
+      const r           = Math.min(creatureRadius(e.variant), 0.22)
+      // shove it away from the player, one axis at a time so walls (and bodies) stop it
       const ux = d > 1e-6 ? dx / d : Math.cos(facing)
       const uy = d > 1e-6 ? dy / d : Math.sin(facing)
-      const kx = e.x + ux * knockback, ky = e.y + uy * knockback
-      if (!isWallFn(Math.floor(kx), Math.floor(e.y), pcx, pcy)) e.x = kx
-      if (!isWallFn(Math.floor(e.x), Math.floor(ky), pcx, pcy)) e.y = ky
+      const kx = e.x + ux * kb, ky = e.y + uy * kb
+      if (!isWallFn(Math.floor(kx), Math.floor(e.y), pcx, pcy) && !(obstacles !== null && obstacles.blocked(kx, e.y, r))) e.x = kx
+      if (!isWallFn(Math.floor(e.x), Math.floor(ky), pcx, pcy) && !(obstacles !== null && obstacles.blocked(e.x, ky, r))) e.y = ky
 
+      const turning = e.ai === 'turning'
       e.stagger = staggerTime
-      e.wardHits = (e.wardHits || 0) + 1
-      hit++
+      e.ai = 'stagger'; e.staggerBlockedT = 0; e.turnBurst = false
+      e.wardHits = (e.wardHits || 0) + (turning ? 1 + hits : hits)
+      if (turning) wardRes.opening++
+      wardRes.hit++
       if (e.wardHits >= dispelAt) {
-        spawnedChunks.delete(`${e.chunkCx},${e.chunkCy}`)
+        const key = `${e.chunkCx},${e.chunkCy}`
+        spawnedChunks.delete(key)
+        setDispelled(key, now + DISPEL_S)
         entities.splice(i, 1)
-        dispelled++
+        wardRes.dispelled++
+        if (spec.dispelEvent) threat.emit(spec.dispelEvent, e, d)
       }
     }
-    return { hit, dispelled }
+    return wardRes
   }
 
-  return { update, getEntities, ward }
+  // The polaroid's flash: everything in the cone with a line to you reels (no knockback, no wardHits); a smiler or a
+  // lurker turns and runs instead. Returns the reused { hit }.
+  const flashRes = { hit: 0 }
+  function flash(player, opts = EMPTY_OPTS) {
+    const range    = opts.range   ?? 6
+    const halfCone = (opts.cone   ?? Math.PI / 2.4) / 2
+    const stagger  = opts.stagger ?? 1.8
+    const facing   = player.angle ?? 0
+    flashRes.hit = 0
+    for (let i = 0; i < entities.length; i++) {
+      const e = entities[i]
+      const dx = e.x - player.x, dy = e.y - player.y
+      const d = Math.sqrt(dx * dx + dy * dy)
+      if (d > range) continue
+      let a = Math.atan2(dy, dx) - facing
+      a = Math.atan2(Math.sin(a), Math.cos(a))
+      if (Math.abs(a) > halfCone) continue
+      if (!lineOfSight(player.x, player.y, e.x, e.y, env.floor)) continue
+      e.stagger = stagger; e.staggerBlockedT = 0; e.turnBurst = false
+      if (e.variant === 'smiler' || e.variant === 'lurker') { e.ai = 'retreat'; e.phaseT = 0 } else e.ai = 'stagger'
+      flashRes.hit++
+    }
+    return flashRes
+  }
+
+  // noise(x, y, L): the only way sound reaches the things. Eight slots, oldest dropped; the newest is flooded now.
+  function noise(x, y, L) {
+    const slot = ring[ringN % NOISE_SLOTS]
+    ringN++
+    slot.x = x; slot.y = y; slot.L = L; slot.t = clock()
+    floodNoise(field, slot, env.floor)
+  }
+
+  // the stalkers on your heels, for the floor below: hunting (this path) or chasing (legacy), nearest first
+  function snapshotChasers(player, maxDist = 10, max = 3) {
+    const out = []
+    const sorted = entities.slice().sort((a, b) => ((a.x - player.x) ** 2 + (a.y - player.y) ** 2) - ((b.x - player.x) ** 2 + (b.y - player.y) ** 2))
+    for (const e of sorted) {
+      if (e.type !== 'stalker') continue
+      if (huntMode ? e.ai !== 'hunt' : e.state !== 'chase') continue
+      const dx = e.x - player.x, dy = e.y - player.y
+      if (dx * dx + dy * dy > maxDist * maxDist) continue
+      out.push({ type: e.type, variant: e.variant, wardHits: e.wardHits || 0 })
+      if (out.length >= max) break
+    }
+    return out
+  }
+
+  // inject(list, nearX, nearY, minR, maxR, delaySec, blockedFn) -> how many were placed. Each descriptor spirals out
+  // from the point for an open cell minR..maxR away (never closer than 4 u) that blockedFn allows, and arrives hunting
+  // toward the point after delaySec. Ignores dispelledUntil: these followed you down.
+  function inject(list, nearX, nearY, minR = 7, maxR = 10, delaySec = 0, blockedFn = null) {
+    if (!enabled) return 0
+    let count = 0
+    for (let k = 0; k < list.length; k++) {
+      if (entities.length + pendingList.length >= MAX_ENTITIES) break
+      const desc = list[k] || {}
+      const a0 = (hash(Math.floor(nearX) + k * 31, Math.floor(nearY) + count * 17) / 4294967296) * Math.PI * 2
+      let fx = NaN, fy = NaN
+      // rings outward across minR..maxR, then inward toward 4 and a little beyond maxR
+      for (let ring = 0; ring < 20 && Number.isNaN(fx); ring++) {
+        let rad
+        if (ring < 8) rad = minR + (maxR - minR) * (ring / 7)
+        else if (ring < 14) rad = minR - (ring - 7) * 0.5
+        else rad = maxR + (ring - 13) * 0.5
+        if (rad < 4) continue
+        for (let j = 0; j < 16; j++) {
+          const ang = a0 + (j / 16) * Math.PI * 2 + ring * 0.37
+          const x = nearX + Math.cos(ang) * rad, y = nearY + Math.sin(ang) * rad
+          const ix = Math.floor(x), iy = Math.floor(y)
+          const cx = ix + 0.5, cy = iy + 0.5
+          if (Math.hypot(cx - nearX, cy - nearY) < 4) continue
+          if (!env.floor(ix, iy)) continue
+          if (blockedFn && blockedFn(cx, cy)) continue
+          fx = cx; fy = cy
+          break
+        }
+      }
+      if (Number.isNaN(fx)) continue                                     // dropped: nowhere to stand
+      const e = huntShape({
+        x: fx, y: fy, type: desc.type ?? 'stalker', variant: desc.variant ?? 'shade', state: 'chase',
+        dir: Math.atan2(nearY - fy, nearX - fx), dirTimer: 3, stagger: 0, wardHits: desc.wardHits ?? 0,
+        chunkCx: Math.floor(fx / CHUNK_SIZE), chunkCy: Math.floor(fy / CHUNK_SIZE),
+      })
+      e.ai = 'hunt'; e.lastSeenX = nearX; e.lastSeenY = nearY; e.pending = delaySec
+      pendingList.push(e)
+      count++
+    }
+    return count
+  }
+
+  function takeWakeEvent() { const n = woke; woke = 0; return n }
+
+  // drainEvents(out) -> n: this frame's hunt events into the caller's array (the event objects are pooled: read them now)
+  function drainEvents(out) {
+    const ev = threat.events
+    const n = ev.length
+    for (let i = 0; i < n; i++) out[i] = ev[i]
+    out.length = n
+    ev.length = 0; threat.mark = 0
+    return n
+  }
+
+  function getThreat() { return threat }
+
+  function getDispelled() {
+    const out = []
+    const now = clock()
+    for (const [k, until] of dispelledUntil) {
+      const rem = until - now
+      if (rem <= 0) continue
+      const i = k.indexOf(',')
+      out.push([Number(k.slice(0, i)), Number(k.slice(i + 1)), rem])
+    }
+    return out
+  }
+
+  // restoreDispelled(list, now): `now` is the clock the remaining seconds count from (the system's own when omitted)
+  function restoreDispelled(list, now = clock()) {
+    if (!list) return
+    for (let i = 0; i < list.length; i++) {
+      const d = list[i]
+      if (!d || d.length < 3) continue
+      setDispelled(`${d[0] | 0},${d[1] | 0}`, now + Math.max(0, +d[2] || 0))
+    }
+  }
+
+  return { update, getEntities, ward, flash, noise, snapshotChasers, inject, takeWakeEvent, drainEvents, getThreat, getDispelled, restoreDispelled }
 }
