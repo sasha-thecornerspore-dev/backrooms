@@ -481,3 +481,131 @@ describe('dropped items', () => {
     expect(sys.isDirty()).toBe(true)               // the floor changed under us
   })
 })
+
+// ── W6: caches. A cache is a dropped record plus a note (ph, oct, by, byId,
+// cacheKey) riding as trailing optional fields; nothing above is changed.
+import { KEPT, MAX_DROPPED } from '../src/renderer/items.js'
+
+describe('caches: the note rides the dropped record', () => {
+  const NOTE_KEYS = ['ph', 'oct', 'by', 'byId', 'cacheKey']
+  function holding(types, isWall = openWorld) {
+    const sys = makeSystem(isWall, { items: { density: 1, types: ['glowstick'] } })
+    sys.inventory.length = 0
+    for (const t of types) sys.inventory.push(typeof t === 'string' ? { type: t } : { ...t })
+    return sys
+  }
+  const strip = (r) => { const o = { ...r }; delete o.key; return o }
+
+  it('legacy identity: no fifth argument and note null give today\'s records and rows', () => {
+    for (const note of [undefined, null]) {
+      const sys = holding(['bandage', { type: 'radio', on: true }, { type: 'almond-water', sour: true }])
+      const args = (now) => note === undefined ? [10.5, 10.5, 0, now] : [10.5, 10.5, 0, now, note]
+      const a = sys.throwSelected(...args(5)).item
+      expect(a).toEqual({ key: 'd:0', x: a.x, y: 10.5, type: 'bandage' })
+      expect(Object.keys(a)).toEqual(['key', 'x', 'y', 'type'])
+      const b = sys.throwSelected(...args(5)).item
+      expect(b).toEqual({ key: 'd:1', x: b.x, y: 10.5, type: 'radio', on: true, onUntil: 185 })
+      expect(Object.keys(b)).toEqual(['key', 'x', 'y', 'type', 'on', 'onUntil'])
+      const c = sys.throwSelected(...args(5)).item
+      expect(c).toEqual({ key: 'd:2', x: c.x, y: 10.5, type: 'almond-water', sour: true })
+      expect(Object.keys(c)).toEqual(['key', 'x', 'y', 'type', 'sour'])
+      expect(sys.getDropped()).toEqual([
+        { x: a.x, y: 10.5, type: 'bandage' },
+        { x: b.x, y: 10.5, type: 'radio', on: true, onUntil: 185 },
+        { x: c.x, y: 10.5, type: 'almond-water', sour: true },
+      ])
+    }
+  })
+
+  it('a note on a sour water keeps sour and carries ph / oct / by / byId; getDropped and restoreDropped carry them', () => {
+    const sys = holding([{ type: 'almond-water', sour: true }])
+    const r = sys.throwSelected(5.5, 5.5, 0, 3, { ph: 3, oct: 5, by: 'maddie', byId: 'id9' })
+    expect(r.ok).toBe(true)
+    expect(r.item).toMatchObject({ type: 'almond-water', sour: true, ph: 3, oct: 5, by: 'maddie', byId: 'id9' })
+    expect(r.item.cacheKey).toBeUndefined()
+    // game.js only knows the landing cell after the throw: the key is written onto the live record
+    r.item.cacheKey = 'c:1:5,5'
+    const rows = sys.getDropped()
+    expect(rows).toEqual([{ x: r.x, y: 5.5, type: 'almond-water', sour: true, ph: 3, oct: 5, by: 'maddie', byId: 'id9', cacheKey: 'c:1:5,5' }])
+    const fresh = holding([])
+    fresh.restoreDropped(JSON.parse(JSON.stringify(rows)))
+    expect(fresh.getDropped()).toEqual(rows)
+    expect(strip(fresh.getWorldItems()[0])).toEqual(strip(r.item))
+  })
+
+  it('the item\'s own flags ride under the note: a talking radio keeps talking', () => {
+    const sys = holding([{ type: 'radio', on: true }])
+    const r = sys.throwSelected(5.5, 5.5, 0, 10, { ph: 0, oct: 1, by: 'm', byId: undefined })
+    expect(r.item).toEqual({ key: 'd:0', x: r.x, y: 5.5, type: 'radio', on: true, onUntil: 190, ph: 0, oct: 1, by: 'm' })
+    expect(sys.inventory).toHaveLength(0)
+  })
+
+  it('dropAt checks the note fields: integers, strings, slices', () => {
+    const sys = makeSystem(solidWorld)
+    const a = sys.dropAt(1, 1, 'bandage', { ph: 1.5, oct: '3', by: 7, byId: 9, cacheKey: {} }, 0)
+    for (const k of NOTE_KEYS) expect(a).not.toHaveProperty(k)
+    const b = sys.dropAt(1, 1, 'bandage', { ph: -1, oct: 7, by: 'x'.repeat(30), byId: 'id', cacheKey: 'c:1:' + '9'.repeat(60) }, 0)
+    expect(b.ph).toBe(-1)
+    expect(b.oct).toBe(7)
+    expect(b.by).toBe('x'.repeat(24))
+    expect(b.byId).toBe('id')
+    expect(b.cacheKey).toHaveLength(48)
+    const c = sys.dropAt(2, 2, 'radio', { on: true }, 0)
+    expect(Object.keys(c)).toEqual(['key', 'x', 'y', 'type', 'on', 'onUntil'])
+    const d = sys.dropAt(2, 2, 'glowstick', {}, 4)
+    expect(Object.keys(d)).toEqual(['key', 'x', 'y', 'type', 't0'])
+  })
+
+  it('pickUp of a cache hands over the thing, not the note; res.item keeps the note', () => {
+    const sys = makeSystem(solidWorld)
+    const it = sys.dropAt(1, 1, 'almond-water', { sour: true, tool: true, on: true, ph: 4, oct: 2, by: 'maddie', byId: 'id9', cacheKey: 'c:1:1,1' }, null)
+    const res = sys.pickUp(it.key)
+    expect(res.ok).toBe(true)
+    expect(res.item).toBe(it)
+    expect(res.item).toMatchObject({ ph: 4, oct: 2, by: 'maddie', byId: 'id9', cacheKey: 'c:1:1,1' })
+    expect(sys.inventory[0]).toEqual({ type: 'almond-water', on: true, sour: true, tool: true })
+    expect(sys.pickUp(it.key)).toEqual({ ok: false, reason: 'gone' })
+  })
+
+  it('takeDropped: a friend took it — out of the world, never into the hand', () => {
+    const sys = makeSystem(solidWorld)
+    sys.inventory.push({ type: 'bandage' })
+    const it = sys.dropAt(4, 4, 'radio', { ph: 1, oct: 1, cacheKey: 'c:1:4,4' }, 0)
+    sys.isDirty()
+    expect(sys.takeDropped('d:0')).toBe(it)
+    expect(sys.inventory).toHaveLength(1)
+    expect(sys.isDirty()).toBe(true)
+    expect(sys.isDirty()).toBe(false)
+    expect(sys.nearestItem(4, 4)).toBeNull()
+    expect(sys.getWorldItems()).toEqual([])
+    for (const k of ['d:0', 'd:99', '0,0', null, undefined, 7]) expect(sys.takeDropped(k)).toBeNull()
+    expect(sys.isDirty()).toBe(false)
+    // a chunk spawn is not taken this way
+    const w = makeSystem()
+    w.update(0, 0)
+    const spawn = w.getWorldItems()[0]
+    w.isDirty()
+    expect(w.takeDropped(spawn.key)).toBeNull()
+    expect(w.getWorldItems()).toContain(spawn)
+    expect(w.isDirty()).toBe(false)
+  })
+
+  it('MAX_DROPPED eviction counts caches: 25 noted drops keep the newest 24', () => {
+    const sys = makeSystem(solidWorld)
+    for (let i = 0; i < 25; i++) sys.dropAt(i, 0, 'bandage', { ph: 1, oct: 0, cacheKey: `c:1:${i},0` }, 0)
+    const rows = sys.getDropped()
+    expect(rows).toHaveLength(MAX_DROPPED)
+    expect(rows[0].cacheKey).toBe('c:1:1,0')
+    expect(rows[23].cacheKey).toBe('c:1:24,0')
+  })
+
+  it('KEPT is exported: plumb, ballast, the extension slip — and they are still kept', () => {
+    expect([...KEPT].sort()).toEqual(['ballast', 'extension-slip', 'plumb'])
+    for (const type of ['plumb', 'ballast', 'extension-slip']) {
+      const sys = holding([{ type }])
+      expect(sys.throwSelected(0, 0, 0, 0, { ph: 1, oct: 0 })).toEqual({ ok: false, reason: 'kept' })
+      expect(sys.inventory).toHaveLength(1)
+    }
+    expect(holding([{ type: 'bandage', tool: true }]).throwSelected(0, 0, 0, 0, { ph: 1, oct: 0 })).toEqual({ ok: false, reason: 'kept' })
+  })
+})
