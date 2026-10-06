@@ -26,7 +26,7 @@ describe('game.js: one voice (messages.js)', () => {
     expect(game).toMatch(/if \(mq && msgEl\) \{ if \(mq\.show\) \{ msgEl\.textContent = mq\.text; msgEl\.style\.opacity = '1' \} else msgEl\.style\.opacity = '0' \}/)
   })
   it('every line that must win or must yield carries its priority', () => {
-    expect(game).toMatch(/showMessage\('it has you\.', PRIO\.combat\)/)
+    expect(game).toMatch(/showMessage\(th\.dmgKind === 'arc' \? 'the current finds you\.' : 'it has you\.', PRIO\.combat\)/)   // the creatures step: the jolt has its own line
     // descend: the level name wins at once, the way hint is a discovery line that follows it
     expect(game).toMatch(/showMessage\(level\.cfg\.levelName, PRIO\.combat\)\r?\n\s+if \(level\.cfg\.exit\?\.hint\) setTimeout\(\(\) => showMessage\(level\.cfg\.exit\.hint, PRIO\.discovery\), 3800\)/)
     expect(game).toMatch(/showMessage\('everything goes dark\. you wake where you fell in\.', PRIO\.combat\)/)

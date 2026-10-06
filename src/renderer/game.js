@@ -19,6 +19,9 @@ import { takeKey } from './input.js'
 import { createSolidWorld, createColliderIndex, movePoint, PLAYER_R } from './collide.js'
 import { bumpKindFor, bumpIntensity, isHardBump, createBumpGate, BUMP_LINES } from './feedback.js'
 import { CLUTTER_LINES } from './placement.js'
+import { hostile, solidCreature } from './hunt.js'
+import { quiet } from './tactics.js'
+import { FOV, HF } from './gfx-frame.js'
 
 // Presence: 1 in 12 chunks has a spirit at its midpoint
 function chunkHasPresence(cx, cy) {
@@ -221,6 +224,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let lastDt     = 1 / 60 // the step the mover measures the enter speed against
   let bobPulse   = 0    // seconds left of the clutter step: a 0.35 s rise-and-settle on the bob
   let playT      = 0    // seconds of play this run — TODO(integrate:floors): saved in snapshot(), restored on resume
+  let lastHitT   = -Infinity // when a thing last reached you — TODO(integrate:fight-verbs): tension reads it
+  let quietTimer = 0    // TODO(integrate:fight-verbs): sweet almond water sets it (QUIET_SECONDS); footsteps at half loudness while it runs
+  const cancelCommit = () => {}   // TODO(integrate:fight-verbs): the bandage commit; a hit cancels it ('the bandage slips.')
+  let mapOpen = false             // TODO(integrate:map): the map card; a hit folds it
+  const closeMap = () => { mapOpen = false }   // TODO(integrate:map): mapCard.close()
+  let arcWas     = false // the tesla's charge last frame (the lights drop once per charge, not every frame of it)
+  let lastStepN  = 0    // the footstep count (floor(bob / PI)) the noise emitter last saw
+  let lureT      = 0.5  // seconds since the lures (dropped talking radios) were last recomputed
 
   // ── the numbers station + the counter-claim (the reality-tunneling arc) ──
   let stationIdx  = 0     // which group of the ledger-count the radio reads next
@@ -242,9 +253,36 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const bumpSaid = new Set(), clutterSeen = new Set()
   let lastBumpLine = -Infinity, lastLetThrough = -Infinity
   const bumpGate = createBumpGate()
-  // TODO(integrate:hunt): hunt.solidCreature / hunt.hostile replace these — until then no creature is a body and none refuses a move
-  const huntSolidCreature = () => false
-  const huntHostile = () => false
+
+  // ── the things' events (hunt.js / variants.js), drained once per frame into one reused array; the event objects are pooled
+  //    (32), so each is read in the frame it arrives and never kept. The lines that must not repeat keep their own gates here:
+  //    'it has seen you.' 8 s, the far line 30 s, the cornered turn once per level, the turning cue once per creature per hunt
+  //    (a new sighting clears it), the hound's two tells once per run. ──
+  const entEvents = []
+  let lastSeenLine = -Infinity, lastFarLine = -Infinity, lastDuck = -Infinity
+  let turnSaid = false, houndTold = false, passTold = false
+  const turningSaid = new Set()
+  function onEntityEvent(ev) {
+    const fog = level.cfg.fogDistance
+    switch (ev.kind) {
+      case 'seen':
+        turningSaid.delete(ev.id)
+        if (ev.d <= fog * 1.1) { if (playT - lastSeenLine > 8) { lastSeenLine = playT; showMessage('it has seen you.', PRIO.combat) } }
+        else if (playT - lastFarLine > 30) { lastFarLine = playT; showMessage('something, far off, stops.', PRIO.ambient) }
+        break
+      case 'lost': showMessage('you have lost it. it is still looking.', PRIO.discovery); break
+      case 'alert': if (ev.d <= fog) footfall(1); break
+      case 'turn': if (!turnSaid) { turnSaid = true; showMessage('it has nowhere to go. it turns.', PRIO.interaction) } break
+      case 'turning': if (ev.d <= fog && !turningSaid.has(ev.id)) { turningSaid.add(ev.id); showMessage('it stops. it turns.', PRIO.interaction) } break
+      case 'smiler-freeze': whisper(); showMessage('it stops when you look. do not look away.', PRIO.discovery); break
+      case 'hound-windup': footfall(2); if (!houndTold) { houndTold = true; showMessage('it gathers itself. push now.', PRIO.interaction) } break
+      case 'hound-pass': if (!passTold) { passTold = true; showMessage('it skids past.', PRIO.interaction) } break
+      case 'lurker-hunt': if (playT - lastDuck > 1.4) { lastDuck = playT; humDuck(1.4) } break
+      case 'crawler': sanity = Math.max(0, sanity - 8); showMessage('something takes your ankles.', PRIO.combat); break
+      case 'watcher-dispelled': sanity = Math.min(100, sanity + 12); showMessage('it looks away first.', PRIO.interaction); break
+      // 'arc': the jolt itself lands through th.dmg / th.dmgKind ('the current finds you.')
+    }
+  }
 
   // Flicker state (persists; retuned per level via level.cfg.flicker)
   let flicker    = 1.0
@@ -332,8 +370,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       onChunk: (k, bundle) => bodies.setChunk(k, bundle.colliders),
       onEvict: (k) => bodies.dropChunk(k),
     })
-    const solid     = createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature: huntSolidCreature })
-    // TODO(integrate:hunt): entities.js ignores the deps until hunt lands; they are what its stepper reads (obstacles, the grid, the clock)
+    const solid     = createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature })
+    // the creatures step around the same bodies, read the same grid, and count their dispels on the play clock (hunt.js)
     const entitySys = createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => playT })
     // The previous level's renderer is disposed BEFORE the next one is created: a GPU backend owns a WebGL context on a sibling canvas, and
     // browsers cap live contexts (~16), so a level change must not leave one behind.
@@ -343,7 +381,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const gfxMs     = performance.now() - tg
     itemSys.enterLevel(cfg)
     vendedSet.clear()               // a re-entered floor re-stocks its machines
-    bumpSaid.clear(); clutterSeen.clear()   // and says its contact lines afresh
+    bumpSaid.clear(); clutterSeen.clear(); turningSaid.clear(); turnSaid = false   // and says its contact / turning lines afresh
 
     // fixed maps spawn at their authored point; procedural at the origin room (carved open)
     if (cfg.spawn) { player.x = cfg.spawn.x; player.y = cfg.spawn.y }
@@ -380,8 +418,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (transitioning) return
     transitioning = true
     document.exitPointerLock()
+    // the stalkers on your heels follow you down: read now, placed once the new floor's bodies stand, arriving a few beats after you
+    // (inject returns 0 where entities are disabled: the lobby, the block) — TODO(integrate:floors): never on a lift
+    const followers = creaturesOn ? level.entitySys.snapshotChasers(player, 10, 3) : []
     fadeThen(() => {
       buildLevel(target)
+      if (followers.length) level.entitySys.inject(followers, player.x, player.y, 7, 10, 3 + Math.random() * 2, (x, y) => level.solid.forEntities.blocked(x, y, 0.2))
       persist()                       // save on every descent
       showMessage(level.cfg.levelName, PRIO.combat)
       if (level.cfg.exit?.hint) setTimeout(() => showMessage(level.cfg.exit.hint, PRIO.discovery), 3800)
@@ -756,6 +798,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── polaroid ──
   const flashEl = document.getElementById('flash')
   let flashAt = -1e9, flashT = 0
+  const FLASH_OPTS = { range: 6, cone: FOV, stagger: 1.8 }, NO_FLASH = { hit: 0 }   // what the flash does to the things (entities.js flash)
   function firePolaroid() {
     let dataUrl = null
     // through the renderer: a WebGL canvas is only readable when re-drawn, and the GPU backend draws on a sibling canvas, not on #c
@@ -778,6 +821,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if (wait > 0) flashT = setTimeout(go, Math.ceil(wait * 1000) + 30); else go()
       }
     }
+    // the flash reaches the things: everything in the cone with a line to you reels, blind (a smiler or a lurker turns and runs);
+    // the shutter is a noise they hear
+    level.entitySys.noise(player.x, player.y, 9)
+    const b = getPref('creatures') ? level.entitySys.flash(player, FLASH_OPTS) : NO_FLASH
+    if (b.hit) showMessage('the flash catches it. it reels, blind.', PRIO.interaction)
     // the caption develops from the LIVE frame, so it works in the browser too
     // (no save bridge). A capture is a small counter-claim — it steadies you.
     const thinNear = ephemera.some(a => a.variant === 'thin' && (a.x - player.x) ** 2 + (a.y - player.y) ** 2 < 16)
@@ -931,7 +979,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
     if (isHardBump(report, wantSprint)) {
       shake = Math.max(shake, 0.06); stamina = Math.max(0, stamina - 2)
-      level.entitySys.noise?.(player.x, player.y, 5)   // TODO(integrate:hunt): entitySys.noise lands with hunt; the things hear a hard bump
+      level.entitySys.noise(player.x, player.y, 5)   // the things hear a hard bump
       const type = hit.type
       if (!bumpSaid.has(type) && timing.t - lastBumpLine > 30) {
         bumpSaid.add(type); lastBumpLine = timing.t
@@ -946,7 +994,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         showMessage(CLUTTER_LINES[report.clutterType] ?? CLUTTER_LINES.default, PRIO.interaction)
       }
     }
-    if (report.blockedBy && huntHostile(report.blockedBy) && timing.t - lastLetThrough > 4) {
+    if (report.blockedBy && hostile(report.blockedBy) && timing.t - lastLetThrough > 4) {
       lastLetThrough = timing.t
       showMessage('it does not let you through.', PRIO.interaction)
     }
@@ -980,6 +1028,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       selected: itemSys.selected,
       pagesRead: [...readSet],
       worldSeed, anchor,
+      dispelled: level?.entitySys.getDispelled() ?? [],   // the chunks whose presence came apart, with the seconds they stay empty
     }
   }
   let saveTimer = 0
@@ -995,6 +1044,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     level.grid.setPlayerChunk(pcx, pcy)
     level.cache.preload(pcx, pcy)
     level.decor.update(pcx, pcy); itemSys.update(pcx, pcy)
+    // the dispelled chunks count their remaining seconds from the system's own clock (playT through deps.now): never a literal 0
+    level.entitySys.restoreDispelled(resume.dispelled ?? [])
     if (!getPref('solidBodies')) return
     const moved = level.solid.settlePlayer(player)
     if (moved > 0.5) {
@@ -1080,6 +1131,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }) : null
 
   const entityAsm = createEntityAssembler(), EF = ENTITY_FILLS
+  // what the things know about you this frame (hunt.js / variants.js ctx): ONE object, mutated per frame, never rebuilt. `player` is the
+  // live object (where they look for you), hf the half field of view (watched() == drawn on screen), damage the floor's contact damage,
+  // lures the dropped talking radios (tactics.computeLures hands back one reused array; recomputed when the items changed or every 0.5 s)
+  const aiCtx = { flashlight, sprinting: false, dark: false, fog: 16, radioOn: false, lures: [], t: 0, hf: HF, playerAngle: 0, player, damage: 16 }
   let last = 0
   let frameCount = 0
   let loopErrs = 0
@@ -1115,6 +1170,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     stepFlicker(fk, dt, fl, Math.random, calm, renderOpts.reduceFlicker)
     flicker = fk.value; flickTgt = fk.target; flickTimer = fk.timer
     setFlicker(flicker)
+    // the tesla's charge: the lights drop for the half second before the jolt (variants.js arcCharge -> threat.arcPending), once per
+    // charge; stepFlicker vets the dip on its next step like every other direct write
+    const thA = level.entitySys.getThreat()
+    if (thA.arcPending && !arcWas) { flickTgt = 0.35; flickTimer = 0.4; blip() }
+    arcWas = thA.arcPending
 
     // ── movement (frozen during a transition fade or while typing in chat): W/S/A/D sum into ONE step (same multipliers 1 / 0.6 / 0.7),
     //    scaled by the clutter under you (x0.55 while edging through), then exactly one tryMove ──
@@ -1143,6 +1203,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
     player.moving = moved
     if (moved) player.bob += 0.12 * dt * 60
+    // a footstep the things can hear lands every half bob cycle (the bob advances 7.2 rad/s: a step every 0.44 s); emitted below, once
+    // the grid follows this frame's chunk
+    const stepN = Math.floor(player.bob / Math.PI)
+    const footstep = moved && stepN !== lastStepN
+    lastStepN = stepN
     // the walk's bob, plus the clutter step: a +5 px rise that settles over 0.35 s (noteContact starts it on clutterEntered)
     const bobBase = (moved && getPref('headBob')) ? Math.sin(player.bob) * 4 : 0
     player.bobOffset = bobBase + (bobPulse > 0 ? Math.sin((0.35 - bobPulse) / 0.35 * Math.PI) * 5 : 0)
@@ -1310,6 +1375,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
           if (stamina >= 20) {
             stamina -= 20; wardCd = 0.65
             const res = getPref('creatures') ? level.entitySys.ward(player) : { hit: 0, dispelled: 0 }
+            level.entitySys.noise(player.x, player.y, 12)   // a ward is loud: the things round the corner hear it
             wardPulse(); shake = Math.max(shake, 0.45)
             if      (res.dispelled > 0) showMessage(res.dispelled > 1 ? 'they come apart in the light.' : 'it comes apart in the light.')
             else if (res.hit > 0)       showMessage(res.hit > 1 ? 'they recoil from you.' : 'it recoils from you.')
@@ -1326,28 +1392,31 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     level.decor.update(pcx, pcy)
     netTimer += dt
     if (mpClient?.isConnected() && netTimer >= 0.05) { netTimer = 0; mpClient.sendPos(player.x, player.y, player.angle, player.hp) }
-    // creatures can be switched off entirely (pure liminal exploration); creaturesOn was read at the top of the frame
-    if (creaturesOn) level.entitySys.update(dt, player, pcx, pcy, radioOn ? 1.5 : 1)
-
-    // ── nearest stalker (drives contact damage, the heartbeat, and sanity) ──
-    let nearD2 = Infinity
-    const creaturesLive = creaturesOn && cfg.entities?.enabled
-    if (creaturesLive) {
-      for (const e of level.entitySys.getEntities()) {
-        if (e.type !== 'stalker') continue
-        if (e.stagger > 0) continue        // reeling from a ward — cannot reach you
-        const d2 = (e.x - player.x) ** 2 + (e.y - player.y) ** 2
-        if (d2 < nearD2) nearD2 = d2
-      }
-    }
-    const nearD = Math.sqrt(nearD2)
+    // ── the things: what they know about you this frame, then one update; the threat record it returns drives contact damage, the
+    //    heartbeat and sanity (no second pass over the list). Creatures can be switched off entirely (pure liminal exploration;
+    //    creaturesOn was read at the top of the frame): the record is then reset, so everything below reads zero. ──
+    const creaturesLive = creaturesOn && !!cfg.entities?.enabled
+    aiCtx.flashlight = flashlight; aiCtx.sprinting = moved && wantSprint; aiCtx.dark = !cfg.lights; aiCtx.fog = cfg.fogDistance
+    aiCtx.radioOn = radioOn; aiCtx.t = playT; aiCtx.playerAngle = player.angle; aiCtx.damage = cfg.entities?.damage ?? 16
+    lureT += dt
+    if (itemSys.isDirty() || lureT >= 0.5) { lureT = 0; aiCtx.lures = itemSys.getLures(playT, player.x, player.y) }
+    // footsteps: walk 3 / sprint 7, halved by sweet water (tactics.quiet); the flood reads the grid at this frame's chunk
+    if (footstep && creaturesLive) level.entitySys.noise(player.x, player.y, (aiCtx.sprinting ? 7 : 3) * quiet(quietTimer))
+    const th = creaturesOn ? level.entitySys.update(dt, player, pcx, pcy, aiCtx) : (level.entitySys.getThreat().reset(), level.entitySys.getThreat())
+    const nEv = level.entitySys.drainEvents(entEvents)
+    for (let i = 0; i < nEv; i++) onEntityEvent(entEvents[i])
+    const woke = level.entitySys.takeWakeEvent()
+    if (woke) { footfall(); showMessage(woke > 1 ? 'they followed you down.' : 'it followed you down.', PRIO.discovery) }
 
     // ── HP: contact damage, i-frames, delayed regen, death ──
     if (invuln > 0) invuln -= dt
     if (wardCd > 0) wardCd -= dt
-    if (!transitioning && creaturesLive && getPref('damage') && invuln <= 0 && nearD < 0.62) {
-      player.hp -= (cfg.entities.damage ?? 16); invuln = 0.7; hurt = 1; regenDelay = 6; shake = 1
-      showMessage('it has you.', PRIO.combat)
+    if (!transitioning && creaturesLive && getPref('damage') && invuln <= 0 && th.dmg > 0) {
+      player.hp -= th.dmg; invuln = 0.7; hurt = 1; regenDelay = 6; shake = 1
+      showMessage(th.dmgKind === 'arc' ? 'the current finds you.' : 'it has you.', PRIO.combat)
+      lastHitT = playT
+      if (mapOpen) closeMap(); if (noteOpen) closeNoteCard()
+      cancelCommit('the bandage slips.')
     }
     if (regenDelay > 0) regenDelay -= dt
     else if (player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + 3.5 * dt)
@@ -1356,16 +1425,18 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (hurtEl) hurtEl.style.opacity = (hurt * 0.55).toFixed(2)
     if (player.hp <= 0) { player.hp = 0; die() }
 
-    // ── heartbeat — quickens as something closes in ──
-    if (!transitioning && creaturesLive && nearD < 12) {
+    // ── heartbeat — quickens as something closes in (th.nearest: the nearest thing that can hurt you, not reeling) ──
+    // TODO(integrate:fight-verbs): tension.tick(dt, th, player.hp) replaces this block (+ audio.setMood)
+    if (!transitioning && creaturesLive && th.nearest < 12) {
       heartT -= dt
-      if (heartT <= 0) { const prox = 1 - nearD / 12; heartbeat(0.5 + prox); heartT = 1.15 - prox * 0.8 }
+      if (heartT <= 0) { const prox = 1 - th.nearest / 12; heartbeat(0.5 + prox); heartT = 1.15 - prox * 0.8 }
     } else heartT = 0
 
-    // ── sanity — dark + the hunt drain it; light, almond water, a friend restore it ──
+    // ── sanity — dark, the hunt and a thing's gaze drain it; light, almond water, a friend restore it ──
     let sdelta = flashlight ? 2 : -2
     sdelta -= (level.index >= 0 && level.index <= 3 ? level.index : 0) * 0.5   // Level ∅ (index 4) does not drain like a fourth floor
-    if (nearD < 10) sdelta -= 4
+    if (th.hunted) sdelta -= 3                 // something is on you
+    if (th.gaze) sdelta -= th.gazeRate         // a smiler held on screen (1.5), a watcher watched back (3)
     if (mpClient) { for (const rp of mpClient.getRemotePlayers()) { if ((rp.x - player.x) ** 2 + (rp.y - player.y) ** 2 < 36) { sdelta += 3; break } } }
     sanity = Math.max(0, Math.min(100, sanity + sdelta * dt))
     updateSanity()

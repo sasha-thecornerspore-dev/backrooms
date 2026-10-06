@@ -26,7 +26,7 @@ describe('game.js: buildLevel order (cache -> grid -> bodies -> decor(hooks) -> 
     const grid = at('const grid      = createGridReader(cfg.map ? null : cache, isWall)')
     const bodies = at('const bodies    = createColliderIndex()')
     const decor = at('const decor     = createDecorSystem(cfg, isWall, worldSeed, {')
-    const solid = at('const solid     = createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature: huntSolidCreature })')
+    const solid = at('const solid     = createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature })')
     const ents = at('const entitySys = createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => playT })')
     const gfx = at('const gfx       = makeGfx(cfg, cache)')
     expect(cache).toBeLessThan(grid); expect(grid).toBeLessThan(bodies); expect(bodies).toBeLessThan(decor)
@@ -37,7 +37,9 @@ describe('game.js: buildLevel order (cache -> grid -> bodies -> decor(hooks) -> 
   it('the contact sets are level-scoped (cleared next to vendedSet) and the later steps are marked for their integrators', () => {
     expect(game).toMatch(/vendedSet\.clear\(\)[^\n]*\r?\n\s*bumpSaid\.clear\(\); clutterSeen\.clear\(\)/)
     expect(game).toMatch(/passes: \[\],\s*\/\/ TODO\(integrate:floors,dress\)/)
-    expect(game).toMatch(/const huntSolidCreature = \(\) => false\r?\n\s*const huntHostile = \(\) => false/)
+    // the creatures step: hunt.js is the one creature-solidity / hostility rule (the placeholders are gone)
+    expect(game).toMatch(/import \{ hostile, solidCreature \} from '\.\/hunt\.js'/)
+    expect(game).not.toMatch(/huntSolidCreature|huntHostile|TODO\(integrate:hunt\)/)
     expect(game).toMatch(/let playT\s+= 0/)
     expect(game).toMatch(/\n\s*playT \+= dt\r?\n/)
   })
@@ -56,7 +58,7 @@ describe('game.js: one mover call per frame', () => {
     expect(game).toMatch(/wantSprint = \(K\['ShiftLeft'\] \|\| K\['ShiftRight'\]\) && stamina > 0/)
     expect(game).not.toMatch(/const wantSprint = /)
     expect(game).not.toMatch(/const creaturesOn = /)
-    const a = game.search(/\n\s*creaturesOn = getPref\('creatures'\)\r?\n\s*let moved = false/), b = game.indexOf('if (creaturesOn) level.entitySys.update(dt, player, pcx, pcy')
+    const a = game.search(/\n\s*creaturesOn = getPref\('creatures'\)\r?\n\s*let moved = false/), b = game.indexOf('const th = creaturesOn ? level.entitySys.update(dt, player, pcx, pcy, aiCtx)')
     expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a)
   })
 })
@@ -67,13 +69,13 @@ describe("game.js: noteContact (the report's rules)", () => {
     expect(body).toMatch(/if \(hit && bumpGate\.near\(timing\.t\)\) \{\r?\n\s*const kind = bumpKindFor\(hit\.kind, hit\.type\)\r?\n\s*if \(kind !== 'silent'\) bump\(kind, bumpIntensity\(report\.enterSpeed\), 0\)/)
   })
   it('a hard bump shakes, costs a breath, makes a noise of 5 and says its line once per type per level with a 30 s cooldown', () => {
-    expect(body).toMatch(/if \(isHardBump\(report, wantSprint\)\) \{\r?\n\s*shake = Math\.max\(shake, 0\.06\); stamina = Math\.max\(0, stamina - 2\)\r?\n\s*level\.entitySys\.noise\?\.\(player\.x, player\.y, 5\)/)
+    expect(body).toMatch(/if \(isHardBump\(report, wantSprint\)\) \{\r?\n\s*shake = Math\.max\(shake, 0\.06\); stamina = Math\.max\(0, stamina - 2\)\r?\n\s*level\.entitySys\.noise\(player\.x, player\.y, 5\)/)
     expect(body).toMatch(/if \(!bumpSaid\.has\(type\) && timing\.t - lastBumpLine > 30\) \{\r?\n\s*bumpSaid\.add\(type\); lastBumpLine = timing\.t\r?\n\s*showMessage\(BUMP_LINES\[type\] \?\? BUMP_LINES\.default\)/)
   })
   it('the pallet taps, clutter pulses the bob and speaks once per type, and the body that refuses you says so at most every 4 s', () => {
     expect(body).toMatch(/if \(report\.stepType === 'pallet'\) bump\('wood', 0\.5\)/)
     expect(body).toMatch(/if \(report\.clutterEntered\) \{\r?\n\s*bobPulse = 0\.35\r?\n\s*if \(!clutterSeen\.has\(report\.clutterType\)\) \{\r?\n\s*clutterSeen\.add\(report\.clutterType\)\r?\n\s*showMessage\(CLUTTER_LINES\[report\.clutterType\] \?\? CLUTTER_LINES\.default, PRIO\.interaction\)/)
-    expect(body).toMatch(/if \(report\.blockedBy && huntHostile\(report\.blockedBy\) && timing\.t - lastLetThrough > 4\) \{\r?\n\s*lastLetThrough = timing\.t\r?\n\s*showMessage\('it does not let you through\.', PRIO\.interaction\)/)
+    expect(body).toMatch(/if \(report\.blockedBy && hostile\(report\.blockedBy\) && timing\.t - lastLetThrough > 4\) \{\r?\n\s*lastLetThrough = timing\.t\r?\n\s*showMessage\('it does not let you through\.', PRIO\.interaction\)/)
   })
   it('the bob carries the pulse: a +5 px rise that settles over 0.35 s', () => {
     expect(game).toMatch(/player\.bobOffset = bobBase \+ \(bobPulse > 0 \? Math\.sin\(\(0\.35 - bobPulse\) \/ 0\.35 \* Math\.PI\) \* 5 : 0\)\r?\n\s*bobPulse = Math\.max\(0, bobPulse - dt\)/)
@@ -85,7 +87,7 @@ describe("game.js: noteContact (the report's rules)", () => {
 
 describe('game.js: settle on resume and on the pref', () => {
   it('a resumed player is settled after decor streams the resumed chunk; a push over half a cell relocates them with the line', () => {
-    expect(game).toMatch(/level\.grid\.setPlayerChunk\(pcx, pcy\)\r?\n\s*level\.cache\.preload\(pcx, pcy\)\r?\n\s*level\.decor\.update\(pcx, pcy\); itemSys\.update\(pcx, pcy\)\r?\n\s*if \(!getPref\('solidBodies'\)\) return\r?\n\s*const moved = level\.solid\.settlePlayer\(player\)\r?\n\s*if \(moved > 0\.5\) \{/)
+    expect(game).toMatch(/level\.grid\.setPlayerChunk\(pcx, pcy\)\r?\n\s*level\.cache\.preload\(pcx, pcy\)\r?\n\s*level\.decor\.update\(pcx, pcy\); itemSys\.update\(pcx, pcy\)\r?\n\s*\/\/[^\n]*\r?\n\s*level\.entitySys\.restoreDispelled\(resume\.dispelled \?\? \[\]\)\r?\n\s*if \(!getPref\('solidBodies'\)\) return\r?\n\s*const moved = level\.solid\.settlePlayer\(player\)\r?\n\s*if \(moved > 0\.5\) \{/)
     expect(game).toMatch(/showMessage\('you woke somewhere slightly else\.', PRIO\.discovery\)/)
     expect(game).toMatch(/renderHotbar\(\)\r?\n\s*\}\r?\n\s*resumeSettle\(\)\r?\n\s*\} else \{/)
     expect(game).toMatch(/for \(let r = 0; r <= 3; r\+\+\)/)                     // the spiral: at most 3 cells out
