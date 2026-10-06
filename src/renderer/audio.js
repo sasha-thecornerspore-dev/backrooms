@@ -559,6 +559,28 @@ export function footfall(steps = 4) {
   } catch { /* ignore */ }
 }
 
+// A whistle in the halls (the roll call, rollcall.js picks the pitch, gain and pan): two sine notes a fourth apart, ~0.4 s, 880 Hz
+// raised by `semis`, through the ambience bus and panned like bump. No-op without audio or when there is no gain to give it.
+export function whistle(semis = 0, pan = 0, gain = 1) {
+  if (!actx || !(gain > 0)) return
+  try {
+    const k = gain > 1 ? 1 : gain
+    const dest = panTo(pan)
+    const f1 = 880 * Math.pow(2, semis / 12), f2 = f1 * Math.pow(2, 5 / 12)
+    const t = actx.currentTime
+    const o1 = actx.createOscillator(), g1 = actx.createGain()
+    o1.type = 'sine'
+    o1.frequency.setValueAtTime(f1, t)
+    g1.gain.setValueAtTime(0.0001, t); g1.gain.exponentialRampToValueAtTime(0.07 * k, t + 0.012); g1.gain.exponentialRampToValueAtTime(0.0004, t + 0.19)
+    o1.connect(g1); g1.connect(dest); o1.start(t); o1.stop(t + 0.2)
+    const o2 = actx.createOscillator(), g2 = actx.createGain()
+    o2.type = 'sine'
+    o2.frequency.setValueAtTime(f2, t + 0.17)
+    g2.gain.setValueAtTime(0.0001, t + 0.17); g2.gain.exponentialRampToValueAtTime(0.063 * k, t + 0.182); g2.gain.exponentialRampToValueAtTime(0.0004, t + 0.40)
+    o2.connect(g2); g2.connect(dest); o2.start(t + 0.17); o2.stop(t + 0.41)
+  } catch { /* ignore */ }
+}
+
 // The hum stops: duck the whole sound bed (ambience + music) to silence for a
 // beat, then restore each to whatever level the player's settings had it at.
 export function humDuck(seconds = 2.6) {
