@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # usage: PLAY_SW_VERSION=14 bash tools/build-play.sh src <gh-pages>/play   (bump the version on every rebuild so clients refetch)
 # Build a self-contained, path-independent PWA bundle of the game into $DEST.
-# Flattens the one ../net/client.js import so everything lives in one directory,
-# giving clean relative paths that work at any mount point (/, /play/, etc).
+# Flattens the ../net/ imports (client.js from index.html, evbus.js from game.js) so everything lives in one
+# directory, giving clean relative paths that work at any mount point (/, /play/, etc).
 set -euo pipefail
 PLAY_SW_VERSION="${PLAY_SW_VERSION:-19}"
 SRC="${1:?src dir}"      # .../backrooms/src
@@ -10,10 +10,18 @@ DEST="${2:?dest dir}"    # .../play
 
 rm -rf "$DEST"; mkdir -p "$DEST/icons"
 
-# game modules (all ./ siblings) + the flattened multiplayer client
+# game modules (all ./ siblings) + the flattened multiplayer client and event bus
 cp "$SRC"/renderer/*.js "$DEST"/            # renderer modules (excludes index.html)
 cp "$SRC"/net/client.js "$DEST"/client.js  # was ../net/client.js
+cp "$SRC"/net/evbus.js "$DEST"/evbus.js    # was ../net/evbus.js
 cp "$SRC"/icons/icon-192.png "$SRC"/icons/icon-512.png "$DEST"/icons/
+# a renderer module that imports from ../net/ (game.js: the event bus) reads its flat sibling instead
+for f in "$DEST"/*.js; do
+  if grep -q "\.\./net/" "$f"; then
+    sed -e "s#\.\./net/evbus\.js#./evbus.js#g" -e "s#\.\./net/client\.js#./client.js#g" "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  fi
+done
+! grep -l "\.\./net/" "$DEST"/*.js || { echo "a ../net/ import survived the flattening" >&2; exit 1; }
 
 # index.html: rewrite the 4 absolute/escaping paths to flat-relative
 sed -e "s#\.\./net/client\.js#./client.js#g" \
@@ -55,7 +63,7 @@ const SHELL = [
   'fixedmap.js', 'level-null-map.js', 'levels.js', 'raycaster.js', 'renderer.js',
   'gfx-util.js', 'gfx-textures.js', 'gfx-world.js', 'gfx-sprites.js', 'gfx-post.js', 'gfx-cpu.js', 'gfx-sky.js', 'gfx-light.js', 'gfx-quality.js', 'gfx-attract.js',
   'gfx-frame.js', 'gfx-gl-g4-validate.js', 'gfx-gl-post-math.js', 'gfx-gl-post-particles.js', 'gfx-gl-post-shaders.js', 'gfx-gl-sprites-atlas.js', 'gfx-gl-sprites-plan.js', 'gfx-gl.js', 'gfx-gl-util.js', 'gfx-gl-world.js', 'gfx-gl-world-data.js', 'gfx-gl-world-shader.js', 'gfx-gl-sprites.js', 'gfx-gl-post.js', 'gfx-stats.js', 'gfx-bench.js',
-  'entities.js', 'audio.js', 'prefs.js', 'messages.js', 'input.js', 'client.js',
+  'entities.js', 'audio.js', 'prefs.js', 'messages.js', 'input.js', 'client.js', 'evbus.js',
   'collide.js', 'placement.js', 'reach.js', 'feedback.js',
   'hunt.js', 'variants.js', 'ward.js', 'tension.js',
   'topology.js', 'levelmem.js', 'death.js', 'channels.js',
@@ -99,3 +107,4 @@ grep -q "backrooms-play-v${PLAY_SW_VERSION}'" "$DEST"/sw.js || { echo "sw.js cac
 echo "built $DEST:"
 ls "$DEST" | sed 's/^/  /'
 echo "  index.html import rewrite -> $(grep -c "'./client.js'" "$DEST"/index.html) match(es)"
+echo "  game.js import rewrite -> $(grep -c "'./evbus.js'" "$DEST"/game.js || true) match(es)"

@@ -17,7 +17,7 @@ const SHELL = [
   '/renderer/topology.js', '/renderer/levelmem.js', '/renderer/death.js', '/renderer/channels.js',
   '/renderer/fogmap.js', '/renderer/sightpins.js', '/renderer/mapcard.js', '/renderer/compass.js',
   '/renderer/dress.js', '/renderer/containers.js', '/renderer/haunts.js',
-  '/net/client.js', '/settings.js',
+  '/net/client.js', '/net/evbus.js', '/settings.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png',
 ]
 

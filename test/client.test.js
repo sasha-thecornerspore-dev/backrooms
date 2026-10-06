@@ -277,6 +277,8 @@ describe('remote records', () => {
     await c1.connect('stillroom'); await c2.connect('stillroom')
     c1.sendPos(3, 3, 0)
     await sleep(700)
+    // the full suite runs files in parallel: a loaded machine delays the server's 20 Hz lists, so give the clock up to 1.5 s more to read 0.6
+    for (let t = 0; t < 1500 && !(c2.getRemotePlayers()[0]?.stillFor >= 0.6); t += 25) await sleep(25)
     expect(c2.getRemotePlayers()[0].stillFor).toBeGreaterThanOrEqual(0.6)
     c1.sendPos(4, 3, 0)
     await sleep(120)

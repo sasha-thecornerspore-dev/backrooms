@@ -43,3 +43,19 @@ describe('offline shell lists: the import closure of game.js', () => {
     })
   }
 })
+
+// The closure above follows only './x.js' siblings: the event bus (src/net/evbus.js, imported by game.js as '../net/evbus.js') sits beside the
+// multiplayer client, so both lists name it by hand and the /play/ build copies it flat and rewrites the import to its sibling.
+describe('offline shell lists: the net modules', () => {
+  it('src/sw.js and tools/build-play.sh both carry the client and the event bus', () => {
+    expect(sw).toContain(`'/net/client.js'`)
+    expect(sw).toContain(`'/net/evbus.js'`)
+    expect(build).toContain(`'client.js'`)
+    expect(build).toContain(`'evbus.js'`)
+  })
+  it('the /play/ build copies evbus.js flat and rewrites ../net/evbus.js to ./evbus.js, failing on any ../net/ import left over', () => {
+    expect(build).toContain('cp "$SRC"/net/evbus.js "$DEST"/evbus.js')
+    expect(build).toContain('-e "s#\\.\\./net/evbus\\.js#./evbus.js#g"')
+    expect(build).toMatch(/! grep -l "\\\.\\\.\/net\/" "\$DEST"\/\*\.js \|\| \{ echo .* >&2; exit 1; \}/)
+  })
+})
