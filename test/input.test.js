@@ -7,8 +7,8 @@ const ev = (code, repeat = false) => ({ code, repeat })
 const at = (over) => ({ ...base, ...over })
 
 describe('takeKey', () => {
-  it('ignores repeat on KeyF/KeyE/Space/Tab/KeyQ/KeyX', () => {
-    for (const code of ['KeyF', 'KeyE', 'Space', 'Tab', 'KeyQ', 'KeyX']) expect(takeKey(ev(code, true), base)).toBe('ignore')
+  it('ignores repeat on KeyF/KeyE/Space/Tab/KeyQ/KeyX/KeyC', () => {
+    for (const code of ['KeyF', 'KeyE', 'Space', 'Tab', 'KeyQ', 'KeyX', 'KeyC']) expect(takeKey(ev(code, true), base)).toBe('ignore')
   })
 
   it('takes repeat on movement keys', () => {
@@ -47,7 +47,7 @@ describe('takeKey', () => {
   })
 
   it('everything else is take', () => {
-    for (const code of ['KeyW', 'KeyF', 'KeyE', 'KeyQ', 'KeyX', 'Escape', 'Digit1']) expect(takeKey(ev(code), base)).toBe('take')
+    for (const code of ['KeyW', 'KeyF', 'KeyE', 'KeyQ', 'KeyX', 'KeyC', 'Escape', 'Digit1']) expect(takeKey(ev(code), base)).toBe('take')
     expect(takeKey(ev('KeyF'), at({ activeTag: 'BUTTON', settingsOpen: true }))).toBe('take')
   })
 

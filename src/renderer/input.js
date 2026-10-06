@@ -6,7 +6,7 @@
 //                   canvas focused) with the settings panel hidden — the panel's own tab order wins while it is open
 //   'take'          everything else
 const EDITABLE   = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
-const NO_REPEAT  = new Set(['KeyF', 'KeyE', 'Space', 'Tab', 'KeyQ', 'KeyX'])   // verbs fire once per press, however long it is held
+const NO_REPEAT  = new Set(['KeyF', 'KeyE', 'Space', 'Tab', 'KeyQ', 'KeyX', 'KeyC'])   // verbs fire once per press, however long it is held
 const GAME_FOCUS = new Set(['BODY', 'CANVAS'])
 const NONE = {}
 
