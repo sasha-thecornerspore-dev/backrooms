@@ -34,9 +34,10 @@ describe('game.js: buildLevel order (cache -> grid -> bodies -> decor(hooks) -> 
     expect(game).toMatch(/onChunk: \(k, bundle\) => bodies\.setChunk\(k, bundle\.colliders\),\r?\n\s*onEvict: \(k\) => bodies\.dropChunk\(k\),/)
     expect(game).toMatch(/level = \{ index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages \}/)
   })
-  it('the contact sets are level-scoped (cleared next to vendedSet) and the later steps are marked for their integrators', () => {
-    expect(game).toMatch(/vendedSet\.clear\(\)[^\n]*\r?\n\s*bumpSaid\.clear\(\); clutterSeen\.clear\(\)/)
-    expect(game).toMatch(/passes: \[\],\s*\/\/ TODO\(integrate:floors,dress\)/)
+  it('the contact sets are level-scoped (cleared next to the frame\'s vendedSet, which levelmem now hands out) and the dress step is marked for its integrator', () => {
+    expect(game).toMatch(/vendedSet = mem\.vendedFor\(index, playT\)[^\n]*\r?\n\s*bumpSaid\.clear\(\); clutterSeen\.clear\(\)/)
+    expect(game).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\)\]\.filter\(Boolean\),/)   // floors: the stairs pass runs; dress: still marked
+    expect(game).toMatch(/TODO\(integrate:dress\)/)
     // the creatures step: hunt.js is the one creature-solidity / hostility rule (the placeholders are gone)
     expect(game).toMatch(/import \{ hostile, solidCreature \} from '\.\/hunt\.js'/)
     expect(game).not.toMatch(/huntSolidCreature|huntHostile|TODO\(integrate:hunt\)/)
@@ -87,10 +88,12 @@ describe("game.js: noteContact (the report's rules)", () => {
 })
 
 describe('game.js: settle on resume and on the pref', () => {
-  it('a resumed player is settled after decor streams the resumed chunk; a push over half a cell relocates them with the line', () => {
-    expect(game).toMatch(/level\.grid\.setPlayerChunk\(pcx, pcy\)\r?\n\s*level\.cache\.preload\(pcx, pcy\)\r?\n\s*level\.decor\.update\(pcx, pcy\); itemSys\.update\(pcx, pcy\)\r?\n\s*\/\/[^\n]*\r?\n\s*level\.entitySys\.restoreDispelled\(resume\.dispelled \?\? \[\]\)\r?\n\s*if \(!getPref\('solidBodies'\)\) return\r?\n\s*const moved = level\.solid\.settlePlayer\(player\)\r?\n\s*if \(moved > 0\.5\) \{/)
+  it('a resumed player is settled after decor streams the resumed chunk (applyResume: updateAt, then settlePlayer last); a push over half a cell relocates them with the line', () => {
+    expect(game).toMatch(/updateAt: \(pcx, pcy\) => \{ level\.grid\.setPlayerChunk\(pcx, pcy\); level\.cache\.preload\(pcx, pcy\); level\.decor\.update\(pcx, pcy\); itemSys\.update\(pcx, pcy\) \}/)
+    expect(game).toMatch(/function resumeSettle\(\) \{\r?\n\s*if \(!getPref\('solidBodies'\)\) return\r?\n\s*const moved = level\.solid\.settlePlayer\(player\)\r?\n\s*if \(moved > 0\.5\) \{/)
     expect(game).toMatch(/showMessage\('you woke somewhere slightly else\.', PRIO\.discovery\)/)
-    expect(game).toMatch(/renderHotbar\(\)\r?\n\s*\}\r?\n\s*resumeSettle\(\)\r?\n\s*\} else \{/)
+    expect(game).toMatch(/const r = applyResume\(resume, \{/)
+    expect(game).toMatch(/settlePlayer: resumeSettle,/)
     expect(game).toMatch(/for \(let r = 0; r <= 3; r\+\+\)/)                     // the spiral: at most 3 cells out
   })
   it('switching Solid furniture on settles once', () => {
@@ -99,14 +102,14 @@ describe('game.js: settle on resume and on the pref', () => {
 })
 
 describe('game.js: the ways and the stairs', () => {
-  it("the prompt and F use nearestWay with the way's own label; the compass reads the reused { rec, dist }", () => {
+  it("the prompt and F use nearestWay with the way's label and floor (wayLabel); the compass reads the reused { rec, dist } as its fallback", () => {
     expect(game).toMatch(/const nearExit = level\.decor\.nearestWay\(player\.x, player\.y, 1\.6\)/)
     expect(game).not.toMatch(/nearestExit\(/)
     expect(game).not.toMatch(/nearestExitAny\(/)
-    expect(game).toMatch(/itemHintEl\.textContent = `f · \$\{nearExit\.label\}`/)
-    expect(game).toMatch(/descend\(nearExit\.target, nearExit\.label\)/)
-    expect(game).toMatch(/const anyExit = level\.decor\.nearestWayAny\(player\.x, player\.y\)/)
-    expect(game).toMatch(/Math\.atan2\(anyExit\.rec\.y - player\.y, anyExit\.rec\.x - player\.x\)/)
+    expect(game).toMatch(/'f · the way is still closing\.' : `f · \$\{wayLabel\(nearExit\)\}`/)
+    expect(game).toMatch(/else if \(nearExit\) \{\r?\n\s*travel\(nearExit\)/)
+    expect(game).toMatch(/compassState\.fallback = level\.decor\.nearestWayAny\(player\.x, player\.y\)/)
+    expect(game).not.toMatch(/anyExit/)
   })
   it('the stairs are a separate pooled category drawn with the exit fill, right after the exits', () => {
     expect(game).toMatch(/entityAsm\.add\('exit', level\.decor\.getExits\(\), EF\.exit\)\r?\n\s*entityAsm\.add\('stair', level\.decor\.getStairs\(\), EF\.exit\)/)

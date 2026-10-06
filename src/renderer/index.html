@@ -250,10 +250,12 @@
     /* found-scrap reading card — aged paper, with the notice panel's inset hairline */
     #note-card { position: fixed; inset: 0; background: rgba(0,0,0,0.74);
       display: flex; align-items: center; justify-content: center; z-index: 55; }
-    #note-inner {
+    #note-inner, .paper {
       background: #e6ddc4; color: #241c0c; border: 1px solid #b8a878;
       box-shadow: 0 12px 40px rgba(0,0,0,0.6), inset 0 0 60px rgba(150,130,80,0.22);
       outline: 1px solid rgba(36,28,12,0.24); outline-offset: -6px;
+    }
+    #note-inner {
       padding: 34px 30px 20px; max-width: 460px; width: 86%;
       font: 15px/1.85 var(--mono); letter-spacing: 0.3px;
       transform: rotate(-0.6deg); cursor: pointer;
@@ -261,6 +263,26 @@
     #note-text { white-space: pre-wrap; }
     #note-foot { margin-top: 20px; font-size: 11px; letter-spacing: 2px; color: #54461f; }
     #note-hint { margin-top: 6px; font-size: 10px; letter-spacing: 2px; color: #5c4d26; }
+    /* the map card (mapcard.js): a sheet of cream paper (.paper: the note's look) risen over the lower two-thirds of the view — held, not
+       modal: the scene keeps running behind it at half pace, and the top third stays visible (max-height 62vh) */
+    #map-card {
+      position: fixed; left: 0; right: 0; bottom: 0; top: 38vh; display: none; align-items: flex-start; justify-content: center;
+      z-index: 55; pointer-events: none;
+    }
+    #map-inner {
+      display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 16px 10px;
+      max-height: 62vh; max-width: 86vw; pointer-events: auto; transform: rotate(0.4deg); cursor: pointer;
+    }
+    #map-canvas { display: block; width: min(448px, calc(86vw - 34px), calc(62vh - 74px)); height: auto; image-rendering: pixelated; }
+    #map-foot { font: 11px var(--mono); letter-spacing: 2px; color: #54461f; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    #map-hint { font: 10px var(--mono); letter-spacing: 2px; color: #5c4d26; }
+    /* the paper corner under the HUD plate: the map's tab on touch only (the keyboard has Tab); a tap reads as Tab (game.js) */
+    #map-tab {
+      display: none; width: 36px; height: 36px; align-items: center; justify-content: center;
+      font: 700 9px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: #54461f; cursor: pointer;
+      transform: rotate(-2deg); outline-offset: -4px;
+    }
+    @media (pointer: coarse) { #map-tab { display: flex; pointer-events: auto; } }
     #presence-hint {
       position: fixed; bottom: 140px; left: 50%; transform: translateX(-50%);
       padding: 5px 16px 6px; font: 700 11px var(--mono);
@@ -518,6 +540,7 @@
       <div id="hp-wrap"><span id="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div></div></div>
       <div id="san-wrap"><span id="san-label">SAN</span><div id="san-bar"><div id="san-fill"></div></div></div>
     </div>
+    <div id="map-tab" class="paper" title="the map (tab)">map</div>
     <div id="hotbar-dock">
       <div id="hotbar"></div>
       <button id="btn-discard" title="set the selected item down (x)">✕ discard</button>
@@ -531,7 +554,7 @@
   </div>
   <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file …)" spellcheck="false" style="display:none"/>
   <div id="msg"></div>
-  <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x set down</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span></div>
+  <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x set down</span> · <span>tab map</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span></div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
   <div id="item-hint" style="opacity:0"></div>
   <div id="stamina-wrap"><div id="stamina-fill"></div></div>
@@ -556,6 +579,14 @@
       <p id="note-text"></p>
       <p id="note-foot"></p>
       <div id="note-hint">tap · e · esc — put it back</div>
+    </div>
+  </div>
+
+  <div id="map-card" style="display:none">
+    <div id="map-inner" class="paper">
+      <canvas id="map-canvas" width="448" height="448"></canvas>
+      <p id="map-foot"></p>
+      <div id="map-hint">tab · esc — fold it</div>
     </div>
   </div>
 

@@ -98,7 +98,7 @@ describe('game.js: set down (X and the dock ✕), the dropped things\' clocks, t
     expect(game).not.toMatch(/function discardSelected\(\)/)
     expect(game).not.toMatch(/itemSys\.discardSelected\(\)/)
   })
-  it('throwSelected: items.throwSelected on the play clock, the four outcomes, then the hotbar; the memory write is the floors TODO', () => {
+  it('throwSelected: items.throwSelected on the play clock, the four outcomes, then the hotbar; the memory write is the loop\'s, on its one dirty read', () => {
     const fn = game.slice(game.indexOf('function throwSelected()'), game.indexOf("document.getElementById('btn-discard')"))
     expect(fn).toContain('const r = itemSys.throwSelected(player.x, player.y, player.angle, playT)')
     expect(fn).toMatch(/if \(!r\.ok\) \{ if \(r\.reason === 'kept'\) showMessage\('you do not put that down\.'\) \}/)
@@ -106,7 +106,8 @@ describe('game.js: set down (X and the dock ✕), the dropped things\' clocks, t
     expect(fn).toContain("t === 'glowstick'          ? 'you leave the green light where it lies.'")
     expect(fn).toContain('`you drop the ${ITEM_NAMES[t] ?? t}.`')
     expect(fn).toContain('renderHotbar()')
-    expect(fn).toMatch(/TODO\(integrate:floors\): mem\.setDropped\(level\.index, itemSys\.getDropped\(\)\)/)
+    expect(fn).not.toMatch(/TODO\(integrate:/)
+    expect(game).toMatch(/if \(itemsDirty\) \{ mem\.setDropped\(level\.index, itemSys\.getDropped\(\)\); persist\(\) \}/)
   })
   it('each frame: the clocks run first (their two ambient lines), then the lures (one isDirty read, 0.5 s), then the radio hum reads the lures within 12 u', () => {
     expect(game).toMatch(/const expired = itemSys\.expireDropped\(playT\)\r?\n\s*for \(let i = 0; i < expired\.length; i\+\+\) showMessage\(expired\[i\]\.kind === 'battery' \? 'the batteries go\.' : 'the green light gutters out\.', PRIO\.ambient\)/)
@@ -121,8 +122,9 @@ describe('game.js: set down (X and the dock ✕), the dropped things\' clocks, t
     expect(at('level.grid.setPlayerChunk(pcx, pcy)')).toBeLessThan(at('lureNoiseT += dt'))
     expect(at('const creaturesLive = creaturesOn && !!cfg.entities?.enabled')).toBeLessThan(at('lureNoiseT += dt'))
   })
-  it('buildLevel still enters the level with cfg alone (the taken / dropped memory is the floors TODO, named)', () => {
-    expect(game).toMatch(/TODO\(integrate:floors\): itemSys\.enterLevel\(cfg, cfg\.map \? null : \[\.\.\.mem\.takenFor\(index\)\], cfg\.map \? null : mem\.droppedFor\(index\)\)\r?\n\s*itemSys\.enterLevel\(cfg\)/)
+  it('buildLevel enters the level with what the floor remembers (levelmem): the keys taken and the items set down, nothing for the block', () => {
+    expect(game).toMatch(/itemSys\.enterLevel\(cfg, cfg\.map \? null : mem\.takenFor\(index\), cfg\.map \? null : mem\.droppedFor\(index\)\)/)
+    expect(game).not.toMatch(/TODO\(integrate:floors\)/)
   })
 })
 
@@ -137,7 +139,7 @@ describe('game.js: the bandage commit, the quiet water, the sour noise', () => {
   it('a hit cancels it with the line; buildLevel and a set-down / slot change cancel it quietly; die says the line', () => {
     expect(game).toMatch(/function cancelCommit\(msg\) \{ if \(commit\.active\) \{ commit\.cancel\(\); if \(msg\) showMessage\(msg\) \} \}/)
     expect(game).toMatch(/lastHitT = playT\r?\n\s*if \(mapOpen\) closeMap\(\); if \(noteOpen\) closeNoteCard\(\)\r?\n\s*cancelCommit\('the bandage slips\.'\)/)
-    const build = game.slice(game.indexOf('function buildLevel(index)'), game.indexOf('const fader = createFader('))
+    const build = game.slice(game.indexOf('function buildLevel(index, at = null)'), game.indexOf('const fader = createFader('))
     expect(build).toMatch(/cancelCommit\(\)\s/)
     expect(build).toContain('tension.reset(); huntMood = false')
     const die = game.slice(game.indexOf('function die()'), game.indexOf('// ── input ──'))

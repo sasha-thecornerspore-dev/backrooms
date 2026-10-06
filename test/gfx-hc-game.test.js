@@ -151,4 +151,10 @@ describe('game.js wiring (source guards)', () => {
     expect(game).not.toMatch(/if \(!level\.cache\.isWall\(nx, player\.y, pcx, pcy\)\) player\.x = nx/)     // the inline point mover lives in collide.js movePoint now
     expect((game.match(/(?<!function )tryMove\(/g) || []).length).toBe(1)                               // W/S/A/D sum into one step: one call site
   })
+  it('floors: game.js has no descend( definition and exactly one travel( definition; the keydown handler goes through takeKey', () => {
+    expect(game).not.toMatch(/function descend\(/)
+    expect(game).not.toMatch(/\bdescend\(/)
+    expect((game.match(/function travel\(/g) || []).length).toBe(1)
+    expect(game).toMatch(/window\.addEventListener\('keydown', e => \{\r?\n\s*const r = takeKey\(e, /)
+  })
 })

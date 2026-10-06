@@ -98,7 +98,8 @@ the spirits decide. or rather, i do.
 | arrow keys | turn (when mouse unlocked) |
 | click | lock mouse for look |
 | space (hold to charge) | **ward** — tap to shove the things back; hold it and your steps slow while the air tightens, then a narrower, longer push throws them farther (costs your legs) |
-| f | take an item · no-clip through an exit |
+| f | take an item · take a way — no-clip through an exit, climb a stairwell, step into the lift |
+| tab | the map (hold your pace) |
 | q | use selected item |
 | x · set down | set the selected item down where you stand — a talking radio keeps talking where it lies |
 | 1–6 | select inventory slot |
@@ -169,7 +170,9 @@ every solo run begins outside, in **the block** — the one real place in the ga
 | **2 — pipe dreams** | a maze of maintenance tunnels. steam, rust, and the dark between the pipes. bring your own light. | follow the pipes to a service hatch and drop into the dark. |
 | **3 — electrical station** | a lightless labyrinth of transformers and live cable. the deepest you should go. | a door humming with current — through it, the lobby waits again. |
 
-descend and the world changes around you: the palette, the fog, the clutter, and what is in it with you. your hit points and your inventory come with you. the floor you left does not remember you.
+descend and the world changes around you: the palette, the fog, the clutter, and what is in it with you. your hit points and your inventory come with you.
+
+the floors are stacked in one building. under some holes there is a **stairwell up**, back to the floor you fell from, a few rooms over from where you landed; and somewhere on level 1 a **lift** stands, uncalled — it only goes one place, and it does not come back for you. the floor you left remembers you: what you took stays taken, what you set down lies where you left it, and a machine you emptied clunks again only after you have been away a while. press **tab** for the map — a sheet of pencil strokes for what you have walked and small glyphs for what you have seen, held while you keep moving at half pace. and when something finally has you, you do not wake where you fell in: you wake a floor above, beside the hole you fell through, lighter — whatever was in your hand is gone, your ceiling a little lower, the trays empty for that visit.
 
 ## building from source
 

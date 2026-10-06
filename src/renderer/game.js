@@ -24,6 +24,16 @@ import { quiet, lureWithin, createCommit, QUIET_SECONDS } from './tactics.js'
 import { createWardCharger, wardOpts } from './ward.js'
 import { createTension, huntDelta, calmDelta } from './tension.js'
 import { FOV, HF } from './gfx-frame.js'
+import { waysFor, stairsPass, chunkMid, findOpenNear, arrivalFor, wayMessage, wayLabel } from './topology.js'
+import { createLevelMemory, applyResume } from './levelmem.js'
+import { resolveDeath, onArrive, wakeSpot } from './death.js'
+import { createFogMap, revealRadius } from './fogmap.js'
+import { visibleWays, SIGHT_LINES, PROX_PIN } from './sightpins.js'
+import { createMapCard } from './mapcard.js'
+import { compassLines, compassText, arrivalSummary } from './compass.js'
+// the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
+export { exitArrow } from './compass.js'
+export { applyResume } from './levelmem.js'
 
 // Presence: 1 in 12 chunks has a spirit at its midpoint
 function chunkHasPresence(cx, cy) {
@@ -65,14 +75,6 @@ const NPC_LINES = [
   'bring a light to the pipes. the dark there is not empty.',
   "if you make it out, don't tell them about me.",
 ]
-
-// A directional arrow (clockwise from straight-ahead) for the descent compass.
-const EXIT_DIRS = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖']
-function exitArrow(rel) {
-  let a = rel % (Math.PI * 2)
-  if (a < 0) a += Math.PI * 2
-  return EXIT_DIRS[Math.round(a / (Math.PI / 4)) % 8]
-}
 
 // ── per-frame plumbing that must not allocate (pure, exported for test/gfx-hc-game.test.js) ──
 
@@ -224,11 +226,24 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let wantSprint = false // the sprint key held this frame (the mover's report and the hard-bump rule read it)
   let lastDt     = 1 / 60 // the step the mover measures the enter speed against
   let bobPulse   = 0    // seconds left of the clutter step: a 0.35 s rise-and-settle on the bob
-  let playT      = 0    // seconds of play this run — TODO(integrate:floors): saved in snapshot(), restored on resume
+  let playT      = 0    // seconds of play this run (the clamped simulation step): saved in snapshot(), restored on resume
   let lastHitT   = -Infinity // when a thing last reached you (stamped by the hit block; nothing reads it yet)
   let quietTimer = 0    // sweet almond water sets it (QUIET_SECONDS): footsteps at half loudness while it runs (tactics.quiet)
-  let mapOpen = false             // TODO(integrate:map): the map card; a hit folds it
-  const closeMap = () => { mapOpen = false }   // TODO(integrate:map): mapCard.close()
+  // ── the floors (topology.js / levelmem.js / death.js): the one memory of what every floor keeps of you (what you took, emptied,
+  //    searched, set down; where you stood), the chunk you arrived in, the way you came by (still closing behind you for 5 s), the
+  //    deaths, and the trays locked after one until the next travel ──
+  const mem = createLevelMemory()
+  let spawnChunk = { cx: 0, cy: 0 }
+  let closing    = null   // { key, until }: the way you just arrived by does not take you straight back
+  let deaths     = 0
+  let vendLocked = false  // after a death: 'the tray is empty.' until the next travel()
+  // ── the map (fogmap.js / sightpins.js / mapcard.js / compass.js): the pencil sheet of what you walked and saw, held not modal ──
+  const fog = createFogMap()
+  let mapOpen = false, mapEverOpened = false, lastLostMsg = -Infinity
+  const compassOut = []                       // compassLines' reused two-slot output (its line objects live on compassOut.slots)
+  let lastCompassAngle = NaN, lastWayCount = -1, lastCompassText = null, lastCellIx = NaN, lastCellIy = NaN
+  const seenWays = [], seenSights = []        // visibleWays' reused out arrays
+  const sightSaid = new Set()                 // 'level:key' of the sights whose first-sight line was said
   let arcWas     = false // the tesla's charge last frame (the lights drop once per charge, not every frame of it)
   let lastStepN  = 0    // the footstep count (floor(bob / PI)) the noise emitter last saw
   let lureT      = 0.5  // seconds since the lures (dropped talking radios) were last recomputed
@@ -257,9 +272,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const eventSched = createEventScheduler()
   const ephemera   = []   // transient event-spawned apparitions (render-only, no collision)
 
-  // vending machines dispense once; keys of spent machines (mirrors items.js
-  // `taken` — survives chunk eviction, cleared per level so a floor re-stocks).
-  const vendedSet = new Set()
+  // vending machines dispense once; the keys still spent on this floor at this visit (levelmem.vendedFor: a key expires only after
+  // VEND_RESTOCK_S away from the floor, so a machine never refills while you watch). Replaced per buildLevel; noteVended writes mem.
+  let vendedSet = new Set()
 
   // contact (collide.js): the lines a body says are said once per type per level (hard bumps, clutter), cleared next to vendedSet;
   // the gate keeps the foley to one near bump per 0.5 s
@@ -368,25 +383,32 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     return g
   }
 
-  function buildLevel(index) {
+  // buildLevel(index, at): the level, streamed around chunk `at` (the chunk you arrive in; the origin when none). cfg.ways is the level's
+  // graph (topology.waysFor): [0] is today's exit (decor reads its kind / label), the rest the stairs up / the lift stairsPass places.
+  function buildLevel(index, at = null) {
     const tb    = performance.now()
     const cfg   = levelConfig(base, index)
+    cfg.ways    = waysFor(index)
+    spawnChunk  = at ?? { cx: 0, cy: 0 }
     // HUD theme hook: index.html restyles body[data-level] ('0'..'3' | '∅') — light ink on dark plates below the lobby
     if (typeof document !== 'undefined' && document.body) document.body.dataset.level = String(cfg.levelIndex)
     // Level ∅ is a hand-authored fixed grid; the rest are procedural chunk worlds.
     // Both expose the same isWall(wx,wy,pcx,pcy); the fixed map adds materialAt.
     const cache = cfg.map ? createFixedMap(cfg.map) : createChunkCache(cfg, worldSeed)
-    cache.preload(0, 0)
+    cache.preload(spawnChunk.cx, spawnChunk.cy)
     const isWall = (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy)
     // the grid the hot paths read (LOS, perception, fog): cell-indexed, no key string per ask (world.js createGridReader). A fixed map
     // (Level ∅) has no getChunk, so the reader wraps isWall at the cell centre instead
     const grid      = createGridReader(cfg.map ? null : cache, isWall)
+    grid.setPlayerChunk(spawnChunk.cx, spawnChunk.cy)
     // the bodies: a per-chunk collider index that decor fills as it scans (placement.js settles each chunk's props / machine / sight /
     // soul against the real walls and hands the same records to onChunk), and the solid world the mover and the creatures read it through.
     // Order: cache -> grid -> bodies -> decor(hooks) -> solid -> entitySys -> gfx
     const bodies    = createColliderIndex()
     const decor     = createDecorSystem(cfg, isWall, worldSeed, {
-      passes: [],   // TODO(integrate:floors,dress): cfg.map ? [] : [stairsPass(cfg, waysFor(index)), dressPass(cfg)].filter(Boolean)
+      // the passes after the sights block, in the fixed order: the stairs up / the lift (topology.js; null on L0 and the block), then the
+      // room dressing — TODO(integrate:dress): [stairsPass(cfg, cfg.ways), dressPass(cfg)].filter(Boolean)
+      passes: cfg.map ? [] : [stairsPass(cfg, cfg.ways)].filter(Boolean),
       onChunk: (k, bundle) => bodies.setChunk(k, bundle.colliders),
       onEvict: (k) => bodies.dropChunk(k),
     })
@@ -399,16 +421,18 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const tg        = performance.now()
     const gfx       = makeGfx(cfg, cache)
     const gfxMs     = performance.now() - tg
-    // TODO(integrate:floors): itemSys.enterLevel(cfg, cfg.map ? null : [...mem.takenFor(index)], cfg.map ? null : mem.droppedFor(index))
-    itemSys.enterLevel(cfg)
-    vendedSet.clear()               // a re-entered floor re-stocks its machines
+    // what this floor remembers of you (levelmem): the keys you took never respawn, what you set down lies where you left it, and the
+    // machines you emptied stay empty until you have been away long enough (the block keeps nothing)
+    itemSys.enterLevel(cfg, cfg.map ? null : mem.takenFor(index), cfg.map ? null : mem.droppedFor(index))
+    vendedSet = mem.vendedFor(index, playT)   // the keys still spent at this visit: a re-entered floor re-stocks only in your absence
     bumpSaid.clear(); clutterSeen.clear(); turningSaid.clear(); turnSaid = false   // and says its contact / turning lines afresh
     cancelCommit()                  // a wrap does not survive the fall (the bandage stays); the new floor's song starts calm
     tension.reset(); huntMood = false
 
-    // fixed maps spawn at their authored point; procedural at the origin room (carved open)
+    // fixed maps spawn at their authored point; procedural at the arrival chunk's hall crossing (the origin's is today's HALF + 0.5
+    // spawn, carved open) or the nearest open cell to it
     if (cfg.spawn) { player.x = cfg.spawn.x; player.y = cfg.spawn.y }
-    else { player.x = HALF + 0.5; player.y = HALF + 0.5 }
+    else { const mid = chunkMid(spawnChunk.cx, spawnChunk.cy), m = findOpenNear(mid.x, mid.y, grid.floor) ?? mid; player.x = m.x; player.y = m.y }
     spawnX = player.x; spawnY = player.y
 
     const messages = [
@@ -420,8 +444,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // Assign `level` BEFORE warming up subsystems — itemSys reads level.cache
     // through a proxy, so the object must exist first.
     level = { index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages }
-    decor.update(0, 0); itemSys.update(0, 0)
+    decor.update(spawnChunk.cx, spawnChunk.cy); itemSys.update(spawnChunk.cx, spawnChunk.cy)
     msgQ.clear()                    // the old floor's lines do not follow you down (one fade if one was up)
+    lastCellIx = NaN                // the compass recomputes on the floor's first frame
     // Morph the bed into this level's mood — unless the player has chosen an
     // alternate track with N, in which case their choice follows them down.
     playSong(trackIdx < 0 ? cfg.music : TRACKS[trackIdx].mood)
@@ -437,32 +462,100 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const fader = createFader({ el: fadeEl, frames: () => frameCount })
   function fadeThen(cb) { fader.run(cb, () => { transitioning = false }) }
 
-  function descend(target, label) {
+  // the chunk under the player (travel / die run outside the loop, where its pcx / pcy are not in scope)
+  const chunkUnder = () => ({ cx: Math.floor(player.x / CHUNK_SIZE), cy: Math.floor(player.y / CHUNK_SIZE) })
+
+  // travel(way): the one way between floors — a hole down, a stairwell up, the lift, the ring back — in ONE coordinate system (topology.js),
+  // so you land beside the partner of the way you took (the stair under the hole, the hole over the stair), where you last stood on a ring
+  // floor, or at the from-chunk's hall crossing. The floor you leave remembers you (levelmem); the way you arrive by is still closing for 5 s.
+  function travel(way) {
     if (transitioning) return
+    if (closing && closing.key === way.key && playT < closing.until) return
     transitioning = true
     document.exitPointerLock()
+    if (mapOpen) closeMap()
+    const fromC = chunkUnder()
     // the stalkers on your heels follow you down: read now, placed once the new floor's bodies stand, arriving a few beats after you
-    // (inject returns 0 where entities are disabled: the lobby, the block) — TODO(integrate:floors): never on a lift
-    const followers = creaturesOn ? level.entitySys.snapshotChasers(player, 10, 3) : []
+    // (inject returns 0 where entities are disabled: the lobby, the block; nothing follows you into the lift)
+    const followers = (creaturesOn && way.kind !== 'lift') ? level.entitySys.snapshotChasers(player, 10, 3) : []
+    mem.leave(level.index, player, fromC, playT)
+    mem.setDropped(level.index, itemSys.getDropped())
+    if (way.kind === 'lift') showMessage(wayMessage(way, { before: true }), PRIO.discovery)
     fadeThen(() => {
-      buildLevel(target)
+      buildLevel(way.target, fromC)
+      const partner = way.kind === 'down' ? level.decor.wayAt(fromC.cx, fromC.cy, 'up') : way.kind === 'up' ? level.decor.exitAt(fromC.cx, fromC.cy) : null
+      const m = way.kind === 'ring' ? mem.get(way.target) : null
+      // a ring floor remembers where you stood: stream that chunk first, so the arrival is validated against the right walls
+      if (m?.x != null) { level.cache.preload(m.cx, m.cy); level.grid.setPlayerChunk(m.cx, m.cy) }
+      const a = arrivalFor({ way, fromCx: fromC.cx, fromCy: fromC.cy, partner, mem: m, floorFn: level.grid.floor, angle: player.angle })
+      player.x = a.x; player.y = a.y
+      spawnChunk = chunkUnder()         // where you actually stand (a.chunk is the from-chunk; a ring arrival or the offset can land you one over)
+      invuln = 1.6
+      closing = { key: partner?.key ?? null, until: playT + 5 }
+      level.grid.setPlayerChunk(spawnChunk.cx, spawnChunk.cy); level.cache.preload(spawnChunk.cx, spawnChunk.cy)
+      level.decor.update(spawnChunk.cx, spawnChunk.cy); itemSys.update(spawnChunk.cx, spawnChunk.cy)
+      level.solid.settlePlayer(player)
+      const rec = mem.arrive(way.target, spawnChunk, playT)
+      const first = rec.visits === 1
+      const hp0 = player.maxHp
+      player.maxHp = onArrive(player.maxHp, first)           // a first visit gives five back (death.js: the one owner of maxHp)
+      vendLocked = false
       if (followers.length) level.entitySys.inject(followers, player.x, player.y, 7, 10, 3 + Math.random() * 2, (x, y) => level.solid.forEntities.blocked(x, y, 0.2))
-      persist()                       // save on every descent
+      if (!level.cfg.map) fog.pinThing(way.target, 'arrived:' + (playT | 0), 'arrived', player.x, player.y)
+      persist(true)                     // save on every travel, with the map
       showMessage(level.cfg.levelName, PRIO.combat)
-      if (level.cfg.exit?.hint) setTimeout(() => showMessage(level.cfg.exit.hint, PRIO.discovery), 3800)
+      const wm = wayMessage(way, { partner, mem: mem.get(way.target) })
+      if (first) {
+        if (level.cfg.exit?.hint) setTimeout(() => showMessage(level.cfg.exit.hint, PRIO.discovery), 3800)
+        if (wm) setTimeout(() => showMessage(wm, PRIO.discovery), 7500)
+      } else {
+        if (wm) setTimeout(() => showMessage(wm, PRIO.discovery), 3800)
+        const s = arrivalSummary(fog.countWays(way.target), rec.visits)
+        if (s) setTimeout(() => showMessage(s, PRIO.discovery), 7500)
+      }
+      if (player.maxHp > hp0) setTimeout(() => showMessage('the floor remembers you less.', PRIO.discovery), 11000)
     })
   }
 
+  // die(): death.js resolves it — you wake a floor above (the lobby and the block where they are) beside the hole you fell through, facing
+  // it: whatever was in your hand is gone (a tool, the ballast and the slip stay), the ceiling five lower (never below 60), the trays
+  // empty until the next travel. The floor you died on remembers where you fell.
   function die() {
     if (transitioning) return
     transitioning = true
     document.exitPointerLock()
+    if (mapOpen) closeMap()
     cancelCommit('the bandage slips.')   // it took you in the second you held still
+    showMessage('everything goes dark.', PRIO.combat)
+    const C = chunkUnder()
+    mem.leave(level.index, player, C, playT)
+    mem.setDropped(level.index, itemSys.getDropped())
     fadeThen(() => {
-      player.hp = player.maxHp
-      player.x = HALF + 0.5; player.y = HALF + 0.5
+      const r = resolveDeath({ level: level.index, inventory: itemSys.inventory, selected: itemSys.selected, maxHp: player.maxHp, deaths, names: ITEM_NAMES })
+      if (r.wakeLevel !== level.index) buildLevel(r.wakeLevel, C)
+      const mid = chunkMid(C.cx, C.cy)
+      const exit = level.decor.exitAt(C.cx, C.cy) ?? level.decor.nearestWayAny(mid.x, mid.y)?.rec ?? null
+      const spot = exit ? wakeSpot(exit, level.grid.floor) : null
+      if (spot) { player.x = spot.x; player.y = spot.y; player.angle = spot.angle }
+      else { const m = findOpenNear(mid.x, mid.y, level.grid.floor) ?? mid; player.x = m.x; player.y = m.y }
+      spawnChunk = chunkUnder()
+      closing = { key: exit?.key ?? null, until: playT + 5 }
+      itemSys.inventory.length = 0
+      itemSys.inventory.push(...r.inventory)
+      itemSys.select(r.selected)
+      player.maxHp = r.maxHp; player.hp = r.maxHp
+      deaths = r.deaths
+      vendLocked = r.vendLocked
       invuln = 1.6; regenDelay = 0; hurt = 0
-      showMessage('everything goes dark. you wake where you fell in.', PRIO.combat)
+      level.grid.setPlayerChunk(spawnChunk.cx, spawnChunk.cy); level.cache.preload(spawnChunk.cx, spawnChunk.cy)
+      level.decor.update(spawnChunk.cx, spawnChunk.cy); itemSys.update(spawnChunk.cx, spawnChunk.cy)
+      level.solid.settlePlayer(player)
+      mem.arrive(level.index, spawnChunk, playT)
+      renderHotbar()
+      persist(true)
+      showMessage(level.cfg.levelName, PRIO.combat)
+      setTimeout(() => showMessage(r.message, PRIO.discovery), 2600)
+      if (r.dropped) setTimeout(() => showMessage(r.droppedLine, PRIO.discovery), 5200)
     })
   }
 
@@ -537,12 +630,22 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     noteOpen = true
     document.exitPointerLock()
     if (!readSet.has(scrap.frag)) { readSet.add(scrap.frag); sanity = Math.min(100, sanity + 6) }   // not alone, for a moment
+    if (!level.cfg.map) fog.pinThing(level.index, scrap.key, 'note', scrap.x, scrap.y, true)       // on the map, filled in: read
     noteTextEl.textContent = SCRAPS[scrap.frag] ?? ''
     noteFootEl.textContent = `${readSet.size} of ${SCRAPS.length} pages found`
     noteCardEl.style.display = 'flex'
   }
   function closeNoteCard() { noteOpen = false; if (noteCardEl) noteCardEl.style.display = 'none' }
   noteCardEl?.addEventListener('pointerdown', closeNoteCard)   // tap / click the card to put it back
+
+  // ── the map card (mapcard.js): the pencil sheet over the lower view. HELD, NOT MODAL — the pointer lock stays, the loop gates the pace
+  //    and the verbs, a hit folds it. A tap on the card (touch) or on the paper corner #map-tab reads as Tab, so every way of folding it
+  //    runs through the one K['Tab'] edge in the loop; touchstart's preventDefault keeps the synthesized click from firing a second one. ──
+  const mapCard = createMapCard(document, { fog, getLevel: () => level, getPlayer: () => player, onTap: () => { K['Tab'] = true } })
+  function closeMap() { mapCard.close(); mapOpen = false }
+  const mapTabEl = document.getElementById('map-tab')
+  mapTabEl?.addEventListener('touchstart', (e) => { e.preventDefault(); K['Tab'] = true }, { passive: false })
+  mapTabEl?.addEventListener('click', () => { K['Tab'] = true })
 
   // ── resize ──
   // The backing store is the css size (today's behaviour) unless the player opted into hi-DPI, in which case the
@@ -657,7 +760,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
                 :                              `you drop the ${ITEM_NAMES[t] ?? t}.`)
     }
     renderHotbar()
-    // TODO(integrate:floors): mem.setDropped(level.index, itemSys.getDropped()) — the loop gates it on its one itemsDirty read
+    // (the floor's memory of what lies here is written by the loop on its one itemsDirty read: mem.setDropped)
   }
   document.getElementById('btn-discard')?.addEventListener('click', throwSelected)
 
@@ -1042,7 +1145,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── vending machine: draw one item, once. Deep down the almond water it gives
   //    may be sour — the lost soul's warning, made real. ──
   function dispenseFromMachine(m) {
-    if (!m || vendedSet.has(m.key)) return
+    if (!m) return
+    if (vendLocked) { showMessage('the tray is empty.'); return }   // a death empties the trays for this visit (until the next travel)
+    if (vendedSet.has(m.key)) return
+    const refilled = mem.wasRestocked(level.index, m.key, playT)   // spent on an earlier visit, restocked while you were away
     const dfloor = level?.index ?? 0
     const pool = ['almond-water', 'almond-water', 'glowstick', 'bandage']
     // Field Recovery caches surface in the deep stacks — a strain gauge, ballast, an exhibit
@@ -1052,14 +1158,21 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const extra = type === 'plumb' ? { tool: true } : (sour ? { sour: true } : {})
     const res = itemSys.grant(type, extra)
     if (!res.ok) { showMessage('the machine whirs, but your hands are already full.'); return }
-    vendedSet.add(m.key)
+    mem.noteVended(level.index, m.key, playT); vendedSet.add(m.key)
+    if (!level.cfg.map) fog.pinThing(level.index, m.key, 'machine', m.x, m.y, true)   // struck through on the map
     renderHotbar(); blip()
-    showMessage(`the machine clunks, and a ${ITEM_NAMES[type] ?? type} drops into the tray.`)
+    const clunk = `the machine clunks, and a ${ITEM_NAMES[type] ?? type} drops into the tray.`
+    if (refilled) { showMessage('the machine has been refilled. by whom.', PRIO.discovery); setTimeout(() => showMessage(clunk), 1600) }
+    else showMessage(clunk)
   }
 
   // ── snapshot + persistence (solo progress & inventory — the "save game") ──
-  function snapshot() {
-    return {
+  // v:1, only ADDED to: memory (levelmem export), playT, deaths, dispelled, and fog (the map, the largest field). The fog is re-exported
+  // on the full cadence only (every 4th periodic save, every travel / death / unload); the saves between carry the last export, so the
+  // map is never absent from the file — the dirty-items save that follows every travel by one frame would otherwise drop it again.
+  let fogExport = null
+  function snapshot(full = false) {
+    const s = {
       level: level?.index ?? 0,
       x: player.x, y: player.y, angle: player.angle,
       hp: player.hp, maxHp: player.maxHp,
@@ -1068,23 +1181,21 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       pagesRead: [...readSet],
       worldSeed, anchor,
       dispelled: level?.entitySys.getDispelled() ?? [],   // the chunks whose presence came apart, with the seconds they stay empty
+      memory: mem.export(), playT, deaths,                // what every floor keeps of you, the play clock, the deaths
     }
+    if (full || !fogExport) fogExport = fog.export()      // the pencil sheets, per floor
+    s.fog = fogExport
+    return s
   }
-  let saveTimer = 0
-  const persist = () => { if (!mpClient) writeSave(snapshot()) }   // solo runs are the ones you resume
-  window.addEventListener('beforeunload', persist)
+  let saveTimer = 0, persistN = 0
+  // solo runs are the ones you resume; the fog rides along on every 4th periodic save and always on a travel / a death / unload
+  function persist(full = false) { if (mpClient) return; persistN++; writeSave(snapshot(full || persistN % 4 === 0)) }
+  window.addEventListener('beforeunload', () => persist(true))
 
-  // The saved position meets the settled furniture: the chunk around it is streamed first (buildLevel scanned the origin), then
+  // The saved position meets the settled furniture (the last step of applyResume): the chunk around it was streamed by updateAt, then
   // settlePlayer lifts the player out of any body or wall face under them. A push of more than half a cell means the spot is gone
   // (a cabinet now stands there), so the nearest open cell centre takes them in instead, and the floor says so.
-  // TODO(integrate:floors): applyResume owns this order (mem.import -> buildLevel -> player fields -> decor/items update -> fog -> settlePlayer)
   function resumeSettle() {
-    const pcx = Math.floor(player.x / CHUNK_SIZE), pcy = Math.floor(player.y / CHUNK_SIZE)
-    level.grid.setPlayerChunk(pcx, pcy)
-    level.cache.preload(pcx, pcy)
-    level.decor.update(pcx, pcy); itemSys.update(pcx, pcy)
-    // the dispelled chunks count their remaining seconds from the system's own clock (playT through deps.now): never a literal 0
-    level.entitySys.restoreDispelled(resume.dispelled ?? [])
     if (!getPref('solidBodies')) return
     const moved = level.solid.settlePlayer(player)
     if (moved > 0.5) {
@@ -1117,22 +1228,36 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── boot: resume a saved run, else a fresh SOLO run enters through Level ∅
   //    (the block — index 4), while online play starts in the lobby together. ──
   if (resume) {
-    buildLevel(resume.level ?? 0)
-    player.x = resume.x ?? player.x
-    player.y = resume.y ?? player.y
-    player.angle = resume.angle ?? 0
-    player.maxHp = resume.maxHp ?? 100
-    player.hp = resume.hp ?? player.maxHp
-    if (Array.isArray(resume.pagesRead)) for (const f of resume.pagesRead) if (Number.isInteger(f) && f >= 0 && f < SCRAPS.length) readSet.add(f)
-    if (Array.isArray(resume.inventory)) {
-      itemSys.inventory.length = 0
-      for (const it of resume.inventory) itemSys.inventory.push({ type: it.type, ...(it.on ? { on: true } : {}) })
-      itemSys.select(Math.max(0, Math.min(5, resume.selected ?? 0)))
-      renderHotbar()
-    }
-    resumeSettle()
+    // levelmem.applyResume owns the order: mem.import + playT + deaths -> buildLevel at the remembered arrival chunk -> the player fields ->
+    // the decor / item scan at the resumed chunk -> the dispelled chunks -> the fog -> the settle. A v:1 save missing every new field loads
+    // to today's behaviour. The clock is set first: buildLevel's vendedFor and the dispelled chunks' remaining seconds count from it (the
+    // entity system reads playT through deps.now, so restoreDispelled is handed the list alone — never applyResume's literal clock).
+    playT = Number(resume.playT) || 0
+    const r = applyResume(resume, {
+      mem, buildLevel,
+      applyPlayer: (s) => {
+        player.x = s.x ?? player.x
+        player.y = s.y ?? player.y
+        player.angle = s.angle ?? 0
+        player.maxHp = s.maxHp ?? 100
+        player.hp = s.hp ?? player.maxHp
+        if (Array.isArray(s.pagesRead)) for (const f of s.pagesRead) if (Number.isInteger(f) && f >= 0 && f < SCRAPS.length) readSet.add(f)
+        if (Array.isArray(s.inventory)) {
+          itemSys.inventory.length = 0
+          for (const it of s.inventory) itemSys.inventory.push({ type: it.type, ...(it.on ? { on: true } : {}) })
+          itemSys.select(Math.max(0, Math.min(5, s.selected ?? 0)))
+          renderHotbar()
+        }
+        return player
+      },
+      updateAt: (pcx, pcy) => { level.grid.setPlayerChunk(pcx, pcy); level.cache.preload(pcx, pcy); level.decor.update(pcx, pcy); itemSys.update(pcx, pcy) },
+      restoreDispelled: (l) => level.entitySys.restoreDispelled(l),
+      fogImport: (f) => { if (f && !fog.import(f)) console.warn('[map] part of the saved map was refused and skipped') },
+      settlePlayer: resumeSettle,
+    })
+    deaths = r.deaths
   } else {
-    buildLevel(mpClient ? 0 : 4)   // solo: fall in through the block (∅); online: the lobby
+    buildLevel(mpClient ? 0 : 4); mem.arrive(level.index, spawnChunk, playT)   // solo: fall in through the block (∅); online: the lobby
   }
   showMessage(level.cfg.levelName, PRIO.combat)
 
@@ -1168,6 +1293,38 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       }
     },
   }) : null
+
+  // ── the map's helpers, built once (nothing allocated per frame): the cache's epoch per chunk (0 where there is none), the decor's
+  //    nearest-way probe for the stale check, the compass's one state object (its stale predicate inside), and the compass element ──
+  const epochOf = (cx, cy) => level.cache.epochOf?.(cx, cy) ?? 0
+  const nearestWayFn = (x, y) => level.decor.nearestWay(x, y, 2)
+  const compassState = { player, known: null, fallback: null, arrived: null, stale: (p) => fog.isStale(level.index, p.chunkKey, epochOf) }
+  const compassEl = document.getElementById('exit-compass')
+  // what goes on the map because you SAW it (sightpins.js), on the cell-change tick only: the ways at 1.35x the fog (the beam shows that
+  // far), the sights at the fog (their first-sight line once, within 9 u), and by proximity (PROX_PIN) the machine, the note and the soul
+  // beside you — the same cone and line of sight the sprite pass and the things use
+  function pinSeen(reach) {
+    const L = level.index, floor = level.grid.floor
+    let n = visibleWays(player, level.decor.getExits(), floor, reach * 1.35, HF, seenWays)
+    for (let i = 0; i < n; i++) { const e = seenWays[i]; fog.pinWay(L, e, epochOf(Math.floor(e.x / CHUNK_SIZE), Math.floor(e.y / CHUNK_SIZE))) }
+    n = visibleWays(player, level.decor.getStairs(), floor, reach * 1.35, HF, seenWays)
+    for (let i = 0; i < n; i++) { const s = seenWays[i]; fog.pinWay(L, s, epochOf(s.cx, s.cy)) }
+    n = visibleWays(player, level.decor.getSights(), floor, reach, HF, seenSights)
+    for (let i = 0; i < n; i++) {
+      const s = seenSights[i]
+      fog.pinThing(L, s.key, 'sight', s.x, s.y)
+      if ((s.x - player.x) ** 2 + (s.y - player.y) ** 2 <= 81) {
+        const said = L + ':' + s.key
+        if (!sightSaid.has(said)) { sightSaid.add(said); showMessage(SIGHT_LINES[s.type]?.line, PRIO.discovery) }
+      }
+    }
+    const m = level.decor.nearestMachine(player.x, player.y, PROX_PIN)
+    if (m) fog.pinThing(L, m.key, 'machine', m.x, m.y, vendedSet.has(m.key))
+    const sc = level.decor.nearestScrap(player.x, player.y, PROX_PIN)
+    if (sc) fog.pinThing(L, sc.key, 'note', sc.x, sc.y, readSet.has(sc.frag))
+    const np = level.decor.nearestNpc(player.x, player.y, PROX_PIN)
+    if (np) fog.pinThing(L, np.key, 'npc', np.x, np.y)
+  }
 
   const entityAsm = createEntityAssembler(), EF = ENTITY_FILLS
   // what the things know about you this frame (hunt.js / variants.js ctx): ONE object, mutated per frame, never rebuilt. `player` is the
@@ -1220,7 +1377,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     creaturesOn = getPref('creatures')
     const creaturesLive = creaturesOn && !!cfg.entities?.enabled
     // a card, the chat, the wish dialog or a fade is up: the verbs below do not fire (a Space that closed the note card never wards)
-    const modal = transitioning || dialogOpen || chatOpen || noteOpen
+    const modal = transitioning || dialogOpen || chatOpen || noteOpen || mapOpen   // (the map too: Space is off while you read it)
 
     // ── the ward (ward.js): the charger is ticked EVERY frame — it owns the hold, the cost and the cooldown — on the press / release
     //    edge counts. Charging slows this frame's step and drains the legs; a release (or the 1.0 s cap) fires: tap or charged, the
@@ -1252,7 +1409,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     wantSprint = false
     if (!transitioning && !chatOpen && !noteOpen) {
       wantSprint = (K['ShiftLeft'] || K['ShiftRight']) && stamina > 0
-      const mult = wantSprint ? 1.8 : 1
+      if (mapOpen) wantSprint = false                       // reading the map: half pace, no sprint (held, not modal)
+      const mult = mapOpen ? 0.5 : (wantSprint ? 1.8 : 1)
       const sp = SPEED * dt * 60 * mult * verbMul
       const ca = Math.cos(player.angle), sa = Math.sin(player.angle)
       let mx = 0, my = 0
@@ -1313,7 +1471,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     lureT += dt
     const itemsDirty = itemSys.isDirty()     // true once after any drop / pickup / expiry / enterLevel (the read clears it)
     if (itemsDirty || lureT >= 0.5) { lureT = 0; aiCtx.lures = itemSys.getLures(playT, player.x, player.y) }
-    // TODO(integrate:floors): if (itemsDirty) { mem.setDropped(level.index, itemSys.getDropped()); persist() } — never every frame
+    if (itemsDirty) { mem.setDropped(level.index, itemSys.getDropped()); persist() }   // what lies on this floor is its to keep: on the one dirty read, never every frame
     const lures = aiCtx.lures
 
     // ── radio audio sync: yours, or one set down within 12 u still talking ──
@@ -1362,7 +1520,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.textContent = 'f · draw from the machine'
         itemHintEl.style.opacity = '1'
       } else if (nearExit) {
-        itemHintEl.textContent = `f · ${nearExit.label}`     // the way's own label (exit records carry kind/label; stairs carry theirs)
+        // the way's own label and where it goes (exit records carry kind/label; stairs carry theirs); the one you just came by is closing
+        itemHintEl.textContent = closing && nearExit.key === closing.key && playT < closing.until ? 'f · the way is still closing.' : `f · ${wayLabel(nearExit)}`
         itemHintEl.style.opacity = '1'
       } else if (nearScrap) {
         itemHintEl.textContent = 'e · read the scrap'
@@ -1372,19 +1531,6 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.style.opacity = '1'
       } else {
         itemHintEl.style.opacity = '0'
-      }
-    }
-
-    // ── descent compass — points at the nearest loaded exit so it's findable ──
-    const compassEl = document.getElementById('exit-compass')
-    if (compassEl) {
-      const anyExit = level.decor.nearestWayAny(player.x, player.y)     // one reused { rec, dist }: read now, never kept
-      if (anyExit && !nearExit) {
-        const rel = Math.atan2(anyExit.rec.y - player.y, anyExit.rec.x - player.x) - player.angle
-        compassEl.textContent = `${exitArrow(rel)}  ${cfg.exit?.label ?? 'descent'}  ·  ${Math.round(anyExit.dist)}m`
-        compassEl.style.opacity = '1'
-      } else {
-        compassEl.style.opacity = '0'
       }
     }
 
@@ -1400,19 +1546,31 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       K['Enter'] = false; K['NumpadEnter'] = false; openChat()
     }
 
-    if (!transitioning && !dialogOpen && !chatOpen && !noteOpen) {
-      // F — item first, else exit
+    // ── the map (held, not modal): Tab or Esc folds it; Tab opens it when nothing else is up and the floor has a map (the block has none).
+    //    The edge is consumed either way, so a Tab pressed on the block or under a card does not open the sheet on the next floor. ──
+    if (mapOpen && (K['Escape'] || K['Tab'])) { K['Escape'] = K['Tab'] = false; closeMap() }
+    else if (K['Tab']) {
+      K['Tab'] = false
+      if (!transitioning && !dialogOpen && !chatOpen && !noteOpen && !cfg.map && settingsHidden()) {
+        mapCard.open(); mapOpen = true
+        if (!mapEverOpened) { mapEverOpened = true; showMessage('you start drawing. it is the only way to know you are moving.', PRIO.discovery) }
+      }
+    }
+
+    // the verbs: off while a card (the note, the map), the chat, the wish dialog or a fade is up
+    if (!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen) {
+      // F — item first, else the machine, else the way
       if (K['KeyF']) {
         K['KeyF'] = false
         if (nearItem) {
           const res = itemSys.pickUp(nearItem.key)
-          if (res.ok) showMessage(`you take the ${ITEM_NAMES[res.item.type] ?? res.item.type}.`)
+          if (res.ok) { showMessage(`you take the ${ITEM_NAMES[res.item.type] ?? res.item.type}.`); if (!nearItem.key.startsWith('d:')) mem.noteTaken(level.index, nearItem.key) }   // a chunk spawn never respawns; a set-down item is not 'taken'
           else if (res.reason === 'full') showMessage('your hands are full.')
           renderHotbar()
         } else if (nearMachine && !vendedSet.has(nearMachine.key)) {
           dispenseFromMachine(nearMachine)
         } else if (nearExit) {
-          descend(nearExit.target, nearExit.label)
+          travel(nearExit)
         }
       }
       // Q — use: a bandage on a hunted floor (1-3) is a committed wrap (peek now, consume when it lands); everything else as before
@@ -1466,6 +1624,38 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     level.cache.preload(pcx, pcy)
     itemSys.update(pcx, pcy)
     level.decor.update(pcx, pcy)
+    // ── the map (fogmap.js): O(1) until your cell changes; then the flood of the open cells around you, the pins of what you can see
+    //    (sightpins.js), and the stale check — a way drawn where the building has since moved is lost, said once per 90 s. The block has
+    //    no map; the card redraws its strokes on that tick only and its arrow when you turn. ──
+    const cix = Math.floor(player.x), ciy = Math.floor(player.y)
+    const cellChanged = cix !== lastCellIx || ciy !== lastCellIy
+    lastCellIx = cix; lastCellIy = ciy
+    if (!cfg.map) {
+      const st = fog.step(level.index, player.x, player.y, revealRadius(level.index), level.grid.floor, epochOf)
+      if (st) {
+        pinSeen(cfg.fogDistance * fogMul)
+        const lost = fog.checkStale(level.index, player, nearestWayFn, epochOf)
+        if (lost && playT - lastLostMsg > 90) { lastLostMsg = playT; showMessage('the hole is not where you drew it.', PRIO.discovery); whisper() }
+        if (mapOpen) mapCard.cellsDirty()
+      }
+      if (mapOpen) mapCard.angleDirty(player.angle)
+    }
+    // ── the compass (compass.js): the nearest way you have SEEN that leads on (a '~' when its chunk moved), else the faint pull of the
+    //    nearest loaded way, and the way you came; recomputed only when the cell, the heading (> 0.05 rad) or the known ways changed;
+    //    hidden under the prompt ──
+    if (compassEl) {
+      const known = fog.ways(level.index)
+      if (cellChanged || Math.abs(player.angle - lastCompassAngle) > 0.05 || known.length !== lastWayCount) {
+        lastCompassAngle = player.angle; lastWayCount = known.length
+        compassState.known = known
+        compassState.fallback = level.decor.nearestWayAny(player.x, player.y)     // one reused { rec, dist }: read now, never kept
+        compassState.arrived = fog.arrivedPin(level.index)
+        compassLines(compassState, compassOut)
+        const s = compassText(compassOut)
+        if (s !== lastCompassText) { compassEl.textContent = s; lastCompassText = s }
+      }
+      compassEl.style.opacity = (compassOut.length === 0 || nearExit) ? '0' : '1'
+    }
     netTimer += dt
     if (mpClient?.isConnected() && netTimer >= 0.05) { netTimer = 0; mpClient.sendPos(player.x, player.y, player.angle, player.hp) }
     // ── the things: what they know about you this frame, then one update; the threat record it returns drives contact damage, the
@@ -1490,6 +1680,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       lastHitT = playT
       if (mapOpen) closeMap(); if (noteOpen) closeNoteCard()
       cancelCommit('the bandage slips.')
+      fog.pinThing(level.index, 'hurt:' + frameCount, 'hurt', player.x, player.y)   // where it hurt you, on the map (the last 12 kept)
     }
     if (regenDelay > 0) regenDelay -= dt
     else if (player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + 3.5 * dt)

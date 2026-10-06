@@ -131,10 +131,10 @@ describe('game.js: the noises the things hear, and the flash', () => {
 })
 
 describe('game.js: followers and the dispel that is saved', () => {
-  it('descend reads the stalkers on your heels BEFORE the fade and injects them 7-10 u out once the new floor stands, against its bodies', () => {
-    const snap = at("const followers = creaturesOn ? level.entitySys.snapshotChasers(player, 10, 3) : []")
+  it('travel reads the stalkers on your heels BEFORE the fade (never into the lift) and injects them 7-10 u out once the new floor stands, against its bodies', () => {
+    const snap = at("const followers = (creaturesOn && way.kind !== 'lift') ? level.entitySys.snapshotChasers(player, 10, 3) : []")
     const fade = game.indexOf('fadeThen(() => {', snap)
-    const built = game.indexOf('buildLevel(target)', fade)
+    const built = game.indexOf('buildLevel(way.target, fromC)', fade)
     const inj = at('if (followers.length) level.entitySys.inject(followers, player.x, player.y, 7, 10, 3 + Math.random() * 2, (x, y) => level.solid.forEntities.blocked(x, y, 0.2))')
     expect(snap).toBeLessThan(fade); expect(fade).toBeLessThan(built); expect(built).toBeLessThan(inj)
   })
@@ -143,11 +143,12 @@ describe('game.js: followers and the dispel that is saved', () => {
   })
   it('snapshot ADDS dispelled; resume restores it with no literal clock (the system counts from playT through deps.now)', () => {
     expect(game).toMatch(/dispelled: level\?\.entitySys\.getDispelled\(\) \?\? \[\],/)
-    expect(game).toMatch(/level\.entitySys\.restoreDispelled\(resume\.dispelled \?\? \[\]\)\r?\n/)
+    // the applyResume dep hands the system the list alone: its own clock (playT through deps.now) counts the remaining seconds
+    expect(game).toMatch(/restoreDispelled: \(l\) => level\.entitySys\.restoreDispelled\(l\),/)
     expect(game).not.toMatch(/restoreDispelled\([^\n]*, 0\)/)
-    // in the documented order: after the decor / items update at the resumed chunk, before the settle
-    expect(at('level.decor.update(pcx, pcy); itemSys.update(pcx, pcy)')).toBeLessThan(at('level.entitySys.restoreDispelled(resume.dispelled ?? [])'))
-    expect(at('level.entitySys.restoreDispelled(resume.dispelled ?? [])')).toBeLessThan(at('const moved = level.solid.settlePlayer(player)'))
+    // in the documented order (levelmem.applyResume, pinned in save-shape.test.js): after the decor / items update at the resumed chunk, before the settle
+    expect(at('level.decor.update(pcx, pcy); itemSys.update(pcx, pcy)')).toBeLessThan(at('restoreDispelled: (l) => level.entitySys.restoreDispelled(l)'))
+    expect(at('restoreDispelled: (l) => level.entitySys.restoreDispelled(l)')).toBeLessThan(at('settlePlayer: resumeSettle,'))
   })
 })
 

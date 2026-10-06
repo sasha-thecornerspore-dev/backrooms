@@ -58,6 +58,8 @@ const SHELL = [
   'entities.js', 'audio.js', 'prefs.js', 'messages.js', 'input.js', 'client.js',
   'collide.js', 'placement.js', 'reach.js', 'feedback.js',
   'hunt.js', 'variants.js', 'ward.js', 'tension.js',
+  'topology.js', 'levelmem.js', 'death.js', 'channels.js',
+  'fogmap.js', 'sightpins.js', 'mapcard.js', 'compass.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
 ]
 self.addEventListener('install', (e) => e.waitUntil((async () => {

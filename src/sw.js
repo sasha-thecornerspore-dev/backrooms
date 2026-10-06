@@ -14,6 +14,8 @@ const SHELL = [
   '/renderer/audio.js', '/renderer/prefs.js', '/renderer/messages.js', '/renderer/input.js',
   '/renderer/collide.js', '/renderer/placement.js', '/renderer/reach.js', '/renderer/feedback.js',
   '/renderer/hunt.js', '/renderer/variants.js', '/renderer/ward.js', '/renderer/tension.js',
+  '/renderer/topology.js', '/renderer/levelmem.js', '/renderer/death.js', '/renderer/channels.js',
+  '/renderer/fogmap.js', '/renderer/sightpins.js', '/renderer/mapcard.js', '/renderer/compass.js',
   '/net/client.js', '/settings.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png',
 ]
