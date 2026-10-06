@@ -288,6 +288,16 @@ export function setMusic(mood) {
   restartSchedulers()
 }
 
+// Patch the live mood IN PLACE (the hunted state, tension.js huntDelta / calmDelta): groove and leadChance are read at the next
+// onBeat, brightness and volume ramp the way setMusic's do. The schedulers are never restarted — the song thickens without a
+// seam, and takes the same long breath on the way back. Tempo is never one of the keys.
+export function setMood(partial) {
+  if (!music || !music.mood || !partial) return
+  Object.assign(music.mood, partial)
+  if (partial.brightness != null && music.bus) music.bus.frequency.setTargetAtTime(partial.brightness, actx.currentTime, 2)
+  if (partial.volume != null) music.master.gain.setTargetAtTime(music.enabled ? partial.volume * music.volScale : 0, actx.currentTime, 2.0)
+}
+
 export function setMusicEnabled(on) {
   if (!music) return
   music.enabled = on

@@ -97,10 +97,10 @@ the spirits decide. or rather, i do.
 | shift | run (watch your legs) |
 | arrow keys | turn (when mouse unlocked) |
 | click | lock mouse for look |
-| space | **ward** — shove back and disperse the things that hunt you (costs your legs) |
+| space (hold to charge) | **ward** — tap to shove the things back; hold it and your steps slow while the air tightens, then a narrower, longer push throws them farther (costs your legs) |
 | f | take an item · no-clip through an exit |
 | q | use selected item |
-| x | drop the selected item |
+| x · set down | set the selected item down where you stand — a talking radio keeps talking where it lies |
 | 1–6 | select inventory slot |
 | e | speak to a presence |
 | enter | chat (in online play) |

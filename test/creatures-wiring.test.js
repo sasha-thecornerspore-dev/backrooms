@@ -19,7 +19,7 @@ const at = (s) => { const k = game.indexOf(s); expect(k, s).toBeGreaterThan(0); 
 describe('game.js: the real exported names, and the placeholders are gone', () => {
   it('imports hostile / solidCreature from hunt.js, quiet from tactics.js and FOV / HF from gfx-frame.js', () => {
     expect(game).toMatch(/import \{ hostile, solidCreature \} from '\.\/hunt\.js'/)
-    expect(game).toMatch(/import \{ quiet \} from '\.\/tactics\.js'/)
+    expect(game).toMatch(/import \{ quiet, lureWithin, createCommit, QUIET_SECONDS \} from '\.\/tactics\.js'/)   // fight-verbs widened it
     expect(game).toMatch(/import \{ FOV, HF \} from '\.\/gfx-frame\.js'/)
   })
   it('the solid world takes hunt.solidCreature; noteContact asks hunt.hostile; no TODO(integrate:hunt) is left', () => {
@@ -43,7 +43,10 @@ describe('game.js: one aiCtx object, mutated per frame, handed to one update', (
   it('every frame writes the live fields in place (no fresh object) and the lures only when the items changed or 0.5 s passed', () => {
     expect(game).toMatch(/aiCtx\.flashlight = flashlight; aiCtx\.sprinting = moved && wantSprint; aiCtx\.dark = !cfg\.lights; aiCtx\.fog = cfg\.fogDistance/)
     expect(game).toMatch(/aiCtx\.radioOn = radioOn; aiCtx\.t = playT; aiCtx\.playerAngle = player\.angle; aiCtx\.damage = cfg\.entities\?\.damage \?\? 16/)
-    expect(game).toMatch(/if \(itemSys\.isDirty\(\) \|\| lureT >= 0\.5\) \{ lureT = 0; aiCtx\.lures = itemSys\.getLures\(playT, player\.x, player\.y\) \}/)
+    // fight-verbs reads isDirty() ONCE per frame (the read clears it) and shares it between the lures and the (floors) memory write
+    expect(game).toMatch(/const itemsDirty = itemSys\.isDirty\(\)/)
+    expect(game).toMatch(/if \(itemsDirty \|\| lureT >= 0\.5\) \{ lureT = 0; aiCtx\.lures = itemSys\.getLures\(playT, player\.x, player\.y\) \}/)
+    expect((game.match(/itemSys\.isDirty\(\)/g) || []).length).toBe(1)
   })
   it('the update takes aiCtx (the hunt path), the legacy aggro multiplier is gone, and creatures off resets the one threat record', () => {
     expect(game).toMatch(/const th = creaturesOn \? level\.entitySys\.update\(dt, player, pcx, pcy, aiCtx\) : \(level\.entitySys\.getThreat\(\)\.reset\(\), level\.entitySys\.getThreat\(\)\)/)
@@ -56,7 +59,9 @@ describe('game.js: one aiCtx object, mutated per frame, handed to one update', (
     expect(game).not.toMatch(/nearD/)
     expect(game).not.toMatch(/if \(e\.stagger > 0\) continue\s+\/\/ reeling from a ward/)
     expect(game).toMatch(/if \(!transitioning && creaturesLive && getPref\('damage'\) && invuln <= 0 && th\.dmg > 0\) \{\r?\n\s*player\.hp -= th\.dmg; invuln = 0\.7; hurt = 1; regenDelay = 6; shake = 1\r?\n\s*showMessage\(th\.dmgKind === 'arc' \? 'the current finds you\.' : 'it has you\.', PRIO\.combat\)\r?\n\s*lastHitT = playT\r?\n\s*if \(mapOpen\) closeMap\(\); if \(noteOpen\) closeNoteCard\(\)\r?\n\s*cancelCommit\('the bandage slips\.'\)/)
-    expect(game).toMatch(/if \(!transitioning && creaturesLive && th\.nearest < 12\) \{\r?\n\s*heartT -= dt\r?\n\s*if \(heartT <= 0\) \{ const prox = 1 - th\.nearest \/ 12; heartbeat\(0\.5 \+ prox\); heartT = 1\.15 - prox \* 0\.8 \}/)
+    // the heartbeat block became tension.tick (fight-verbs; pinned in fight-wiring.test.js): the threat record still feeds it
+    expect(game).not.toMatch(/const prox = 1 - th\.nearest \/ 12/)
+    expect(game).toMatch(/const tn = tension\.tick\(dt, creaturesLive && !transitioning \? th : null, player\.hp\)/)
     expect(game).not.toMatch(/if \(nearD < 10\) sdelta -= 4/)
     expect(game).toMatch(/if \(th\.hunted\) sdelta -= 3/)
     expect(game).toMatch(/if \(th\.gaze\) sdelta -= th\.gazeRate/)
@@ -114,7 +119,7 @@ describe('game.js: the noises the things hear, and the flash', () => {
     expect(at('if (footstep && creaturesLive) level.entitySys.noise(')).toBeLessThan(at('const th = creaturesOn ? level.entitySys.update('))
   })
   it('the ward is a noise of 12, a hard bump of 5 (no optional call left), the polaroid of 9', () => {
-    expect(game).toMatch(/const res = getPref\('creatures'\) \? level\.entitySys\.ward\(player\) : \{ hit: 0, dispelled: 0 \}\r?\n\s*level\.entitySys\.noise\(player\.x, player\.y, 12\)/)
+    expect(game).toMatch(/const res = getPref\('creatures'\) \? level\.entitySys\.ward\(player, wardOpts\(w\.charged\)\) : EMPTY_WARD\r?\n\s*level\.entitySys\.noise\(player\.x, player\.y, 12\)/)   // fight-verbs: tap / charged opts
     expect(game).toMatch(/level\.entitySys\.noise\(player\.x, player\.y, 5\)/)
     expect(game).not.toMatch(/entitySys\.noise\?\./)
     expect(game).toMatch(/level\.entitySys\.noise\(player\.x, player\.y, 9\)/)

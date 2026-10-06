@@ -57,7 +57,7 @@ const SHELL = [
   'gfx-frame.js', 'gfx-gl-g4-validate.js', 'gfx-gl-post-math.js', 'gfx-gl-post-particles.js', 'gfx-gl-post-shaders.js', 'gfx-gl-sprites-atlas.js', 'gfx-gl-sprites-plan.js', 'gfx-gl.js', 'gfx-gl-util.js', 'gfx-gl-world.js', 'gfx-gl-world-data.js', 'gfx-gl-world-shader.js', 'gfx-gl-sprites.js', 'gfx-gl-post.js', 'gfx-stats.js', 'gfx-bench.js',
   'entities.js', 'audio.js', 'prefs.js', 'messages.js', 'input.js', 'client.js',
   'collide.js', 'placement.js', 'reach.js', 'feedback.js',
-  'hunt.js', 'variants.js',
+  'hunt.js', 'variants.js', 'ward.js', 'tension.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
 ]
 self.addEventListener('install', (e) => e.waitUntil((async () => {

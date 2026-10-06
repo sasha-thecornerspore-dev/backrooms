@@ -71,8 +71,9 @@ describe('game.js: keys through input.js takeKey', () => {
     expect(game).not.toMatch(/t\.tagName === 'INPUT' \|\| t\.tagName === 'TEXTAREA'/)       // the old inline rule lives in input.js now
   })
   it('blur and a hidden document sweep the key map', () => {
-    expect(game).toMatch(/window\.addEventListener\('blur', \(\) => \{ for \(const k in K\) K\[k\] = false \}\)/)
-    expect(game).toMatch(/document\.addEventListener\('visibilitychange', \(\) => \{ if \(document\.hidden\) for \(const k in K\) K\[k\] = false \}\)/)
+    // (fight-verbs added the ward latch drop beside the sweep: a ward held into a blur never fires)
+    expect(game).toMatch(/window\.addEventListener\('blur', \(\) => \{ for \(const k in K\) K\[k\] = false; charger\.forceRelease\(\) \}\)/)
+    expect(game).toMatch(/document\.addEventListener\('visibilitychange', \(\) => \{ if \(document\.hidden\) \{ for \(const k in K\) K\[k\] = false; charger\.forceRelease\(\) \} \}\)/)
   })
 })
 

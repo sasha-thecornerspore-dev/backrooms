@@ -5,7 +5,7 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, bump } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, bump } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
 import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
@@ -20,7 +20,9 @@ import { createSolidWorld, createColliderIndex, movePoint, PLAYER_R } from './co
 import { bumpKindFor, bumpIntensity, isHardBump, createBumpGate, BUMP_LINES } from './feedback.js'
 import { CLUTTER_LINES } from './placement.js'
 import { hostile, solidCreature } from './hunt.js'
-import { quiet } from './tactics.js'
+import { quiet, lureWithin, createCommit, QUIET_SECONDS } from './tactics.js'
+import { createWardCharger, wardOpts } from './ward.js'
+import { createTension, huntDelta, calmDelta } from './tension.js'
 import { FOV, HF } from './gfx-frame.js'
 
 // Presence: 1 in 12 chunks has a spirit at its midpoint
@@ -213,7 +215,6 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let invuln     = 0    // i-frames after a hit
   let hurt       = 0    // red-flash intensity
   let regenDelay = 0    // seconds before hp regen resumes
-  let wardCd     = 0    // cooldown between wards (the fight-back)
   let netTimer   = 0    // throttles position updates to the server (~20Hz)
   let flashlight = true // the player's own light (toggle with L)
   let sanity     = 100  // the dark and the things eat at it; light + friends restore it
@@ -224,14 +225,26 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let lastDt     = 1 / 60 // the step the mover measures the enter speed against
   let bobPulse   = 0    // seconds left of the clutter step: a 0.35 s rise-and-settle on the bob
   let playT      = 0    // seconds of play this run — TODO(integrate:floors): saved in snapshot(), restored on resume
-  let lastHitT   = -Infinity // when a thing last reached you — TODO(integrate:fight-verbs): tension reads it
-  let quietTimer = 0    // TODO(integrate:fight-verbs): sweet almond water sets it (QUIET_SECONDS); footsteps at half loudness while it runs
-  const cancelCommit = () => {}   // TODO(integrate:fight-verbs): the bandage commit; a hit cancels it ('the bandage slips.')
+  let lastHitT   = -Infinity // when a thing last reached you (stamped by the hit block; nothing reads it yet)
+  let quietTimer = 0    // sweet almond water sets it (QUIET_SECONDS): footsteps at half loudness while it runs (tactics.quiet)
   let mapOpen = false             // TODO(integrate:map): the map card; a hit folds it
   const closeMap = () => { mapOpen = false }   // TODO(integrate:map): mapCard.close()
   let arcWas     = false // the tesla's charge last frame (the lights drop once per charge, not every frame of it)
   let lastStepN  = 0    // the footstep count (floor(bob / PI)) the noise emitter last saw
   let lureT      = 0.5  // seconds since the lures (dropped talking radios) were last recomputed
+  let lureNoiseT = 0    // seconds since the dropped radios last made the noise the things hear (8 every 0.5 s)
+
+  // ── the fight verbs (ward.js / tactics.js / tension.js): the charger owns the ward's hold, cost and cooldown and reads press /
+  //    release EDGE COUNTS (a touch tap inside one frame still lands); the commit is the 1.2 s bandage wrap a hit interrupts; the
+  //    tension is the hunted state as heartbeat and music. All three are ticked every frame and never rebuilt. ──
+  const charger   = createWardCharger()
+  const wardInput = { press: 0, release: 0 }
+  const EMPTY_WARD = { hit: 0, dispelled: 0, opening: 0 }     // what a ward meets with creatures switched off
+  const commit    = createCommit(1.2)
+  // drop the wrap where it stands (the bandage stays in your hand); with a line when something took you mid-wrap
+  function cancelCommit(msg) { if (commit.active) { commit.cancel(); if (msg) showMessage(msg) } }
+  const tension   = createTension()
+  let huntMood    = false  // tension's mood last frame: a track cycled mid-chase keeps the hunt's delta
 
   // ── the numbers station + the counter-claim (the reality-tunneling arc) ──
   let stationIdx  = 0     // which group of the ledger-count the radio reads next
@@ -328,15 +341,22 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let trackIdx = getPref('track')
   if (!Number.isInteger(trackIdx) || trackIdx < -1 || trackIdx >= TRACKS.length) trackIdx = -1
 
+  // The song the floor (or the chosen track) plays. setMusic is handed a COPY of the base mood: tension's setMood patches the live
+  // object in place (the hunt thickens it, calm restores it from the base), so the base itself — cfg.music, a TRACKS constant — stays
+  // pristine. A song started mid-chase takes the hunt's delta at once, so the hunt does not drop out when a track is cycled.
+  function playSong(base) {
+    setMusic({ ...base })
+    if (huntMood) setMood(huntDelta(base))
+  }
   function cycleTrack() {
     trackIdx = trackIdx + 1 >= TRACKS.length ? -1 : trackIdx + 1
     setPref('track', trackIdx)
     if (trackIdx < 0) {
-      setMusic(level.cfg.music)
+      playSong(level.cfg.music)
       showMessage('the building resumes its own song.')
     } else {
       const t = TRACKS[trackIdx]
-      setMusic(t.mood)
+      playSong(t.mood)
       showMessage(t.hint)
     }
   }
@@ -379,9 +399,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const tg        = performance.now()
     const gfx       = makeGfx(cfg, cache)
     const gfxMs     = performance.now() - tg
+    // TODO(integrate:floors): itemSys.enterLevel(cfg, cfg.map ? null : [...mem.takenFor(index)], cfg.map ? null : mem.droppedFor(index))
     itemSys.enterLevel(cfg)
     vendedSet.clear()               // a re-entered floor re-stocks its machines
     bumpSaid.clear(); clutterSeen.clear(); turningSaid.clear(); turnSaid = false   // and says its contact / turning lines afresh
+    cancelCommit()                  // a wrap does not survive the fall (the bandage stays); the new floor's song starts calm
+    tension.reset(); huntMood = false
 
     // fixed maps spawn at their authored point; procedural at the origin room (carved open)
     if (cfg.spawn) { player.x = cfg.spawn.x; player.y = cfg.spawn.y }
@@ -401,7 +424,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     msgQ.clear()                    // the old floor's lines do not follow you down (one fade if one was up)
     // Morph the bed into this level's mood — unless the player has chosen an
     // alternate track with N, in which case their choice follows them down.
-    setMusic(trackIdx < 0 ? cfg.music : TRACKS[trackIdx].mood)
+    playSong(trackIdx < 0 ? cfg.music : TRACKS[trackIdx].mood)
 
     updateHud()
     renderHotbar()
@@ -434,6 +457,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (transitioning) return
     transitioning = true
     document.exitPointerLock()
+    cancelCommit('the bandage slips.')   // it took you in the second you held still
     fadeThen(() => {
       player.hp = player.maxHp
       player.x = HALF + 0.5; player.y = HALF + 0.5
@@ -454,20 +478,22 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (r === 'ignore') return
     if (r === 'take-prevent') e.preventDefault()
     K[e.code] = true
+    if (e.code === 'Space') wardInput.press++       // the ward counts edges (takeKey already dropped the held repeats)
   })
-  window.addEventListener('keyup',   e => { K[e.code] = false })
-  // a key held while the window loses focus never gets its keyup: sweep the map so the player does not walk on alone
-  window.addEventListener('blur', () => { for (const k in K) K[k] = false })
-  document.addEventListener('visibilitychange', () => { if (document.hidden) for (const k in K) K[k] = false })
+  window.addEventListener('keyup',   e => { K[e.code] = false; if (e.code === 'Space') wardInput.release++ })
+  // a key held while the window loses focus never gets its keyup: sweep the map so the player does not walk on alone, and drop a
+  // ward latch without firing it (a stray release++ later falls on nothing)
+  window.addEventListener('blur', () => { for (const k in K) K[k] = false; charger.forceRelease() })
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { for (const k in K) K[k] = false; charger.forceRelease() } })
   // Pointer-lock mouse-look is desktop only; on touch the on-screen controls
   // drive movement + look instead (initTouchControls, below).
   if (!isTouchDevice()) canvas.addEventListener('click', () => canvas.requestPointerLock())
-  document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas })
+  document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; if (!locked) charger.forceRelease() })
   document.addEventListener('mousemove', e => { if (locked) player.angle += e.movementX * 0.002 * (getPref('mouseSensitivity') / 100) })
 
-  // ── touch controls (phones / ChromeOS tablets) — feeds K + player.angle;
+  // ── touch controls (phones / ChromeOS tablets) — feeds K + player.angle, and the WARD button feeds the ward's edge counters;
   //    a no-op on desktop, so keyboard play is unchanged ──
-  initTouchControls({ canvas, K, player, getPref })
+  initTouchControls({ canvas, K, player, getPref, edges: { Space: wardInput } })
 
   // ── wish dialog ──
   let dialogOpen = false
@@ -615,15 +641,25 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
     hotbarEl.innerHTML = html
     for (const el of hotbarEl.querySelectorAll('.slot')) {
-      el.addEventListener('click', () => { itemSys.select(+el.dataset.slot); renderHotbar() })
+      el.addEventListener('click', () => { cancelCommit(); itemSys.select(+el.dataset.slot); renderHotbar() })   // a slot change ends a wrap
     }
   }
-  function discardSelected() {
-    const res = itemSys.discardSelected()
-    if (res) showMessage(`you drop the ${ITEM_NAMES[res.type] ?? res.type}.`)
+  // X and the dock's ✕: set the selected item down (items.js throwSelected — 1.2 u ahead, or at your feet against a wall). A radio
+  // keeps talking where it lies (the things go to it), a glowstick is a breadcrumb; the deep-stack finds are kept.
+  function throwSelected() {
+    const r = itemSys.throwSelected(player.x, player.y, player.angle, playT)
+    if (!r.ok) { if (r.reason === 'kept') showMessage('you do not put that down.') }
+    else {
+      cancelCommit()                                          // the bandage you were wrapping is on the floor now
+      const t = r.item.type
+      showMessage(t === 'radio' && r.item.on ? 'you set the radio down, still talking. let it talk.'
+                : t === 'glowstick'          ? 'you leave the green light where it lies.'
+                :                              `you drop the ${ITEM_NAMES[t] ?? t}.`)
+    }
     renderHotbar()
+    // TODO(integrate:floors): mem.setDropped(level.index, itemSys.getDropped()) — the loop gates it on its one itemsDirty read
   }
-  document.getElementById('btn-discard')?.addEventListener('click', discardSelected)
+  document.getElementById('btn-discard')?.addEventListener('click', throwSelected)
 
   // ── multiplayer chat ──
   const chatLogEl    = document.getElementById('chat-log')
@@ -670,6 +706,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (!chatInputEl || chatOpen) return          // solo too — the input doubles as the field console
     chatOpen = true
     for (const k in K) K[k] = false            // drop any held movement keys
+    charger.forceRelease()                     // and a ward being held: typing never fires it
     document.exitPointerLock()
     chatInputEl.style.display = 'block'; chatInputEl.value = ''; chatInputEl.focus()
     if (chatLogEl) chatLogEl.style.opacity = '1'
@@ -880,6 +917,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const dfloor = level?.index ?? 0
     if (eff.type === 'almond-water') {
       if (eff.sour) {
+        level.entitySys.noise(player.x, player.y, 6)        // the retch: the things hear it
         if (dfloor === 3) {
           sanity = Math.max(0, sanity - 14); doorSlam()
           showMessage('the water is sour, and something reads the withdrawal. a line moves in a ledger you cannot see.')
@@ -889,6 +927,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         }
       } else {
         stamina = 100; calmTimer = 20; sanity = Math.min(100, sanity + 35); wardPulse()
+        quietTimer = QUIET_SECONDS                          // and your steps go soft for a while (tactics.quiet halves the footstep noise)
         showMessage('the water is sweet. the lights steady, and so does your mind.')
       }
     } else if (eff.type === 'glowstick') {
@@ -1179,12 +1218,42 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // ── movement (frozen during a transition fade or while typing in chat): W/S/A/D sum into ONE step (same multipliers 1 / 0.6 / 0.7),
     //    scaled by the clutter under you (x0.55 while edging through), then exactly one tryMove ──
     creaturesOn = getPref('creatures')
+    const creaturesLive = creaturesOn && !!cfg.entities?.enabled
+    // a card, the chat, the wish dialog or a fade is up: the verbs below do not fire (a Space that closed the note card never wards)
+    const modal = transitioning || dialogOpen || chatOpen || noteOpen
+
+    // ── the ward (ward.js): the charger is ticked EVERY frame — it owns the hold, the cost and the cooldown — on the press / release
+    //    edge counts. Charging slows this frame's step and drains the legs; a release (or the 1.0 s cap) fires: tap or charged, the
+    //    things in the cone recoil / come apart / are caught turning (hunt's opening counts double), and a dispel steadies you. ──
+    let verbMul = 1
+    const w = charger.tick(dt, wardInput.press, wardInput.release, stamina)
+    if (modal) charger.forceRelease()
+    else if (w?.charging) { stamina = Math.max(0, stamina - w.drain * dt); verbMul *= w.moveMul }
+    else if (w?.denied) showMessage('nothing left in your legs to push with.')
+    else if (w) {
+      stamina -= w.cost
+      const res = getPref('creatures') ? level.entitySys.ward(player, wardOpts(w.charged)) : EMPTY_WARD
+      level.entitySys.noise(player.x, player.y, 12)   // a ward is loud: the things round the corner hear it
+      wardPulse(); shake = Math.max(shake, w.charged ? 0.7 : 0.45)
+      if      (res.dispelled > 0) showMessage(res.dispelled > 1 ? 'they come apart in the light.' : 'it comes apart in the light.')
+      else if (res.opening > 0)   showMessage('you catch it turning. it reels.')
+      else if (res.hit > 0)       showMessage(res.hit > 1 ? 'they recoil from you.' : 'it recoils from you.')
+      else                        showMessage('you push at the dark. it gives nothing back.')
+      sanity = Math.min(100, sanity + 10 * res.dispelled)
+    }
+    // ── the bandage commit (tactics.js): 1.2 s of holding still at 0.4 speed; the heal and the consume land at the end (a hit
+    //    cancels it in the HP block below, and the bandage stays in your hand) ──
+    const c = commit.tick(dt)
+    if (c === 'running') verbMul *= 0.4
+    else if (c === 'done') applyItemEffect(itemSys.consumeSelected())
+    if (quietTimer > 0) quietTimer -= dt
+
     let moved = false
     wantSprint = false
     if (!transitioning && !chatOpen && !noteOpen) {
       wantSprint = (K['ShiftLeft'] || K['ShiftRight']) && stamina > 0
       const mult = wantSprint ? 1.8 : 1
-      const sp = SPEED * dt * 60 * mult
+      const sp = SPEED * dt * 60 * mult * verbMul
       const ca = Math.cos(player.angle), sa = Math.sin(player.angle)
       let mx = 0, my = 0
       if (K['KeyW'] || K['ArrowUp'])   { mx += ca * sp; my += sa * sp; moved = true }
@@ -1237,13 +1306,29 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     saveTimer += dt
     if (saveTimer > 8) { saveTimer = 0; persist() }
 
-    // ── radio audio sync ──
-    const radioOn = itemSys.isRadioOn()
+    // ── the things set down (items.js): their clocks first — a radio's battery goes, a glowstick gutters out — then the lures (the
+    //    dropped radios still talking: one reused array, recomputed when the items changed or every 0.5 s; read now, never kept) ──
+    const expired = itemSys.expireDropped(playT)
+    for (let i = 0; i < expired.length; i++) showMessage(expired[i].kind === 'battery' ? 'the batteries go.' : 'the green light gutters out.', PRIO.ambient)
+    lureT += dt
+    const itemsDirty = itemSys.isDirty()     // true once after any drop / pickup / expiry / enterLevel (the read clears it)
+    if (itemsDirty || lureT >= 0.5) { lureT = 0; aiCtx.lures = itemSys.getLures(playT, player.x, player.y) }
+    // TODO(integrate:floors): if (itemsDirty) { mem.setDropped(level.index, itemSys.getDropped()); persist() } — never every frame
+    const lures = aiCtx.lures
+
+    // ── radio audio sync: yours, or one set down within 12 u still talking ──
+    const radioOn = itemSys.isRadioOn() || lureWithin(lures, player.x, player.y, 12)
     if (radioOn !== radioWasOn) { radioWasOn = radioOn; setRadio(radioOn) }
 
     const pcx = Math.floor(player.x / CHUNK_SIZE)
     const pcy = Math.floor(player.y / CHUNK_SIZE)
     level.grid.setPlayerChunk(pcx, pcy)      // before entitySys.update / any floor() read this frame
+    // the dropped radios talk: a noise of 8 from each lure every 0.5 s (sharedConventions #5), flooded over this frame's grid
+    lureNoiseT += dt
+    if (lureNoiseT >= 0.5) {
+      lureNoiseT = 0
+      if (creaturesLive) for (let i = 0; i < lures.length; i++) level.entitySys.noise(lures[i].x, lures[i].y, 8)
+    }
 
     // ── presence proximity (radio finds them from farther) ──
     const presenceRange = radioOn ? 400 : 4
@@ -1330,8 +1415,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
           descend(nearExit.target, nearExit.label)
         }
       }
-      if (K['KeyQ']) { K['KeyQ'] = false; applyItemEffect(itemSys.useSelected()) }
-      if (K['KeyX']) { K['KeyX'] = false; discardSelected() }
+      // Q — use: a bandage on a hunted floor (1-3) is a committed wrap (peek now, consume when it lands); everything else as before
+      if (K['KeyQ']) {
+        K['KeyQ'] = false
+        const it = itemSys.peekSelected()
+        if (it?.type === 'bandage' && level.index >= 1 && level.index <= 3) { if (!commit.active) { commit.start(); showMessage('you hold still and wrap it.') } }
+        else applyItemEffect(itemSys.useSelected())
+      }
+      if (K['KeyX']) { K['KeyX'] = false; throwSelected() }
       if (K['KeyM']) { K['KeyM'] = false; const on = !getPref('music'); setPref('music', on); showMessage(on ? 'the music seeps back in.' : 'the music stops.') }
       if (K['KeyN']) { K['KeyN'] = false; cycleTrack() }
       if (K['KeyL']) { K['KeyL'] = false; flashlight = !flashlight; showMessage(flashlight ? 'flashlight on.' : 'flashlight off — the dark leans in.') }
@@ -1359,7 +1450,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       }
       for (let i = 0; i < 6; i++) {
         const code = `Digit${i + 1}`
-        if (K[code]) { K[code] = false; itemSys.select(i); renderHotbar() }
+        if (K[code]) { K[code] = false; cancelCommit(); itemSys.select(i); renderHotbar() }   // a slot change ends a wrap (consume takes the SELECTED item)
       }
       if (K['KeyE']) {
         K['KeyE'] = false
@@ -1367,22 +1458,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         else if (nearScrap) openNoteCard(nearScrap)
         else if (nearNpc) showMessage(NPC_LINES[Math.floor(Math.random() * NPC_LINES.length)])
       }
-      // Space — the ward: a shove of will and light. Knocks the things back and
-      // leaves them reeling; ward one enough times and it comes apart. Costs legs.
-      if (K['Space']) {
-        K['Space'] = false
-        if (wardCd <= 0) {
-          if (stamina >= 20) {
-            stamina -= 20; wardCd = 0.65
-            const res = getPref('creatures') ? level.entitySys.ward(player) : { hit: 0, dispelled: 0 }
-            level.entitySys.noise(player.x, player.y, 12)   // a ward is loud: the things round the corner hear it
-            wardPulse(); shake = Math.max(shake, 0.45)
-            if      (res.dispelled > 0) showMessage(res.dispelled > 1 ? 'they come apart in the light.' : 'it comes apart in the light.')
-            else if (res.hit > 0)       showMessage(res.hit > 1 ? 'they recoil from you.' : 'it recoils from you.')
-            else                        showMessage('you push at the dark. it gives nothing back.')
-          } else showMessage('nothing left in your legs to push with.')
-        }
-      }
+      // Space — the ward — is the charger block at the head of the frame (ward.js reads the press / release edge counts)
     }
     if (K['Escape'] && dialogOpen) { K['Escape'] = false; closeDialog() }
 
@@ -1395,11 +1471,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // ── the things: what they know about you this frame, then one update; the threat record it returns drives contact damage, the
     //    heartbeat and sanity (no second pass over the list). Creatures can be switched off entirely (pure liminal exploration;
     //    creaturesOn was read at the top of the frame): the record is then reset, so everything below reads zero. ──
-    const creaturesLive = creaturesOn && !!cfg.entities?.enabled
     aiCtx.flashlight = flashlight; aiCtx.sprinting = moved && wantSprint; aiCtx.dark = !cfg.lights; aiCtx.fog = cfg.fogDistance
     aiCtx.radioOn = radioOn; aiCtx.t = playT; aiCtx.playerAngle = player.angle; aiCtx.damage = cfg.entities?.damage ?? 16
-    lureT += dt
-    if (itemSys.isDirty() || lureT >= 0.5) { lureT = 0; aiCtx.lures = itemSys.getLures(playT, player.x, player.y) }
+    // (aiCtx.lures was refreshed above, with the dropped things' clocks)
     // footsteps: walk 3 / sprint 7, halved by sweet water (tactics.quiet); the flood reads the grid at this frame's chunk
     if (footstep && creaturesLive) level.entitySys.noise(player.x, player.y, (aiCtx.sprinting ? 7 : 3) * quiet(quietTimer))
     const th = creaturesOn ? level.entitySys.update(dt, player, pcx, pcy, aiCtx) : (level.entitySys.getThreat().reset(), level.entitySys.getThreat())
@@ -1410,7 +1484,6 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     // ── HP: contact damage, i-frames, delayed regen, death ──
     if (invuln > 0) invuln -= dt
-    if (wardCd > 0) wardCd -= dt
     if (!transitioning && creaturesLive && getPref('damage') && invuln <= 0 && th.dmg > 0) {
       player.hp -= th.dmg; invuln = 0.7; hurt = 1; regenDelay = 6; shake = 1
       showMessage(th.dmgKind === 'arc' ? 'the current finds you.' : 'it has you.', PRIO.combat)
@@ -1425,12 +1498,17 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (hurtEl) hurtEl.style.opacity = (hurt * 0.55).toFixed(2)
     if (player.hp <= 0) { player.hp = 0; die() }
 
-    // ── heartbeat — quickens as something closes in (th.nearest: the nearest thing that can hurt you, not reeling) ──
-    // TODO(integrate:fight-verbs): tension.tick(dt, th, player.hp) replaces this block (+ audio.setMood)
-    if (!transitioning && creaturesLive && th.nearest < 12) {
-      heartT -= dt
-      if (heartT <= 0) { const prox = 1 - th.nearest / 12; heartbeat(0.5 + prox); heartT = 1.15 - prox * 0.8 }
-    } else heartT = 0
+    // ── tension (tension.js): the hunted state as heartbeat and music. The hunt's report drives it (Level 0 / ∅, a fade and creatures
+    //    off read as calm — null); the heart comes into your ears as the level rises, the floor's own song thickens on 'enter' and takes
+    //    its long breath back on 'exit' (setMood patches the live mood in place: no restart, no seam), one 'it is close.' per crossing ──
+    const tn = tension.tick(dt, creaturesLive && !transitioning ? th : null, player.hp)
+    heartT -= dt
+    if (tn.beat < Infinity && heartT <= 0) { heartbeat(0.5 + tn.level); heartT = tn.beat }
+    const base = trackIdx < 0 ? cfg.music : TRACKS[trackIdx].mood
+    if (tn.just === 'enter') setMood(huntDelta(base))
+    if (tn.just === 'exit') setMood(calmDelta(base))
+    huntMood = tn.mood === 'hunt'
+    if (tn.close) showMessage('it is close.', PRIO.combat)
 
     // ── sanity — dark, the hunt and a thing's gaze drain it; light, almond water, a friend restore it ──
     let sdelta = flashlight ? 2 : -2
@@ -1442,7 +1520,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     updateSanity()
     const insane = Math.max(0, Math.min(1, (42 - sanity) / 42))
     if (insaneEl) insaneEl.style.opacity = (insane * 0.6).toFixed(2)
-    if (insane > 0.25 && !transitioning) { sanWhisperT -= dt; if (sanWhisperT <= 0) { whisper(); sanWhisperT = 3 + Math.random() * 6 } }
+    // the whispers come closer together the higher the tension runs (the window shrinks by up to half)
+    if (insane > 0.25 && !transitioning) { sanWhisperT -= dt; if (sanWhisperT <= 0) { whisper(); sanWhisperT = (3 + Math.random() * 6) * (1 - 0.5 * tn.level) } }
 
     // ── screen shake (decays) ──
     if (shake > 0.01) {
