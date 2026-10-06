@@ -45,6 +45,22 @@ describe('prefs', () => {
   })
 })
 
+describe('solidBodies pref', () => {
+  it('defaults true and normalizes a non-boolean to the default', () => {
+    expect(PREF_DEFAULTS.solidBodies).toBe(true)
+    expect('solidBodies' in getPrefs()).toBe(true)
+    expect(normalizePref('solidBodies', true)).toBe(true)
+    expect(normalizePref('solidBodies', false)).toBe(false)
+    for (const bad of ['yes', 'false', 0, 1, null, undefined, {}, []]) expect(normalizePref('solidBodies', bad), String(bad)).toBe(true)
+  })
+  it('setPref coerces a garbage value back to true and persists only booleans', () => {
+    setPref('solidBodies', false)
+    expect(getPref('solidBodies')).toBe(false)
+    setPref('solidBodies', 'maybe')
+    expect(getPref('solidBodies')).toBe(true)
+  })
+})
+
 describe('graphics & comfort prefs', () => {
   it('ship safe, backwards-compatible defaults', () => {
     expect(PREF_DEFAULTS.graphicsQuality).toBe('auto')
@@ -121,12 +137,13 @@ describe('prefs load-time behaviour (fresh module, stubbed browser)', () => {
     expect((await fresh({ matchMedia: motion(false), localStorage: store({ reduceFlicker: true }) })).getPref('reduceFlicker')).toBe(true)
   })
   it('a stored garbage value falls back to the (device) default instead of reaching the renderer', async () => {
-    const m = await fresh({ matchMedia: motion(true), localStorage: store({ reduceFlicker: 'maybe', graphicsQuality: 'ultra', fpsCap: 144, hiDpi: 'yes', renderer: 7 }) })
+    const m = await fresh({ matchMedia: motion(true), localStorage: store({ reduceFlicker: 'maybe', graphicsQuality: 'ultra', fpsCap: 144, hiDpi: 'yes', renderer: 7, solidBodies: 'off' }) })
     expect(m.getPref('reduceFlicker')).toBe(true)
     expect(m.getPref('graphicsQuality')).toBe('auto')
     expect(m.getPref('fpsCap')).toBe(0)
     expect(m.getPref('hiDpi')).toBe(false)
     expect(m.getPref('renderer')).toBe('auto')
+    expect(m.getPref('solidBodies')).toBe(true)
   })
   it('valid stored values survive, and unrelated stored keys are left alone', async () => {
     const m = await fresh({ localStorage: store({ graphicsQuality: 'legacy', fpsCap: 60, hiDpi: true, renderer: 'cpu', playerName: 'ann', music: false }) })
