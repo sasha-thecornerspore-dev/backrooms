@@ -409,6 +409,7 @@
       <label class="toggle-row"><span>Head-bob</span><input type="checkbox" id="set-headbob"/></label>
       <label class="toggle-row"><span>Mouse sensitivity</span><input type="range" id="set-sens" min="25" max="250" step="5"/></label>
       <label class="toggle-row"><span>Creatures <span class="set-hint">below level 0</span></span><input type="checkbox" id="set-creatures"/></label>
+      <label class="toggle-row"><span>Solid furniture <span class="set-hint">walk around things</span></span><input type="checkbox" id="set-solid"/></label>
       <label class="toggle-row"><span>Can take damage <span class="set-hint">peaceful = off</span></span><input type="checkbox" id="set-damage"/></label>
 
       <div class="set-section">GRAPHICS &amp; COMFORT</div>
@@ -766,7 +767,7 @@
     prefChk('set-music', 'music');       prefRange('set-musicvol', 'musicVolume'); prefChk('set-ambience', 'ambience')
     prefRange('set-ambiencevol', 'ambienceVolume')
     prefChk('set-grain', 'grain');       prefChk('set-particles', 'particles');    prefChk('set-crosshair', 'crosshair');    prefChk('set-headbob', 'headBob')
-    prefRange('set-sens', 'mouseSensitivity'); prefChk('set-creatures', 'creatures'); prefChk('set-damage', 'damage')
+    prefRange('set-sens', 'mouseSensitivity'); prefChk('set-creatures', 'creatures'); prefChk('set-solid', 'solidBodies'); prefChk('set-damage', 'damage')
     // graphics & comfort — prefs.js validates every value; game.js applies them live (quality, fps cap, DPR, flicker)
     document.getElementById('set-quality').addEventListener('change', e => setPref('graphicsQuality', e.target.value))
     document.getElementById('set-fpscap').addEventListener('change', e => setPref('fpsCap', +e.target.value))
@@ -792,6 +793,7 @@
       document.getElementById('set-headbob').checked    = p.headBob
       document.getElementById('set-sens').value         = p.mouseSensitivity
       document.getElementById('set-creatures').checked  = p.creatures
+      document.getElementById('set-solid').checked      = p.solidBodies
       document.getElementById('set-damage').checked     = p.damage
       document.getElementById('set-quality').value      = p.graphicsQuality
       document.getElementById('set-reduceflicker').checked = p.reduceFlicker

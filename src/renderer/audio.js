@@ -384,22 +384,24 @@ export function heartbeat(intensity = 1) {
 // A brief, wavering whisper — surfaces when your sanity runs low.
 export function whisper() {
   if (!actx) return
-  try {
-    const dur = 0.6 + Math.random() * 0.5
-    const len = Math.floor(actx.sampleRate * dur)
-    const buf = actx.createBuffer(1, len, actx.sampleRate)
-    const d = buf.getChannelData(0)
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.4)
-    const src = actx.createBufferSource(); src.buffer = buf
-    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1100 + Math.random() * 1500; bp.Q.value = 6
-    const lfo = actx.createOscillator(); lfo.frequency.value = 6 + Math.random() * 8
-    const lg = actx.createGain(); lg.gain.value = 400
-    lfo.connect(lg); lg.connect(bp.frequency); lfo.start()
-    const g = actx.createGain(); const t = actx.currentTime
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.03, t + 0.2); g.gain.linearRampToValueAtTime(0, t + dur)
-    src.connect(bp); bp.connect(g); g.connect(actx.destination)
-    src.start(t); src.stop(t + dur); lfo.stop(t + dur)
-  } catch { /* ignore */ }
+  try { whisperInto(actx.destination, 1) } catch { /* ignore */ }
+}
+// the whisper's graph, into any destination at a gain scale (1 = the sanity whisper; bump('murmur') takes it at half into the ambience bus)
+function whisperInto(dest, scale) {
+  const dur = 0.6 + Math.random() * 0.5
+  const len = Math.floor(actx.sampleRate * dur)
+  const buf = actx.createBuffer(1, len, actx.sampleRate)
+  const d = buf.getChannelData(0)
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.4)
+  const src = actx.createBufferSource(); src.buffer = buf
+  const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1100 + Math.random() * 1500; bp.Q.value = 6
+  const lfo = actx.createOscillator(); lfo.frequency.value = 6 + Math.random() * 8
+  const lg = actx.createGain(); lg.gain.value = 400
+  lfo.connect(lg); lg.connect(bp.frequency); lfo.start()
+  const g = actx.createGain(); const t = actx.currentTime
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.03 * scale, t + 0.2); g.gain.linearRampToValueAtTime(0, t + dur)
+  src.connect(bp); bp.connect(g); g.connect(dest)
+  src.start(t); src.stop(t + dur); lfo.stop(t + dur)
 }
 
 // A short chirp when a chat message arrives (a UI ping, always audible).
@@ -458,6 +460,58 @@ export function doorSlam() {
     const ng = actx.createGain(); ng.gain.setValueAtTime(0.09, t); ng.gain.exponentialRampToValueAtTime(0.0004, t + 0.12)
     src.connect(bp); bp.connect(ng); ng.connect(dest); src.start(t); src.stop(t + 0.13)
   } catch { /* ignore */ }
+}
+
+// A body answering your touch (feedback.js names the kind, game.js gates the calls): 'thud' is the doorSlam sine lower and shorter,
+// 'hollow' a triangle for the drums and the machine, 'scrape' the footfall-style noise burst band-passed high, 'wood' one tap for the
+// pallet, 'murmur' the whisper at half gain. Routed through the ambience bus; panned when the engine can (createStereoPanner), mono
+// otherwise. No-op without audio.
+export function bump(kind, intensity = 1, pan = 0) {
+  if (!actx) return
+  if (kind !== 'thud' && kind !== 'hollow' && kind !== 'scrape' && kind !== 'wood' && kind !== 'murmur') return   // 'silent', or no recipe
+  try {
+    const k = intensity > 1 ? 1 : intensity < 0 ? 0 : intensity
+    const dest = panTo(pan)
+    const t = actx.currentTime
+    if (kind === 'thud') {
+      const o = actx.createOscillator(), g = actx.createGain()
+      o.type = 'sine'
+      o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.14)
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.10 * k, t + 0.006); g.gain.exponentialRampToValueAtTime(0.0004, t + 0.18)
+      o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.2)
+    } else if (kind === 'hollow') {
+      const o = actx.createOscillator(), g = actx.createGain()
+      o.type = 'triangle'
+      o.frequency.setValueAtTime(180, t); o.frequency.exponentialRampToValueAtTime(70, t + 0.2)
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09 * k, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0004, t + 0.25)
+      o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.27)
+    } else if (kind === 'scrape') {
+      const len = Math.floor(actx.sampleRate * 0.12)
+      const buf = actx.createBuffer(1, len, actx.sampleRate); const d = buf.getChannelData(0)
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2)
+      const src = actx.createBufferSource(); src.buffer = buf
+      const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 1.2
+      const g = actx.createGain(); g.gain.setValueAtTime(0.07 * k, t); g.gain.exponentialRampToValueAtTime(0.0004, t + 0.12)
+      src.connect(bp); bp.connect(g); g.connect(dest); src.start(t); src.stop(t + 0.13)
+    } else if (kind === 'wood') {
+      const o = actx.createOscillator(), g = actx.createGain()
+      o.type = 'sine'
+      o.frequency.setValueAtTime(70, t)
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.08 * k, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0004, t + 0.08)
+      o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.1)
+    } else if (kind === 'murmur') {
+      whisperInto(dest, 0.5)
+    }
+  } catch { /* ignore */ }
+}
+// where a bump plays: the ambience bus, through a panner when one is asked for and the engine has them (a centred bump needs none)
+function panTo(pan) {
+  const bus = ambienceGain || actx.destination
+  if (!pan || typeof actx.createStereoPanner !== 'function') return bus
+  const p = actx.createStereoPanner()
+  p.pan.value = pan < -1 ? -1 : pan > 1 ? 1 : pan
+  p.connect(bus)
+  return p
 }
 
 // Muffled footfalls that aren't yours — a handful of soft low thumps, receding.

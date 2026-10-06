@@ -5,7 +5,7 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, bump } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
 import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
@@ -16,6 +16,9 @@ import { SCRAPS } from './scraps.js'
 import { createEventScheduler } from './events.js'
 import { createMessageQueue, PRIO } from './messages.js'
 import { takeKey } from './input.js'
+import { createSolidWorld, createColliderIndex, movePoint, PLAYER_R } from './collide.js'
+import { bumpKindFor, bumpIntensity, isHardBump, createBumpGate, BUMP_LINES } from './feedback.js'
+import { CLUTTER_LINES } from './placement.js'
 
 // Presence: 1 in 12 chunks has a spirit at its midpoint
 function chunkHasPresence(cx, cy) {
@@ -214,6 +217,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let sanWhisperT = 0
   let heartT     = 0
   let shake      = 0    // screen-shake magnitude, decays each frame
+  let wantSprint = false // the sprint key held this frame (the mover's report and the hard-bump rule read it)
+  let lastDt     = 1 / 60 // the step the mover measures the enter speed against
+  let bobPulse   = 0    // seconds left of the clutter step: a 0.35 s rise-and-settle on the bob
+  let playT      = 0    // seconds of play this run — TODO(integrate:floors): saved in snapshot(), restored on resume
 
   // ── the numbers station + the counter-claim (the reality-tunneling arc) ──
   let stationIdx  = 0     // which group of the ledger-count the radio reads next
@@ -229,6 +236,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // vending machines dispense once; keys of spent machines (mirrors items.js
   // `taken` — survives chunk eviction, cleared per level so a floor re-stocks).
   const vendedSet = new Set()
+
+  // contact (collide.js): the lines a body says are said once per type per level (hard bumps, clutter), cleared next to vendedSet;
+  // the gate keeps the foley to one near bump per 0.5 s
+  const bumpSaid = new Set(), clutterSeen = new Set()
+  let lastBumpLine = -Infinity, lastLetThrough = -Infinity
+  const bumpGate = createBumpGate()
+  // TODO(integrate:hunt): hunt.solidCreature / hunt.hostile replace these — until then no creature is a body and none refuses a move
+  const huntSolidCreature = () => false
+  const huntHostile = () => false
 
   // Flicker state (persists; retuned per level via level.cfg.flicker)
   let flicker    = 1.0
@@ -307,8 +323,18 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // the grid the hot paths read (LOS, perception, fog): cell-indexed, no key string per ask (world.js createGridReader). A fixed map
     // (Level ∅) has no getChunk, so the reader wraps isWall at the cell centre instead
     const grid      = createGridReader(cfg.map ? null : cache, isWall)
-    const entitySys = createEntitySystem(cfg, isWall)
-    const decor     = createDecorSystem(cfg, isWall, worldSeed)
+    // the bodies: a per-chunk collider index that decor fills as it scans (placement.js settles each chunk's props / machine / sight /
+    // soul against the real walls and hands the same records to onChunk), and the solid world the mover and the creatures read it through.
+    // Order: cache -> grid -> bodies -> decor(hooks) -> solid -> entitySys -> gfx
+    const bodies    = createColliderIndex()
+    const decor     = createDecorSystem(cfg, isWall, worldSeed, {
+      passes: [],   // TODO(integrate:floors,dress): cfg.map ? [] : [stairsPass(cfg, waysFor(index)), dressPass(cfg)].filter(Boolean)
+      onChunk: (k, bundle) => bodies.setChunk(k, bundle.colliders),
+      onEvict: (k) => bodies.dropChunk(k),
+    })
+    const solid     = createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature: huntSolidCreature })
+    // TODO(integrate:hunt): entities.js ignores the deps until hunt lands; they are what its stepper reads (obstacles, the grid, the clock)
+    const entitySys = createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => playT })
     // The previous level's renderer is disposed BEFORE the next one is created: a GPU backend owns a WebGL context on a sibling canvas, and
     // browsers cap live contexts (~16), so a level change must not leave one behind.
     if (level && level.gfx) { try { level.gfx.dispose() } catch { /* a half-torn-down renderer must never block a level change */ } level.gfx = null }
@@ -317,6 +343,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const gfxMs     = performance.now() - tg
     itemSys.enterLevel(cfg)
     vendedSet.clear()               // a re-entered floor re-stocks its machines
+    bumpSaid.clear(); clutterSeen.clear()   // and says its contact lines afresh
 
     // fixed maps spawn at their authored point; procedural at the origin room (carved open)
     if (cfg.spawn) { player.x = cfg.spawn.x; player.y = cfg.spawn.y }
@@ -331,7 +358,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     // Assign `level` BEFORE warming up subsystems — itemSys reads level.cache
     // through a proxy, so the object must exist first.
-    level = { index, cfg, cache, grid, entitySys, decor, gfx, messages }
+    level = { index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages }
     decor.update(0, 0); itemSys.update(0, 0)
     msgQ.clear()                    // the old floor's lines do not follow you down (one fade if one was up)
     // Morph the bed into this level's mood — unless the player has chosen an
@@ -471,11 +498,22 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   resize()
 
   const SPEED = 0.05
+  // ONE mover call per frame (the movement block sums W/S/A/D into one step). Solid furniture on: collide.js resolves the step against the
+  // 0.12 wall box, the bodies and the creatures, and reports the contacts (noteContact). Off: the old point-vs-wall mover, verbatim.
+  // movePlayer writes player.x/y itself and hands back ONE reused report; movePoint's result is reused too — read and drop.
+  const EMPTY = []
+  let lastReport = null
+  let creaturesOn = getPref('creatures')     // read live each frame, at the top of the loop
   function tryMove(nx, ny) {
-    const pcx = Math.floor(player.x / CHUNK_SIZE)
-    const pcy = Math.floor(player.y / CHUNK_SIZE)
-    if (!level.cache.isWall(nx, player.y, pcx, pcy)) player.x = nx
-    if (!level.cache.isWall(player.x, ny, pcx, pcy)) player.y = ny
+    if (!getPref('solidBodies')) {
+      const pcx = Math.floor(player.x / CHUNK_SIZE)
+      const pcy = Math.floor(player.y / CHUNK_SIZE)
+      const r = movePoint(player.x, player.y, nx, ny, level.cache.isWall, pcx, pcy)
+      player.x = r.x; player.y = r.y
+      return
+    }
+    lastReport = level.solid.movePlayer(player, nx, ny, lastDt, wantSprint, creaturesOn ? level.entitySys.getEntities() : EMPTY)
+    noteContact(lastReport)
   }
 
   // ── HUD (decluttered: level name only, plus optional anchor drift) ──
@@ -882,6 +920,38 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
   }
 
+  // ── contact (the mover's report, collide.js): the foley on an ENTER edge, the hard bump of a sprint into something with mass
+  //    (a shake, a breath, a noise the things hear, one line per type per level), the pallet's tap, the clutter line and bob
+  //    pulse, and the body that would not let you through ──
+  function noteContact(report) {
+    const hit = report.entered
+    if (hit && bumpGate.near(timing.t)) {
+      const kind = bumpKindFor(hit.kind, hit.type)
+      if (kind !== 'silent') bump(kind, bumpIntensity(report.enterSpeed), 0)
+    }
+    if (isHardBump(report, wantSprint)) {
+      shake = Math.max(shake, 0.06); stamina = Math.max(0, stamina - 2)
+      level.entitySys.noise?.(player.x, player.y, 5)   // TODO(integrate:hunt): entitySys.noise lands with hunt; the things hear a hard bump
+      const type = hit.type
+      if (!bumpSaid.has(type) && timing.t - lastBumpLine > 30) {
+        bumpSaid.add(type); lastBumpLine = timing.t
+        showMessage(BUMP_LINES[type] ?? BUMP_LINES.default)
+      }
+    }
+    if (report.stepType === 'pallet') bump('wood', 0.5)
+    if (report.clutterEntered) {
+      bobPulse = 0.35
+      if (!clutterSeen.has(report.clutterType)) {
+        clutterSeen.add(report.clutterType)
+        showMessage(CLUTTER_LINES[report.clutterType] ?? CLUTTER_LINES.default, PRIO.interaction)
+      }
+    }
+    if (report.blockedBy && huntHostile(report.blockedBy) && timing.t - lastLetThrough > 4) {
+      lastLetThrough = timing.t
+      showMessage('it does not let you through.', PRIO.interaction)
+    }
+  }
+
   // ── vending machine: draw one item, once. Deep down the almond water it gives
   //    may be sour — the lost soul's warning, made real. ──
   function dispenseFromMachine(m) {
@@ -916,6 +986,44 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const persist = () => { if (!mpClient) writeSave(snapshot()) }   // solo runs are the ones you resume
   window.addEventListener('beforeunload', persist)
 
+  // The saved position meets the settled furniture: the chunk around it is streamed first (buildLevel scanned the origin), then
+  // settlePlayer lifts the player out of any body or wall face under them. A push of more than half a cell means the spot is gone
+  // (a cabinet now stands there), so the nearest open cell centre takes them in instead, and the floor says so.
+  // TODO(integrate:floors): applyResume owns this order (mem.import -> buildLevel -> player fields -> decor/items update -> fog -> settlePlayer)
+  function resumeSettle() {
+    const pcx = Math.floor(player.x / CHUNK_SIZE), pcy = Math.floor(player.y / CHUNK_SIZE)
+    level.grid.setPlayerChunk(pcx, pcy)
+    level.cache.preload(pcx, pcy)
+    level.decor.update(pcx, pcy); itemSys.update(pcx, pcy)
+    if (!getPref('solidBodies')) return
+    const moved = level.solid.settlePlayer(player)
+    if (moved > 0.5) {
+      const spot = openSpotNear(player.x, player.y)
+      if (spot) { player.x = spot.x; player.y = spot.y }
+      showMessage('you woke somewhere slightly else.', PRIO.discovery)
+    }
+  }
+  // the nearest open cell centre (a spiral over grid.floor, up to 3 cells out) that no solid body overlaps; null when none is that close
+  const SPOT_Q = []
+  function openSpotNear(x0, y0) {
+    const cx0 = Math.floor(x0), cy0 = Math.floor(y0)
+    for (let r = 0; r <= 3; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+          const ix = cx0 + dx, iy = cy0 + dy
+          if (!level.grid.floor(ix, iy)) continue
+          const x = ix + 0.5, y = iy + 0.5
+          const n = level.bodies.query(x, y, PLAYER_R, SPOT_Q)
+          let clear = true
+          for (let i = 0; i < n; i++) if (SPOT_Q[i].cls === 'solid') { clear = false; break }
+          if (clear) return { x, y }
+        }
+      }
+    }
+    return null
+  }
+
   // ── boot: resume a saved run, else a fresh SOLO run enters through Level ∅
   //    (the block — index 4), while online play starts in the lobby together. ──
   if (resume) {
@@ -932,6 +1040,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       itemSys.select(Math.max(0, Math.min(5, resume.selected ?? 0)))
       renderHotbar()
     }
+    resumeSettle()
   } else {
     buildLevel(mpClient ? 0 : 4)   // solo: fall in through the block (∅); online: the lobby
   }
@@ -954,7 +1063,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     else if (k === 'musicVolume') setMusicVolume(v)
     else if (k === 'ambience')  setAmbience(v)
     else if (k === 'ambienceVolume') setAmbienceVolume(v)
-    // mouseSensitivity, headBob, creatures and damage are read live each frame
+    else if (k === 'solidBodies') { if (v && level) level.solid.settlePlayer(player) }   // switched on mid-stride: out of whatever you stood in
+    // mouseSensitivity, headBob, creatures, damage and solidBodies (the mover's dispatch) are read live each frame
   })
 
   // ?gfxstats=1: the diagnostics panel (gfx-stats.js) — created only when asked for; otherwise nothing, no timer, no element
@@ -987,6 +1097,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (t0 < 0) t0 = ts
     const dt = Math.min(rawMs / 1000, 0.05)
     last = ts
+    playT += dt
     timing.t = (ts - t0) / 1000; timing.dt = Math.min(rawMs / 1000, 0.1)
     if (qd.frame(rawMs, lastWorkMs)) qd.apply(renderOpts)                 // adaptive resolution: down fast, up slowly
     // the GPU health monitor watches the REAL frame interval (a CPU-side timer cannot see GPU time); it only acts once the resolution is at its floor
@@ -1005,17 +1116,26 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     flicker = fk.value; flickTgt = fk.target; flickTimer = fk.timer
     setFlicker(flicker)
 
-    // ── movement (frozen during a transition fade or while typing in chat) ──
+    // ── movement (frozen during a transition fade or while typing in chat): W/S/A/D sum into ONE step (same multipliers 1 / 0.6 / 0.7),
+    //    scaled by the clutter under you (x0.55 while edging through), then exactly one tryMove ──
+    creaturesOn = getPref('creatures')
     let moved = false
+    wantSprint = false
     if (!transitioning && !chatOpen && !noteOpen) {
-      const wantSprint = (K['ShiftLeft'] || K['ShiftRight']) && stamina > 0
+      wantSprint = (K['ShiftLeft'] || K['ShiftRight']) && stamina > 0
       const mult = wantSprint ? 1.8 : 1
       const sp = SPEED * dt * 60 * mult
       const ca = Math.cos(player.angle), sa = Math.sin(player.angle)
-      if (K['KeyW'] || K['ArrowUp'])   { tryMove(player.x + ca * sp, player.y + sa * sp); moved = true }
-      if (K['KeyS'] || K['ArrowDown']) { tryMove(player.x - ca * sp * 0.6, player.y - sa * sp * 0.6); moved = true }
-      if (K['KeyA'])                   { tryMove(player.x + Math.cos(player.angle - Math.PI/2) * sp * 0.7, player.y + Math.sin(player.angle - Math.PI/2) * sp * 0.7); moved = true }
-      if (K['KeyD'])                   { tryMove(player.x + Math.cos(player.angle + Math.PI/2) * sp * 0.7, player.y + Math.sin(player.angle + Math.PI/2) * sp * 0.7); moved = true }
+      let mx = 0, my = 0
+      if (K['KeyW'] || K['ArrowUp'])   { mx += ca * sp; my += sa * sp; moved = true }
+      if (K['KeyS'] || K['ArrowDown']) { mx -= ca * sp * 0.6; my -= sa * sp * 0.6; moved = true }
+      if (K['KeyA'])                   { mx += Math.cos(player.angle - Math.PI/2) * sp * 0.7; my += Math.sin(player.angle - Math.PI/2) * sp * 0.7; moved = true }
+      if (K['KeyD'])                   { mx += Math.cos(player.angle + Math.PI/2) * sp * 0.7; my += Math.sin(player.angle + Math.PI/2) * sp * 0.7; moved = true }
+      if (moved) {
+        lastDt = dt
+        const mult2 = getPref('solidBodies') ? level.solid.clutterAt(player.x, player.y) : 1
+        tryMove(player.x + mx * mult2, player.y + my * mult2)
+      }
       if (!locked && K['ArrowLeft'])  player.angle -= 0.04 * dt * 60   // dt-scaled: a 144 Hz display turns at the same rate
       if (!locked && K['ArrowRight']) player.angle += 0.04 * dt * 60
       if (moved && wantSprint) stamina = Math.max(0, stamina - 22 * dt)
@@ -1023,7 +1143,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
     player.moving = moved
     if (moved) player.bob += 0.12 * dt * 60
-    player.bobOffset = (moved && getPref('headBob')) ? Math.sin(player.bob) * 4 : 0
+    // the walk's bob, plus the clutter step: a +5 px rise that settles over 0.35 s (noteContact starts it on clutterEntered)
+    const bobBase = (moved && getPref('headBob')) ? Math.sin(player.bob) * 4 : 0
+    player.bobOffset = bobBase + (bobPulse > 0 ? Math.sin((0.35 - bobPulse) / 0.35 * Math.PI) * 5 : 0)
+    bobPulse = Math.max(0, bobPulse - dt)
 
     // ── the message line: the queue decides what shows; one reused result or null (messages.js) ──
     const mq = msgQ.tick(dt)
@@ -1074,8 +1197,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     // ── items: pickup prompt ──
     const nearItem = itemSys.nearestItem(player.x, player.y, 1.4)
-    // ── exits: descent prompt (wider grab range) ──
-    const nearExit = level.decor.nearestExit(player.x, player.y, 1.6)
+    // ── the ways (exits, and the stairs a pass adds): the prompt (wider grab range) ──
+    const nearExit = level.decor.nearestWay(player.x, player.y, 1.6)
     const nearNpc  = level.decor.nearestNpc(player.x, player.y, 1.8)
     const nearScrap = level.decor.nearestScrap(player.x, player.y, 1.8)
     const nearMachine = level.decor.nearestMachine(player.x, player.y, 1.6)
@@ -1089,7 +1212,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.textContent = 'f · draw from the machine'
         itemHintEl.style.opacity = '1'
       } else if (nearExit) {
-        itemHintEl.textContent = `f · ${cfg.exit?.label ?? 'descend'}`
+        itemHintEl.textContent = `f · ${nearExit.label}`     // the way's own label (exit records carry kind/label; stairs carry theirs)
         itemHintEl.style.opacity = '1'
       } else if (nearScrap) {
         itemHintEl.textContent = 'e · read the scrap'
@@ -1105,9 +1228,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // ── descent compass — points at the nearest loaded exit so it's findable ──
     const compassEl = document.getElementById('exit-compass')
     if (compassEl) {
-      const anyExit = level.decor.nearestExitAny(player.x, player.y)
+      const anyExit = level.decor.nearestWayAny(player.x, player.y)     // one reused { rec, dist }: read now, never kept
       if (anyExit && !nearExit) {
-        const rel = Math.atan2(anyExit.y - player.y, anyExit.x - player.x) - player.angle
+        const rel = Math.atan2(anyExit.rec.y - player.y, anyExit.rec.x - player.x) - player.angle
         compassEl.textContent = `${exitArrow(rel)}  ${cfg.exit?.label ?? 'descent'}  ·  ${Math.round(anyExit.dist)}m`
         compassEl.style.opacity = '1'
       } else {
@@ -1139,7 +1262,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         } else if (nearMachine && !vendedSet.has(nearMachine.key)) {
           dispenseFromMachine(nearMachine)
         } else if (nearExit) {
-          descend(nearExit.target, cfg.exit?.label)
+          descend(nearExit.target, nearExit.label)
         }
       }
       if (K['KeyQ']) { K['KeyQ'] = false; applyItemEffect(itemSys.useSelected()) }
@@ -1203,8 +1326,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     level.decor.update(pcx, pcy)
     netTimer += dt
     if (mpClient?.isConnected() && netTimer >= 0.05) { netTimer = 0; mpClient.sendPos(player.x, player.y, player.angle, player.hp) }
-    // creatures can be switched off entirely (pure liminal exploration)
-    const creaturesOn = getPref('creatures')
+    // creatures can be switched off entirely (pure liminal exploration); creaturesOn was read at the top of the frame
     if (creaturesOn) level.entitySys.update(dt, player, pcx, pcy, radioOn ? 1.5 : 1)
 
     // ── nearest stalker (drives contact damage, the heartbeat, and sanity) ──
@@ -1272,6 +1394,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     entityAsm.add('npc', level.decor.getNpcs(), EF.npc)
     entityAsm.add('prop', level.decor.getProps(), EF.prop)
     entityAsm.add('exit', level.decor.getExits(), EF.exit)
+    entityAsm.add('stair', level.decor.getStairs(), EF.exit)     // the ways up draw with the exit art, from their own pool (never aliasing the exits')
     entityAsm.add('item', itemSys.getWorldItems(), EF.item)
     entityAsm.add('note', level.decor.getScraps(), EF.note, readSet)
     entityAsm.add('machine', level.decor.getMachines(), EF.machine, vendedSet)

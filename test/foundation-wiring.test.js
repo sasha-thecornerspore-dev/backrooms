@@ -19,7 +19,7 @@ describe('game.js: one voice (messages.js)', () => {
     expect(game).not.toMatch(/setTimeout\(\(\) => \{ msgEl\.style\.opacity = '0' \}, 4200\)/)
   })
   it('the loop ticks the queue right after the movement block and writes #msg from the one result', () => {
-    const i = game.indexOf("player.bobOffset = (moved && getPref('headBob'))")
+    const i = game.indexOf("const bobBase = (moved && getPref('headBob'))")
     const j = game.indexOf('const mq = msgQ.tick(dt)')
     const k = game.indexOf('if (fogTimer > 0) fogTimer -= dt')
     expect(i).toBeGreaterThan(0); expect(j).toBeGreaterThan(i); expect(k).toBeGreaterThan(j)
@@ -45,7 +45,7 @@ describe('game.js: one voice (messages.js)', () => {
     expect(game).toContain("showMessage('you push at the dark. it gives nothing back.')")
   })
   it('buildLevel clears the queue once the new level object stands', () => {
-    expect(game).toMatch(/level = \{ index, cfg, cache, grid, entitySys, decor, gfx, messages \}\r?\n\s*decor\.update\(0, 0\); itemSys\.update\(0, 0\)\r?\n\s*msgQ\.clear\(\)/)
+    expect(game).toMatch(/level = \{ index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages \}\r?\n\s*decor\.update\(0, 0\); itemSys\.update\(0, 0\)\r?\n\s*msgQ\.clear\(\)/)
   })
   it("the loop's DOM write, replayed: a floor murmur never talks over 'it has you.', and the line fades once", () => {
     const el = { textContent: '', style: { opacity: '0' } }
@@ -80,7 +80,7 @@ describe('game.js: the grid reader and the sanity clamp', () => {
   it('buildLevel makes the grid from the cache (null for a fixed map) and the level carries it', () => {
     expect(game).toMatch(/import \{ loadConfig, CHUNK_SIZE, createChunkCache, createGridReader \} from '\.\/world\.js'/)
     expect(game).toMatch(/const grid\s+= createGridReader\(cfg\.map \? null : cache, isWall\)/)
-    expect(game).toMatch(/level = \{ index, cfg, cache, grid, entitySys, decor, gfx, messages \}/)
+    expect(game).toMatch(/level = \{ index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages \}/)   // bodies / solid: the collide step
   })
   it('each frame the grid follows the player chunk before the entity system runs', () => {
     const a = game.indexOf('level.grid.setPlayerChunk(pcx, pcy)')

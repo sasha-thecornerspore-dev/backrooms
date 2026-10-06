@@ -145,4 +145,10 @@ describe('game.js wiring (source guards)', () => {
     expect(game).toMatch(/const fader = createFader\(\{ el: fadeEl, frames: \(\) => frameCount \}\)/)       // behaviour: test/gfx-jc-game.test.js
     expect(game).not.toMatch(/requestAnimationFrame\(\(\) => \{ fadeEl\.style\.opacity = '0' \}\)/)
   })
+  it('solid bodies (collide): tryMove dispatches to level.solid.movePlayer (Solid furniture on) or the legacy movePoint (off); the movement block has exactly one tryMove( call site', () => {
+    expect(game).toMatch(/if \(!getPref\('solidBodies'\)\) \{\r?\n\s*const pcx = Math\.floor\(player\.x \/ CHUNK_SIZE\)\r?\n\s*const pcy = Math\.floor\(player\.y \/ CHUNK_SIZE\)\r?\n\s*const r = movePoint\(player\.x, player\.y, nx, ny, level\.cache\.isWall, pcx, pcy\)\r?\n\s*player\.x = r\.x; player\.y = r\.y\r?\n\s*return\r?\n\s*\}/)
+    expect(game).toMatch(/lastReport = level\.solid\.movePlayer\(player, nx, ny, lastDt, wantSprint, creaturesOn \? level\.entitySys\.getEntities\(\) : EMPTY\)\r?\n\s*noteContact\(lastReport\)/)
+    expect(game).not.toMatch(/if \(!level\.cache\.isWall\(nx, player\.y, pcx, pcy\)\) player\.x = nx/)     // the inline point mover lives in collide.js movePoint now
+    expect((game.match(/(?<!function )tryMove\(/g) || []).length).toBe(1)                               // W/S/A/D sum into one step: one call site
+  })
 })
