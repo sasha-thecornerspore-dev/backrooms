@@ -12,7 +12,7 @@ export const ITEM_TYPES = ['almond-water', 'glowstick', 'bandage', 'polaroid', '
 export const MAX_SLOTS = 6
 export const MAX_DROPPED = 24
 // the deep-stack finds are not put down: a reading, a weight, the one line that stayed open
-const KEPT = new Set(['plumb', 'ballast', 'extension-slip'])
+export const KEPT = new Set(['plumb', 'ballast', 'extension-slip'])
 const THROW_AHEAD = 1.2
 // the throw is marched in steps of 0.3 u: no step can skip a one-cell (1 u) wall
 const THROW_STEPS = 4
@@ -47,7 +47,7 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
   const taken      = new Set()  // picked up this level — never respawns
   const inventory  = []         // [{type, on?}] — persists across levels
   let   selected   = 0
-  const dropped    = new Map()  // "d:n" → {key, x, y, type, on?, onUntil?, t0?, sour?} — set down, never evicted
+  const dropped    = new Map()  // "d:n" → {key, x, y, type, on?, onUntil?, t0?, sour?, + a cache's note} — set down, never evicted
   let   dropN      = 0          // next drop key
   let   dirty      = false      // dropped / taken changed since isDirty() last read it
   const expired    = []         // reused: expireDropped's events
@@ -204,6 +204,12 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
     else if (type === 'radio' && it.on && now != null) it.onUntil = now + RADIO_BATTERY
     if (extra.t0 != null) it.t0 = extra.t0
     else if (type === 'glowstick' && now != null) it.t0 = now
+    // a cache's note (caches.js) trails the record; absent, the record is as it was
+    if (Number.isInteger(extra.ph)) it.ph = extra.ph
+    if (Number.isInteger(extra.oct)) it.oct = extra.oct
+    if (typeof extra.by === 'string') it.by = extra.by.slice(0, 24)
+    if (typeof extra.byId === 'string') it.byId = extra.byId
+    if (typeof extra.cacheKey === 'string') it.cacheKey = extra.cacheKey.slice(0, 48)
     dropped.set(key, it)
     while (dropped.size > MAX_DROPPED) dropped.delete(dropped.keys().next().value)
     dirty = true
@@ -214,7 +220,8 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
   // The whole path is sampled, not just the landing point: with the player's
   // back against a one-cell wall, 1.2 u ahead is the corridor on the OTHER side.
   // The deep-stack finds are kept. Returns { ok, item, x, y } or { ok: false, reason }.
-  function throwSelected(px, py, angle, now) {
+  // `note` (a cache's ph / oct / by / byId) rides over the item's own flags.
+  function throwSelected(px, py, angle, now, note = null) {
     const item = inventory[selected]
     if (!item) return { ok: false, reason: 'empty' }
     if (KEPT.has(item.type) || item.tool) return { ok: false, reason: 'kept' }
@@ -226,7 +233,7 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
     }
     inventory.splice(selected, 1)
     if (selected >= inventory.length && selected > 0) selected = inventory.length - 1
-    const it = dropAt(x, y, item.type, item, now)
+    const it = dropAt(x, y, item.type, note ? Object.assign({}, item, note) : item, now)
     return { ok: true, item: it, x, y }
   }
 
@@ -258,6 +265,11 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
       if (it.onUntil != null) r.onUntil = it.onUntil
       if (it.t0 != null) r.t0 = it.t0
       if (it.sour) r.sour = true
+      if (it.ph != null) r.ph = it.ph
+      if (it.oct != null) r.oct = it.oct
+      if (it.by != null) r.by = it.by
+      if (it.byId != null) r.byId = it.byId
+      if (it.cacheKey != null) r.cacheKey = it.cacheKey
       out.push(r)
     }
     return out
@@ -279,6 +291,17 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
       }
       dropAt(x, y, r.type, r, null)
     }
+  }
+
+  // A friend took it: the record leaves the world without touching the hand.
+  // Dropped keys only; a chunk spawn is never removed this way.
+  function takeDropped(key) {
+    if (typeof key !== 'string' || !key.startsWith('d:')) return null
+    const it = dropped.get(key)
+    if (!it) return null
+    dropped.delete(key)
+    dirty = true
+    return it
   }
 
   function getLures(now, px, py) { return computeLures(dropped, now, px, py) }
@@ -307,6 +330,7 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
     select, getSelected, useSelected, discardSelected, isRadioOn, enterLevel,
     peekSelected, consumeSelected,
     dropAt, throwSelected, expireDropped, exportTaken, getDropped, restoreDropped, getLures, isDirty,
+    takeDropped,
     inventory,
     get selected() { return selected },
   }
