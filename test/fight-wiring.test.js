@@ -199,6 +199,10 @@ describe('the words', () => {
     expect(readme).toMatch(/^\| x · set down \| /m)
     expect(html).toContain('<span>x set down</span>')
     expect(html).toContain('title="set the selected item down (x)"')
+    // FEEL-10: the visible label says it too (the narrow-screen ::before '✕' is unchanged)
+    expect(html).toContain('title="set the selected item down (x)">✕ set down</button>')
+    expect(html).not.toContain('✕ discard')
+    expect(html).toContain("#btn-discard::before { content: '✕'; font-size: 14px; }")
   })
 })
 
