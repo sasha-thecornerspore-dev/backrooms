@@ -127,6 +127,7 @@ hit the gear ⚙ (top-right) for the control panel. everything added is optional
 | film grain / crosshair / head-bob | visual feel |
 | mouse sensitivity | look speed |
 | creatures | turn every entity off for pure liminal exploration |
+| solid furniture | walk around things — the chairs, crates, cabinets and machines have bodies, and so do the things in the fog; off, you pass through them as before |
 | can take damage | off for a peaceful, no-stakes wander |
 
 auto-update and software rendering live in the same panel.
@@ -143,7 +144,7 @@ type your **name**, hit **PLAY ONLINE**, pick a **room code**, and share it. any
 
 ## save & continue
 
-solo runs auto-save — your level, position, hit points and whole inventory — every few seconds, on every descent, and when you quit. **CONTINUE** on the title screen drops you back exactly where you left off.
+solo runs auto-save — your level, position, hit points and whole inventory, what every floor remembers of you, and the sheets of your map — every few seconds, on every descent, and when you quit. **CONTINUE** on the title screen drops you back exactly where you left off.
 
 ---
 
