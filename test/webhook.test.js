@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { isBlockedAddress, validateWebhookUrl, buildBeaconTarget, resolveAndPin, fireBeacon } from '../src/webhook.js'
+import { formatAnchor } from '../src/renderer/anchor.js'
 
 // Every assertion below names its own input, so a failure reports WHICH address
 // regressed rather than a bare "expected false to be true".
@@ -243,6 +244,26 @@ describe('buildBeaconTarget', () => {
     expect(JSON.parse(t.body)).toMatchObject({ event: 'beacon', app: 'backrooms', version: '1.4.0' })
     expect(() => buildBeaconTarget('nope', '', ctx)).toThrow()
   })
+
+  // an anchored player's beacon carries the pin — only in the player's OWN custom body
+  const PIN = { lat: 39.2994, lng: -76.641 }
+  it('ntfy and discord targets are byte-identical with and without an anchor', () => {
+    expect(buildBeaconTarget('ntfy', 'my-room_1', { ...ctx, anchor: PIN })).toEqual(buildBeaconTarget('ntfy', 'my-room_1', ctx))
+    const d = 'https://discord.com/api/webhooks/1/x'
+    expect(buildBeaconTarget('discord', d, { ...ctx, anchor: PIN })).toEqual(buildBeaconTarget('discord', d, ctx))
+  })
+
+  it('the custom body carries the pin as formatAnchor writes it, only for a valid pin', () => {
+    const base = { event: 'beacon', app: 'backrooms', version: '1.4.0', ts: new Date(0).toISOString() }
+    const t = buildBeaconTarget('custom', 'https://example.com/hook', { ...ctx, anchor: PIN })
+    expect(JSON.parse(t.body)).toEqual({ ...base, body: '39.2994,-76.6410' })
+    expect(JSON.parse(t.body).body).toBe(formatAnchor(PIN))
+    for (const anchor of [undefined, null, { lat: 'x', lng: 1 }, { lat: 91, lng: 0 }]) {
+      const b = JSON.parse(buildBeaconTarget('custom', 'https://example.com/hook', { ...ctx, anchor }).body)
+      expect(b).toEqual(base)
+      expect('body' in b).toBe(false)
+    }
+  })
 })
 
 const pub = (addr, family = 4) => async () => [{ address: addr, family }]
@@ -361,5 +382,22 @@ describe('fireBeacon', () => {
       lookup: pub('93.184.216.34'), request: fakeReq,
     })).rejects.toThrow()
     expect(destroyed).toBeInstanceOf(Error)
+  })
+
+  it('forwards opts.anchor into the custom body it writes', async () => {
+    const PIN = { lat: 39.2994, lng: -76.641 }
+    const fire = async (extra) => {
+      let written = null
+      const fakeReq = (opts, cb) => {
+        queueMicrotask(() => cb({ statusCode: 204, resume() {} }))
+        return { on() {}, write(b) { written = b }, end() {}, destroy() {} }
+      }
+      await fireBeacon('custom', 'https://example.com/hook', {
+        appVersion: '1.4.0', now: 0, lookup: pub('93.184.216.34'), request: fakeReq, ...extra,
+      })
+      return JSON.parse(written)
+    }
+    expect((await fire({ anchor: PIN })).body).toBe(formatAnchor(PIN))
+    expect('body' in (await fire({}))).toBe(false)
   })
 })

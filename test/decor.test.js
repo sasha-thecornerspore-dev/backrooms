@@ -57,6 +57,32 @@ describe('decor system', () => {
     sys.update(40, 40)                                     // walking far never evicts it
     expect(sys.getExits()).toHaveLength(1)
   })
+
+  // ── the form on the counter: a fixed-map level's authored notes (cfg.notes, ∅ only) ──
+  const FORM_CFG = { ...L0, exitAt: { x: 12.5, y: 9.5 }, exit: { target: 0, denom: 1 }, scraps: { denom: 0 }, notes: [{ x: 6.5, y: 6.5 }] }
+
+  it('cfg.notes places exactly one scrap, keyed outside the chunks, frag -1, form', () => {
+    const sys = createDecorSystem(FORM_CFG, open); sys.update(0, 0)
+    expect(sys.getScraps()).toEqual([{ key: '∅:n0', x: 6.5, y: 6.5, frag: -1, form: true }])
+    sys.update(40, 40)                                     // never evicted, like the '∅' exit
+    expect(sys.getScraps()).toEqual([{ key: '∅:n0', x: 6.5, y: 6.5, frag: -1, form: true }])
+    sys.update(40, 40)
+    expect(sys.getScraps()).toHaveLength(1)                // placed once
+  })
+
+  it('nearestScrap finds the form within 1.8 and nothing beyond', () => {
+    const sys = createDecorSystem(FORM_CFG, open); sys.update(0, 0)
+    expect(sys.nearestScrap(6.7, 6.5, 1.8).key).toBe('∅:n0')
+    expect(sys.nearestScrap(40, 40, 1.8)).toBeNull()
+  })
+
+  it('enterLevel to a cfg without notes clears the form', () => {
+    const sys = createDecorSystem(FORM_CFG, open); sys.update(0, 0)
+    sys.enterLevel(L0); sys.update(0, 0)
+    expect(sys.getScraps().some((s) => String(s.key).startsWith('∅:n'))).toBe(false)
+    sys.enterLevel(FORM_CFG); sys.update(0, 0)             // and back: re-read, placed again
+    expect(sys.getScraps().filter((s) => s.form)).toHaveLength(1)
+  })
 })
 
 // ── settled placement (placement.js through decor) ──────────────────────────────────────────────────────────────────────

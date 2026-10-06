@@ -154,12 +154,12 @@ app.whenReady().then(() => {
   // beacon (T0 solo): fire the player's OWN registered webhook. All validation
   // and the SSRF-safe POST live in webhook.js; here we only rate-limit + log.
   ipcMain.handle('fire-beacon', async (_e, payload) => {
-    const { effect, webhook } = payload || {}
+    const { effect, webhook, anchor } = payload || {}
     const now = Date.now()
     if (now - lastBeaconAt < 10_000) return { ok: false, reason: 'cooldown' }
     lastBeaconAt = now
     try {
-      const r = await fireBeacon(effect, webhook, { appVersion: app.getVersion(), now })
+      const r = await fireBeacon(effect, webhook, { appVersion: app.getVersion(), now, anchor })   // the pin: custom body only
       logLine(`beacon: effect=${effect} ok=${r.ok} status=${r.status ?? '-'}${r.skipped ? ' (skipped)' : ''}`)
       return r
     } catch (e) {

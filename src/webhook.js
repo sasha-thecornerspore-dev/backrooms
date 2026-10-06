@@ -6,11 +6,17 @@
 // (Node builtins only, no Electron) so it can be unit-tested in isolation.
 //
 // SCOPE: T0 fires the player's OWN webhook to themselves. Anything involving
-// a second participant is out of scope for this module.
+// a second participant is out of scope for this module. An anchored player's
+// pin travels only in the player's own custom body, never to ntfy or discord.
 
 import net from 'net'
 import https from 'https'
 import dns from 'dns'
+import { formatAnchor } from './renderer/anchor.js'
+
+// a real place, or nothing: finite lat in [-90, 90], lng in [-180, 180] (the renderer sends what it has)
+const isPin = (a) => a !== null && typeof a === 'object' && Number.isFinite(a.lat) && Number.isFinite(a.lng) &&
+  a.lat >= -90 && a.lat <= 90 && a.lng >= -180 && a.lng <= 180
 
 // new URL() keeps the brackets around an IPv6 host ('[::1]'), and net.isIP('[::1]')
 // is 0 — every literal-IP check in this file needs the brackets stripped first, or a
@@ -150,7 +156,7 @@ export function validateWebhookUrl(urlStr) {
 
 // Shape the outbound request for the chosen effect. Never trusts the raw
 // target beyond what validateWebhookUrl / the ntfy regex permit.
-export function buildBeaconTarget(effect, webhook, { appVersion, now }) {
+export function buildBeaconTarget(effect, webhook, { appVersion, now, anchor = null }) {
   const target = String(webhook || '').trim()
   if (effect === 'ntfy') {
     if (!NTFY_TOPIC_RE.test(target)) throw new Error('ntfy topic: 1-64 of letters, digits, _ or -')
@@ -172,10 +178,12 @@ export function buildBeaconTarget(effect, webhook, { appVersion, now }) {
   }
   if (effect === 'custom') {
     const u = validateWebhookUrl(target)
+    const body = { event: 'beacon', app: 'backrooms', version: appVersion, ts: new Date(now).toISOString() }
+    if (isPin(anchor)) body.body = formatAnchor(anchor)
     return {
       url: u.href,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ event: 'beacon', app: 'backrooms', version: appVersion, ts: new Date(now).toISOString() }),
+      body: JSON.stringify(body),
     }
   }
   throw new Error(`unknown beacon effect: ${effect}`)
@@ -218,11 +226,11 @@ export async function resolveAndPin(hostname, lookup = defaultLookup) {
 export async function fireBeacon(effect, webhook, opts = {}) {
   const {
     appVersion = '0.0.0', now = 0,
-    lookup = defaultLookup, request = https.request, timeoutMs = 5000,
+    lookup = defaultLookup, request = https.request, timeoutMs = 5000, anchor = null,
   } = opts
   if (!effect || effect === 'off') return { ok: false, skipped: true }
 
-  const target = buildBeaconTarget(effect, webhook, { appVersion, now })
+  const target = buildBeaconTarget(effect, webhook, { appVersion, now, anchor })
   const u = new URL(target.url)
   const pinnedIp = await resolveAndPin(u.hostname, lookup)
   const strippedHost = stripBrackets(u.hostname)
