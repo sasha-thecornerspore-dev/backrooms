@@ -1085,7 +1085,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     hereObj.seen = false                 // TODO(integrate:W7) I12: evidence.active(playT)
     hereObj.o = null                     // TODO(integrate:W2) I5: origin
     hereObj.thin = false                 // TODO(integrate:W2) I5: thin
-    hereObj.status = 'notice-mailed'     // TODO(integrate:W3) I13: file.status
+    hereObj.status = 'notice-mailed'     // TODO(integrate:W3) I14a/I13: file.status (I14a declares `file`)
     hereObj.aseed = myAseed
     return hereObj
   }
