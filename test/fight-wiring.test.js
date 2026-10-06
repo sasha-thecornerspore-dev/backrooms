@@ -278,12 +278,15 @@ describe('touch.js edges (integrator)', () => {
     return { made, document: { createElement: mk, getElementById: () => null, head: mk('head'), body: mk('body'), addEventListener() {} } }
   }
   afterEach(() => { for (const k of Object.keys(saved)) { if (saved[k] === undefined) delete globalThis[k]; else globalThis[k] = saved[k] } })
-  it('source: initTouchControls takes `edges`; press++ on touchstart, release++ and the key let go on touchend / touchcancel; ACTIONS stays five', () => {
+  it('source: initTouchControls takes `edges`; press++ on touchstart, release++ and the key let go on touchend / touchcancel; ACTIONS is six', () => {
     expect(touch).toMatch(/export function initTouchControls\(\{ canvas, K, player, getPref, edges = null \} = \{\}\)/)
     expect(touch).toMatch(/if \(edge\) edge\.press\+\+/)
     expect(touch).toMatch(/if \(edge\) \{ edge\.release\+\+; K\[code\] = false \}/)
     const codes = [...touch.match(/const ACTIONS = \[([\s\S]*?)\n\]/)[1].matchAll(/code:\s*'([^']+)'/g)].map((x) => x[1])
-    expect(codes).toEqual(['KeyF', 'KeyQ', 'Space', 'KeyE', 'KeyL'])
+    expect(codes).toEqual(['KeyF', 'KeyQ', 'Space', 'KeyE', 'KeyL', 'KeyC'])
+    expect(touch).toMatch(/\{ code: 'KeyC', label: 'CALL', hint: 'whistle' \}/)
+    // six discs and ACT overflow a landscape phone: the top of the stack wraps into a second column to the left
+    expect(touch).toContain('flex-wrap: wrap-reverse')
   })
   it('replayed: WARD moves press on touchstart and release on touchend (clearing K.Space); ACT leaves K.KeyF for the loop', () => {
     for (const k of ['window', 'document']) saved[k] = globalThis[k]
@@ -305,5 +308,9 @@ describe('touch.js edges (integrator)', () => {
     expect(edges.Space.press).toBe(2); expect(edges.Space.release).toBe(2)
     act.listeners.touchstart[0](ev); act.listeners.touchend[0]()
     expect(K.KeyF).toBe(true)                                   // the loop edge-consumes it, as before
+    const call = btn('KeyC')
+    expect(call).toBeDefined(); expect(call.title).toBe('whistle')
+    call.listeners.touchstart[0](ev); call.listeners.touchend[0]()
+    expect(K.KeyC).toBe(true)                                   // CALL is a plain key button: the loop edge-consumes the whistle
   })
 })

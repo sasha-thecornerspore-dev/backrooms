@@ -296,14 +296,14 @@ describe('createMapCard', () => {
   })
 })
 
-// the map opens from Tab on a keyboard and from #map-tab on a phone: the five touch action buttons stay five, none of them Tab
+// the map opens from Tab on a keyboard and from #map-tab on a phone: the touch action buttons are the five plus W5's CALL, none of them Tab
 describe('touch.js ACTIONS (source guard)', () => {
-  it('has exactly five entries and none is Tab', () => {
+  it('has exactly six entries and none is Tab', () => {
     const src = readFileSync(new URL('../src/renderer/touch.js', import.meta.url), 'utf8')
     const m = src.match(/const ACTIONS = \[([\s\S]*?)\n\]/)
     expect(m).not.toBeNull()
     const codes = [...m[1].matchAll(/code:\s*'([^']+)'/g)].map((x) => x[1])
-    expect(codes).toHaveLength(5)
+    expect(codes).toHaveLength(6)
     expect(codes).not.toContain('Tab')
   })
 })

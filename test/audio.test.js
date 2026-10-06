@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scaleFrequency } from '../src/renderer/audio.js'
+import { scaleFrequency, whistle } from '../src/renderer/audio.js'
 
 // scaleFrequency is the one pure, testable piece of the generative music engine
 // (the rest is Web Audio graph wiring, exercised in-browser). It maps a scale
@@ -37,5 +37,13 @@ describe('scaleFrequency', () => {
       expect(f).toBeGreaterThan(0)
       expect(Number.isFinite(f)).toBe(true)
     }
+  })
+})
+
+// this file never runs initAudio, so there is no AudioContext here: the whistle (W5) is a quiet no-op, never a throw
+describe('whistle without audio', () => {
+  it('whistle() does not throw without an AudioContext', () => {
+    expect(() => whistle()).not.toThrow()
+    expect(() => whistle(7, 0.5, 0.3)).not.toThrow()
   })
 })
