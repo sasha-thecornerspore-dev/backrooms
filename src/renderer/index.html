@@ -286,6 +286,8 @@
       transform: rotate(-2deg); outline-offset: -4px;
     }
     @media (pointer: coarse) { #map-tab { display: flex; pointer-events: auto; } }
+    /* the block (Level ∅) has no map: neither the paper corner nor the hint row offers one there */
+    body[data-level="∅"] #map-tab, body[data-level="∅"] #hint .k-map { display: none; }
     #presence-hint {
       position: fixed; bottom: 140px; left: 50%; transform: translateX(-50%);
       padding: 5px 16px 6px; font: 700 11px var(--mono);
@@ -557,7 +559,7 @@
   </div>
   <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file …)" spellcheck="false" style="display:none"/>
   <div id="msg"></div>
-  <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x set down</span> · <span>tab map</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span></div>
+  <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x set down</span><span class="k-map"> · tab map</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span></div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
   <div id="item-hint" style="opacity:0"></div>
   <div id="stamina-wrap"><div id="stamina-fill"></div></div>

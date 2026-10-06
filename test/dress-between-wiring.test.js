@@ -38,7 +38,7 @@ describe('game.js: the real exported names, the passes, the state', () => {
   })
   it('the search and haunt state is declared once, outside the loop; the container predicate is hoisted (no closure per frame)', () => {
     for (const s of ['const searchLog = createSearchLog()', 'let searchT = 0, searchTarget = null, drawerCostSaid = false',
-      'const haunts = createHauntTracker({ now: () => playT })', 'let dreadQuietT = 0, lightToggles = 0', 'let waterT = 0, waterStepT = 0',
+      'const hauntTrackers = new Map()', 'let haunts = null', 'let dreadQuietT = 0, lightToggles = 0', 'let waterT = 0, waterStepT = 0',
       'const unsearchedBox = (p) => CONTAINER_TYPES[p.type] !== undefined && !searchLog.isSearched(p.key)',
       'const hauntCtxObj = { player, props: null, isOpen: (x, y) => level.grid.floor(Math.floor(x), Math.floor(y)), trail: null }']) {
       expect(at(s)).toBeLessThan(loopAt); once(s)
@@ -66,7 +66,7 @@ describe('game.js: the search (containers.js)', () => {
     expect(game).toMatch(/function startSearch\(p, th\) \{\r?\n\s*if \(th\.hunted \|\| th\.nearest <= 4\) \{ showMessage\('not now\.', PRIO\.interaction\); return \}\r?\n\s*searchTarget = p; searchT = SEARCH_HOLD_S\r?\n\s*showMessage\('you rummage\.', PRIO\.interaction\)\r?\n\s*drawerSlide\(\)/)
   })
   it('any step leaves the drawer; the hold ticks down and resolves once', () => {
-    expect(game).toMatch(/if \(searchT > 0 && moved\) \{ searchT = 0; searchTarget = null; showMessage\('you leave the drawer\.', PRIO\.interaction\) \}\r?\n\s*if \(searchT > 0\) \{ searchT -= dt; if \(searchT <= 0 && searchTarget\) \{ resolveSearch\(searchTarget\); searchTarget = null \} \}/)
+    expect(game).toMatch(/if \(searchT > 0 && stepped\) \{ searchT = 0; searchTarget = null; showMessage\('you leave the drawer\.', PRIO\.interaction\) \}\r?\n\s*if \(searchT > 0\) \{ searchT -= dt; if \(searchT <= 0 && searchTarget\) \{ resolveSearch\(searchTarget\); searchTarget = null \} \}/)
     expect((game.match(/resolveSearch\(searchTarget\)/g) || []).length).toBe(1)
   })
   it('resolveSearch rolls on the key\'s chunk with the world seed and the floor\'s salt, remembers the key only on success, makes a noise of 4 and charges the deep floors once-said', () => {

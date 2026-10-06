@@ -42,7 +42,7 @@ describe('game.js: one aiCtx object, mutated per frame, handed to one update', (
   })
   it('every frame writes the live fields in place (no fresh object) and the lures only when the items changed or 0.5 s passed', () => {
     expect(game).toMatch(/aiCtx\.flashlight = flashlight; aiCtx\.sprinting = moved && wantSprint; aiCtx\.dark = !cfg\.lights; aiCtx\.fog = cfg\.fogDistance/)
-    expect(game).toMatch(/aiCtx\.radioOn = radioOn; aiCtx\.t = playT; aiCtx\.playerAngle = player\.angle; aiCtx\.damage = cfg\.entities\?\.damage \?\? 16/)
+    expect(game).toMatch(/aiCtx\.radioOn = itemSys\.isRadioOn\(\); aiCtx\.t = playT; aiCtx\.playerAngle = player\.angle; aiCtx\.damage = cfg\.entities\?\.damage \?\? 16/)
     // fight-verbs reads isDirty() ONCE per frame (the read clears it) and shares it between the lures and the (floors) memory write
     expect(game).toMatch(/const itemsDirty = itemSys\.isDirty\(\)/)
     expect(game).toMatch(/if \(itemsDirty \|\| lureT >= 0\.5\) \{ lureT = 0; aiCtx\.lures = itemSys\.getLures\(playT, player\.x, player\.y\) \}/)
@@ -58,7 +58,7 @@ describe('game.js: one aiCtx object, mutated per frame, handed to one update', (
     expect(game).not.toMatch(/let nearD2 = Infinity/)
     expect(game).not.toMatch(/nearD/)
     expect(game).not.toMatch(/if \(e\.stagger > 0\) continue\s+\/\/ reeling from a ward/)
-    expect(game).toMatch(/if \(!transitioning && creaturesLive && getPref\('damage'\) && invuln <= 0 && th\.dmg > 0\) \{\r?\n\s*player\.hp -= th\.dmg; invuln = 0\.7; hurt = 1; regenDelay = 6; shake = 1\r?\n\s*showMessage\(th\.dmgKind === 'arc' \? 'the current finds you\.' : 'it has you\.', PRIO\.combat\)\r?\n\s*lastHitT = playT\r?\n\s*if \(mapOpen\) closeMap\(\); if \(noteOpen\) closeNoteCard\(\)\r?\n\s*cancelCommit\('the bandage slips\.'\)/)
+    expect(game).toMatch(/if \(!transitioning && creaturesLive && getPref\('damage'\) && invuln <= 0 && th\.dmg > 0\) \{\r?\n\s*player\.hp -= th\.dmg; invuln = 0\.7; hurt = 1; regenDelay = 6; shake = 1\r?\n\s*showMessage\(th\.dmgKind === 'arc' \? 'the current finds you\.' : 'it has you\.', PRIO\.urgent\)[^\n]*\r?\n\s*lastHitT = playT\r?\n\s*if \(mapOpen\) closeMap\(\); if \(noteOpen\) closeNoteCard\(\)\r?\n\s*cancelCommit\('the bandage slips\.'\)/)
     // the heartbeat block became tension.tick (fight-verbs; pinned in fight-wiring.test.js): the threat record still feeds it
     expect(game).not.toMatch(/const prox = 1 - th\.nearest \/ 12/)
     expect(game).toMatch(/const tn = tension\.tick\(dt, creaturesLive && !transitioning \? th : null, player\.hp\)/)
@@ -94,10 +94,10 @@ describe('game.js: the events, drained once per frame into one reused array', ()
   })
   it('the variant events carry theirs: the smiler, the hound (twice, once per run), the lurker, the crawler, the watcher', () => {
     expect(body).toContain("case 'smiler-freeze': whisper(); showMessage('it stops when you look. do not look away.', PRIO.discovery); break")
-    expect(body).toMatch(/case 'hound-windup': footfall\(2\); if \(!houndTold\) \{ houndTold = true; showMessage\('it gathers itself\. push now\.', PRIO\.interaction\) \} break/)
+    expect(body).toMatch(/case 'hound-windup': footfall\(2\); if \(!houndTold\) \{ houndTold = true; showMessage\('it gathers itself\. push now\.', PRIO\.urgent\) \} break/)
     expect(body).toMatch(/case 'hound-pass': if \(!passTold\) \{ passTold = true; showMessage\('it skids past\.', PRIO\.interaction\) \} break/)
     expect(body).toMatch(/case 'lurker-hunt': if \(playT - lastDuck > 1\.4\) \{ lastDuck = playT; humDuck\(1\.4\) \} break/)
-    expect(body).toContain("case 'crawler': sanity = Math.max(0, sanity - 8); showMessage('something takes your ankles.', PRIO.combat); break")
+    expect(body).toContain("case 'crawler': sanity = Math.max(0, sanity - 8); showMessage('something takes your ankles.', PRIO.urgent); break")
     expect(body).toContain("case 'watcher-dispelled': sanity = Math.min(100, sanity + 12); showMessage('it looks away first.', PRIO.interaction); break")
   })
   it('the per-level gates are cleared with the other level-scoped sets', () => {
@@ -135,7 +135,7 @@ describe('game.js: followers and the dispel that is saved', () => {
     const snap = at("const followers = (creaturesOn && way.kind !== 'lift') ? level.entitySys.snapshotChasers(player, 10, 3) : []")
     const fade = game.indexOf('fadeThen(() => {', snap)
     const built = game.indexOf('buildLevel(way.target, fromC)', fade)
-    const inj = at('if (followers.length) level.entitySys.inject(followers, player.x, player.y, 7, 10, 3 + Math.random() * 2, (x, y) => level.solid.forEntities.blocked(x, y, 0.2))')
+    const inj = at('const followed = followers.length ? level.entitySys.inject(followers, player.x, player.y, 7, 10, 3 + Math.random() * 2, (x, y) => level.solid.forEntities.blocked(x, y, 0.2)) : 0')
     expect(snap).toBeLessThan(fade); expect(fade).toBeLessThan(built); expect(built).toBeLessThan(inj)
   })
   it('each frame the wake event says who followed you down', () => {

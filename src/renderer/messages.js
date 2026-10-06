@@ -1,15 +1,18 @@
 // messages.js — the one voice of the building: a priority queue for the HUD line, so nothing talks over 'it has you.'
 //
-// PRIO: ambient 0 (floor murmurs) < discovery 1 (what you found) < interaction 2 (what you did) < combat 3 (what has you).
+// PRIO: ambient 0 (floor murmurs) < discovery 1 (what you found) < interaction 2 (what you did) < combat 3 (what has you)
+// < urgent 4 (the hit itself, the hound's one tell: the line must land in the frame it happens).
 // createMessageQueue({ dwellS, holdS, discoveryGapS }) -> { push(text, prio), tick(dt) -> null | { text, show }, clear() }
 //   - a line holds holdS seconds, then ONE tick returns { show: false } so the caller fades the element
 //   - a push above the current priority replaces it at once; at or below, it waits until the current line has been visible dwellS
+//   - an urgent push replaces whatever shows at once, even another urgent line (the line it replaces is dropped, not queued); combat
+//     keeps its FIFO for the level name and the lift's line
 //   - discovery lines queue FIFO, deduped by exact text, never dropped, at most one shown per discoveryGapS
 //   - ambient lines are dropped unless the queue is idle (nothing showing, nothing waiting)
 //   - interaction lines queue behind a combat line; past 2 waiting the OLDEST goes (the player acted again: that result is stale)
 //   - the same text pushed while it shows re-arms its hold (no flicker)
 //   - tick() hands back ONE reused result object or null; the idle path allocates nothing
-export const PRIO = Object.freeze({ ambient: 0, discovery: 1, interaction: 2, combat: 3 })
+export const PRIO = Object.freeze({ ambient: 0, discovery: 1, interaction: 2, combat: 3, urgent: 4 })
 
 const MAX_WAITING_INTERACTION = 2
 
@@ -36,7 +39,7 @@ export function createMessageQueue({ dwellS = 1.6, holdS = 4.2, discoveryGapS = 
       else qDiscovery.push(text)                                                         // never dropped
       return
     }
-    if (cur === null || prio > curPrio) { setCur(text, prio); return }                 // combat always wins instantly
+    if (cur === null || prio > curPrio || prio >= PRIO.urgent) { setCur(text, prio); return }   // combat wins instantly; urgent always
     if (prio >= PRIO.combat) { qCombat.push(text); return }
     qInteraction.push(text)
     while (qInteraction.length > MAX_WAITING_INTERACTION) qInteraction.shift()          // the oldest result is stale

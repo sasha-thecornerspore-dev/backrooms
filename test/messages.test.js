@@ -10,8 +10,8 @@ function run(q, total, step = 0.1) {
 const shown = (log) => log.filter(([, s]) => s).map(([t]) => t)
 
 describe('PRIO', () => {
-  it('orders ambient < discovery < interaction < combat', () => {
-    expect(PRIO).toEqual({ ambient: 0, discovery: 1, interaction: 2, combat: 3 })
+  it('orders ambient < discovery < interaction < combat < urgent', () => {
+    expect(PRIO).toEqual({ ambient: 0, discovery: 1, interaction: 2, combat: 3, urgent: 4 })
   })
 })
 
@@ -20,6 +20,33 @@ describe('createMessageQueue', () => {
     const q = createMessageQueue()
     expect(q.tick(0.016)).toBeNull()
     expect(q.tick(1)).toBeNull()
+  })
+
+  it('an urgent push replaces a combat line at once (no dwell), and a later urgent replaces it too; combat keeps its FIFO', () => {
+    const q = createMessageQueue({ dwellS: 1.6 })
+    q.push('it has seen you.', PRIO.combat)
+    expect(q.tick(0.016).text).toBe('it has seen you.')
+    q.push('it is close.', PRIO.combat)                                 // combat at combat: waits out the dwell (the level name / lift order)
+    expect(q.tick(0.016)).toBeNull()
+    q.push('it has you.', PRIO.urgent)                                  // the hit: shown on this very tick
+    expect(q.tick(0.016)).toEqual({ text: 'it has you.', show: true })
+    q.push('something takes your ankles.', PRIO.urgent)
+    expect(q.tick(0.016)).toEqual({ text: 'something takes your ankles.', show: true })
+    expect(run(q, 1.4)).toEqual([])
+    expect(q.tick(0.3)).toEqual({ text: 'it is close.', show: true }) // the waiting combat line follows after the dwell
+  })
+
+  it('a chase replayed at 60 fps (seen 0.5 s, close 1.4 s, the hit 1.9 s): the hit line shows with the hit, not 1.8 s behind it', () => {
+    const q = createMessageQueue()
+    const pushes = [[0.5, 'it has seen you.', PRIO.combat], [1.4, 'it is close.', PRIO.combat], [1.9, 'it has you.', PRIO.urgent]]
+    let t = 0, hitAt = -1
+    for (let i = 0; i < 400; i++) {
+      t += 1 / 60
+      for (const p of pushes) if (Math.abs(p[0] - t) < 1 / 120) q.push(p[1], p[2])
+      const r = q.tick(1 / 60)
+      if (r && r.show && r.text === 'it has you.' && hitAt < 0) hitAt = t
+    }
+    expect(hitAt).toBeGreaterThan(1.88); expect(hitAt).toBeLessThan(1.95)
   })
 
   it('a combat push replaces an interaction line on the same tick', () => {

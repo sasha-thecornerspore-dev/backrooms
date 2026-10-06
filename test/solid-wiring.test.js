@@ -35,7 +35,10 @@ describe('game.js: buildLevel order (cache -> grid -> bodies -> decor(hooks) -> 
     expect(game).toMatch(/level = \{ index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages \}/)
   })
   it('the contact sets are level-scoped (cleared next to the frame\'s vendedSet, which levelmem now hands out) and the passes run in the fixed order', () => {
-    expect(game).toMatch(/vendedSet = mem\.vendedFor\(index, playT\)[^\n]*\r?\n\s*bumpSaid\.clear\(\); clutterSeen\.clear\(\)/)
+    // (the vendedSet is read once the new level object stands, below the clears: itemSys.enterLevel must see the new walls — W-R1)
+    const build = game.slice(game.indexOf('function buildLevel(index, at = null) {'), game.indexOf('const fader = createFader('))
+    expect(build).toMatch(/\n\s*bumpSaid\.clear\(\); clutterSeen\.clear\(\)/)
+    expect(build.indexOf('bumpSaid.clear(); clutterSeen.clear()')).toBeLessThan(build.indexOf('vendedSet = mem.vendedFor(index, playT)'))
     expect(game).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\)\]\.filter\(Boolean\),/)   // stairs -> dress -> haunts
     expect(game).not.toMatch(/TODO\(integrate:dress\)/)
     // the creatures step: hunt.js is the one creature-solidity / hostility rule (the placeholders are gone)
@@ -51,7 +54,7 @@ describe('game.js: one mover call per frame', () => {
     expect(game).toMatch(/let mx = 0, my = 0\r?\n\s*if \(K\['KeyW'\] \|\| K\['ArrowUp'\]\)\s+\{ mx \+= ca \* sp; my \+= sa \* sp; moved = true \}/)
     expect(game).toMatch(/if \(K\['KeyS'\] \|\| K\['ArrowDown'\]\) \{ mx -= ca \* sp \* 0\.6; my -= sa \* sp \* 0\.6; moved = true \}/)
     expect(game).toMatch(/if \(K\['KeyA'\]\)\s+\{ mx \+= Math\.cos\(player\.angle - Math\.PI\/2\) \* sp \* 0\.7; my \+= Math\.sin\(player\.angle - Math\.PI\/2\) \* sp \* 0\.7; moved = true \}/)
-    expect(game).toMatch(/if \(moved\) \{\r?\n\s*lastDt = dt\r?\n\s*const mult2 = getPref\('solidBodies'\) \? level\.solid\.clutterAt\(player\.x, player\.y\) : 1\r?\n\s*tryMove\(player\.x \+ mx \* mult2, player\.y \+ my \* mult2\)\r?\n\s*\}/)
+    expect(game).toMatch(/if \(moved\) \{\r?\n\s*lastDt = dt\r?\n\s*const mult2 = getPref\('solidBodies'\) \? level\.solid\.clutterAt\(player\.x, player\.y\) : 1\r?\n\s*const x0 = player\.x, y0 = player\.y\r?\n\s*tryMove\(player\.x \+ mx \* mult2, player\.y \+ my \* mult2\)\r?\n\s*stepped = \(player\.x - x0\) \*\* 2 \+ \(player\.y - y0\) \*\* 2 > 1e-6[^\n]*\r?\n\s*\}/)
     expect((game.match(/(?<!function )tryMove\(/g) || []).length).toBe(1)
   })
   it('the sprint flag the hard-bump rule reads is the one the movement block set this frame; creaturesOn is read at the top of the frame', () => {

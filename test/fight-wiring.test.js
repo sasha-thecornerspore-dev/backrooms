@@ -114,7 +114,9 @@ describe('game.js: set down (X and the dock ✕), the dropped things\' clocks, t
     expect(game).toMatch(/const radioOn = itemSys\.isRadioOn\(\) \|\| lureWithin\(lures, player\.x, player\.y, 12\)/)
     expect(at('const expired = itemSys.expireDropped(playT)')).toBeLessThan(at('const itemsDirty = itemSys.isDirty()'))
     expect(at('const itemsDirty = itemSys.isDirty()')).toBeLessThan(at('const radioOn = itemSys.isRadioOn()'))
-    expect(at('const radioOn = itemSys.isRadioOn()')).toBeLessThan(at('aiCtx.radioOn = radioOn'))
+    // the hunt's ctx.radioOn is the CARRIED radio only (variants.json: a carried playing radio widens the tesla's sight; set down, it is a lure)
+    expect(at('const radioOn = itemSys.isRadioOn()')).toBeLessThan(at('aiCtx.radioOn = itemSys.isRadioOn();'))
+    expect(game).not.toMatch(/aiCtx\.radioOn = radioOn/)
     expect(game).not.toMatch(/for \(const ev of itemSys\.expireDropped/)      // indexed over the reused array: nothing allocated per frame
   })
   it('the dropped radios are a noise of 8 every 0.5 s, flooded after the grid follows this frame\'s chunk, only while the things are live', () => {
@@ -164,11 +166,11 @@ describe('game.js: tension replaces the heartbeat block', () => {
     expect(game).not.toMatch(/heartT = 1\.15 - prox \* 0\.8/)
   })
   it('enter / exit patch the live mood from the pristine base (never a setMusic), close says its line as combat, the mood is remembered for N', () => {
-    expect(block).toContain('const base = trackIdx < 0 ? cfg.music : TRACKS[trackIdx].mood')
-    expect(block).toContain("if (tn.just === 'enter') setMood(huntDelta(base))")
-    expect(block).toContain("if (tn.just === 'exit') setMood(calmDelta(base))")
+    expect(block).toContain('const songBase = trackIdx < 0 ? cfg.music : TRACKS[trackIdx].mood')
+    expect(block).toContain("if (tn.just === 'enter') setMood(huntDelta(songBase))")
+    expect(block).toContain("if (tn.just === 'exit') setMood(calmDelta(songBase))")
     expect(block).toContain("huntMood = tn.mood === 'hunt'")
-    expect(block).toContain("if (tn.close) showMessage('it is close.', PRIO.combat)")
+    expect(block).toContain("if (tn.close && playT - lastSeenLine > 1.6) showMessage('it is close.', PRIO.combat)")
     expect(block).not.toContain('setMusic(')
   })
   it('the whisper window shrinks with the tension', () => {

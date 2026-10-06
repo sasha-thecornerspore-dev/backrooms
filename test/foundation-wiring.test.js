@@ -26,13 +26,13 @@ describe('game.js: one voice (messages.js)', () => {
     expect(game).toMatch(/if \(mq && msgEl\) \{ if \(mq\.show\) \{ msgEl\.textContent = mq\.text; msgEl\.style\.opacity = '1' \} else msgEl\.style\.opacity = '0' \}/)
   })
   it('every line that must win or must yield carries its priority', () => {
-    expect(game).toMatch(/showMessage\(th\.dmgKind === 'arc' \? 'the current finds you\.' : 'it has you\.', PRIO\.combat\)/)   // the creatures step: the jolt has its own line
+    expect(game).toMatch(/showMessage\(th\.dmgKind === 'arc' \? 'the current finds you\.' : 'it has you\.', PRIO\.urgent\)/)   // the creatures step: the jolt has its own line; urgent, so it lands with the hit (FEEL-2)
     // travel: the level name wins at once; on a first visit the way hint is a discovery line that follows it
-    expect(game).toMatch(/showMessage\(level\.cfg\.levelName, PRIO\.combat\)\r?\n\s+const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)\r?\n\s+if \(first\) \{\r?\n\s+if \(level\.cfg\.exit\?\.hint\) setTimeout\(\(\) => showMessage\(level\.cfg\.exit\.hint, PRIO\.discovery\), 3800\)/)
+    expect(game).toMatch(/showMessage\(level\.cfg\.levelName, PRIO\.combat\)\r?\n\s+const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)\r?\n\s+if \(first\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s+if \(level\.cfg\.exit\?\.hint && !followed\) later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\)/)
     // dying: 'everything goes dark.' is combat; the wake line (death.js) follows as discovery
     expect(game).toMatch(/showMessage\('everything goes dark\.', PRIO\.combat\)/)
-    expect(game).toMatch(/setTimeout\(\(\) => showMessage\(r\.message, PRIO\.discovery\), 2600\)/)
-    expect(game).toMatch(/buildLevel\(mpClient \? 0 : 4\)[^\n]*\r?\n\s*\}\r?\n\s*showMessage\(level\.cfg\.levelName, PRIO\.combat\)/)
+    expect(game).toMatch(/later\(2600, r\.message, PRIO\.discovery\)/)
+    expect(game).toMatch(/buildLevel\(mpClient \? 0 : 4\)[^\n]*\r?\n\s*if \(getPref\('solidBodies'\)\) level\.solid\.settlePlayer\(player\)[^\n]*\r?\n\s*\}\r?\n\s*showMessage\(level\.cfg\.levelName, PRIO\.combat\)/)
     expect(game).toMatch(/showMessage\(level\.messages\[Math\.floor\(Math\.random\(\) \* level\.messages\.length\)\], PRIO\.ambient\)/)
     // event lines: fireEvent's prio — ambient by default (the scheduler passes none), interaction when a drawer fires them — except the two
     // that answer to you, which stay on the interaction default
@@ -50,7 +50,7 @@ describe('game.js: one voice (messages.js)', () => {
     expect(game).toContain("showMessage('you push at the dark. it gives nothing back.')")
   })
   it('buildLevel clears the queue once the new level object stands', () => {
-    expect(game).toMatch(/level = \{ index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages \}\r?\n\s*decor\.update\(spawnChunk\.cx, spawnChunk\.cy\); itemSys\.update\(spawnChunk\.cx, spawnChunk\.cy\)\r?\n\s*msgQ\.clear\(\)/)
+    expect(game).toMatch(/level = \{ index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages \}\r?\n[\s\S]*?\r?\n\s*decor\.update\(spawnChunk\.cx, spawnChunk\.cy\); itemSys\.update\(spawnChunk\.cx, spawnChunk\.cy\)\r?\n\s*msgQ\.clear\(\)/)
   })
   it("the loop's DOM write, replayed: a floor murmur never talks over 'it has you.', and the line fades once", () => {
     const el = { textContent: '', style: { opacity: '0' } }
