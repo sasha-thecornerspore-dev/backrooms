@@ -168,6 +168,35 @@ describe('createMessageQueue', () => {
     expect(q2.tick(0.1)).toBeNull()
   })
 
+  // the drawer's haunt (containers.js applyRoll -> game.js fireEvent): the roll lands 0.75 s into 'you rummage.' (interaction, holdS 4.2),
+  // so its line must be pushed at interaction to be seen at all; at ambient the queue drops it and the sanity hit arrives with no text
+  it('a search result pushed while "you rummage." shows is kept at interaction and dropped at ambient', () => {
+    const cold = 'a cold spot. your breath fogs where there is nothing cold enough to fog it.'
+    const asWired = createMessageQueue(), seenWired = []
+    asWired.push('you rummage.', PRIO.interaction); seenWired.push(...run(asWired, 0.75))     // SEARCH_HOLD_S
+    asWired.push(cold, PRIO.interaction); seenWired.push(...run(asWired, 12))
+    expect(shown(seenWired)).toEqual(['you rummage.', cold])
+    const dropped = createMessageQueue(), seenDropped = []
+    dropped.push('you rummage.', PRIO.interaction); seenDropped.push(...run(dropped, 0.75))
+    dropped.push(cold, PRIO.ambient); seenDropped.push(...run(dropped, 12))
+    expect(shown(seenDropped)).toEqual(['you rummage.'])
+  })
+
+  // the lift (game.js travel): a 'before' line pushed ahead of the fade is cleared by buildLevel 0.58 s later, and never shown at all when a
+  // prompt result is up; pushed under the veil after the clear, at combat, it reads first and the level name follows (combat queues FIFO)
+  it('two combat lines pushed after clear() both show, in order; a discovery line pushed before the clear is lost', () => {
+    const lift = 'the lift arrives without being called. it only goes one place.', name = 'level 3 — the pipes'
+    const before = createMessageQueue(), seenBefore = []
+    before.push('you take the almond water.', PRIO.interaction); seenBefore.push(...run(before, 0.1))
+    before.push(lift, PRIO.discovery); seenBefore.push(...run(before, 0.58))              // queued behind the interaction line, under the veil
+    before.clear(); before.push(name, PRIO.combat); seenBefore.push(...run(before, 12))   // buildLevel: the clear drops it before it showed
+    expect(shown(seenBefore)).toEqual(['you take the almond water.', name])
+    const under = createMessageQueue(), seenUnder = []
+    under.push('you take the almond water.', PRIO.interaction); seenUnder.push(...run(under, 0.68))
+    under.clear(); under.push(lift, PRIO.combat); under.push(name, PRIO.combat); seenUnder.push(...run(under, 12))
+    expect(shown(seenUnder)).toEqual(['you take the almond water.', lift, name])
+  })
+
   it('ignores empty pushes', () => {
     const q = createMessageQueue()
     q.push('', PRIO.combat); q.push(null, PRIO.combat); q.push(undefined, PRIO.interaction)

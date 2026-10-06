@@ -461,6 +461,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     level = { index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages }
     decor.update(spawnChunk.cx, spawnChunk.cy); itemSys.update(spawnChunk.cx, spawnChunk.cy)
     msgQ.clear()                    // the old floor's lines do not follow you down (one fade if one was up)
+    ephemera.length = 0             // nor its apparitions: a haunt's standing figure would otherwise stand on the new floor at its old x,y
     lastCellIx = NaN                // the compass recomputes on the floor's first frame
     // Morph the bed into this level's mood — unless the player has chosen an
     // alternate track with N, in which case their choice follows them down.
@@ -495,7 +496,6 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const followers = (creaturesOn && way.kind !== 'lift') ? level.entitySys.snapshotChasers(player, 10, 3) : []
     mem.leave(level.index, player, fromC, playT)
     mem.setDropped(level.index, itemSys.getDropped())
-    if (way.kind === 'lift') showMessage(wayMessage(way, { before: true }), PRIO.discovery)
     fadeThen(() => {
       buildLevel(way.target, fromC)
       const partner = way.kind === 'down' ? level.decor.wayAt(fromC.cx, fromC.cy, 'up') : way.kind === 'up' ? level.decor.exitAt(fromC.cx, fromC.cy) : null
@@ -518,6 +518,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (followers.length) level.entitySys.inject(followers, player.x, player.y, 7, 10, 3 + Math.random() * 2, (x, y) => level.solid.forEntities.blocked(x, y, 0.2))
       if (!level.cfg.map) fog.pinThing(way.target, 'arrived:' + (playT | 0), 'arrived', player.x, player.y)
       persist(true)                     // save on every travel, with the map
+      // the lift's line is said under the veil, past buildLevel's msgQ.clear() (which would drop it before the fade): at combat it is never
+      // queued behind a prompt result, and combat queues FIFO, so it reads before the level name
+      if (way.kind === 'lift') showMessage(wayMessage(way, { before: true }), PRIO.combat)
       showMessage(level.cfg.levelName, PRIO.combat)
       const wm = wayMessage(way, { partner, mem: mem.get(way.target) })
       if (first) {
@@ -1103,22 +1106,24 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       ttl: (span * 2) / sp + 0.2, variant: thin ? 'thin' : (Math.random() < 0.5 ? 'shade' : 'lurker'),
     })
   }
-  function fireEvent(id) {
+  // fireEvent(id, prio): the scheduled events murmur at ambient (dropped unless the line is idle); a drawer's haunt is the result of a search,
+  // so containers.js fires it at interaction and the line shows behind 'you rummage.' (door-slam / crosser keep their interaction default)
+  function fireEvent(id, prio = PRIO.ambient) {
     if (id === 'lights-cascade') {
       flickTgt = 0.14; flickTimer = 0.7                        // a wave of dark, held, then the loop recovers it
-      showMessage('the lights go out ahead of you, one by one. then, slowly, they come back.', PRIO.ambient)
+      showMessage('the lights go out ahead of you, one by one. then, slowly, they come back.', prio)
     } else if (id === 'door-slam') {
       doorSlam(); shake = Math.max(shake, 0.35)
       showMessage('somewhere behind you, a door slams shut.')
     } else if (id === 'hum-stops') {
       humDuck(2.6)
-      showMessage('the hum stops. the silence has a shape. then it resumes, as if something had been listening.', PRIO.ambient)
+      showMessage('the hum stops. the silence has a shape. then it resumes, as if something had been listening.', prio)
     } else if (id === 'cold-spot') {
       sanity = Math.max(0, sanity - 4); whisper()
-      showMessage('a cold spot. your breath fogs where there is nothing cold enough to fog it.', PRIO.ambient)
+      showMessage('a cold spot. your breath fogs where there is nothing cold enough to fog it.', prio)
     } else if (id === 'footsteps') {
       footfall()
-      showMessage('footsteps. not yours. they keep your pace, and stop when you stop.', PRIO.ambient)
+      showMessage('footsteps. not yours. they keep your pace, and stop when you stop.', prio)
     } else if (id === 'crosser') {
       spawnCrosser(); footfall(3); heartbeat(0.7)
       showMessage('far down the hall, something crosses the intersection. the hall is empty when you look again.')
@@ -1136,9 +1141,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
   const clampSanity = (d) => { sanity = Math.max(0, Math.min(100, sanity + d)) }
   const searchApi = {
-    grant: itemSys.grant, message: showMessage, sanity: clampSanity, fire: fireEvent,
+    grant: itemSys.grant, message: showMessage, sanity: clampSanity, fire: (id) => fireEvent(id, PRIO.interaction),
     // 'behind-you': the still figure on the trail you just walked; a cold spot when no open trail cell is behind you (hauntEffects -> null)
-    behindYou: () => { const fx = hauntEffects('standing-figure', hauntCtx()); if (fx) applyHaunt(fx); else fireEvent('cold-spot') },
+    behindYou: () => { const fx = hauntEffects('standing-figure', hauntCtx()); if (fx) applyHaunt(fx); else fireEvent('cold-spot', PRIO.interaction) },
   }
   function resolveSearch(p) {
     const [cx, cy] = p.key.split(':')[0].split(',').map(Number)     // keys are `${cx},${cy}:${i}` (scatter) or `${cx},${cy}:d${n}` (dressed)

@@ -74,12 +74,17 @@ describe('game.js: buildLevel(index, at)', () => {
 
 describe('game.js: travel(way) replaces descend', () => {
   const body = slice('function travel(way) {', '// die(): death.js resolves it')
-  it('is the one way between floors: the closing guard, the memory written before the fade, the lift\'s line before it, no followers into the lift', () => {
+  it('is the one way between floors: the closing guard, the memory written before the fade, the lift\'s line under it, no followers into the lift', () => {
     expect(game).not.toMatch(/\bdescend\(/)
     expect((game.match(/function travel\(/g) || []).length).toBe(1)
     expect(body).toMatch(/if \(closing && closing\.key === way\.key && playT < closing\.until\) return/)
     expect(body).toMatch(/const followers = \(creaturesOn && way\.kind !== 'lift'\) \? level\.entitySys\.snapshotChasers\(player, 10, 3\) : \[\]/)
-    expect(body).toMatch(/mem\.leave\(level\.index, player, fromC, playT\)\r?\n\s*mem\.setDropped\(level\.index, itemSys\.getDropped\(\)\)\r?\n\s*if \(way\.kind === 'lift'\) showMessage\(wayMessage\(way, \{ before: true \}\), PRIO\.discovery\)\r?\n\s*fadeThen\(/)
+    expect(body).toMatch(/mem\.leave\(level\.index, player, fromC, playT\)\r?\n\s*mem\.setDropped\(level\.index, itemSys\.getDropped\(\)\)\r?\n\s*fadeThen\(/)
+    // the lift's 'before' line is pushed UNDER the veil, after buildLevel's msgQ.clear() (which dropped it when said before the fade), at combat
+    // (never queued behind a prompt result) and right before the level name (combat queues FIFO: both read)
+    expect(body).not.toMatch(/before: true \}\), PRIO\.discovery\)/)
+    expect(body).toMatch(/persist\(true\)[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(way\.kind === 'lift'\) showMessage\(wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*showMessage\(level\.cfg\.levelName, PRIO\.combat\)/)
+    expect(body.indexOf('buildLevel(way.target, fromC)')).toBeLessThan(body.indexOf("{ before: true }"))
     expect(body.indexOf('if (mapOpen) closeMap()')).toBeLessThan(body.indexOf('fadeThen('))
   })
   it('under the fade: buildLevel at the from-chunk, the partner by kind, arrivalFor with the ring\'s memory, the closing way, the arrival record, the ceiling, the trays, the pin, the full save', () => {

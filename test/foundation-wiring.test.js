@@ -34,13 +34,16 @@ describe('game.js: one voice (messages.js)', () => {
     expect(game).toMatch(/setTimeout\(\(\) => showMessage\(r\.message, PRIO\.discovery\), 2600\)/)
     expect(game).toMatch(/buildLevel\(mpClient \? 0 : 4\)[^\n]*\r?\n\s*\}\r?\n\s*showMessage\(level\.cfg\.levelName, PRIO\.combat\)/)
     expect(game).toMatch(/showMessage\(level\.messages\[Math\.floor\(Math\.random\(\) \* level\.messages\.length\)\], PRIO\.ambient\)/)
-    // event lines: ambient, except the two that answer to you
+    // event lines: fireEvent's prio — ambient by default (the scheduler passes none), interaction when a drawer fires them — except the two
+    // that answer to you, which stay on the interaction default
+    expect(game).toContain('function fireEvent(id, prio = PRIO.ambient) {')
+    expect(game).toMatch(/if \(evId\) \{ fireEvent\(evId\); dreadQuietT = 12 \}/)
     for (const line of [
       'the lights go out ahead of you, one by one. then, slowly, they come back.',
       'the hum stops. the silence has a shape. then it resumes, as if something had been listening.',
       'a cold spot. your breath fogs where there is nothing cold enough to fog it.',
       'footsteps. not yours. they keep your pace, and stop when you stop.',
-    ]) expect(game).toContain(`showMessage('${line}', PRIO.ambient)`)
+    ]) expect(game).toContain(`showMessage('${line}', prio)`)
     expect(game).toContain("showMessage('somewhere behind you, a door slams shut.')")
     expect(game).toContain("showMessage('far down the hall, something crosses the intersection. the hall is empty when you look again.')")
     // ward results stay on the default (interaction)

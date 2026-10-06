@@ -76,9 +76,24 @@ describe('game.js: the search (containers.js)', () => {
     expect(game).toMatch(/searchLog\.markSearched\(p\.key\); mem\.noteSearched\(level\.index, p\.key\)\r?\n\s*level\.entitySys\.noise\(p\.x, p\.y, 4\)/)
     expect(game).toMatch(/if \(level\.index >= DRAWER_COST\.minLevel\) \{[^\n]*\r?\n\s*sanity = Math\.max\(0, sanity - DRAWER_COST\.sanity\)\r?\n\s*if \(!drawerCostSaid\) \{ drawerCostSaid = true; showMessage\(DRAWER_COST\.line, PRIO\.discovery\) \}/)
     expect(game).toMatch(/if \(roll\.kind === 'item'\) renderHotbar\(\)/)
-    // the api: the inventory's grant, the queue, a clamped sanity, the event ids through fireEvent, behind-you through the figure with the cold spot as fallback
-    expect(game).toMatch(/grant: itemSys\.grant, message: showMessage, sanity: clampSanity, fire: fireEvent,/)
-    expect(game).toMatch(/behindYou: \(\) => \{ const fx = hauntEffects\('standing-figure', hauntCtx\(\)\); if \(fx\) applyHaunt\(fx\); else fireEvent\('cold-spot'\) \}/)
+    // the api: the inventory's grant, the queue, a clamped sanity, the event ids through fireEvent AT INTERACTION (a search result is 'what you
+    // did': at ambient the line was dropped behind 'you rummage.'), behind-you through the figure with the cold spot as fallback, also at interaction
+    expect(game).toMatch(/grant: itemSys\.grant, message: showMessage, sanity: clampSanity, fire: \(id\) => fireEvent\(id, PRIO\.interaction\),/)
+    expect(game).toMatch(/behindYou: \(\) => \{ const fx = hauntEffects\('standing-figure', hauntCtx\(\)\); if \(fx\) applyHaunt\(fx\); else fireEvent\('cold-spot', PRIO\.interaction\) \}/)
+    expect(game).not.toMatch(/fire: fireEvent,/)
+  })
+  it('fireEvent(id, prio = PRIO.ambient): the four murmurs take the caller\'s priority; door-slam and the crosser keep their interaction default', () => {
+    once('function fireEvent(id, prio = PRIO.ambient) {')
+    const body = game.slice(at('function fireEvent(id, prio = PRIO.ambient) {'), at('function startSearch(p, th) {'))
+    for (const line of ['the lights go out ahead of you, one by one. then, slowly, they come back.',
+      'the hum stops. the silence has a shape. then it resumes, as if something had been listening.',
+      'a cold spot. your breath fogs where there is nothing cold enough to fog it.',
+      'footsteps. not yours. they keep your pace, and stop when you stop.']) expect(body).toContain(`showMessage('${line}', prio)`)
+    expect(body).not.toContain(', PRIO.ambient)')                                     // no line in fireEvent pins ambient any more
+    expect(body).toContain("showMessage('somewhere behind you, a door slams shut.')")
+    expect(body).toContain("showMessage('far down the hall, something crosses the intersection. the hall is empty when you look again.')")
+    // the scheduled path still murmurs: no priority passed, so the default (ambient) applies
+    expect(game).toMatch(/if \(evId\) \{ fireEvent\(evId\); dreadQuietT = 12 \}/)
   })
 })
 
@@ -104,6 +119,9 @@ describe('game.js: the hauntings (haunts.js) and the shared quiet', () => {
     expect(game).toMatch(/flashlight = !flashlight; lightToggles\+\+;/)
     // running water keeps pace for its timer
     expect(game).toMatch(/if \(waterT > 0\) \{ waterT -= dt; waterStepT -= dt; if \(waterStepT <= 0 && waterT > 0\) \{ waterStepT = 3; footfall\(8\) \} \}/)
+    // the figure does not follow you to the next floor: buildLevel empties the apparitions with the old floor's lines
+    expect(game).toMatch(/msgQ\.clear\(\)[^\n]*\r?\n\s*ephemera\.length = 0/)
+    once('ephemera.length = 0')
     // the figure vanishes when you come within vanishAt
     expect(game).toMatch(/if \(a\.vanishAt && \(a\.x - player\.x\) \*\* 2 \+ \(a\.y - player\.y\) \*\* 2 < a\.vanishAt \* a\.vanishAt\) a\.ttl = 0/)
     // hauntCtx fills the one object (getProps / lastTrail allocate only on a haunt)
