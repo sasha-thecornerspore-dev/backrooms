@@ -9,10 +9,12 @@ import { createChunkCache, createGridReader, CHUNK_SIZE, DEFAULT_CONFIG } from '
 import { createFixedMap } from '../src/renderer/fixedmap.js'
 import { NULL_MAP, NULL_SPAWN, NULL_EXIT } from '../src/renderer/level-null-map.js'
 import { PLAYER_R } from '../src/renderer/collide.js'
+import { waysFor, stairsPass } from '../src/renderer/topology.js'
+import { dressPass } from '../src/renderer/dress.js'
 
-// TODO(integrate:floors,dress): the plan runs this gate with stairsPass(cfg, waysFor(index)) and dressPass(cfg) ON. Neither module
-// is merged yet, so the gate runs with passes = [] (the integration order's first landing); the floors / dress steps add them here.
-const PASSES = []
+// the gate runs with the passes game.js runs: the stairs up / the lift (never bodies, but spots that must stay reachable) and the room
+// dressing (solids that must seal nothing); built per level, as buildLevel does (the haunts pass places no body and no spot)
+const passesFor = (cfg, index) => [stairsPass(cfg, waysFor(index)), dressPass(cfg)].filter(Boolean)
 const CS = CHUNK_SIZE
 const key = (cx, cy) => `${cx},${cy}`
 const chunkOf = (x, y) => key(Math.floor(x / CS), Math.floor(y / CS))
@@ -91,11 +93,12 @@ describe('walkable on a small grid', () => {
 // the first `n` chunks (the scan order is deterministic) with their colliders and spots.
 function scanLevel(index, seed, n) {
   const cfg = levelConfig(DEFAULT_CONFIG, index)
+  cfg.ways = waysFor(index)
   const cache = createChunkCache(cfg, seed)
   const isWall = (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy)
   const grid = createGridReader(cache, isWall)
   const bundles = new Map()
-  const decor = createDecorSystem(cfg, isWall, seed, { passes: PASSES, onChunk: (k, b) => bundles.set(k, b) })
+  const decor = createDecorSystem(cfg, isWall, seed, { passes: passesFor(cfg, index), onChunk: (k, b) => bundles.set(k, b) })
   const items = createItemSystem(cfg, isWall, seed)
   items.enterLevel(cfg)
   const spots = new Map()   // chunk key -> [{ x, y, radius, what }]

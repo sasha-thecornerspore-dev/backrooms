@@ -54,13 +54,13 @@ describe('game.js: the real exported names, the re-exports, the placeholders gon
 
 describe('game.js: buildLevel(index, at)', () => {
   const body = slice('function buildLevel(index, at = null) {', 'const fader = createFader(')
-  it('sets cfg.ways before decor is built, streams the arrival chunk, runs stairsPass after the sights (dress still marked), and spawns at the chunk\'s crossing', () => {
+  it('sets cfg.ways before decor is built, streams the arrival chunk, runs stairsPass first after the sights (dress and haunts behind it), and spawns at the chunk\'s crossing', () => {
     expect(body).toMatch(/cfg\.ways {4}= waysFor\(index\)\r?\n\s*spawnChunk {2}= at \?\? \{ cx: 0, cy: 0 \}/)
     expect(body.indexOf('cfg.ways    = waysFor(index)')).toBeLessThan(body.indexOf('const decor     = createDecorSystem('))
     expect(body).toContain('cache.preload(spawnChunk.cx, spawnChunk.cy)')
     expect(body).toContain('grid.setPlayerChunk(spawnChunk.cx, spawnChunk.cy)')
-    expect(body).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\)\]\.filter\(Boolean\),/)
-    expect(body).toMatch(/TODO\(integrate:dress\)/)
+    expect(body).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\)\]\.filter\(Boolean\),/)
+    expect(body).not.toMatch(/TODO\(integrate:dress\)/)
     expect(body).toMatch(/else \{ const mid = chunkMid\(spawnChunk\.cx, spawnChunk\.cy\), m = findOpenNear\(mid\.x, mid\.y, grid\.floor\) \?\? mid; player\.x = m\.x; player\.y = m\.y \}/)
     expect(body).not.toMatch(/player\.x = HALF \+ 0\.5/)
     expect(body).toContain('decor.update(spawnChunk.cx, spawnChunk.cy); itemSys.update(spawnChunk.cx, spawnChunk.cy)')

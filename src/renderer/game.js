@@ -5,7 +5,7 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, bump } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, drawerSlide, bump } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
 import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
@@ -31,6 +31,9 @@ import { createFogMap, revealRadius } from './fogmap.js'
 import { visibleWays, SIGHT_LINES, PROX_PIN } from './sightpins.js'
 import { createMapCard } from './mapcard.js'
 import { compassLines, compassText, arrivalSummary } from './compass.js'
+import { dressPass } from './dress.js'
+import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog } from './containers.js'
+import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -227,7 +230,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let lastDt     = 1 / 60 // the step the mover measures the enter speed against
   let bobPulse   = 0    // seconds left of the clutter step: a 0.35 s rise-and-settle on the bob
   let playT      = 0    // seconds of play this run (the clamped simulation step): saved in snapshot(), restored on resume
-  let lastHitT   = -Infinity // when a thing last reached you (stamped by the hit block; nothing reads it yet)
+  let lastHitT   = -Infinity // when a thing last reached you (stamped by the hit block; the haunts' calm gate reads it)
   let quietTimer = 0    // sweet almond water sets it (QUIET_SECONDS): footsteps at half loudness while it runs (tactics.quiet)
   // ── the floors (topology.js / levelmem.js / death.js): the one memory of what every floor keeps of you (what you took, emptied,
   //    searched, set down; where you stood), the chunk you arrived in, the way you came by (still closing behind you for 5 s), the
@@ -270,7 +273,17 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
   // ── Living Atmosphere — occasional ambient dread events ──
   const eventSched = createEventScheduler()
-  const ephemera   = []   // transient event-spawned apparitions (render-only, no collision)
+  const ephemera   = []   // transient event-spawned apparitions (render-only, no collision; a haunt's figure carries vanishAt)
+
+  // ── the drawers (containers.js) and the placed hauntings (haunts.js): the hold-to-search state, the keys opened on this floor
+  //    (levelmem keeps them across visits and saves), the haunt cooldowns on the play clock, and dreadQuietT — the ONE quiet shared by
+  //    the scheduled events and the haunts (20 s after a haunt, 12 s after an event), so the two dread layers never stack ──
+  const searchLog = createSearchLog()
+  let searchT = 0, searchTarget = null, drawerCostSaid = false
+  const unsearchedBox = (p) => CONTAINER_TYPES[p.type] !== undefined && !searchLog.isSearched(p.key)   // hoisted: no closure per frame
+  const haunts = createHauntTracker({ now: () => playT })
+  let dreadQuietT = 0, lightToggles = 0
+  let waterT = 0, waterStepT = 0   // running water: footfall(8) now and every ~3 s while its 12 s timer runs
 
   // vending machines dispense once; the keys still spent on this floor at this visit (levelmem.vendedFor: a key expires only after
   // VEND_RESTOCK_S away from the floor, so a machine never refills while you watch). Replaced per buildLevel; noteVended writes mem.
@@ -406,9 +419,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // Order: cache -> grid -> bodies -> decor(hooks) -> solid -> entitySys -> gfx
     const bodies    = createColliderIndex()
     const decor     = createDecorSystem(cfg, isWall, worldSeed, {
-      // the passes after the sights block, in the fixed order: the stairs up / the lift (topology.js; null on L0 and the block), then the
-      // room dressing — TODO(integrate:dress): [stairsPass(cfg, cfg.ways), dressPass(cfg)].filter(Boolean)
-      passes: cfg.map ? [] : [stairsPass(cfg, cfg.ways)].filter(Boolean),
+      // the passes after the sights block, in the fixed order: the stairs up / the lift (topology.js; null on L0 and the block), the
+      // room dressing (dress.js; null on the block), then the hauntings (haunts.js; AFTER the dressing, so its ctx.props sees the cabinets)
+      passes: cfg.map ? [] : [stairsPass(cfg, cfg.ways), dressPass(cfg), hauntsPass(cfg)].filter(Boolean),
       onChunk: (k, bundle) => bodies.setChunk(k, bundle.colliders),
       onEvict: (k) => bodies.dropChunk(k),
     })
@@ -426,6 +439,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     itemSys.enterLevel(cfg, cfg.map ? null : mem.takenFor(index), cfg.map ? null : mem.droppedFor(index))
     vendedSet = mem.vendedFor(index, playT)   // the keys still spent at this visit: a re-entered floor re-stocks only in your absence
     bumpSaid.clear(); clutterSeen.clear(); turningSaid.clear(); turnSaid = false   // and says its contact / turning lines afresh
+    // the drawers this floor remembers you opening (levelmem); a hold does not survive the fall, nor the deep floors' line
+    searchLog.clear(); searchLog.seed(mem.searchedFor(index)); drawerCostSaid = false; searchT = 0; searchTarget = null; waterT = 0
     cancelCommit()                  // a wrap does not survive the fall (the bandage stays); the new floor's song starts calm
     tension.reset(); huntMood = false
 
@@ -1110,6 +1125,55 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
   }
 
+  // ── the drawers (containers.js): the hold starts only when nothing real is close, any step cancels it (the movement block), and it
+  //    lands after SEARCH_HOLD_S in resolveSearch. What a drawer holds is a pure roll of its key and chunk, so a save and a reload agree;
+  //    a completed search is remembered by the floor (levelmem) and heard by the things (noise 4, sharedConventions #5). ──
+  function startSearch(p, th) {
+    if (th.hunted || th.nearest <= 4) { showMessage('not now.', PRIO.interaction); return }
+    searchTarget = p; searchT = SEARCH_HOLD_S
+    showMessage('you rummage.', PRIO.interaction)
+    drawerSlide()
+  }
+  const clampSanity = (d) => { sanity = Math.max(0, Math.min(100, sanity + d)) }
+  const searchApi = {
+    grant: itemSys.grant, message: showMessage, sanity: clampSanity, fire: fireEvent,
+    // 'behind-you': the still figure on the trail you just walked; a cold spot when no open trail cell is behind you (hauntEffects -> null)
+    behindYou: () => { const fx = hauntEffects('standing-figure', hauntCtx()); if (fx) applyHaunt(fx); else fireEvent('cold-spot') },
+  }
+  function resolveSearch(p) {
+    const [cx, cy] = p.key.split(':')[0].split(',').map(Number)     // keys are `${cx},${cy}:${i}` (scatter) or `${cx},${cy}:d${n}` (dressed)
+    const roll = rollContainer(p.key, cx, cy, level.index, worldSeed | 0, level.cfg.maze?.salt | 0)
+    if (!applyRoll(roll, searchApi)) return                           // an item with no hand free: the key stays unsearched
+    searchLog.markSearched(p.key); mem.noteSearched(level.index, p.key)
+    level.entitySys.noise(p.x, p.y, 4)
+    if (level.index >= DRAWER_COST.minLevel) {                        // the deep floors count the drawers you open
+      sanity = Math.max(0, sanity - DRAWER_COST.sanity)
+      if (!drawerCostSaid) { drawerCostSaid = true; showMessage(DRAWER_COST.line, PRIO.discovery) }
+    }
+    if (roll.kind === 'item') renderHotbar()
+  }
+
+  // ── the hauntings (haunts.js): the tracker hands back the nearest placed haunt in radius and off cooldown, only while calm (the loop);
+  //    hauntEffects turns its id into the one-shot applied here. hauntCtx is ONE reused object — getProps / lastTrail allocate, but only
+  //    on a haunt, never per frame. A null effect (no trail cell behind you, no chair to turn) consumes no cooldown. ──
+  const hauntCtxObj = { player, props: null, isOpen: (x, y) => level.grid.floor(Math.floor(x), Math.floor(y)), trail: null }
+  function hauntCtx() { hauntCtxObj.props = level.decor.getProps(); hauntCtxObj.trail = fog.lastTrail(6); return hauntCtxObj }
+  function applyHaunt(fx) {
+    if (fx.ephemera) ephemera.push(fx.ephemera)                     // the figure carries vanishAt: the loop drops it when you come within three
+    if (fx.audio === 'whisper') whisper()
+    else if (fx.audio === 'doorSlam') doorSlam()
+    else if (fx.audio === 'footfall:8') { footfall(8); waterT = fx.timerS ?? 12; waterStepT = 3 }   // and again every ~3 s while the water runs
+    if (fx.shake) shake = Math.max(shake, fx.shake)
+    // fx.moveProps: nothing to do — hauntEffects turned the chairs in place already (the list is informational)
+    if (fx.flashlightOff) {
+      flashlight = false
+      const tog = lightToggles                                      // restored only if L was not touched meanwhile
+      setTimeout(() => { if (lightToggles === tog) flashlight = true }, fx.flashlightOff * 1000)
+    }
+    showMessage(fx.message, PRIO.discovery)
+    clampSanity(fx.sanity)
+  }
+
   // ── contact (the mover's report, collide.js): the foley on an ENTER edge, the hard bump of a sprint into something with mass
   //    (a shake, a breath, a noise the things hear, one line per type per level), the pallet's tap, the clutter line and bob
   //    pulse, and the body that would not let you through ──
@@ -1429,6 +1493,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       else                     stamina = Math.min(100, stamina + 9 * dt)
     }
     player.moving = moved
+    // the hold at a drawer (containers.js): any step leaves it; otherwise it lands after SEARCH_HOLD_S
+    if (searchT > 0 && moved) { searchT = 0; searchTarget = null; showMessage('you leave the drawer.', PRIO.interaction) }
+    if (searchT > 0) { searchT -= dt; if (searchT <= 0 && searchTarget) { resolveSearch(searchTarget); searchTarget = null } }
     if (moved) player.bob += 0.12 * dt * 60
     // a footstep the things can hear lands every half bob cycle (the bob advances 7.2 rad/s: a step every 0.44 s); emitted below, once
     // the grid follows this frame's chunk
@@ -1456,9 +1523,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
 
     // ── Living Atmosphere: occasional ambient dread events (procedural floors only) ──
-    const evCanFire = !transitioning && !dialogOpen && !chatOpen && !noteOpen && level.index >= 0 && level.index <= 3
+    //    (not while a drawer is being searched, and not inside the quiet a haunt or an earlier event left behind)
+    const evCanFire = !transitioning && !dialogOpen && !chatOpen && !noteOpen && level.index >= 0 && level.index <= 3 && searchT <= 0 && dreadQuietT <= 0
     const evId = eventSched.tick(dt, { level: level.index, sanity, canFire: evCanFire })
-    if (evId) fireEvent(evId)
+    if (evId) { fireEvent(evId); dreadQuietT = 12 }
+    dreadQuietT = Math.max(0, dreadQuietT - dt)
+    // running water (a haunt): the footfalls keep your pace for as long as its timer runs
+    if (waterT > 0) { waterT -= dt; waterStepT -= dt; if (waterStepT <= 0 && waterT > 0) { waterStepT = 3; footfall(8) } }
 
     updateHud(); updateHp(); updateStamina()
     saveTimer += dt
@@ -1510,6 +1581,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const nearNpc  = level.decor.nearestNpc(player.x, player.y, 1.8)
     const nearScrap = level.decor.nearestScrap(player.x, player.y, 1.8)
     const nearMachine = level.decor.nearestMachine(player.x, player.y, 1.6)
+    // the drawers (containers.js): the nearest container you have not opened; it takes the prompt and F over a way farther than
+    // 1.0 u (the block has no containers). Ladder: item > machine > container-or-way > scrap > soul
+    const nearBox = cfg.map ? null : level.decor.nearestProp(player.x, player.y, 1.5, unsearchedBox)
+    const boxFirst = nearBox !== null && (!nearExit || (nearExit.x - player.x) ** 2 + (nearExit.y - player.y) ** 2 > 1)
 
     const itemHintEl = document.getElementById('item-hint')
     if (itemHintEl) {
@@ -1518,6 +1593,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.style.opacity = '1'
       } else if (nearMachine && !vendedSet.has(nearMachine.key)) {
         itemHintEl.textContent = 'f · draw from the machine'
+        itemHintEl.style.opacity = '1'
+      } else if (boxFirst) {
+        itemHintEl.textContent = `f · search ${CONTAINER_TYPES[nearBox.type]}`
         itemHintEl.style.opacity = '1'
       } else if (nearExit) {
         // the way's own label and where it goes (exit records carry kind/label; stairs carry theirs); the one you just came by is closing
@@ -1559,7 +1637,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     // the verbs: off while a card (the note, the map), the chat, the wish dialog or a fade is up
     if (!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen) {
-      // F — item first, else the machine, else the way
+      // F — item first, else the machine, else the drawer (when it is nearer than the way), else the way
       if (K['KeyF']) {
         K['KeyF'] = false
         if (nearItem) {
@@ -1569,6 +1647,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
           renderHotbar()
         } else if (nearMachine && !vendedSet.has(nearMachine.key)) {
           dispenseFromMachine(nearMachine)
+        } else if (boxFirst) {
+          startSearch(nearBox, thA)                             // last frame's threat record (this frame's lands below)
         } else if (nearExit) {
           travel(nearExit)
         }
@@ -1583,7 +1663,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (K['KeyX']) { K['KeyX'] = false; throwSelected() }
       if (K['KeyM']) { K['KeyM'] = false; const on = !getPref('music'); setPref('music', on); showMessage(on ? 'the music seeps back in.' : 'the music stops.') }
       if (K['KeyN']) { K['KeyN'] = false; cycleTrack() }
-      if (K['KeyL']) { K['KeyL'] = false; flashlight = !flashlight; showMessage(flashlight ? 'flashlight on.' : 'flashlight off — the dark leans in.') }
+      if (K['KeyL']) { K['KeyL'] = false; flashlight = !flashlight; lightToggles++; showMessage(flashlight ? 'flashlight on.' : 'flashlight off — the dark leans in.') }   // the counter: a haunt only restores a light you did not touch
       if (K['KeyB']) {
         K['KeyB'] = false
         const effect = getPref('beaconEffect')
@@ -1672,6 +1752,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const woke = level.entitySys.takeWakeEvent()
     if (woke) { footfall(); showMessage(woke > 1 ? 'they followed you down.' : 'it followed you down.', PRIO.discovery) }
 
+    // ── the hauntings (haunts.js): only while CALM — no event could fire either, nothing hunting, nothing within 14, no hit for 20 s,
+    //    the map folded; dreadQuietT (a haunt sets 20 s, an event 12 s) keeps the two dread layers apart. The block has none (no fog, no
+    //    records). getHaunts is decor's one reused list; the effect is applied by applyHaunt and the spot pinned on the map. ──
+    const hauntCalm = evCanFire && dreadQuietT <= 0 && !th.hunted && th.nearest >= 14 && playT - lastHitT > 20 && !mapOpen && !cfg.map
+    const h = hauntCalm ? haunts.check(player.x, player.y, level.decor.getHaunts(), true) : null
+    if (h) {
+      const fx = hauntEffects(h.id, hauntCtx())
+      if (fx) { haunts.fire(h.key); applyHaunt(fx); dreadQuietT = 20; fog.pinThing(level.index, h.key, 'haunt', h.x, h.y) }
+    }
+
     // ── HP: contact damage, i-frames, delayed regen, death ──
     if (invuln > 0) invuln -= dt
     if (!transitioning && creaturesLive && getPref('damage') && invuln <= 0 && th.dmg > 0) {
@@ -1725,6 +1815,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // advance any event apparitions (render-only; no collision or damage)
     for (let i = ephemera.length - 1; i >= 0; i--) {
       const a = ephemera[i]; a.x += a.vx * dt; a.y += a.vy * dt; a.ttl -= dt
+      if (a.vanishAt && (a.x - player.x) ** 2 + (a.y - player.y) ** 2 < a.vanishAt * a.vanishAt) a.ttl = 0   // the still figure: gone when you come close
       if (a.ttl <= 0) ephemera.splice(i, 1)
     }
     // one flat list in this order: enemies (as-is), remote players, npcs, props, exits, items, notes, machines, sights, apparitions — built

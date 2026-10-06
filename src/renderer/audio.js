@@ -472,6 +472,24 @@ export function doorSlam() {
   } catch { /* ignore */ }
 }
 
+// A drawer dragged open (game.js, the search hold): 0.3 s of filtered noise — doorSlam's noise half, longer, lower and swelling a
+// little as it comes, through the ambience bus. No-op without audio.
+export function drawerSlide() {
+  if (!actx) return
+  try {
+    const dest = ambienceGain || actx.destination
+    const t = actx.currentTime
+    const len = Math.floor(actx.sampleRate * 0.3)
+    const buf = actx.createBuffer(1, len, actx.sampleRate); const d = buf.getChannelData(0)
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.sin((i / len) * Math.PI)
+    const src = actx.createBufferSource(); src.buffer = buf
+    const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.1
+    bp.frequency.setValueAtTime(700, t); bp.frequency.linearRampToValueAtTime(1100, t + 0.3)
+    const g = actx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.06, t + 0.04); g.gain.exponentialRampToValueAtTime(0.0004, t + 0.3)
+    src.connect(bp); bp.connect(g); g.connect(dest); src.start(t); src.stop(t + 0.31)
+  } catch { /* ignore */ }
+}
+
 // A body answering your touch (feedback.js names the kind, game.js gates the calls): 'thud' is the doorSlam sine lower and shorter,
 // 'hollow' a triangle for the drums and the machine, 'scrape' the footfall-style noise burst band-passed high, 'wood' one tap for the
 // pallet, 'murmur' the whisper at half gain. Routed through the ambience bus; panned when the engine can (createStereoPanner), mono

@@ -99,6 +99,7 @@ the spirits decide. or rather, i do.
 | click | lock mouse for look |
 | space (hold to charge) | **ward** — tap to shove the things back; hold it and your steps slow while the air tightens, then a narrower, longer push throws them farther (costs your legs) |
 | f | take an item · take a way — no-clip through an exit, climb a stairwell, step into the lift |
+| f · search a cabinet | by a cabinet, crate, box, drum or panel: hold still for a moment and the drawer gives up what it holds — a step away leaves it; not while something is close |
 | tab | the map (hold your pace) |
 | q | use selected item |
 | x · set down | set the selected item down where you stand — a talking radio keeps talking where it lies |

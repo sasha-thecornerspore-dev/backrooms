@@ -72,6 +72,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
   const scraps   = new Map()  // "cx,cy" → {key,x,y,frag}  (a note left behind)
   const machines = new Map()  // "cx,cy" → {key,x,y}       (a vending machine)
   const sights   = new Map()  // "cx,cy" → {key,x,y,type}  (a landmark set-piece)
+  const haunts   = new Map()  // "cx,cy" → {key,x,y,id}    (a placed haunting, from a pass: never a body, never pinned until it fires)
   const scanned  = new Set()
 
   function openCell(cx, cy, rng, pcx, pcy) {
@@ -150,6 +151,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
         isWall: (wx, wy) => isWallFn(wx, wy, pcx, pcy),
         hash, rngFrom,
         openCell: (rng) => openCell(cx, cy, rng, pcx, pcy),
+        props: list,     // the chunk's freshly built prop list, live: a later pass (haunts) sees what an earlier one (dress) added
         add: (kind, record) => {
           if (kind === 'prop') list.push(record)
           else if (kind === 'stair') {
@@ -159,6 +161,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
             if (!sl) { sl = []; stairs.set(key, sl) }
             sl.push(record)
           }
+          else if (kind === 'haunt') haunts.set(key, record)
         },
       }
       for (let i = 0; i < passes.length; i++) passes[i](ctx)
@@ -215,6 +218,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
         machines.delete(k)
         sights.delete(k)
         stairs.delete(k)
+        haunts.delete(k)
         if (onEvict) onEvict(k)
       }
     }
@@ -343,8 +347,17 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
     }
     return best
   }
-  // every loaded way of one kind: the exits are the level's down way (whatever cfg.ways named it), stairs carry their own kind
+  // the placed hauntings (haunts.js records): ONE reused list, rebuilt in place — the tracker reads it on every calm frame
+  const hauntList = []
+  function getHaunts() {
+    hauntList.length = 0
+    for (const h of haunts.values()) hauntList.push(h)
+    return hauntList
+  }
+  // every loaded way of one kind: the exits are the level's down way (whatever cfg.ways named it), stairs carry their own kind;
+  // 'haunt' is the placed hauntings (a fresh array: getHaunts is the per-frame one)
   function getKind(kind) {
+    if (kind === 'haunt') return [...haunts.values()]
     const out = []
     for (const e of exits.values()) if (e.kind === kind) out.push(e)
     for (const sl of stairs.values()) for (const s of sl) if (s.kind === kind) out.push(s)
@@ -372,11 +385,12 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
     machines.clear()
     sights.clear()
     stairs.clear()
+    haunts.clear()
     scanned.clear()
   }
 
   return {
     update, getProps, getExits, nearestExit, nearestExitAny, getNpcs, nearestNpc, getScraps, nearestScrap, getMachines, nearestMachine, getSights, enterLevel,
-    getStairs, wayAt, exitAt, nearestWay, nearestWayAny, nearestProp, getKind,
+    getStairs, wayAt, exitAt, nearestWay, nearestWayAny, nearestProp, getKind, getHaunts,
   }
 }

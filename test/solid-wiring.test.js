@@ -34,10 +34,10 @@ describe('game.js: buildLevel order (cache -> grid -> bodies -> decor(hooks) -> 
     expect(game).toMatch(/onChunk: \(k, bundle\) => bodies\.setChunk\(k, bundle\.colliders\),\r?\n\s*onEvict: \(k\) => bodies\.dropChunk\(k\),/)
     expect(game).toMatch(/level = \{ index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages \}/)
   })
-  it('the contact sets are level-scoped (cleared next to the frame\'s vendedSet, which levelmem now hands out) and the dress step is marked for its integrator', () => {
+  it('the contact sets are level-scoped (cleared next to the frame\'s vendedSet, which levelmem now hands out) and the passes run in the fixed order', () => {
     expect(game).toMatch(/vendedSet = mem\.vendedFor\(index, playT\)[^\n]*\r?\n\s*bumpSaid\.clear\(\); clutterSeen\.clear\(\)/)
-    expect(game).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\)\]\.filter\(Boolean\),/)   // floors: the stairs pass runs; dress: still marked
-    expect(game).toMatch(/TODO\(integrate:dress\)/)
+    expect(game).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\)\]\.filter\(Boolean\),/)   // stairs -> dress -> haunts
+    expect(game).not.toMatch(/TODO\(integrate:dress\)/)
     // the creatures step: hunt.js is the one creature-solidity / hostility rule (the placeholders are gone)
     expect(game).toMatch(/import \{ hostile, solidCreature \} from '\.\/hunt\.js'/)
     expect(game).not.toMatch(/huntSolidCreature|huntHostile|TODO\(integrate:hunt\)/)
