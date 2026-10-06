@@ -276,6 +276,9 @@
     #map-canvas { display: block; width: min(448px, calc(86vw - 34px), calc(62vh - 74px)); height: auto; image-rendering: pixelated; }
     #map-foot { font: 11px var(--mono); letter-spacing: 2px; color: #54461f; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
     #map-hint { font: 10px var(--mono); letter-spacing: 2px; color: #5c4d26; }
+    /* while the sheet is up, the building's line reads over it (game.js sets body.map-open): #msg sits at 34%, the card rises from 38vh.
+       Only then — the base #msg keeps no z-index, so the modal note card still covers a murmur */
+    body.map-open #msg { z-index: 56; }
     /* the paper corner under the HUD plate: the map's tab on touch only (the keyboard has Tab); a tap reads as Tab (game.js) */
     #map-tab {
       display: none; width: 36px; height: 36px; align-items: center; justify-content: center;

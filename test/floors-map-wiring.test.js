@@ -177,15 +177,23 @@ describe('game.js: the save and the resume', () => {
 describe('game.js: the map, held not modal', () => {
   it('the card is built once with the fog and a Tab-shaped onTap; closeMap folds it; the paper corner feeds the same key', () => {
     expect(game).toMatch(/const mapCard = createMapCard\(document, \{ fog, getLevel: \(\) => level, getPlayer: \(\) => player, onTap: \(\) => \{ K\['Tab'\] = true \} \}\)/)
-    expect(game).toMatch(/function closeMap\(\) \{ mapCard\.close\(\); mapOpen = false \}/)
+    expect(game).toMatch(/function closeMap\(\) \{ mapCard\.close\(\); mapOpen = false; document\.body\.classList\.remove\('map-open'\) \}/)
     expect(game).toMatch(/mapTabEl\?\.addEventListener\('touchstart', \(e\) => \{ e\.preventDefault\(\); K\['Tab'\] = true \}, \{ passive: false \}\)/)
     expect(game).toMatch(/mapTabEl\?\.addEventListener\('click', \(\) => \{ K\['Tab'\] = true \}\)/)
     expect(game).not.toMatch(/mapCard\.toggle/)
   })
   it('Tab / Esc fold it; Tab opens it when nothing else is up, never on the block, with the first-open line; the edge is consumed either way', () => {
-    expect(game).toMatch(/if \(mapOpen && \(K\['Escape'\] \|\| K\['Tab'\]\)\) \{ K\['Escape'\] = K\['Tab'\] = false; closeMap\(\) \}\r?\n\s*else if \(K\['Tab'\]\) \{\r?\n\s*K\['Tab'\] = false\r?\n\s*if \(!transitioning && !dialogOpen && !chatOpen && !noteOpen && !cfg\.map && settingsHidden\(\)\) \{\r?\n\s*mapCard\.open\(\); mapOpen = true/)
+    expect(game).toMatch(/if \(mapOpen && \(K\['Escape'\] \|\| K\['Tab'\]\)\) \{ K\['Escape'\] = K\['Tab'\] = false; closeMap\(\) \}\r?\n\s*else if \(K\['Tab'\]\) \{\r?\n\s*K\['Tab'\] = false\r?\n\s*if \(!transitioning && !dialogOpen && !chatOpen && !noteOpen && !cfg\.map && settingsHidden\(\)\) \{\r?\n\s*mapCard\.open\(\); mapOpen = true; document\.body\.classList\.add\('map-open'\)/)
     expect(game).toContain("if (!mapEverOpened) { mapEverOpened = true; showMessage('you start drawing. it is the only way to know you are moving.', PRIO.discovery) }")
     expect(at("if (mapOpen && (K['Escape'] || K['Tab']))")).toBeLessThan(at('if (!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen) {'))
+  })
+  it('body.map-open follows the card exactly: set where it opens, cleared in closeMap, the one way it folds (a hit, a travel, a death, Tab / Esc)', () => {
+    expect((game.match(/mapCard\.open\(\)/g) || []).length).toBe(1)
+    expect((game.match(/mapCard\.close\(\)/g) || []).length).toBe(1)
+    expect((game.match(/classList\.add\('map-open'\)/g) || []).length).toBe(1)
+    expect((game.match(/classList\.remove\('map-open'\)/g) || []).length).toBe(1)
+    expect(game).not.toMatch(/classList\.toggle\('map-open'/)
+    expect(game).not.toMatch(/(?<!let )mapOpen = false(?!; document\.body\.classList\.remove\('map-open'\))/)   // nothing folds it behind closeMap's back
   })
   it('the gates: half pace and no sprint while open, the verbs (F/E/Q/X and the ward) off, mouse-look untouched, a hit folds it, events and damage stay live', () => {
     expect(game).toMatch(/if \(mapOpen\) wantSprint = false[^\n]*\r?\n\s*const mult = mapOpen \? 0\.5 : \(wantSprint \? 1\.8 : 1\)/)
@@ -249,6 +257,16 @@ describe('index.html: the map card and the paper corner', () => {
     expect(html).toMatch(/#map-card \{\r?\n\s*position: fixed;[^}]*display: none;[^}]*z-index: 55; pointer-events: none;/)
     expect(html).toMatch(/#map-inner \{[^}]*max-height: 62vh; max-width: 86vw; pointer-events: auto;/)
     expect(html).toMatch(/#map-canvas \{[^}]*image-rendering: pixelated;/)
+  })
+  it('the centre message reads over the open card (it sits at 34%, the card rises from 38vh), and only then: under the note card it stays below', () => {
+    const lift = html.match(/body\.map-open #msg \{ z-index: (\d+); \}/)
+    expect(lift).not.toBeNull()
+    const cardZ = Number(html.match(/#map-card \{[^}]*z-index: (\d+);/)[1])
+    const noteZ = Number(html.match(/#note-card \{[^}]*z-index: (\d+);/)[1])
+    expect(Number(lift[1])).toBeGreaterThan(cardZ)
+    expect(html).toMatch(/#msg \{\s*position: fixed; top: 34%;/)
+    expect(html.match(/#msg \{[^}]*\}/)[0]).not.toContain('z-index')   // the base rule leaves #msg at auto: the modal note card covers it
+    expect(noteZ).toBeGreaterThanOrEqual(cardZ)
   })
   it('#map-tab sits in #hud-cluster under the plate, hidden until a coarse pointer, and the hint row names tab', () => {
     expect(html).toMatch(/<\/div>\r?\n\s*<div id="map-tab" class="paper" title="the map \(tab\)">map<\/div>\r?\n\s*<div id="hotbar-dock">/)

@@ -660,7 +660,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    and the verbs, a hit folds it. A tap on the card (touch) or on the paper corner #map-tab reads as Tab, so every way of folding it
   //    runs through the one K['Tab'] edge in the loop; touchstart's preventDefault keeps the synthesized click from firing a second one. ──
   const mapCard = createMapCard(document, { fog, getLevel: () => level, getPlayer: () => player, onTap: () => { K['Tab'] = true } })
-  function closeMap() { mapCard.close(); mapOpen = false }
+  // body.map-open lifts the centre message over the sheet (index.html): #msg sits at 34%, the card rises from 38vh, so a line said while
+  // you read the map ('you start drawing...', 'the hole is not where you drew it.') was cut in half by the paper
+  function closeMap() { mapCard.close(); mapOpen = false; document.body.classList.remove('map-open') }
   const mapTabEl = document.getElementById('map-tab')
   mapTabEl?.addEventListener('touchstart', (e) => { e.preventDefault(); K['Tab'] = true }, { passive: false })
   mapTabEl?.addEventListener('click', () => { K['Tab'] = true })
@@ -1635,7 +1637,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     else if (K['Tab']) {
       K['Tab'] = false
       if (!transitioning && !dialogOpen && !chatOpen && !noteOpen && !cfg.map && settingsHidden()) {
-        mapCard.open(); mapOpen = true
+        mapCard.open(); mapOpen = true; document.body.classList.add('map-open')
         if (!mapEverOpened) { mapEverOpened = true; showMessage('you start drawing. it is the only way to know you are moving.', PRIO.discovery) }
       }
     }
