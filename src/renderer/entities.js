@@ -103,12 +103,12 @@ export function createEntitySystem(config, isWallFn, deps = null) {
   const variants    = { stalker: ent.stalkerVariants || ['shade'], wanderer: ent.wandererVariants || ['shade'] }
 
   const threat = createThreat()
-  const field = createNoiseField()
-  const ring = []
-  for (let i = 0; i < NOISE_SLOTS; i++) ring.push({ x: 0, y: 0, L: 0, t: 0 })
+  // one flood per ring slot: several noises in one frame (a ward, a bump, the lures, a footstep) are all heard
+  const ring = [], fields = []
+  for (let i = 0; i < NOISE_SLOTS; i++) { ring.push({ x: 0, y: 0, L: 0, t: 0 }); fields.push(createNoiseField()) }
   let ringN = 0, woke = 0, huntMode = false, rr = 0
   // the hunt path reads cells through the grid reader (no key string per ask); without one, isWallFn at the cell centre
-  const env = { dt: 0, now: 0, pcx: 0, pcy: 0, player: null, ctx: null, isWall: null, floor: null, obstacles, field, losBudget: LOS_BUDGET, damage, helpers: null, threat }
+  const env = { dt: 0, now: 0, pcx: 0, pcy: 0, player: null, ctx: null, isWall: null, floor: null, obstacles, fields, losBudget: LOS_BUDGET, damage, helpers: null, threat }
   env.floor = grid ? (ix, iy) => grid.floor(ix, iy) : (ix, iy) => !isWallFn(ix + 0.5, iy + 0.5, env.pcx, env.pcy)
   env.isWall = (ix, iy) => !env.floor(ix, iy)
 
@@ -373,12 +373,15 @@ export function createEntitySystem(config, isWallFn, deps = null) {
     return flashRes
   }
 
-  // noise(x, y, L): the only way sound reaches the things. Eight slots, oldest dropped; the newest is flooded now.
+  // noise(x, y, L): the only way sound reaches the things. Eight slots, oldest dropped; each floods its own field now,
+  // stamped with the running count so a creature can tell which ones it has already heard.
   function noise(x, y, L) {
-    const slot = ring[ringN % NOISE_SLOTS]
+    const k = ringN % NOISE_SLOTS
+    const slot = ring[k], f = fields[k]
     ringN++
     slot.x = x; slot.y = y; slot.L = L; slot.t = clock()
-    floodNoise(field, slot, env.floor)
+    floodNoise(f, slot, env.floor)
+    f.id = ringN
   }
 
   // the stalkers on your heels, for the floor below: in a hunting phase (this path: hunt and the variants' freeze / windup /

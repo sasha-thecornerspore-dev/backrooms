@@ -189,16 +189,52 @@ describe('the flash', () => {
 })
 
 describe('the noise ring', () => {
-  it('keeps eight noises and floods the newest', () => {
-    const player = { x: 60.5, y: 60.5, angle: 0 }
+  const player = { x: 60.5, y: 60.5, angle: 0 }
+  function sysWith(...es) {
     const sys = createEntitySystem(quiet, wallOf(open), { grid: mkGrid(open), obstacles: null })
-    const e = ent(5.5, 5.5)
-    sys.getEntities().push(e)
+    for (const e of es) sys.getEntities().push(e)
     sys.update(0, player, 2, 2, mkCtx(player))
+    return sys
+  }
+  it('keeps eight noises, the oldest dropped, and floods each one', () => {
+    const e = ent(5.5, 5.5)
+    const sys = sysWith(e)
     for (let i = 0; i < 9; i++) sys.noise(100 + i, 100, 3)              // far away: nothing hears these
     sys.noise(5.5, 9.5, 3)
     sys.update(DT, player, 2, 2, mkCtx(player))
     expect(e.ai).toBe('alert')
+  })
+  it('two noises in one frame are both heard: a later far footstep does not wipe a near one (SD-noise-overwrite)', () => {
+    const e = ent(5.5, 5.5)
+    const sys = sysWith(e)
+    sys.noise(5.5, 7.5, 8)                                               // a dropped radio's loop beside it
+    sys.noise(30.5, 5.5, 3)                                              // then the walk, 25 u off
+    sys.update(DT, player, 2, 2, mkCtx(player))
+    expect(e.ai).toBe('alert')
+    expect([e.tx, e.ty]).toEqual([5.5, 7.5])
+  })
+  it('two creatures each hear their own noise of the same frame', () => {
+    const a = ent(5.5, 5.5, 'shade', { id: 1 }), b = ent(40.5, 40.5, 'shade', { id: 2 })
+    const sys = sysWith(a, b)
+    sys.noise(5.5, 8.5, 12)                                              // a ward
+    sys.noise(40.5, 42.5, 3)                                             // a footstep
+    sys.update(DT, player, 2, 2, mkCtx(player))
+    expect(a.ai).toBe('alert'); expect(b.ai).toBe('alert')
+    expect([a.tx, a.ty]).toEqual([5.5, 8.5]); expect([b.tx, b.ty]).toEqual([40.5, 42.5])
+  })
+  it('the loudest at its cell draws it, and a noise once heard is not heard again while it stays live', () => {
+    const e = ent(5.5, 5.5)
+    const sys = sysWith(e)
+    sys.noise(9.5, 5.5, 3)                                               // 1.5 at its cell
+    sys.noise(5.5, 7.5, 8)                                               // 5.3 at its cell
+    sys.update(DT, player, 2, 2, mkCtx(player))
+    expect(e.ai).toBe('alert'); expect([e.tx, e.ty]).toEqual([5.5, 7.5])
+    e.ai = 'roam'
+    sys.update(DT, player, 2, 2, mkCtx(player))
+    expect(e.ai).toBe('roam')
+    sys.noise(5.5, 3.5, 6)
+    sys.update(DT, player, 2, 2, mkCtx(player))
+    expect(e.ai).toBe('alert'); expect([e.tx, e.ty]).toEqual([5.5, 3.5])
   })
 })
 

@@ -372,10 +372,21 @@ export function stepAI(e, dt, ctx, spec, env, threat) {
   const d = Math.sqrt(dx * dx + dy * dy)
   if (spec.hostilePhases.size > 0 && !(e.stagger > 0) && d < threat.nearest) { threat.nearest = d; threat.nearestEntity = e }
 
-  // hearing: the live flood, read once at this creature's cell, reacted to once per noise
-  const f = env.field
-  if (f && f.id !== e.heardId && f.id > 0 && env.now - f.t <= NOISE_LIVE) {
-    if (loudnessAt(f, Math.floor(e.x), Math.floor(e.y)) * spec.hearK >= 1) { e.heardId = f.id; onHeard(e, f, d, threat) }
+  // hearing: every live flood not yet heard (ids rise with each noise), read once each at this creature's cell; the
+  // loudest audible one is reacted to, and everything audible up to the newest counts as heard
+  const fs = env.fields
+  if (fs) {
+    const ix = Math.floor(e.x), iy = Math.floor(e.y)
+    let best = null, bestL = 0, top = e.heardId
+    for (let k = 0; k < fs.length; k++) {
+      const f = fs[k]
+      if (!(f.id > e.heardId) || env.now - f.t > NOISE_LIVE) continue
+      const l = loudnessAt(f, ix, iy)
+      if (l * spec.hearK < 1) continue
+      if (f.id > top) top = f.id
+      if (l > bestL) { bestL = l; best = f }
+    }
+    if (best) { e.heardId = top; onHeard(e, best, d, threat) }
   }
   e.fresh = false
   perceive(e, d, spec, ctx, env)

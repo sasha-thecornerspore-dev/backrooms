@@ -47,7 +47,7 @@ function ent(x, y, variant = 'shade', over = {}) {
   return { id: over.id ?? 1, x, y, type: 'stalker', variant, state: 'idle', dir: 0, dirTimer: 99, stagger: 0, wardHits: 0, chunkCx: Math.floor(x / N), chunkCy: Math.floor(y / N), ...over }
 }
 function mkEnv(floor, obstacles = null, over = {}) {
-  return { dt: DT, now: 0, pcx: 0, pcy: 0, player: { x: 1e6, y: 1e6, angle: 0 }, ctx: null, floor, isWall: (ix, iy) => !floor(ix, iy), obstacles, field: null, losBudget: 6, damage: 16, helpers: null, threat: createThreat(), ...over }
+  return { dt: DT, now: 0, pcx: 0, pcy: 0, player: { x: 1e6, y: 1e6, angle: 0 }, ctx: null, floor, isWall: (ix, iy) => !floor(ix, iy), obstacles, fields: null, losBudget: 6, damage: 16, helpers: null, threat: createThreat(), ...over }
 }
 const noObst = { blocked: () => false, radiusFor: creatureRadius }
 const obst = (fn) => ({ blocked: fn, radiusFor: creatureRadius })
@@ -145,6 +145,20 @@ describe('hearing: one bounded flood over the real floor of generateChunk(0,0,0,
     expect(f.gen).toBeInstanceOf(Uint16Array); expect(f.q).toBeInstanceOf(Int16Array)
     // the old flood is gone: a cell loud under the first noise is silent now unless the third reached it
     expect(loudnessAt(f, 3, 5)).toBe(0)
+  })
+
+  it('stepAI reads every live field: an earlier noise is heard though a later one sits in another slot (SD-noise-overwrite)', () => {
+    const near = createNoiseField(), far = createNoiseField(), old = createNoiseField()
+    floodNoise(near, { x: 5.5, y: 7.5, L: 8, t: 0 }, open); near.id = 1
+    floodNoise(far, { x: 30.5, y: 5.5, L: 3, t: 0 }, open); far.id = 2
+    floodNoise(old, { x: 5.5, y: 6.5, L: 12, t: -1 }, open); old.id = 3           // loud but no longer live
+    const e = ent(5.5, 5.5)
+    const env = mkEnv(open, null, { fields: [near, far, old] })
+    stepAI(e, DT, mkCtx(env.player), specFor('shade'), env, env.threat)
+    expect(e.ai).toBe('alert'); expect([e.tx, e.ty]).toEqual([5.5, 7.5]); expect(e.heardId).toBe(1)
+    e.ai = 'roam'
+    stepAI(e, DT, mkCtx(env.player), specFor('shade'), env, env.threat)
+    expect(e.ai).toBe('roam')                                                        // heard once, not again
   })
 })
 
