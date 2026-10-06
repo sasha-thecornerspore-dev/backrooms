@@ -1,4 +1,4 @@
-import { loadConfig, CHUNK_SIZE, createChunkCache } from './world.js'
+import { loadConfig, CHUNK_SIZE, createChunkCache, createGridReader } from './world.js'
 import { createFixedMap } from './fixedmap.js'
 import { levelConfig, TRACKS } from './levels.js'
 import { createEntitySystem } from './entities.js'
@@ -14,6 +14,8 @@ import { formatAnchor, driftMeters } from './anchor.js'
 import { initTouchControls, isTouchDevice } from './touch.js'
 import { SCRAPS } from './scraps.js'
 import { createEventScheduler } from './events.js'
+import { createMessageQueue, PRIO } from './messages.js'
+import { takeKey } from './input.js'
 
 // Presence: 1 in 12 chunks has a spirit at its midpoint
 function chunkHasPresence(cx, cy) {
@@ -302,6 +304,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const cache = cfg.map ? createFixedMap(cfg.map) : createChunkCache(cfg, worldSeed)
     cache.preload(0, 0)
     const isWall = (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy)
+    // the grid the hot paths read (LOS, perception, fog): cell-indexed, no key string per ask (world.js createGridReader). A fixed map
+    // (Level ∅) has no getChunk, so the reader wraps isWall at the cell centre instead
+    const grid      = createGridReader(cfg.map ? null : cache, isWall)
     const entitySys = createEntitySystem(cfg, isWall)
     const decor     = createDecorSystem(cfg, isWall, worldSeed)
     // The previous level's renderer is disposed BEFORE the next one is created: a GPU backend owns a WebGL context on a sibling canvas, and
@@ -326,8 +331,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     // Assign `level` BEFORE warming up subsystems — itemSys reads level.cache
     // through a proxy, so the object must exist first.
-    level = { index, cfg, cache, entitySys, decor, gfx, messages }
+    level = { index, cfg, cache, grid, entitySys, decor, gfx, messages }
     decor.update(0, 0); itemSys.update(0, 0)
+    msgQ.clear()                    // the old floor's lines do not follow you down (one fade if one was up)
     // Morph the bed into this level's mood — unless the player has chosen an
     // alternate track with N, in which case their choice follows them down.
     setMusic(trackIdx < 0 ? cfg.music : TRACKS[trackIdx].mood)
@@ -350,8 +356,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     fadeThen(() => {
       buildLevel(target)
       persist()                       // save on every descent
-      showMessage(level.cfg.levelName)
-      if (level.cfg.exit?.hint) setTimeout(() => showMessage(level.cfg.exit.hint), 3800)
+      showMessage(level.cfg.levelName, PRIO.combat)
+      if (level.cfg.exit?.hint) setTimeout(() => showMessage(level.cfg.exit.hint, PRIO.discovery), 3800)
     })
   }
 
@@ -363,22 +369,27 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       player.hp = player.maxHp
       player.x = HALF + 0.5; player.y = HALF + 0.5
       invuln = 1.6; regenDelay = 0; hurt = 0
-      showMessage('everything goes dark. you wake where you fell in.')
+      showMessage('everything goes dark. you wake where you fell in.', PRIO.combat)
     })
   }
 
   // ── input ──
   const K = Object.create(null)
   let locked = false
-  // settings panel has text fields (e.g. the beacon target URL) — without this guard,
-  // typing a webhook into them feeds every character into the game's key map and plays the game
+  // input.js takeKey decides what the key map takes: text fields are ignored (typing a webhook into settings must not play the game),
+  // the edge-triggered verbs (F/E/Space/Tab/Q/X) fire once per press however long they are held, Space never scrolls the page and Tab
+  // stays with the game while it owns focus and the settings panel is hidden (the panel's own tab order wins while it is open)
+  const settingsHidden = () => { const sm = document.getElementById('settings-modal'); return !sm || sm.style.display === 'none' }
   window.addEventListener('keydown', e => {
-    const t = e.target
-    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
-    if (e.code === 'Space') e.preventDefault()
+    const r = takeKey(e, { activeTag: e.target?.tagName, isContentEditable: !!e.target?.isContentEditable, locked, settingsOpen: settingsHidden() === false })
+    if (r === 'ignore') return
+    if (r === 'take-prevent') e.preventDefault()
     K[e.code] = true
   })
   window.addEventListener('keyup',   e => { K[e.code] = false })
+  // a key held while the window loses focus never gets its keyup: sweep the map so the player does not walk on alone
+  window.addEventListener('blur', () => { for (const k in K) K[k] = false })
+  document.addEventListener('visibilitychange', () => { if (document.hidden) for (const k in K) K[k] = false })
   // Pointer-lock mouse-look is desktop only; on touch the on-screen controls
   // drive movement + look instead (initTouchControls, below).
   if (!isTouchDevice()) canvas.addEventListener('click', () => canvas.requestPointerLock())
@@ -696,17 +707,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     addChatLine('', 'connected — Enter to chat · /me to emote', true)
   }
 
-  // ── messages (black text, fades via opacity — see CSS) ──
+  // ── messages (black text, fades via opacity — see CSS): one voice. Every line goes through the priority queue (messages.js) so a
+  //    floor murmur never talks over 'it has you.'; the loop ticks it and writes #msg. Default priority: interaction (what you did). ──
   const msgEl  = document.getElementById('msg')
   let msgTimer = 0
   let msgNext  = base.messageInterval[0] + Math.random() * (base.messageInterval[1] - base.messageInterval[0])
-  function showMessage(text) {
-    if (!msgEl || !text) return
-    msgEl.textContent = text
-    msgEl.style.opacity = '1'
-    clearTimeout(showMessage._t)
-    showMessage._t = setTimeout(() => { msgEl.style.opacity = '0' }, 4200)
-  }
+  const msgQ = createMessageQueue()
+  function showMessage(text, prio = PRIO.interaction) { if (text) msgQ.push(String(text), prio) }
 
   // ── polaroid ──
   const flashEl = document.getElementById('flash')
@@ -856,19 +863,19 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function fireEvent(id) {
     if (id === 'lights-cascade') {
       flickTgt = 0.14; flickTimer = 0.7                        // a wave of dark, held, then the loop recovers it
-      showMessage('the lights go out ahead of you, one by one. then, slowly, they come back.')
+      showMessage('the lights go out ahead of you, one by one. then, slowly, they come back.', PRIO.ambient)
     } else if (id === 'door-slam') {
       doorSlam(); shake = Math.max(shake, 0.35)
       showMessage('somewhere behind you, a door slams shut.')
     } else if (id === 'hum-stops') {
       humDuck(2.6)
-      showMessage('the hum stops. the silence has a shape. then it resumes, as if something had been listening.')
+      showMessage('the hum stops. the silence has a shape. then it resumes, as if something had been listening.', PRIO.ambient)
     } else if (id === 'cold-spot') {
       sanity = Math.max(0, sanity - 4); whisper()
-      showMessage('a cold spot. your breath fogs where there is nothing cold enough to fog it.')
+      showMessage('a cold spot. your breath fogs where there is nothing cold enough to fog it.', PRIO.ambient)
     } else if (id === 'footsteps') {
       footfall()
-      showMessage('footsteps. not yours. they keep your pace, and stop when you stop.')
+      showMessage('footsteps. not yours. they keep your pace, and stop when you stop.', PRIO.ambient)
     } else if (id === 'crosser') {
       spawnCrosser(); footfall(3); heartbeat(0.7)
       showMessage('far down the hall, something crosses the intersection. the hall is empty when you look again.')
@@ -928,7 +935,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   } else {
     buildLevel(mpClient ? 0 : 4)   // solo: fall in through the block (∅); online: the lobby
   }
-  showMessage(level.cfg.levelName)
+  showMessage(level.cfg.levelName, PRIO.combat)
 
   // apply saved audio/visual prefs, then keep them live as the panel changes them
   setMusicEnabled(getPref('music'))
@@ -1018,6 +1025,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (moved) player.bob += 0.12 * dt * 60
     player.bobOffset = (moved && getPref('headBob')) ? Math.sin(player.bob) * 4 : 0
 
+    // ── the message line: the queue decides what shows; one reused result or null (messages.js) ──
+    const mq = msgQ.tick(dt)
+    if (mq && msgEl) { if (mq.show) { msgEl.textContent = mq.text; msgEl.style.opacity = '1' } else msgEl.style.opacity = '0' }
+
     if (fogTimer > 0) fogTimer -= dt
     const fogMul = fogTimer > 0 ? 1.6 : 1
 
@@ -1026,7 +1037,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (msgTimer >= msgNext) {
       msgTimer = 0
       msgNext  = base.messageInterval[0] + Math.random() * (base.messageInterval[1] - base.messageInterval[0])
-      showMessage(level.messages[Math.floor(Math.random() * level.messages.length)])
+      showMessage(level.messages[Math.floor(Math.random() * level.messages.length)], PRIO.ambient)
     }
 
     // ── Living Atmosphere: occasional ambient dread events (procedural floors only) ──
@@ -1044,6 +1055,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     const pcx = Math.floor(player.x / CHUNK_SIZE)
     const pcy = Math.floor(player.y / CHUNK_SIZE)
+    level.grid.setPlayerChunk(pcx, pcy)      // before entitySys.update / any floor() read this frame
 
     // ── presence proximity (radio finds them from farther) ──
     const presenceRange = radioOn ? 400 : 4
@@ -1213,7 +1225,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (wardCd > 0) wardCd -= dt
     if (!transitioning && creaturesLive && getPref('damage') && invuln <= 0 && nearD < 0.62) {
       player.hp -= (cfg.entities.damage ?? 16); invuln = 0.7; hurt = 1; regenDelay = 6; shake = 1
-      showMessage('it has you.')
+      showMessage('it has you.', PRIO.combat)
     }
     if (regenDelay > 0) regenDelay -= dt
     else if (player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + 3.5 * dt)
@@ -1230,7 +1242,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     // ── sanity — dark + the hunt drain it; light, almond water, a friend restore it ──
     let sdelta = flashlight ? 2 : -2
-    sdelta -= level.index * 0.5
+    sdelta -= (level.index >= 0 && level.index <= 3 ? level.index : 0) * 0.5   // Level ∅ (index 4) does not drain like a fourth floor
     if (nearD < 10) sdelta -= 4
     if (mpClient) { for (const rp of mpClient.getRemotePlayers()) { if ((rp.x - player.x) ** 2 + (rp.y - player.y) ** 2 < 36) { sdelta += 3; break } } }
     sanity = Math.max(0, Math.min(100, sanity + sdelta * dt))

@@ -19,3 +19,27 @@ describe('offline shell lists', () => {
     })
   }
 })
+
+// Beyond the gfx modules: every renderer module game.js reaches through static imports (the closure, one hop at a time) must be in both
+// lists too, or a new import (messages.js, input.js, ...) works online and breaks the installed PWA offline.
+describe('offline shell lists: the import closure of game.js', () => {
+  const closure = new Set()
+  const queue = ['game.js']
+  while (queue.length) {
+    const f = queue.shift()
+    if (closure.has(f)) continue
+    closure.add(f)
+    const src = fs.readFileSync(path.join(rendererDir, f), 'utf8')
+    for (const m of src.matchAll(/from\s+'\.\/([\w-]+\.js)'/g)) queue.push(m[1])
+  }
+  it('reaches the foundation modules', () => {
+    expect(closure.has('messages.js')).toBe(true)
+    expect(closure.has('input.js')).toBe(true)
+  })
+  for (const f of [...closure].sort()) {
+    it(`${f} (imported by game.js) is in src/sw.js and tools/build-play.sh`, () => {
+      expect(sw).toContain(`'/renderer/${f}'`)
+      expect(build).toContain(`'${f}'`)
+    })
+  }
+})
