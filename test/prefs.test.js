@@ -170,3 +170,48 @@ describe('prefs load-time behaviour (fresh module, stubbed browser)', () => {
     expect(JSON.parse(ls.setItem.mock.calls.at(-1)[1]).graphicsQuality).toBe('auto')
   })
 })
+
+// the file (status.js) lives in prefs under the key 'file': prefs.js passes unknown keys through, no code of its own
+describe('the file pref (status.js stores it; prefs.js only carries it)', () => {
+  const fresh = async (stubs = {}) => {
+    vi.resetModules()
+    for (const [k, v] of Object.entries(stubs)) vi.stubGlobal(k, v)
+    return import('../src/renderer/prefs.js')
+  }
+  afterEach(() => { vi.unstubAllGlobals(); vi.resetModules() })
+  const store = (obj) => ({ getItem: () => (obj === null ? null : JSON.stringify(obj)), setItem: vi.fn() })
+  const FILE = { status: 'extension', at: 1, ledgerHeard: true, closing: null, redacted: [2] }
+
+  it('a stored file survives a fresh load deep-equal', async () => {
+    const m = await fresh({ localStorage: store({ file: FILE }) })
+    expect(m.getPref('file')).toEqual(FILE)
+  })
+  it('setPref persists it as JSON', async () => {
+    const ls = store(null)
+    const m = await fresh({ localStorage: ls })
+    m.setPref('file', FILE)
+    expect(JSON.parse(ls.setItem.mock.calls.at(-1)[1]).file).toEqual(FILE)
+  })
+  it('normalizePref passes it through; it has no default', async () => {
+    const m = await fresh({})
+    expect(m.normalizePref('file', FILE)).toBe(FILE)
+    expect('file' in m.PREF_DEFAULTS).toBe(false)
+    expect(m.getPref('file')).toBe(undefined)
+    const { loadFile } = await import('../src/renderer/status.js')
+    expect(loadFile(m.getPref('file'))).toEqual({ status: 'notice-mailed', at: null, ledgerHeard: false, closing: null, redacted: [] })
+  })
+  it('the same object again is dropped (prefs.js: same value, already chosen); saveFile\'s fresh copy is persisted', async () => {
+    const ls = store(null)
+    const m = await fresh({ localStorage: ls })
+    const { saveFile } = await import('../src/renderer/status.js')
+    const f = { ...FILE, redacted: [2] }
+    m.setPref('file', f)
+    expect(ls.setItem).toHaveBeenCalledTimes(1)
+    f.redacted.push(3)
+    m.setPref('file', f)                                   // same reference: never reaches localStorage
+    expect(ls.setItem).toHaveBeenCalledTimes(1)
+    saveFile(f)
+    expect(ls.setItem).toHaveBeenCalledTimes(2)
+    expect(JSON.parse(ls.setItem.mock.calls.at(-1)[1]).file.redacted).toEqual([2, 3])
+  })
+})
