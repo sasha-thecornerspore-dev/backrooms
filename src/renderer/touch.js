@@ -62,6 +62,7 @@ export const ACTIONS = [
   { code: 'Space', label: 'WARD', hint: 'push back' },
   { code: 'KeyE', label: 'SPEAK', hint: 'talk · wish' },
   { code: 'KeyL', label: 'LIGHT', hint: 'flashlight' },
+  { code: 'KeyC', label: 'CALL', hint: 'whistle' },
 ]
 
 const CSS = `
@@ -75,7 +76,8 @@ const CSS = `
   border-radius: 50%; background: rgba(201,186,114,0.5); border: 2px solid rgba(42,30,0,0.6);
   transition: transform 0.04s linear; }
 #touch-actions { position: absolute; right: 20px; bottom: 30px; display: flex; flex-direction: column-reverse;
-  gap: 12px; pointer-events: none; z-index: 3; }
+  gap: 12px; flex-wrap: wrap-reverse; max-height: calc(100vh - 60px); align-content: flex-end; column-gap: 12px;
+  pointer-events: none; z-index: 3; }
 .touch-btn { width: 66px; height: 66px; border-radius: 50%; pointer-events: auto; touch-action: none;
   background: rgba(20,16,6,0.42); border: 2px solid rgba(201,186,114,0.5); color: #e8d9a0;
   font: bold 12px 'Courier New', monospace; letter-spacing: 1px; display: flex; align-items: center;

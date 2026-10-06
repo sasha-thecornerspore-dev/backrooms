@@ -44,11 +44,13 @@ describe('lookYaw', () => {
 })
 
 // the map opens from Tab on a keyboard and from the paper corner #map-tab on a phone (sharedConventions #12): the action buttons stay the
-// five they were, and none of them is Tab — the tab's touchstart / click set K['Tab'] itself (game.js), so the one edge in the loop folds it
+// five they were plus the whistle (W5's CALL, last), and none of them is Tab — the tab's touchstart / click set K['Tab'] itself (game.js),
+// so the one edge in the loop folds it
 describe('ACTIONS', () => {
-  it('has exactly five entries and none is Tab', () => {
-    expect(ACTIONS).toHaveLength(5)
-    expect(ACTIONS.map(a => a.code)).toEqual(['KeyF', 'KeyQ', 'Space', 'KeyE', 'KeyL'])
+  it('has exactly six entries and none is Tab', () => {
+    expect(ACTIONS).toHaveLength(6)
+    expect(ACTIONS.map(a => a.code)).toEqual(['KeyF', 'KeyQ', 'Space', 'KeyE', 'KeyL', 'KeyC'])
     expect(ACTIONS.some(a => a.code === 'Tab')).toBe(false)
+    expect(ACTIONS[5]).toEqual({ code: 'KeyC', label: 'CALL', hint: 'whistle' })
   })
 })
