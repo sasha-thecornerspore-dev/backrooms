@@ -88,3 +88,18 @@ describe('update check (PKG-1)', () => {
     expect(log).not.toContain('example.invalid')
   })
 })
+
+describe('fire-beacon (an anchored beacon carries the pin)', () => {
+  it('accepts an anchor in the payload; the off effect returns before any network', async () => {
+    const fire = h.handlers.get('fire-beacon')
+    expect(typeof fire).toBe('function')
+    await expect(fire(null, { effect: 'off', webhook: '', anchor: { lat: 39.2994, lng: -76.641 } }))
+      .resolves.toEqual({ ok: false, skipped: true })
+  })
+
+  it('src/main.js destructures the anchor and hands it to fireBeacon', () => {
+    const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+    expect(src).toMatch(/const \{ effect, webhook, anchor \} = payload \|\| \{\}/)
+    expect(src).toMatch(/fireBeacon\(effect, webhook, \{ appVersion: app\.getVersion\(\), now, anchor \}\)/)
+  })
+})

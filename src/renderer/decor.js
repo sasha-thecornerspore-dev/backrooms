@@ -43,6 +43,9 @@ export const SIGHT_TYPES = ['chairpile', 'tvwall', 'payphone', 'mannequin']
 function wayDown(cfg) { return cfg.ways?.[0] ?? { kind: 'down', label: cfg.exit?.label ?? 'descend' } }
 const EMPTY = []
 const TRUE = () => true
+// an authored note's scrap key ('∅:n0', ...), built once: update() runs every frame
+const NOTE_KEYS = []
+const noteKey = (i) => NOTE_KEYS[i] ?? (NOTE_KEYS[i] = '∅:n' + i)
 
 export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null) {
   let cfg = config
@@ -59,6 +62,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
   // Fixed-map levels (Level ∅) place ONE exit at an authored point instead of
   // scattering them by chunk hash. When set, procedural exit placement is skipped.
   let fixedExit = config.exitAt || null
+  let fixedNotes = config.notes || null   // ...and its authored notes (the ∅ intake form): scraps keyed outside the chunks
   let exitKind  = wayDown(config).kind
   let exitLabel = wayDown(config).label
   const passes  = (hooks?.passes ?? EMPTY).filter((p) => typeof p === 'function')
@@ -236,6 +240,11 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
     if (fixedExit && !exits.has('∅')) {
       exits.set('∅', { key: '∅', x: fixedExit.x, y: fixedExit.y, target: exitTarget, kind: exitKind, label: exitLabel })
     }
+    // the authored notes, the same way: never in `scanned` (never evicted), never settled (a scrap is not a body)
+    if (fixedNotes) for (let i = 0; i < fixedNotes.length; i++) {
+      const k = noteKey(i)
+      if (!scraps.has(k)) scraps.set(k, { key: k, x: fixedNotes[i].x, y: fixedNotes[i].y, frag: -1, form: true })
+    }
   }
 
   function getProps() {
@@ -376,6 +385,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
     sightDenom = Math.max(0, cfg.sights?.denom ?? sightDenom)
     salt      = cfg.maze?.salt | 0
     fixedExit = cfg.exitAt || null
+    fixedNotes = cfg.notes || null
     exitKind  = wayDown(cfg).kind
     exitLabel = wayDown(cfg).label
     props.clear()

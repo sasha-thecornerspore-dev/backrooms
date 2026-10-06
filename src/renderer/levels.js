@@ -198,6 +198,7 @@ export const LEVELS = [
       items: { density: 40, types: ['polaroid'] },              // sparse — a camera, for evidence
       props: { density: 0.4, types: ['trash', 'tire', 'weeds', 'box'] },  // the dumping-ground yard
       scraps: { denom: 0 },   // no office-wanderer notes here — this is a real place
+      notes: [{ x: 6.5, y: 6.5 }],   // one authored note: the intake form, on open ground two cells west of the stoops
       machines: { denom: 0 },
       sights: { denom: 0 },
       dress: { denom: 0 },    // the yard is dressed by hand, not by the lobby's furniture

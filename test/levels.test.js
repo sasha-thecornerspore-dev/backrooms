@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { LEVELS, levelConfig, levelCount } from '../src/renderer/levels.js'
 import { DEFAULT_CONFIG } from '../src/renderer/world.js'
+import { createFixedMap } from '../src/renderer/fixedmap.js'
+import { NULL_MAP } from '../src/renderer/level-null-map.js'
 
 describe('levels', () => {
   it('defines the four descent levels plus Level ∅', () => {
@@ -74,5 +76,14 @@ describe('levels', () => {
     expect(levelConfig(DEFAULT_CONFIG, 4).levelIndex).toBe('∅')   // ∅ is index 4
     expect(levelConfig(DEFAULT_CONFIG, 5).levelIndex).toBe(0)     // wraps back to the lobby
     expect(levelConfig(DEFAULT_CONFIG, -1).levelIndex).toBe('∅')  // -1 wraps to the last (∅)
+  })
+
+  it('∅ carries the one authored note (the form on the counter) on open ground; levels 0-3 carry none', () => {
+    expect(levelConfig(DEFAULT_CONFIG, 4).notes).toEqual([{ x: 6.5, y: 6.5 }])
+    for (const i of [0, 1, 2, 3]) expect(levelConfig(DEFAULT_CONFIG, i).notes).toBeUndefined()
+    expect('notes' in DEFAULT_CONFIG).toBe(false)
+    const fm = createFixedMap(NULL_MAP)
+    expect(fm.isWall(6.5, 6.5)).toBe(false)
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) expect(fm.isWall(6.5 + dx, 6.5 + dy)).toBe(false)
   })
 })
