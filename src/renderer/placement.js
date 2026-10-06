@@ -91,13 +91,30 @@ export function settle(rec, cls, sides, r, vis, side) {
   return rec
 }
 
+const OPPOSITE = { N: 'S', S: 'N', E: 'W', W: 'E' }
+
 // settleChunk(records, floorFn, radiusFn, visFn, sideFn): every record settled in place by its own cell; returns records.
+// Then the pair rule: the lane rule is per body, so two solids hugging opposite walls of one corridor / nook cell can each pass it
+// and together close the cell. When the gap between their discs, 1 - (visA + HUG_GAP + rA) - (visB + HUG_GAP + rB), is under
+// 2 PLAYER_R + 0.02 the smaller footprint (the later on a tie) becomes clutter.
 export function settleChunk(records, floorFn, radiusFn = footprintRadius, visFn = visualHalf, sideFn) {
   for (let i = 0; i < records.length; i++) {
     const rec = records[i]
     const cls = classifyCell(floorFn, rec.x, rec.y)
     const sides = wallSides(floorFn, rec.x, rec.y)
     settle(rec, cls, sides, radiusFn(rec.kind, rec.type), visFn(rec.kind, rec.type), sideFn ? sideFn(rec) : 1)
+  }
+  for (let i = 0; i < records.length; i++) {
+    const a = records[i]
+    for (let j = i + 1; j < records.length && a.cls === 'solid'; j++) {
+      const b = records[j]
+      if (b.cls !== 'solid' || !a.hug || b.hug !== OPPOSITE[a.hug]) continue
+      if (a.cellCls !== 'corridor' && a.cellCls !== 'nook') continue
+      if (Math.floor(a.x) !== Math.floor(b.x) || Math.floor(a.y) !== Math.floor(b.y)) continue
+      const ra = radiusFn(a.kind, a.type), rb = radiusFn(b.kind, b.type)
+      const gap = 1 - (visFn(a.kind, a.type) + HUG_GAP + ra) - (visFn(b.kind, b.type) + HUG_GAP + rb)
+      if (gap < 2 * PLAYER_R + 0.02) (ra < rb ? a : b).cls = 'clutter'
+    }
   }
   return records
 }

@@ -8,7 +8,7 @@ import { levelConfig } from '../src/renderer/levels.js'
 import { createChunkCache, createGridReader, CHUNK_SIZE, DEFAULT_CONFIG } from '../src/renderer/world.js'
 import { createFixedMap } from '../src/renderer/fixedmap.js'
 import { NULL_MAP, NULL_SPAWN, NULL_EXIT } from '../src/renderer/level-null-map.js'
-import { PLAYER_R } from '../src/renderer/collide.js'
+import { PLAYER_R, createColliderIndex, createSolidWorld } from '../src/renderer/collide.js'
 import { waysFor, stairsPass } from '../src/renderer/topology.js'
 import { dressPass } from '../src/renderer/dress.js'
 
@@ -164,6 +164,41 @@ describe('the reach gate', () => {
     }
     expect(hugged).toBeGreaterThan(10)
     expect(clutter).toBe(0)                     // the lobby's prop set has nothing wider than a plant (only a sight can be clutter here)
+  })
+
+  // FEEL-6: two spools hugging opposite walls of one 1-wide cell each passed the lane rule but together left 0.238 u. The flood
+  // never noticed (the cells past them stay reachable the long way round), so this walks the real mover down the corridor.
+  it('level 3, seed 2654435761, chunk (-1,-2): the real mover walks the N-S corridor past the cell (-21,-28)', () => {
+    const seed = 2654435761
+    const cfg = levelConfig(DEFAULT_CONFIG, 3)
+    cfg.ways = waysFor(3)
+    const cache = createChunkCache(cfg, seed)
+    const isWall = (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy)
+    const grid = createGridReader(cache, isWall)
+    const index = createColliderIndex()
+    const decor = createDecorSystem(cfg, isWall, seed, {
+      passes: passesFor(cfg, 3), onChunk: (k, b) => index.setChunk(k, b.colliders), onEvict: (k) => index.dropChunk(k),
+    })
+    grid.setPlayerChunk(-1, -2); decor.update(-1, -2)
+    for (let y = -30; y <= -26; y++) expect(grid.floor(-21, y), `cell -21,${y}`).toBe(true)
+    expect(grid.floor(-22, -28)).toBe(false); expect(grid.floor(-20, -28)).toBe(false)
+    const Q = []
+    const n = index.query(-20.5, -27.5, 0.5, Q)
+    const inCell = Q.slice(0, n).filter((c) => Math.floor(c.x) === -21 && Math.floor(c.y) === -28 && c.cls !== 'none')
+    expect(inCell.map((c) => c.type).sort()).toEqual(['spool', 'spool'])
+    expect(inCell.map((c) => c.hug).sort()).toEqual(['E', 'W'])
+    expect(inCell.filter((c) => c.cls === 'solid')).toHaveLength(1)
+    for (const wig of [0, 0.4, 0.9, -0.4, -0.9]) {
+      const solid = createSolidWorld({ index, floorFn: grid.floor, solidCreature: () => false })
+      const p = { x: -20.5, y: -29.5 }
+      let reached = false
+      for (let f = 0; f < 900 && !reached; f++) {
+        const ang = Math.atan2(-25.5 - p.y, -20.5 - p.x) + wig * Math.sin(f / 7)
+        solid.movePlayer(p, p.x + Math.cos(ang) * 0.05, p.y + Math.sin(ang) * 0.05, 1 / 60, false, [])
+        reached = Math.floor(p.x) === -21 && Math.floor(p.y) === -26
+      }
+      expect(reached, `wiggle ${wig}: stopped at ${p.x.toFixed(2)},${p.y.toFixed(2)}`).toBe(true)
+    }
   })
 
   it('NULL_MAP: spawn -> exit reachable with the 0.12 AABB and Level ∅ props are solid', () => {

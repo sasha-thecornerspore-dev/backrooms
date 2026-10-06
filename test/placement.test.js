@@ -273,6 +273,52 @@ describe('settleChunk', () => {
     expect(list[4].hug).toBe('W'); expect(list[4].cellCls).toBe('junction'); expect(list[4].cls).toBe('solid')
   })
 
+  // FEEL-6: two solids hugging opposite walls of one 1-wide cell each pass the lane rule alone, but together close it
+  const pairGap = (a, b) => 1 - (visualHalf(a.kind, a.type) + HUG_GAP + a.r) - (visualHalf(b.kind, b.type) + HUG_GAP + b.r)
+  const bySide = (list, sides) => (p) => sides[list.indexOf(p)]
+
+  it('two spools hugging opposite walls of one corridor cell: the later one becomes clutter, the lane stays open', () => {
+    const list = [rec('prop', 'spool', 2.5, 3.5), rec('prop', 'spool', 2.5, 3.5)]   // corridor (walls E, W)
+    settleChunk(list, gridFloor, footprintRadius, visualHalf, bySide(list, [1, -1]))
+    expect(list[0].hug).toBe('E'); expect(list[1].hug).toBe('W')
+    expect(pairGap(list[0], list[1])).toBeLessThan(2 * PLAYER_R + 0.02)
+    expect(list[0].cls).toBe('solid'); expect(list[1].cls).toBe('clutter')
+    // the positions are the hugged ones either way: only the class changes
+    expect(list[1].x).toBeCloseTo(2 + visualHalf('prop', 'spool') + HUG_GAP, 12)
+  })
+
+  it('of two unequal bodies the smaller is demoted, whichever comes first', () => {
+    for (const order of [['cabinet', 'spool'], ['spool', 'cabinet']]) {
+      const list = order.map((t) => rec('prop', t, 3.5, 4.5))                       // corridor (walls N, S)
+      settleChunk(list, gridFloor, footprintRadius, visualHalf, bySide(list, [1, -1]))
+      expect(list.map((p) => p.hug)).toEqual(['N', 'S'])
+      expect(pairGap(list[0], list[1])).toBeLessThan(2 * PLAYER_R + 0.02)
+      for (const p of list) expect(p.cls, p.type).toBe(p.type === 'cabinet' ? 'clutter' : 'solid')
+    }
+  })
+
+  it('a pair that leaves the player 2 PLAYER_R + 0.02 stays solid; same-wall pairs, other cells and rooms are untouched', () => {
+    const pair = [rec('prop', 'cabinet', 2.5, 3.5), rec('prop', 'cabinet', 2.5, 3.5)]
+    settleChunk(pair, gridFloor, footprintRadius, visualHalf, bySide(pair, [1, -1]))
+    expect(pairGap(pair[0], pair[1])).toBeGreaterThanOrEqual(2 * PLAYER_R + 0.02)
+    expect(pair.map((p) => p.hug)).toEqual(['E', 'W']); expect(pair.map((p) => p.cls)).toEqual(['solid', 'solid'])
+    const same = [rec('prop', 'spool', 2.5, 3.5), rec('prop', 'spool', 2.5, 3.5)]
+    settleChunk(same, gridFloor, footprintRadius, visualHalf, () => 1)
+    expect(same.map((p) => p.hug)).toEqual(['E', 'E']); expect(same.map((p) => p.cls)).toEqual(['solid', 'solid'])
+    const apart = [rec('prop', 'spool', 2.5, 7.5), rec('prop', 'spool', 3.5, 7.5)]   // neighbouring cells of one corridor
+    settleChunk(apart, gridFloor, footprintRadius, visualHalf, bySide(apart, [1, -1]))
+    expect(apart.map((p) => p.hug)).toEqual(['N', 'S']); expect(apart.map((p) => p.cls)).toEqual(['solid', 'solid'])
+    const room = [rec('prop', 'spool', 1.5, 1.5), rec('prop', 'spool', 1.5, 1.5)]    // a room cell never has opposite walls
+    settleChunk(room, gridFloor, footprintRadius, visualHalf, bySide(room, [1, -1]))
+    expect(room.map((p) => p.cls)).toEqual(['solid', 'solid'])
+  })
+
+  it('a body already clutter or none does not count: the solid partner stays solid', () => {
+    const list = [rec('prop', 'couch', 2.5, 3.5), rec('prop', 'spool', 2.5, 3.5), rec('prop', 'papers', 2.5, 3.5)]
+    settleChunk(list, gridFloor, footprintRadius, visualHalf, bySide(list, [1, -1, 1]))
+    expect(list[0].cls).toBe('clutter'); expect(list[1].cls).toBe('solid'); expect(list[2].cls).toBe('none')
+  })
+
   it('an empty list is returned as is', () => {
     const list = []
     expect(settleChunk(list, gridFloor, footprintRadius, visualHalf, () => 1)).toBe(list)
