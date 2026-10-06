@@ -10,7 +10,7 @@ import { getPref, setPref, onPrefChange } from './prefs.js'
 import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
 import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
 import { writeSave } from './save.js'
-import { formatAnchor, driftMeters } from './anchor.js'
+import { formatAnchor, driftMeters, anchorSeed } from './anchor.js'
 import { initTouchControls, isTouchDevice } from './touch.js'
 import { SCRAPS } from './scraps.js'
 import { createEventScheduler } from './events.js'
@@ -34,6 +34,7 @@ import { compassLines, compassText, arrivalSummary } from './compass.js'
 import { dressPass } from './dress.js'
 import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog } from './containers.js'
 import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
+import { createEvBus } from '../net/evbus.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -552,6 +553,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if (s) later(7500, s, PRIO.discovery)
       }
       if (player.maxHp > hp0) later(11000, 'the floor remembers you less.', PRIO.discovery)
+      bus?.here(hereFields())           // the room learns your new floor at once (a friend's chat says 'no-clipped deeper.')
     })
   }
 
@@ -597,6 +599,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       showMessage(level.cfg.levelName, PRIO.combat)
       later(2600, r.message, PRIO.discovery)
       if (r.dropped) later(5200, r.droppedLine, PRIO.discovery)
+      bus?.here(hereFields())           // woken a floor above: the room learns it at once
     })
   }
 
@@ -826,7 +829,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     clearTimeout(renderChat._t)
     renderChat._t = setTimeout(() => { if (!chatOpen) chatLogEl.style.opacity = '0.3' }, 7000)
   }
-  function addChatLine(from, text, isSystem) {
+  const JOINED_LINE = 'entered the level.', JOIN_SAY_MS = 2000
+  const joinedLine = (id) => {
+    const p = bus.peers.get(id)
+    return p && bus.fresh(id) && p.status !== 'notice-mailed' ? `entered the level, filed under ${p.status}.` : JOINED_LINE
+  }
+  // (from, text, isSystem, id): the client hands the speaker's id as a 4th argument (a chat, a join, a leave). A friend walking in is said
+  // once their heartbeat has had JOIN_SAY_MS to name the file they are under — 'entered the level, filed under extension.'; no heartbeat by
+  // then (an old client) or an unanswered notice, today's 'entered the level.'
+  function addChatLine(from, text, isSystem, id) {
+    if (isSystem && id && bus && text === JOINED_LINE) { setTimeout(() => addChatLine(from, joinedLine(id), true), JOIN_SAY_MS); return }
     chatLines.push({ from, text, sys: isSystem })
     if (chatLines.length > 8) chatLines.shift()
     renderChat()
@@ -968,6 +980,44 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     mpClient.onChat(addChatLine)
     mpClient.onTyping(showTyping)
     addChatLine('', 'connected — Enter to chat · /me to emote', true)
+  }
+
+  // ── the event bus (src/net/evbus.js): the one relayed 'ev' every co-op verb rides, and 'here' — the heartbeat that tells the room which
+  //    floor you are on and what the file knows of you (and you of them: the bus merges a friend's onto their players-list record, the
+  //    sprites read it). null solo, so every `bus?.` is a no-op there and the game is today's. Nothing here allocates per frame: the roster
+  //    the bus reads (peerIdSet, peerRec) is refilled in place by fillRemotes, self() writes one object, hereFields() fills one. ──
+  const selfPos = { x: 0, y: 0, lvl: 0 }
+  const peerIdSet = new Set(), peerRec = new Map()        // the players list's ids and their last records (x, y), this frame
+  const peerPos = (id) => peerRec.get(id) ?? null
+  const bus = mpClient ? createEvBus({
+    send: mpClient.sendEv, now: () => performance.now(),
+    self: () => { selfPos.x = player.x; selfPos.y = player.y; selfPos.lvl = level ? level.index : 0; return selfPos },
+    peerPos, peerIds: () => peerIdSet, selfId: () => mpClient.id, mergeRemote: mpClient.mergeRemote,
+  }) : null
+  if (bus) {
+    mpClient.onEv(bus.receive)
+    // a friend's floor change is a people line: 'no-clipped deeper.' / 'climbed back.' / 'fell in.' (none when the depth held)
+    bus.onFloorChange((id, name, from, to, line) => { if (line) addChatLine(name || 'someone', line, true) })
+    // the kinds, registered in this one place (the bus believes nothing it was not told about); each item's handlers land in its own step
+    // TODO(integrate:W5) I9/I10: register whistle / kneel / woke from W5's evKinds(() => mpClient.id) — whistle: lvl int 0..4 && finite x/y && c <= 32, minGapMs 8000, posKeys ['x','y']; kneel: to === my id, maxDist 2.0, minGapMs 350; woke: by === my id, maxDist 3.0
+    // TODO(integrate:W6) I11: bus.register('cache', { check: (p) => isCachePayload(p, ITEM_NAMES), replayable: true, posKeys: ['x', 'y'], minGapMs: 3000 }); bus.register('take', { check: isTakePayload, replayable: true, minGapMs: 500 })
+    // TODO(integrate:W7) I12: bus.register('ward', { check: lvl int && finite x/y/a, posKeys: ['x', 'y'], minGapMs: 600 }) and 'photo' { maxDist: 11, minGapMs: 4000 } — NB emit() runs check() on the OUTGOING payload too, so a photo check of `p.of === mpClient.id` refuses every photo you send: check the receiver side in the handler, not in check()
+  }
+  // what 'here' says of you (bus.here sends it at once when a field changed, else every 3 s from tick): ONE object, filled per call (the bus
+  // copies it). Sent about once a second from the loop, and at once after a travel or a death
+  const myAseed = anchor ? anchorSeed(anchor.lat, anchor.lng) : null
+  const hereObj = { lvl: 0, lit: true, st: 'ok', seen: false, o: null, thin: false, status: 'notice-mailed', aseed: myAseed }
+  let hereTimer = 1                                        // the first frame says it
+  function hereFields() {
+    hereObj.lvl = level ? level.index : 0
+    hereObj.lit = flashlight
+    hereObj.st = 'ok'                    // TODO(integrate:W5) I9: kneel.st ? 'kneel' : down.st
+    hereObj.seen = false                 // TODO(integrate:W7) I12: evidence.active(playT)
+    hereObj.o = null                     // TODO(integrate:W2) I5: origin
+    hereObj.thin = false                 // TODO(integrate:W2) I5: thin
+    hereObj.status = 'notice-mailed'     // TODO(integrate:W3) I13: file.status
+    hereObj.aseed = myAseed
+    return hereObj
   }
 
   // ── messages (black text, fades via opacity — see CSS): one voice. Every line goes through the priority queue (messages.js) so a
@@ -1433,14 +1483,25 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
 
   const entityAsm = createEntityAssembler(), EF = ENTITY_FILLS
-  // the remote players drawn this frame: ONE reused array refilled once per frame (the net block) from the players list. getRemotePlayers
-  // hands fresh copies, so a record's fields may be written here without touching the client's own
+  // the remote players this frame: ONE reused array refilled once per frame (the net block) from the players list, read by the sanity
+  // friend rule and the sprite list. With the bus only the friends on THIS floor count (bus.onFloor: a peer without a fresh heartbeat — an
+  // old client, or one gone quiet 8 s — always does), and a stale friend's heartbeat fields are blanked so it draws as a legacy peer (a
+  // record keeps the last fields the bus merged). The same pass refills the roster the bus reads (peerIdSet / peerRec). getRemotePlayers
+  // hands fresh copies, so a record's fields may be written here without touching the client's own.
   const remoteOnFloor = []
   function fillRemotes() {
-    remoteOnFloor.length = 0
+    remoteOnFloor.length = 0; peerIdSet.clear(); peerRec.clear()
     if (!mpClient) return
     const list = mpClient.getRemotePlayers()
-    for (let i = 0; i < list.length; i++) remoteOnFloor.push(list[i])
+    for (let i = 0; i < list.length; i++) {
+      const rp = list[i]
+      peerIdSet.add(rp.id); peerRec.set(rp.id, rp)
+      if (bus) {
+        if (!bus.onFloor(rp.id)) continue
+        if (!bus.fresh(rp.id)) { rp.st = rp.lit = rp.origin = rp.status = undefined; rp.thin = rp.seen = false }
+      }
+      remoteOnFloor.push(rp)
+    }
   }
   // what the things know about you this frame (hunt.js / variants.js ctx): ONE object, mutated per frame, never rebuilt. `player` is the
   // live object (where they look for you), hf the half field of view (watched() == drawn on screen), damage the floor's contact damage,
@@ -1791,7 +1852,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
     netTimer += dt
     if (mpClient?.isConnected() && netTimer >= 0.05) { netTimer = 0; mpClient.sendPos(player.x, player.y, player.angle, player.hp) }
-    fillRemotes()                           // the remote players drawn this frame (one list, refilled once)
+    // the people: the roster and this floor's remote players, once; then the bus's tick (new / gone / stale peers, the 3 s heartbeat) and
+    // 'here' about once a second (the bus sends only a change, or the 3 s beat)
+    fillRemotes()
+    if (bus) { bus.tick(performance.now()); hereTimer += dt; if (hereTimer >= 1) { hereTimer = 0; bus.here(hereFields()) } }
     // ── the things: what they know about you this frame, then one update; the threat record it returns drives contact damage, the
     //    heartbeat and sanity (no second pass over the list). Creatures can be switched off entirely (pure liminal exploration;
     //    creaturesOn was read at the top of the frame): the record is then reset, so everything below reads zero. ──
@@ -1852,7 +1916,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     sdelta -= (level.index >= 0 && level.index <= 3 ? level.index : 0) * 0.5   // Level ∅ (index 4) does not drain like a fourth floor
     if (th.hunted) sdelta -= 3                 // something is on you
     if (th.gaze) sdelta -= th.gazeRate         // a smiler held on screen (1.5), a watcher watched back (3)
-    if (mpClient) { for (const rp of mpClient.getRemotePlayers()) { if ((rp.x - player.x) ** 2 + (rp.y - player.y) ** 2 < 36) { sdelta += 3; break } } }
+    if (mpClient) { for (const rp of remoteOnFloor) { if ((rp.x - player.x) ** 2 + (rp.y - player.y) ** 2 < 36) { sdelta += 3; break } } }   // a friend on this floor
     sanity = Math.max(0, Math.min(100, sanity + sdelta * dt))
     updateSanity()
     const insane = Math.max(0, Math.min(1, (42 - sanity) / 42))
