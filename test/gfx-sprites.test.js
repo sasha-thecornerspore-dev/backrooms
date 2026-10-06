@@ -8,7 +8,7 @@ import {
   STATES, FACINGS, FACING_FRONT, FACING_BACK, FACING_SIDE, ANIM_FRAMES, PROP_SPEC, FIG, PERSON, ITEM_COLORS, SIGHT_SPEC,
   stateIndex, creatureState, apparitionState, animFrame, entityPhase, wrapAngle, headingRel, creatureFacing, headsRight,
   frameIndex, frameKey, variantHash, propVariant, unitJitter, visibleRuns, pickMip,
-  getFrame, resetAtlas, atlasStats, drawSprites, packLayer, createPaint, prewarmSprites,
+  getFrame, resetAtlas, atlasStats, drawSprites, packLayer, createPaint, prewarmSprites, NEAR_STATIC, planSprites,
 } from '../src/renderer/gfx-sprites.js'
 
 const sha = (a) => createHash('sha256').update(Buffer.from(a.buffer, a.byteOffset, a.byteLength)).digest('hex')
@@ -343,6 +343,33 @@ describe('drawSprites: placement', () => {
     expect(b.y1).toBeLessThanOrEqual(Math.ceil(row4) + 2)
     expect(b.y1).toBeGreaterThan(Math.floor(row4) - 4)
     expect(S.fs.HH - b.y0).toBeGreaterThan(10)    // the lurker rises well above the horizon
+  })
+})
+
+describe('drawSprites: the near cull', () => {
+  // static bodies are solid, so the camera can never be inside one: they draw down to NEAR_STATIC; what moves keeps the old 0.35
+  it('NEAR_STATIC is 0.15', () => { expect(NEAR_STATIC).toBe(0.15) })
+
+  // planSprites(...).sprites is how many entities survived the cull (the plan is reused: read it at once)
+  const kept = (e) => planSprites(scene().fs, [e]).sprites
+
+  it('keeps a prop at fwd 0.2 and drops a creature at fwd 0.2', () => {
+    expect(kept(propAt(0.2))).toBe(1)
+    expect(kept(enemy({ variant: 'lurker', x: 0.2, y: 0, state: 'idle' }))).toBe(0)
+    expect(kept(enemy({ variant: 'lurker', x: 0.4, y: 0, state: 'idle' }))).toBe(1)
+  })
+
+  it('a prop at fwd 0.1 is dropped; a machine, a sight and a lost soul at fwd 0.2 are kept; a remote player at 0.2 is not', () => {
+    expect(kept(propAt(0.1))).toBe(0)
+    expect(kept(propAt(NEAR_STATIC))).toBe(1)
+    expect(kept(propAt(NEAR_STATIC - 1e-6))).toBe(0)
+    expect(kept({ kind: 'machine', x: 0.2, y: 0, vended: false, key: 'm' })).toBe(1)
+    expect(kept({ kind: 'sight', x: 0.2, y: 0, sightType: 'payphone', key: 's' })).toBe(1)
+    expect(kept({ kind: 'npc', x: 0.2, y: 0, name: 'a lost soul', key: 'n' })).toBe(1)
+    expect(kept({ kind: 'player', x: 0.2, y: 0, name: 'ann', angle: 0 })).toBe(0)
+    expect(kept({ kind: 'player', x: 0.4, y: 0, name: 'ann', angle: 0 })).toBe(1)
+    expect(kept({ kind: 'item', x: 0.2, y: 0, itemType: 'radio', key: 'i' })).toBe(0)        // items and notes are not bodies: 0.35 stays
+    expect(kept({ kind: 'exit', x: 0.2, y: 0, target: 1, key: 'e' })).toBe(0)
   })
 })
 

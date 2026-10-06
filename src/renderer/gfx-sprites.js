@@ -118,6 +118,11 @@ export const SIGHT_SPEC = {
 export const MACHINE_SPEC = { h: 0.62, w: 0.30 }
 export const EXIT_SPEC = { h: 0.86, w: 0.46, beam: 2.7 }
 
+// The near cull. Static bodies (props, sights, machines, lost souls) are solid (collide.js), so the camera is never inside one: the
+// closest a head-on meeting gets is footprint r + PLAYER_R >= 0.255, and they may draw down to 0.15. What moves (creatures, remote
+// players, apparitions) is not pinned that way and keeps the old 0.35, which bounds the fill cost of a thing standing on you.
+export const NEAR_STATIC = 0.15
+
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // 2. FRAME SELECTION (pure)
 // ════════════════════════════════════════════════════════════════════════════════════════════════
@@ -2706,7 +2711,8 @@ export function planSprites(fs, entities) {
     const e = entities[i]
     const ex = e.x - CAMX, ey = e.y - CAMY
     const fwd = ex * CA + ey * SAN                       // perpendicular depth: what the z-buffer holds
-    if (!(fwd >= 0.35)) continue                            // never draw from inside a prop (they are not solid): bounds the fill cost
+    const near = (e.kind === 'prop' || e.kind === 'sight' || e.kind === 'machine' || e.kind === 'npc') ? NEAR_STATIC : 0.35
+    if (!(fwd >= near)) continue                            // static bodies are solid (never entered); moving ones keep the fill-cost bound
     const reach = e.kind === 'exit' ? fog * 1.35 : fog
     if (fwd > reach) continue
     const lat = -ex * SAN + ey * CA                      // + = screen right
