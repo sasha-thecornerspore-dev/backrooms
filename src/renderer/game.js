@@ -34,6 +34,7 @@ import { compassLines, compassText, arrivalSummary } from './compass.js'
 import { dressPass } from './dress.js'
 import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog } from './containers.js'
 import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
+import { createCard, CARD_KEYS } from './papercard.js'
 import { createEvBus } from '../net/evbus.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
@@ -663,24 +664,93 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }, 3000)
   })
 
-  // ── found scraps: notes left by earlier wanderers, read on a paper card ──
+  // ── found scraps: notes left by earlier wanderers, read on the paper card. papercard.js is the one state machine for every card laid over
+  //    the maze (page, form, confirm, sealed, choose, read): it only decides what a key does; this adapter owns the DOM, the readSet, sanity
+  //    and the map pin. noteOpen === (card.state !== null) — kept by openCard / closeNoteCard — so the movement gate, `modal`, the map gate
+  //    and the verbs gate hold for every mode. cardScrap is the scrap the card shows (the card's state keeps only its own keys). ──
   const readSet = new Set()          // distinct frag indices the player has read
   let noteOpen = false
+  const card = createCard()
+  let cardScrap = null
   const noteCardEl = document.getElementById('note-card')
   const noteTextEl = document.getElementById('note-text')
   const noteFootEl = document.getElementById('note-foot')
-  function openNoteCard(scrap) {
-    if (noteOpen || !scrap || !noteCardEl) return   // no card element → never freeze invisibly
+  const noteLinesEl = document.getElementById('note-lines')
+  const noteHintEl = document.getElementById('note-hint')
+  // the card as its state says: the text, the foot, and the option lines (a sealed page's read / leave, the cache menu) — each line its own
+  // tap target that never reaches the card body; while there are lines they ARE the prompt, so the foot and the put-it-back hint step aside
+  function renderCard(s) {
+    noteTextEl.textContent = s.text
+    noteFootEl.textContent = s.foot
+    const lines = s.lines
+    noteFootEl.style.display = lines.length ? 'none' : ''
+    if (noteHintEl) noteHintEl.style.display = lines.length ? 'none' : ''
+    if (!noteLinesEl) return
+    noteLinesEl.textContent = ''
+    for (let i = 0; i < lines.length; i++) {
+      const p = document.createElement('p')
+      p.className = 'note-line'; p.textContent = lines[i]
+      p.addEventListener('pointerdown', (e) => { e.stopPropagation(); cardInput('tapLine:' + i) })
+      noteLinesEl.appendChild(p)
+    }
+  }
+  // openCard(mode, opts, scrap): lays a card over the maze (papercard.js open's opts: text, foot, menu, onPick, onConfirm, onClose, ...);
+  // refused while one is up, and without the card's DOM (never freeze invisibly). -> the card's state, or null
+  function openCard(mode, opts, scrap = null) {
+    if (noteOpen || !noteCardEl) return null
+    const s = card.open(mode, opts)
+    cardScrap = scrap
     noteOpen = true
     document.exitPointerLock()
-    if (!readSet.has(scrap.frag)) { readSet.add(scrap.frag); sanity = Math.min(100, sanity + 6) }   // not alone, for a moment
-    if (!level.cfg.map) fog.pinThing(level.index, 'n:' + scrap.key, 'note', scrap.x, scrap.y, true)       // on the map, filled in: read
-    noteTextEl.textContent = SCRAPS[scrap.frag] ?? ''
-    noteFootEl.textContent = `${readSet.size} of ${SCRAPS.length} pages found`
+    renderCard(s)
     noteCardEl.style.display = 'flex'
+    return s
   }
-  function closeNoteCard() { noteOpen = false; if (noteCardEl) noteCardEl.style.display = 'none' }
-  noteCardEl?.addEventListener('pointerdown', closeNoteCard)   // tap / click the card to put it back
+  // every way a card leaves: a key or a tap that closed it (cardInput), a hit, a travel. A forced close is an Esc to the card — a choose
+  // card drops nothing, a confirm card stays unconfirmed — and its onClose runs, as on every close
+  function closeNoteCard() {
+    const s = card.state
+    if (s) { card.step(s, 'Escape'); if (s.onClose) s.onClose() }
+    card.state = null; cardScrap = null; noteOpen = false
+    if (noteCardEl) noteCardEl.style.display = 'none'
+  }
+  // one card key (CARD_KEYS from the loop's card branch), a tap on the card body ('tap') or on option line i ('tapLine:i')
+  function cardInput(key) {
+    const s = card.state
+    if (!s) return
+    const { state, action } = card.step(s, key)
+    if (state === null) closeNoteCard()                 // closed by this key: the DOM and noteOpen follow the card
+    else if (state !== s) renderCard(state)
+    if (!action) return
+    if (action.type === 'close') { if (action.confirmed && s.onConfirm) s.onConfirm() }
+    else if (action.type === 'pick') { if (s.onPick) s.onPick(action.pick) }
+    else if (action.type === 'reveal') revealScrap()    // the sealed page read: the card is a page now
+    else if (action.type === 'redact') redactScrap()
+    else if (action.type === 'refuse') showMessage(action.line)
+    if (state === null && s.onClose) s.onClose()
+  }
+  noteCardEl?.addEventListener('pointerdown', () => cardInput('tap'))   // tap / click the card to put it back (a sealed or a choose card waits for a line)
+  // a page read — a plain page on open, a sealed one when you choose to read it: counted once (the first time it steadies you), filled in
+  // on the map, and the foot counts the pages
+  function revealScrap() {
+    const scrap = cardScrap
+    if (!scrap || !card.state) return
+    if (!readSet.has(scrap.frag)) { readSet.add(scrap.frag); sanity = Math.min(100, sanity + 6) }   // not alone, for a moment   TODO(integrate:W2) I5: the +6 becomes rules.scrapSanity
+    if (!level.cfg.map) fog.pinThing(level.index, 'n:' + scrap.key, 'note', scrap.x, scrap.y, true)       // on the map, filled in: read
+    renderCard(card.setFoot(card.state, `${readSet.size} of ${SCRAPS.length} pages found`))
+  }
+  // a sealed page left unread: the file notes it (compliance counts it); it still goes on the map
+  function redactScrap() {
+    const scrap = cardScrap
+    if (!scrap) return
+    // TODO(integrate:W3) I13: applyFile({ ...file, redacted: [...file.redacted, scrap.frag] }) — W3's one write seam (sealed cards open only once W3 lands)
+    if (!level.cfg.map) fog.pinThing(level.index, 'n:' + scrap.key, 'note', scrap.x, scrap.y, true)
+  }
+  // E at a scrap: m.'s page, revealed as it opens (today's card byte for byte: the text, '{n} of 26 pages found', +6 the first time, the pin)
+  function openNoteCard(scrap) {
+    if (!scrap || !openCard('page', { text: SCRAPS[scrap.frag] ?? '' }, scrap)) return
+    revealScrap()
+  }
 
   // ── the map card (mapcard.js): the pencil sheet over the lower view. HELD, NOT MODAL — the pointer lock stays, the loop gates the pace
   //    and the verbs, a hit folds it. A tap on the card (touch) or on the paper corner #map-tab reads as Tab, so every way of folding it
@@ -1726,11 +1796,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       }
     }
 
-    // reading a scrap freezes play; any action key or Esc puts it back (works
-    // for touch too — the SPEAK/ACT/WARD buttons set these keys)
-    if (noteOpen && (K['Escape'] || K['KeyE'] || K['KeyF'] || K['Space'] || K['Enter'] || K['NumpadEnter'])) {
-      K['Escape'] = K['KeyE'] = K['KeyF'] = K['Space'] = K['Enter'] = K['NumpadEnter'] = false
-      closeNoteCard()
+    // the paper card freezes play and takes its keys FIRST, before the chat, the map and the verbs can read them: Esc / E / F / Space /
+    // Enter / NumpadEnter, X and the digits (papercard CARD_KEYS) are the card's while it is up — a page goes back on any close key, as
+    // before (touch too: the SPEAK / ACT / WARD buttons set these keys), a sealed card reads or leaves, a cache menu picks
+    if (noteOpen) {
+      for (let i = 0; i < CARD_KEYS.length; i++) { const k = CARD_KEYS[i]; if (K[k]) { K[k] = false; cardInput(k) } }
     }
 
     // Enter opens chat when connected to others

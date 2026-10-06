@@ -262,6 +262,14 @@
     }
     #note-text { white-space: pre-wrap; }
     #note-foot { margin-top: 20px; font-size: 11px; letter-spacing: 2px; color: #54461f; }
+    /* the card's option lines (papercard.js: a sealed page's read / leave, the cache menu): faint pencil, each its own tap target */
+    #note-lines { margin-top: 18px; display: flex; flex-direction: column; gap: 2px; }
+    #note-lines:empty { display: none; }
+    #note-lines .note-line {
+      font-size: 13px; line-height: 1.6; letter-spacing: 1px; color: #54461f;
+      padding: 4px 8px; margin: 0 -8px; cursor: pointer; border-left: 2px solid transparent;
+    }
+    #note-lines .note-line:hover { color: #241c0c; background: rgba(84,70,31,0.08); border-left-color: rgba(84,70,31,0.5); }
     #note-hint { margin-top: 6px; font-size: 10px; letter-spacing: 2px; color: #5c4d26; }
     /* the map card (mapcard.js): a sheet of cream paper (.paper: the note's look) risen over the lower two-thirds of the view — held, not
        modal: the scene keeps running behind it at half pace, and the top third stays visible (max-height 62vh) */
@@ -582,6 +590,7 @@
   <div id="note-card" style="display:none">
     <div id="note-inner">
       <p id="note-text"></p>
+      <div id="note-lines"></div>
       <p id="note-foot"></p>
       <div id="note-hint">tap · e · esc — put it back</div>
     </div>

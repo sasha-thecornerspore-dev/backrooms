@@ -66,6 +66,61 @@ describe('game.js: the event bus (I3)', () => {
   })
 })
 
+describe('game.js: the paper card (I4)', () => {
+  const html = read('../src/renderer/index.html')
+  it('imports createCard and CARD_KEYS from papercard.js and builds ONE card before the loop', () => {
+    expect(game).toMatch(/import \{ createCard, CARD_KEYS \} from '\.\/papercard\.js'/)
+    expect(count(/createCard\(\)/g)).toBe(1)
+    expect(at('const card = createCard()')).toBeLessThan(loopAt)
+    expect(at('let cardScrap = null')).toBeLessThan(loopAt)
+  })
+  it('the card branch takes CARD_KEYS first — before the Enter check, the map\'s Tab and the verbs; the old close-any-key block is gone', () => {
+    expect(game).not.toMatch(/K\['Escape'\] = K\['KeyE'\] = K\['KeyF'\] = K\['Space'\] = K\['Enter'\] = K\['NumpadEnter'\] = false/)
+    expect(game).toMatch(/if \(noteOpen\) \{\r?\n\s*for \(let i = 0; i < CARD_KEYS\.length; i\+\+\) \{ const k = CARD_KEYS\[i\]; if \(K\[k\]\) \{ K\[k\] = false; cardInput\(k\) \} \}\r?\n\s*\}/)
+    const branch = at('for (let i = 0; i < CARD_KEYS.length; i++)')
+    expect(branch).toBeGreaterThan(loopAt)
+    expect(branch).toBeLessThan(at("if (!chatOpen && !dialogOpen && !noteOpen && (K['Enter'] || K['NumpadEnter'])) {"))
+    expect(branch).toBeLessThan(at("if (mapOpen && (K['Escape'] || K['Tab']))"))
+    expect(branch).toBeLessThan(at('if (!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen) {'))
+  })
+  it('noteOpen follows card.state: set only where a card opens, cleared where every close lands; a forced close is an Esc to the card', () => {
+    expect(count(/noteOpen = true/g)).toBe(1)
+    const open = game.slice(at('function openCard(mode, opts, scrap = null) {'), at('function closeNoteCard() {'))
+    expect(open).toMatch(/if \(noteOpen \|\| !noteCardEl\) return null/)
+    expect(open).toMatch(/const s = card\.open\(mode, opts\)\r?\n\s*cardScrap = scrap\r?\n\s*noteOpen = true\r?\n\s*document\.exitPointerLock\(\)/)
+    const close = game.slice(at('function closeNoteCard() {'), at('function cardInput(key) {'))
+    expect(close).toContain("if (s) { card.step(s, 'Escape'); if (s.onClose) s.onClose() }")
+    expect(close).toContain('card.state = null; cardScrap = null; noteOpen = false')
+    const input = game.slice(at('function cardInput(key) {'), at("noteCardEl?.addEventListener('pointerdown'"))
+    expect(input).toMatch(/const \{ state, action \} = card\.step\(s, key\)\r?\n\s*if \(state === null\) closeNoteCard\(\)/)
+    expect(input).toContain('if (action.confirmed && s.onConfirm) s.onConfirm()')
+    expect(input).toContain('if (s.onPick) s.onPick(action.pick)')
+    expect(input).toContain("else if (action.type === 'refuse') showMessage(action.line)")
+    // the hit still folds the card (creatures-wiring / fight-wiring / floors-map-wiring pin the line itself)
+    expect(game).toMatch(/if \(mapOpen\) closeMap\(\); if \(noteOpen\) closeNoteCard\(\)/)
+  })
+  it('a tap on the card body is the card\'s \'tap\'; an option line is \'tapLine:i\' and never reaches the body', () => {
+    expect(game).toContain("noteCardEl?.addEventListener('pointerdown', () => cardInput('tap'))")
+    expect(game).toContain("p.addEventListener('pointerdown', (e) => { e.stopPropagation(); cardInput('tapLine:' + i) })")
+    expect(game).not.toMatch(/addEventListener\('pointerdown', closeNoteCard\)/)
+  })
+  it('the reveal binds the card\'s scrap and keeps the pinned map line; a page opens revealed (today\'s card: +6 once, the pin, the pages-found foot)', () => {
+    const reveal = game.slice(at('function revealScrap() {'), at('function redactScrap() {'))
+    expect(reveal).toMatch(/const scrap = cardScrap\r?\n/)
+    expect(reveal).toContain('if (!readSet.has(scrap.frag)) { readSet.add(scrap.frag); sanity = Math.min(100, sanity + 6) }')
+    expect(reveal).toContain("if (!level.cfg.map) fog.pinThing(level.index, 'n:' + scrap.key, 'note', scrap.x, scrap.y, true)")
+    expect(reveal).toContain('renderCard(card.setFoot(card.state, `${readSet.size} of ${SCRAPS.length} pages found`))')
+    expect(game.slice(at('function redactScrap() {'), at('function openNoteCard(scrap) {'))).toMatch(/const scrap = cardScrap\r?\n/)
+    expect(game).toMatch(/function openNoteCard\(scrap\) \{\r?\n\s*if \(!scrap \|\| !openCard\('page', \{ text: SCRAPS\[scrap\.frag\] \?\? '' \}, scrap\)\) return\r?\n\s*revealScrap\(\)/)
+    expect(game).toContain('else if (nearScrap) openNoteCard(nearScrap)')
+  })
+  it('index.html: the option lines sit between the text and the foot, faint and tappable', () => {
+    expect(html).toMatch(/<p id="note-text"><\/p>\r?\n\s*<div id="note-lines"><\/div>\r?\n\s*<p id="note-foot"><\/p>/)
+    expect(html).toMatch(/#note-lines \.note-line \{[^}]*cursor: pointer;/)
+    expect(html).toMatch(/#note-lines:empty \{ display: none; \}/)
+  })
+})
+
 describe('game.js: the remote player fill (I2)', () => {
   it('ENTITY_FILLS.player forwards the six heartbeat fields after hp, in order, and never the id', () => {
     expect(game).toContain("r.hp = p.hp; r.st = p.st; r.lit = p.lit; r.thin = !!p.thin; r.origin = p.origin; r.status = p.status; r.seen = !!p.seen }")

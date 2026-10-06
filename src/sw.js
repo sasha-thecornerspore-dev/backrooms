@@ -16,7 +16,7 @@ const SHELL = [
   '/renderer/hunt.js', '/renderer/variants.js', '/renderer/ward.js', '/renderer/tension.js',
   '/renderer/topology.js', '/renderer/levelmem.js', '/renderer/death.js', '/renderer/channels.js',
   '/renderer/fogmap.js', '/renderer/sightpins.js', '/renderer/mapcard.js', '/renderer/compass.js',
-  '/renderer/dress.js', '/renderer/containers.js', '/renderer/haunts.js',
+  '/renderer/dress.js', '/renderer/containers.js', '/renderer/haunts.js', '/renderer/papercard.js',
   '/net/client.js', '/net/evbus.js', '/settings.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png',
 ]
