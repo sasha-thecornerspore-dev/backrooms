@@ -13,6 +13,7 @@ const SHELL = [
   '/renderer/gfx-frame.js', '/renderer/gfx-gl-g4-validate.js', '/renderer/gfx-gl-post-math.js', '/renderer/gfx-gl-post-particles.js', '/renderer/gfx-gl-post-shaders.js', '/renderer/gfx-gl-sprites-atlas.js', '/renderer/gfx-gl-sprites-plan.js', '/renderer/gfx-gl.js', '/renderer/gfx-gl-util.js', '/renderer/gfx-gl-world.js', '/renderer/gfx-gl-world-data.js', '/renderer/gfx-gl-world-shader.js', '/renderer/gfx-gl-sprites.js', '/renderer/gfx-gl-post.js', '/renderer/gfx-stats.js', '/renderer/gfx-bench.js',
   '/renderer/audio.js', '/renderer/prefs.js', '/renderer/messages.js', '/renderer/input.js',
   '/renderer/collide.js', '/renderer/placement.js', '/renderer/reach.js', '/renderer/feedback.js',
+  '/renderer/hunt.js', '/renderer/variants.js',
   '/net/client.js', '/settings.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png',
 ]
