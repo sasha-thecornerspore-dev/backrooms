@@ -6,6 +6,7 @@
 // never chunk-evicted, picked up like any item, saved per floor by game.js.
 import { CHUNK_SIZE } from './world.js'
 import { computeLures, RADIO_BATTERY, GLOW_TTL } from './tactics.js'
+import { findOpenNear } from './topology.js'
 
 export const ITEM_TYPES = ['almond-water', 'glowstick', 'bandage', 'polaroid', 'radio']
 export const MAX_SLOTS = 6
@@ -13,6 +14,8 @@ export const MAX_DROPPED = 24
 // the deep-stack finds are not put down: a reading, a weight, the one line that stayed open
 const KEPT = new Set(['plumb', 'ballast', 'extension-slip'])
 const THROW_AHEAD = 1.2
+// the throw is marched in steps of 0.3 u: no step can skip a one-cell (1 u) wall
+const THROW_STEPS = 4
 
 // The third channel `c` is the world seed. Math.imul is an EXACT 32-bit multiply
 // (no float rounding, identical on every engine), and Math.imul(0, K) === 0, so
@@ -208,14 +211,19 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
   }
 
   // Put the selected item down 1.2 u ahead if that cell is open, else at the feet.
+  // The whole path is sampled, not just the landing point: with the player's
+  // back against a one-cell wall, 1.2 u ahead is the corridor on the OTHER side.
   // The deep-stack finds are kept. Returns { ok, item, x, y } or { ok: false, reason }.
   function throwSelected(px, py, angle, now) {
     const item = inventory[selected]
     if (!item) return { ok: false, reason: 'empty' }
     if (KEPT.has(item.type) || item.tool) return { ok: false, reason: 'kept' }
     const pcx = Math.floor(px / CHUNK_SIZE), pcy = Math.floor(py / CHUNK_SIZE)
-    let x = px + Math.cos(angle) * THROW_AHEAD, y = py + Math.sin(angle) * THROW_AHEAD
-    if (isWallFn(x, y, pcx, pcy)) { x = px; y = py }
+    const dx = Math.cos(angle) * THROW_AHEAD, dy = Math.sin(angle) * THROW_AHEAD
+    let x = px + dx, y = py + dy
+    for (let k = 1; k <= THROW_STEPS; k++) {
+      if (isWallFn(px + dx * k / THROW_STEPS, py + dy * k / THROW_STEPS, pcx, pcy)) { x = px; y = py; break }
+    }
     inventory.splice(selected, 1)
     if (selected >= inventory.length && selected > 0) selected = inventory.length - 1
     const it = dropAt(x, y, item.type, item, now)
@@ -255,9 +263,22 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
     return out
   }
 
+  // Saved coordinates are not trusted: a regenerated chunk (epoch reset on
+  // reload) can put a wall where the item was set down, and a radio talking
+  // from inside a wall lures the things to a spot nobody can reach. A record
+  // on a wall cell comes back on the nearest open cell centre (3-ring spiral);
+  // with nothing open that near it is kept where it was rather than lost.
   function restoreDropped(list) {
     if (!list) return
-    for (const r of list) dropAt(r.x, r.y, r.type, r, null)
+    for (const r of list) {
+      let x = r.x, y = r.y
+      const pcx = Math.floor(x / CHUNK_SIZE), pcy = Math.floor(y / CHUNK_SIZE)
+      if (isWallFn(x, y, pcx, pcy)) {
+        const open = findOpenNear(x, y, (cx, cy) => !isWallFn(cx + 0.5, cy + 0.5, pcx, pcy), 3)
+        if (open) { x = open.x; y = open.y }
+      }
+      dropAt(x, y, r.type, r, null)
+    }
   }
 
   function getLures(now, px, py) { return computeLures(dropped, now, px, py) }

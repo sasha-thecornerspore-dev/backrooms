@@ -297,6 +297,26 @@ describe('dropped items', () => {
     expect(r2.x).toBeCloseTo(9.3)
   })
 
+  it('throwSelected never passes through a one-cell wall: back against the wall, the item lands at the feet (RT-2)', () => {
+    // one-cell wall at x in [11, 12); the corridor beyond (cell 12) is open
+    const wallAt11 = (wx) => Math.floor(wx) === 11
+    const sys = loaded(['radio'], wallAt11)
+    sys.select(0)
+    // the player's 0.12 wall box rests against the wall face: 1.2 u ahead is cell 12, the far side
+    const r = sys.throwSelected(10.88, 10.5, 0, 7)
+    expect(r.ok).toBe(true)
+    expect(r.x).toBe(10.88); expect(r.y).toBe(10.5)
+    expect(Math.floor(r.item.x)).not.toBe(12)
+    // the probe case: x = 9.87 in cell 9, wall cell 10, cell 11 open
+    const wallAt10 = (wx) => Math.floor(wx) === 10
+    const sys2 = loaded(['radio'], wallAt10)
+    const r2 = sys2.throwSelected(9.87, 10.5, 0, 7)
+    expect(r2.x).toBe(9.87); expect(r2.y).toBe(10.5)
+    // the same throw with the wall gone lands 1.2 ahead as before
+    const r3 = loaded(['radio']).throwSelected(9.87, 10.5, 0, 7)
+    expect(r3.x).toBeCloseTo(11.07)
+  })
+
   it('plumb, ballast and the extension slip are kept; an empty hand reports empty', () => {
     for (const type of ['plumb', 'ballast', 'extension-slip']) {
       const sys = loaded([{ type, ...(type === 'plumb' ? { tool: true } : {}) }])
@@ -362,6 +382,30 @@ describe('dropped items', () => {
     expect(b.getDropped()).toEqual(list)
     expect(b.getWorldItems().map(i => i.type)).toEqual(['radio', 'glowstick', 'bandage'])
     expect(b.getLures(150, 0, 0)).toHaveLength(1)
+  })
+
+  it('restoreDropped puts a record saved on a wall cell back on the nearest open cell centre (DS-4)', () => {
+    // a single wall cell at (5, 5); everything else is floor
+    const wallCell = (wx, wy) => Math.floor(wx) === 5 && Math.floor(wy) === 5
+    const sys = makeSystem(wallCell)
+    sys.restoreDropped([
+      { x: 5.5, y: 5.5, type: 'radio', on: true, onUntil: 90 },   // inside the wall
+      { x: 7.5, y: 5.5, type: 'glowstick', t0: 10 },             // on open floor: untouched
+    ])
+    expect(sys.getDropped()).toEqual([
+      { x: 5.5, y: 4.5, type: 'radio', on: true, onUntil: 90 },   // first open neighbour in spiral order
+      { x: 7.5, y: 5.5, type: 'glowstick', t0: 10 },
+    ])
+    // the lure now comes from the nudged, reachable spot
+    expect(sys.getLures(50, 0, 0)[0]).toMatchObject({ x: 5.5, y: 4.5 })
+    // enterLevel seeds through the same path
+    const sys2 = makeSystem(wallCell)
+    sys2.enterLevel({ items: { density: 1, types: ['bandage'] }, maze: { salt: 0 } }, null, [{ x: 5.2, y: 5.8, type: 'bandage' }])
+    expect(sys2.getDropped()).toEqual([{ x: 5.5, y: 4.5, type: 'bandage' }])
+    // nothing open within 3 rings: the record is kept where it was rather than lost
+    const sys3 = makeSystem(solidWorld)
+    sys3.restoreDropped([{ x: 5.5, y: 5.5, type: 'bandage' }])
+    expect(sys3.getDropped()).toEqual([{ x: 5.5, y: 5.5, type: 'bandage' }])
   })
 
   it('expireDropped reports battery at onUntil and gutter at t0 + 240', () => {
