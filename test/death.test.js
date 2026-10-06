@@ -57,6 +57,13 @@ describe('resolveDeath', () => {
     expect(past.inventory).toEqual([{ type: 'bandage' }]); expect(past.dropped).toBeNull(); expect(past.selected).toBe(0)
   })
 
+  it('a plumb without its tool flag (an old save, reloaded) is still kept, as items.js keeps it (SD-plumb-death)', () => {
+    const r = resolveDeath(base({ inventory: [{ type: 'bandage' }, { type: 'plumb' }], selected: 1 }))
+    expect(r.inventory).toEqual([{ type: 'bandage' }, { type: 'plumb' }])
+    expect(r.dropped).toBeNull(); expect(r.droppedLine).toBeNull()
+    expect(r.selected).toBe(1)
+  })
+
   it('selected is clamped like items.js after the loss', () => {
     const last = resolveDeath(base({ inventory: [{ type: 'bandage' }, { type: 'glowstick' }, { type: 'almond-water' }], selected: 2 }))
     expect(last.inventory).toEqual([{ type: 'bandage' }, { type: 'glowstick' }])

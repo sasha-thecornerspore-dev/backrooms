@@ -7,8 +7,9 @@ import { offsetBeside } from './topology.js'
 
 export const MAX_HP_FLOOR = 60
 export const SCAR = 5
-// never lost in the fall: the deep-stack finds that are kept (items.js KEPT minus the plumb, which is a tool and keeps itself)
-const KEPT = new Set(['ballast', 'extension-slip'])
+// never lost in the fall: the deep-stack finds that are kept (items.js KEPT). The plumb is kept by its type too, so a plumb whose tool
+// flag was lost (an old save) still stays in the hand
+const KEPT = new Set(['plumb', 'ballast', 'extension-slip'])
 const WAKE_LINE = 'you wake beside the hole you fell through. something of you stayed down there.'
 
 // the floor you wake on: a floor above for 1..3, the lobby and the block where they are
