@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stickToKeys, lookYaw } from '../src/renderer/touch.js'
+import { stickToKeys, lookYaw, ACTIONS } from '../src/renderer/touch.js'
 
 const R = 66
 
@@ -40,5 +40,15 @@ describe('lookYaw', () => {
   })
   it('scales linearly with the sensitivity pref', () => {
     expect(lookYaw(100, 200)).toBeCloseTo(lookYaw(100, 100) * 2, 6)
+  })
+})
+
+// the map opens from Tab on a keyboard and from the paper corner #map-tab on a phone (sharedConventions #12): the action buttons stay the
+// five they were, and none of them is Tab — the tab's touchstart / click set K['Tab'] itself (game.js), so the one edge in the loop folds it
+describe('ACTIONS', () => {
+  it('has exactly five entries and none is Tab', () => {
+    expect(ACTIONS).toHaveLength(5)
+    expect(ACTIONS.map(a => a.code)).toEqual(['KeyF', 'KeyQ', 'Space', 'KeyE', 'KeyL'])
+    expect(ACTIONS.some(a => a.code === 'Tab')).toBe(false)
   })
 })

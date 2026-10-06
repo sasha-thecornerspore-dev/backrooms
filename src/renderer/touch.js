@@ -56,7 +56,7 @@ export function lookYaw(dx, sens) {
 const MOVE_KEYS = ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ShiftLeft']
 
 // Buttons that map 1:1 to a key the game loop already edge-consumes.
-const ACTIONS = [
+export const ACTIONS = [
   { code: 'KeyF', label: 'ACT', hint: 'take · descend' },
   { code: 'KeyQ', label: 'USE', hint: 'use item' },
   { code: 'Space', label: 'WARD', hint: 'push back' },
