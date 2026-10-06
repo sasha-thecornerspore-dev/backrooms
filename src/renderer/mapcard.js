@@ -2,8 +2,8 @@
 //
 // drawMap(ctx, view, opts) takes any object with fillRect / fillText / save / restore / translate / rotate / beginPath / moveTo / lineTo /
 // fill: each walked cell one 7x7 ink rect at alpha 0.55, jittered ±0.6 px by a hash of the cell (a pencil hand, the same every time),
-// faded chunks at 0.22 with their fresh cells drawn dark over them, pins as 11 px monospace glyphs (hollow when lost, a machine struck
-// through once vended, a note faint until read), the player a 3-point arrow rotated by the view's angle. opts.layer 'cells' draws the
+// faded chunks at 0.22 with their fresh cells drawn dark over them, pins as 11 px monospace glyphs (hollow when lost, faint when stale or
+// lost, a machine struck through once vended, a note faint until read), the player a 3-point arrow rotated by the view's angle. opts.layer 'cells' draws the
 // strokes and pins only (the offscreen layer), 'player' the arrow only (redrawn when the angle turns), unset draws all.
 // createMapCard(doc, deps) is the thin DOM: a no-op card when #map-card is absent (openNoteCard's rule, game.js:468), otherwise redraws
 // the cells layer only on cellsDirty() and the arrow only when |Δangle| > 0.05 rad, never per frame. HELD, NOT MODAL: the card never
@@ -55,7 +55,8 @@ function drawPins(ctx, view, pitch, color) {
   const half = pitch / 2
   for (let i = 0; i < view.pins.length; i++) {
     const p = view.pins[i]
-    ctx.globalAlpha = p.lost ? 0.5 : (p.type === 'note' && !p.flag) ? 0.5 : 0.9
+    // faint: lost, or stale (the chunk under it faded: the building moved, the glyph may not be where you drew it), or a note unread
+    ctx.globalAlpha = (p.lost || view.faded.has(p.chunkKey) || (p.type === 'note' && !p.flag)) ? 0.5 : 0.9
     ctx.fillText(glyphFor(p), (Math.floor(p.x) - view.ox) * pitch + half, (Math.floor(p.y) - view.oy) * pitch + half)
   }
 }

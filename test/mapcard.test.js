@@ -15,6 +15,12 @@ function recorder() {
   const ctx = { calls }
   for (const m of ['fillRect', 'fillText', 'save', 'restore', 'translate', 'rotate', 'beginPath', 'moveTo', 'lineTo', 'fill']) ctx[m] = rec(m)
   ctx.count = (name) => calls.filter((c) => c[0] === name).length
+  // the alpha each glyph was drawn with: [text, x, y, alpha]
+  let alpha = 1
+  Object.defineProperty(ctx, 'globalAlpha', { get: () => alpha, set: (v) => { alpha = v } })
+  ctx.glyphs = []
+  const fillText = ctx.fillText
+  ctx.fillText = (text, x, y) => { ctx.glyphs.push([text, x, y, alpha]); fillText(text, x, y) }
   return ctx
 }
 
@@ -93,6 +99,34 @@ describe('drawMap', () => {
     expect(texts).not.toContain('▽')
     expect(texts).toContain('⊠')                                     // struck through once vended
     expect(ctx.count('fillRect')).toBe(view.n + view.nFresh)          // dim strokes, then the fresh ones over them
+  })
+
+  it('a stale pin (its chunk faded under it) stays on the map, faded like a lost one; a pin in a live chunk draws full', () => {
+    const fog = createFogMap()
+    let epoch = 0
+    const epochOf = () => epoch
+    fog.step(0, 5.5, 5.5, 1, open, epochOf)
+    fog.pinWay(0, { key: '0,0', kind: 'down', x: 5.5, y: 5.5, target: 1, label: 'descend' })      // the chunk that will fade
+    fog.pinThing(0, 'm', 'machine', 7.5, 7.5, false)                                              // same chunk
+    fog.pinWay(0, { key: '1,0', kind: 'down', x: 25.5, y: 5.5, target: 1, label: 'descend' })     // a live chunk, never walked
+    fog.pinThing(0, 'n', 'note', 26.5, 5.5, true)
+    fog.pinThing(0, 'u', 'note', 27.5, 5.5, false)                                                 // unread: faint until read
+    epoch = 1
+    fog.step(0, 5.5, 9.5, 1, open, epochOf)
+    const view = buildMapView(fog, 0, at(5.5, 9.5), { cells: 56 })
+    expect(view.faded.has('0,0')).toBe(true); expect(view.faded.has('1,0')).toBe(false)
+    const ctx = recorder()
+    drawMap(ctx, view, {})
+    const alphaAt = (wx, wy) => ctx.glyphs.find((g) => g[1] === (Math.floor(wx) - view.ox) * 8 + 4 && g[2] === (Math.floor(wy) - view.oy) * 8 + 4)
+    expect(alphaAt(5.5, 5.5)).toEqual(['▽', expect.any(Number), expect.any(Number), 0.5])     // stale: still drawn, not hollow, faded
+    expect(alphaAt(7.5, 7.5)[3]).toBe(0.5)
+    expect(alphaAt(25.5, 5.5)).toEqual(['▽', expect.any(Number), expect.any(Number), 0.9])
+    expect(alphaAt(26.5, 5.5)[3]).toBe(0.9)
+    expect(alphaAt(27.5, 5.5)[3]).toBe(0.5)
+    fog.markLost(0, '0,0')
+    const ctx2 = recorder()
+    drawMap(ctx2, buildMapView(fog, 0, at(5.5, 9.5), { cells: 56 }), {})
+    expect(ctx2.glyphs.find((g) => g[0] === '◌')[3]).toBe(0.5)                                  // lost: hollow, and faded
   })
 
   it('layers: cells draws no arrow, player draws only the arrow', () => {
