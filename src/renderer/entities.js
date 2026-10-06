@@ -1,6 +1,6 @@
 import { CHUNK_SIZE } from './world.js'
 import { specFor } from './variants.js'
-import { stepAI, separate, createThreat, createNoiseField, floodNoise, lineOfSight, DISPEL_S } from './hunt.js'
+import { stepAI, separate, createThreat, createNoiseField, floodNoise, lineOfSight, DISPEL_S, HUNTING } from './hunt.js'
 import { creatureRadius } from './collide.js'
 
 const MAX_ENTITIES = 20
@@ -137,9 +137,35 @@ export function createEntitySystem(config, isWallFn, deps = null) {
         const until = dispelledUntil.get(key)
         if (until !== undefined && now < until) continue
         spawnedChunks.add(key)
-        if (shouldSpawn(cx, cy, spawnDenom)) entities.push(makeEntity(cx, cy, stalkerDenom, variants))
+        if (shouldSpawn(cx, cy, spawnDenom)) {
+          const e = settleSpawn(makeEntity(cx, cy, stalkerDenom, variants))
+          if (e !== null) entities.push(e)
+        }
       }
     }
+  }
+
+  // A chunk spawn must stand on open floor: makeEntity lands within 2 u of the hall crossing, which is mostly maze wall, and a
+  // creature inside a wall cell never frees itself (moveEntity refuses both legs, every steer probe lands in the same cell) yet
+  // still sees out of it and hunts. The mid column is the main hall, open at every epoch (world.js), so a wall-bound spawn moves
+  // onto it at its own y; a body on that hall cell slides it along the hall, and a hall with no room is skipped. The rng draws
+  // happen in makeEntity, untouched, so nothing else about the spawn changes. Returns the entity, or null to skip.
+  function settleSpawn(e) {
+    const hallX = e.chunkCx * CHUNK_SIZE + (CHUNK_SIZE >> 1) + 0.5
+    if (!env.floor(Math.floor(e.x), Math.floor(e.y))) e.x = hallX
+    if (!env.floor(Math.floor(e.x), Math.floor(e.y))) return null      // a fixed map: no hall to fall back on
+    if (obstacles === null) return e
+    const r = creatureRadius(e.variant)
+    if (!obstacles.blocked(e.x, e.y, r)) return e
+    const y0 = Math.floor(e.y) + 0.5
+    for (let k = 1; k <= 4; k++) {
+      for (let s = -1; s <= 1; s += 2) {
+        const y = y0 + s * k
+        if (Math.floor(y / CHUNK_SIZE) !== e.chunkCy) continue
+        if (env.floor(Math.floor(hallX), Math.floor(y)) && !obstacles.blocked(hallX, y, r)) { e.x = hallX; e.y = y; return e }
+      }
+    }
+    return null
   }
 
   function stepEntity(e, dt, player, isWallFn, playerCx, playerCy, aggroMul = 1) {
@@ -239,6 +265,7 @@ export function createEntitySystem(config, isWallFn, deps = null) {
 
   function update(dt, player, playerCx, playerCy, ctxOrAggroMul = 1) {
     tSum += dt
+    env.pcx = playerCx; env.pcy = playerCy           // the spawn check reads the floor relative to this frame's chunk
     evict(playerCx, playerCy)
     trySpawnAround(playerCx, playerCy)
     if (typeof ctxOrAggroMul === 'object' && ctxOrAggroMul !== null) { huntMode = true; huntUpdate(dt, player, playerCx, playerCy, ctxOrAggroMul) }
@@ -354,13 +381,14 @@ export function createEntitySystem(config, isWallFn, deps = null) {
     floodNoise(field, slot, env.floor)
   }
 
-  // the stalkers on your heels, for the floor below: hunting (this path) or chasing (legacy), nearest first
+  // the stalkers on your heels, for the floor below: in a hunting phase (this path: hunt and the variants' freeze / windup /
+  // lunge / recover / arcCharge, hunt.HUNTING) or chasing (legacy), nearest first
   function snapshotChasers(player, maxDist = 10, max = 3) {
     const out = []
     const sorted = entities.slice().sort((a, b) => ((a.x - player.x) ** 2 + (a.y - player.y) ** 2) - ((b.x - player.x) ** 2 + (b.y - player.y) ** 2))
     for (const e of sorted) {
       if (e.type !== 'stalker') continue
-      if (huntMode ? e.ai !== 'hunt' : e.state !== 'chase') continue
+      if (huntMode ? !HUNTING.has(e.ai) : e.state !== 'chase') continue
       const dx = e.x - player.x, dy = e.y - player.y
       if (dx * dx + dy * dy > maxDist * maxDist) continue
       out.push({ type: e.type, variant: e.variant, wardHits: e.wardHits || 0 })

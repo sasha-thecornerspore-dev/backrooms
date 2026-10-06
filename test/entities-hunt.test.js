@@ -286,6 +286,87 @@ describe('snapshotChasers', () => {
     old.getEntities().push({ ...ent(55.5, 50.5), state: 'chase' }, { ...ent(56.5, 50.5), state: 'idle' })
     expect(old.snapshotChasers(player, 10, 3).length).toBe(1)
   })
+  it('counts the variant hunting phases (a frozen smiler, a hound in windup / lunge / recover, a charging tesla), not search or stagger', () => {
+    const player = { x: 50.5, y: 50.5, angle: 0 }
+    const sys = createEntitySystem(quiet, wallOf(open), { grid: mkGrid(open), obstacles: null })
+    sys.update(0, player, 2, 2, mkCtx(player))                            // the hunt path is the one that was updated last
+    const list = sys.getEntities()
+    list.push(ent(53.5, 50.5, 'smiler', { id: 1, ai: 'freeze' }))         // 3: frozen on screen, still on your heels
+    list.push(ent(52.5, 50.5, 'hound', { id: 2, ai: 'windup' }))          // 2: winding up
+    list.push(ent(54.5, 50.5, 'shade', { id: 3, ai: 'hunt' }))            // 4
+    list.push(ent(51.5, 50.5, 'shade', { id: 4, ai: 'search' }))          // 1: lost you — no
+    list.push(ent(50.5, 52.5, 'shade', { id: 5, ai: 'stagger', stagger: 1 }))   // 2: reeling — no
+    expect(sys.snapshotChasers(player, 10, 3).map((s) => s.variant)).toEqual(['hound', 'smiler', 'shade'])
+    for (const ai of ['lunge', 'recover', 'arcCharge']) {
+      list.length = 0
+      list.push(ent(53.5, 50.5, ai === 'arcCharge' ? 'tesla' : 'hound', { id: 6, ai }))
+      expect(sys.snapshotChasers(player, 10, 3).length, ai).toBe(1)
+    }
+  })
+})
+
+describe('chunk spawns stand on open floor', () => {
+  // L1's rules on a seed-0 cache: makeEntity lands within 2 u of the hall crossing, mostly maze wall; the spawn moves onto the hall.
+  // chaseRange / fleeRange 0 so the legacy step at dt 0 touches no field: the lists below are what the spawn alone produced
+  const L1 = { chunkEvictRadius: 3, maze: { salt: 0x1111, roomChance: 0.15, braid: 0.12, corridor: 1 },
+    entities: { enabled: true, spawnDenom: 12, stalkerDenom: 4, chaseRange: 0, fleeRange: 0, damage: 14, stalkerVariants: ['smiler', 'hound'], wandererVariants: ['watcher'] } }
+  const hallX = (cx) => cx * N + (N >> 1) + 0.5
+  it('a spawn in a wall cell moves onto the chunk\'s mid column at its own y; the rng draws (type, variant, dir, y) are unchanged', () => {
+    const cache = createChunkCache(L1, 0)
+    const isWall = (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy)
+    const grid = createGridReader(cache, isWall)
+    let total = 0, relocated = 0
+    for (let pcx = -40; pcx <= 40; pcx += 10) for (let pcy = -40; pcy <= 40; pcy += 10) {
+      grid.setPlayerChunk(pcx, pcy)
+      const player = { x: pcx * N + 11.5, y: pcy * N + 11.5, angle: 0 }
+      const sys = createEntitySystem(L1, isWall, { grid, obstacles: null, now: () => 0 })
+      sys.update(0, player, pcx, pcy)
+      // the same chunks on an all-open floor never relocate: what makeEntity drew before the fix
+      const twin = createEntitySystem(L1, wallOf(open), { grid: mkGrid(open), obstacles: null, now: () => 0 })
+      twin.update(0, player, pcx, pcy)
+      const ents = sys.getEntities(), was = twin.getEntities()
+      expect(ents.length).toBe(was.length)
+      for (let i = 0; i < ents.length; i++) {
+        const e = ents[i], w = was[i]
+        total++
+        expect(grid.floor(Math.floor(e.x), Math.floor(e.y)), `${e.variant} in chunk ${e.chunkCx},${e.chunkCy} at ${e.x},${e.y}`).toBe(true)
+        expect([e.type, e.variant, e.dir, e.dirTimer, e.y, e.chunkCx, e.chunkCy]).toEqual([w.type, w.variant, w.dir, w.dirTimer, w.y, w.chunkCx, w.chunkCy])
+        if (e.x !== w.x) { relocated++; expect(e.x).toBe(hallX(e.chunkCx)); expect(grid.floor(Math.floor(w.x), Math.floor(w.y))).toBe(false) }
+        else expect(grid.floor(Math.floor(w.x), Math.floor(w.y))).toBe(true)
+      }
+    }
+    expect(total).toBeGreaterThan(20)
+    expect(relocated).toBeGreaterThan(0)
+  })
+  it('a body on the hall cell slides the spawn along the hall; a hall with no room skips it; the legacy path checks too', () => {
+    // a world that is nothing but the mid column: every spawn has to move onto it
+    const hall = (ix, iy) => ((ix % N) + N) % N === (N >> 1)
+    const cfg = { chunkEvictRadius: 3 }
+    const p = { x: 11.5, y: 11.5, angle: 0 }
+    const free = createEntitySystem(cfg, wallOf(hall), { grid: mkGrid(hall), obstacles: noObst })
+    free.update(0, p, 0, 0, mkCtx(p))
+    const first = free.getEntities()[0]
+    expect(first).toBeDefined()
+    for (const e of free.getEntities()) expect(Math.floor(e.x - e.chunkCx * N)).toBe(N >> 1)   // on the hall (a spawn already there keeps its x)
+    const cell = Math.floor(first.y)
+    const body = obst((x, y) => Math.floor(x) === Math.floor(hallX(first.chunkCx)) && Math.floor(y) === cell)
+    const slid = createEntitySystem(cfg, wallOf(hall), { grid: mkGrid(hall), obstacles: body })
+    slid.update(0, p, 0, 0, mkCtx(p))
+    const e = slid.getEntities().find((x) => x.chunkCx === first.chunkCx && x.chunkCy === first.chunkCy)
+    expect(e).toBeDefined()
+    expect(e.x).toBe(hallX(first.chunkCx))
+    expect(Math.abs(e.y - (cell + 0.5))).toBe(1)
+    expect(Math.floor(e.y / N)).toBe(first.chunkCy)
+    expect(body.blocked(e.x, e.y, creatureRadius(e.variant))).toBe(false)
+    const full = createEntitySystem(cfg, wallOf(hall), { grid: mkGrid(hall), obstacles: obst(() => true) })
+    expect(() => full.update(0, p, 0, 0, mkCtx(p))).not.toThrow()
+    expect(full.getEntities().length).toBe(0)
+    // the legacy step (no ctx, no grid) reads the floor through isWallFn at the cell centre
+    const old = createEntitySystem(cfg, wallOf(hall))
+    old.update(0, p, 0, 0)
+    expect(old.getEntities().length).toBeGreaterThan(0)
+    for (const e of old.getEntities()) expect(Math.floor(e.x - e.chunkCx * N)).toBe(N >> 1)
+  })
 })
 
 describe('the threat record and contact', () => {

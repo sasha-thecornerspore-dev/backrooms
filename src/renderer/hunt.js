@@ -38,7 +38,8 @@ const FLEE_SPEED = 1.8, RETREAT_SPEED = 2.0
 const PROBE = 0.35
 const OFFS = [0.6, -0.6, 1.2, -1.2, 1.9, -1.9]
 const DX4 = [1, -1, 0, 0], DY4 = [0, 0, 1, -1]
-const HUNTING = new Set(['hunt', 'freeze', 'windup', 'lunge', 'recover', 'arcCharge'])
+// the hunting phases: threat.hunted here, and what entities.snapshotChasers counts as on your heels
+export const HUNTING = new Set(['hunt', 'freeze', 'windup', 'lunge', 'recover', 'arcCharge'])
 
 function hash3(a, b, c) {
   let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2246822519)) | 0
