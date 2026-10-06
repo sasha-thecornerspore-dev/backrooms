@@ -168,7 +168,7 @@ function perceive(e, d, spec, ctx, env) {
   e.los = los
   e.seen = los && d <= rangeFor(e, spec, ctx)
   e.fresh = true
-  const base = e.ai === 'hunt' ? PERC_HUNT : PERC_ROAM
+  const base = HUNTING.has(e.ai) ? PERC_HUNT : PERC_ROAM        // every hunting phase, or a tesla's arc lands through a wall
   e.percT = base * (0.85 + 0.3 * entityPhase(e))             // the phase offsets the cadence so a brood drifts apart
 }
 

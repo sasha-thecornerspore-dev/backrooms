@@ -601,3 +601,39 @@ describe('the legacy path is byte-for-byte the old stepper', () => {
     }
   })
 })
+
+describe('the variant hunting phases look on the hunting cadence', () => {
+  // a tesla 4 u west of the player with a clear line; one cell between them becomes a wall partway through the 0.5 s charge
+  function charge(closeAt) {
+    let wall = false, t = 0
+    const floor = (ix, iy) => !(wall && ix === 7 && iy === 6)
+    const cfg = { entities: { enabled: true, spawnDenom: 1e9, stalkerDenom: 1, damage: 22 } }
+    const sys = createEntitySystem(cfg, wallOf(floor), { obstacles: null, grid: mkGrid(floor), now: () => t })
+    const e = ent(5.5, 6.5, 'tesla', { dirTimer: 50, chunkCx: 0, chunkCy: 0 })
+    sys.getEntities().push(e)
+    const player = { x: 9.5, y: 6.5, angle: Math.PI }
+    const ctx = { flashlight: true, sprinting: false, dark: false, fog: 14, radioOn: false, lures: [], t: 0, hf: 0.65, playerAngle: Math.PI }
+    let chargeAt = null
+    for (let f = 0; f < 600; f++) {
+      t += DT
+      if (closeAt !== null && chargeAt !== null && !wall && t - chargeAt >= closeAt) wall = true
+      const th = sys.update(DT, player, 0, 0, ctx)
+      if (chargeAt === null && e.ai === 'arcCharge') chargeAt = t
+      if (th.dmg > 0 && th.dmgKind === 'arc') return { jolt: true, chargeAt }
+      if (chargeAt !== null && t - chargeAt > 1.0) break
+    }
+    return { jolt: false, chargeAt }
+  }
+  it('with the line kept open the arc lands', () => {
+    const r = charge(null)
+    expect(r.chargeAt).not.toBeNull()
+    expect(r.jolt).toBe(true)
+  })
+  it('a wall that closes late in the charge cancels it (arcCharge re-checks every ~0.15 s, not 0.35 s)', () => {
+    for (const at of [0.2, 0.3, 0.35, 0.4]) {
+      const r = charge(at)
+      expect(r.chargeAt, String(at)).not.toBeNull()
+      expect(r.jolt, String(at)).toBe(false)
+    }
+  })
+})
