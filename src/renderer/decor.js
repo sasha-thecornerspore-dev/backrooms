@@ -8,8 +8,17 @@
 //
 // Mirrors items.js's scan/evict lifecycle. Reconfigured per level via
 // enterLevel(); nothing here is ever picked up, so there is no "taken" set.
+//
+// The pass pipeline (this release): props -> exit -> npc -> scrap -> machine -> sight -> hooks.passes (stairs, dressing, hauntings:
+// each on its own channels.js constants via ctx.hash / ctx.rngFrom / ctx.openCell) -> settleChunk over the bodies (props, machine,
+// sight, npc: never exits, stairs or items) -> hooks.onChunk(key, bundle). The settled position IS the drawn position, and the same
+// records go to the collider index. No walls -> no hugging, so the open-grid goldens are untouched.
 import { CHUNK_SIZE } from './world.js'
 import { fragmentAt } from './scraps.js'
+import { colliderFor, footprintRadius, visualHalf } from './collide.js'
+import { settleChunk } from './placement.js'
+import { unitJitter } from './gfx-sprites.js'
+import { walkable, loses } from './reach.js'
 
 // The third channel `c` is the world seed. Math.imul(0, K) === 0 and X ^ 0 === X,
 // so with seed 0 this hash is byte-identical to the original — the unseeded world
@@ -30,7 +39,13 @@ function rngFrom(a, b, seed = 0) {
 // and give you something to orient by. Non-interactive; drawn big in renderer.js.
 export const SIGHT_TYPES = ['chairpile', 'tvwall', 'payphone', 'mannequin']
 
-export function createDecorSystem(config, isWallFn, worldSeed = 0) {
+// the exit's way: cfg.ways[0] when the level names its ways (topology), else the plain descent with the exit's label
+function wayDown(cfg) { return cfg.ways?.[0] ?? { kind: 'down', label: cfg.exit?.label ?? 'descend' } }
+const EMPTY = []
+const TRUE = () => true
+
+export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null) {
+  let cfg = config
   let propTypes = config.props?.types?.length ? config.props.types : ['box']
   let propDens  = config.props?.density ?? 3
   let exitDenom = Math.max(1, config.exit?.denom ?? 6)
@@ -44,9 +59,15 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
   // Fixed-map levels (Level ∅) place ONE exit at an authored point instead of
   // scattering them by chunk hash. When set, procedural exit placement is skipped.
   let fixedExit = config.exitAt || null
+  let exitKind  = wayDown(config).kind
+  let exitLabel = wayDown(config).label
+  const passes  = (hooks?.passes ?? EMPTY).filter((p) => typeof p === 'function')
+  const onChunk = typeof hooks?.onChunk === 'function' ? hooks.onChunk : null
+  const onEvict = typeof hooks?.onEvict === 'function' ? hooks.onEvict : null
 
   const props   = new Map()   // "cx,cy" → [{key,x,y,type,rot}]
-  const exits    = new Map()  // "cx,cy" → {key,x,y,target}
+  const exits    = new Map()  // "cx,cy" → {key,x,y,target,kind,label}
+  const stairs   = new Map()  // "cx,cy" → [{key,x,y,kind,target,label,cx,cy}]  (the ways up, from a pass)
   const npcs     = new Map()  // "cx,cy" → {key,x,y}  (a lost soul)
   const scraps   = new Map()  // "cx,cy" → {key,x,y,frag}  (a note left behind)
   const machines = new Map()  // "cx,cy" → {key,x,y}       (a vending machine)
@@ -83,7 +104,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
     if (!fixedExit && hash(cx + 5150 + salt, cy + 6270 + salt, seed) % exitDenom === 0) {
       const erng = rngFrom(cx * 313 + salt + 99, cy * 911 + salt + 77, seed)
       const spot = openCell(cx, cy, erng, pcx, pcy)
-      if (spot) exits.set(key, { key, x: spot.wx, y: spot.wy, target: exitTarget })
+      if (spot) exits.set(key, { key, x: spot.wx, y: spot.wy, target: exitTarget, kind: exitKind, label: exitLabel })
     }
 
     // a lost soul — rare, neutral, speaks when you approach
@@ -121,6 +142,64 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
         sights.set(key, { key, x: spot.wx, y: spot.wy, type })
       }
     }
+
+    // the appended passes: each reads its own channels.js constants and places through ctx, never touching the streams above
+    if (passes.length) {
+      const ctx = {
+        cx, cy, key, pcx, pcy, salt, seed, cfg,
+        isWall: (wx, wy) => isWallFn(wx, wy, pcx, pcy),
+        hash, rngFrom,
+        openCell: (rng) => openCell(cx, cy, rng, pcx, pcy),
+        add: (kind, record) => {
+          if (kind === 'prop') list.push(record)
+          else if (kind === 'stair') {
+            if (record.cx === undefined) record.cx = cx
+            if (record.cy === undefined) record.cy = cy
+            let sl = stairs.get(key)
+            if (!sl) { sl = []; stairs.set(key, sl) }
+            sl.push(record)
+          }
+        },
+      }
+      for (let i = 0; i < passes.length; i++) passes[i](ctx)
+      if (list.length && !props.has(key)) props.set(key, list)
+    }
+
+    // the bodies: every prop plus this chunk's machine, sight and soul, settled against the real walls, then written back so the
+    // drawn position is the settled one and the collider index sees the same record
+    const machine = machines.get(key) ?? null, sight = sights.get(key) ?? null, npc = npcs.get(key) ?? null
+    const bodies = []
+    for (let i = 0; i < list.length; i++) { const c = colliderFor('prop', list[i]); c.rot = list[i].rot; bodies.push(c) }
+    if (machine) bodies.push(colliderFor('machine', machine))
+    if (sight) bodies.push(colliderFor('sight', sight))
+    if (npc) bodies.push(colliderFor('npc', npc))
+    if (bodies.length) {
+      const floorFn = (ix, iy) => !isWallFn(ix + 0.5, iy + 0.5, pcx, pcy)
+      settleChunk(bodies, floorFn, footprintRadius, visualHalf, sideFn)
+      for (let i = 0; i < bodies.length; i++) {
+        const c = bodies[i]
+        const rec = c.kind === 'prop' ? list[i] : c.kind === 'machine' ? machine : c.kind === 'sight' ? sight : npc
+        rec.x = c.x; rec.y = c.y; rec.cls = c.cls; rec.hug = c.hug; rec.cellCls = c.cellCls
+      }
+    }
+    if (onChunk) onChunk(key, { colliders: bodies, props: list, machine, sight, npc, stairs: stairs.get(key) ?? EMPTY })
+    return bodies
+  }
+
+  // the side a hugged body leans to when its cell offers more than one wall: props by their seeded rotation (gfx-sprites unitJitter,
+  // the per-instance variation the art already uses), sights / machines / souls by chunk-hash parity. Deterministic; consumes no rng.
+  function sideFn(rec) {
+    if (rec.kind === 'prop') return unitJitter(rec.rot, 23) < 0 ? -1 : 1
+    return (hash(rec.cx, rec.cy, seed) & 1) ? 1 : -1
+  }
+
+  // the dev-only reach assertion (a test run only: the harness and vitest set the marker): settling must not seal any cell the
+  // walls alone leave reachable from the chunk's hall crossing
+  function assertReach(cx, cy, bodies, pcx, pcy) {
+    const floorFn = (ix, iy) => !isWallFn(ix + 0.5, iy + 0.5, pcx, pcy)
+    const ox = cx * CHUNK_SIZE + (CHUNK_SIZE >> 1) + 0.5, oy = cy * CHUNK_SIZE + (CHUNK_SIZE >> 1) + 0.5
+    const lost = loses(walkable(floorFn, EMPTY, ox, oy), walkable(floorFn, bodies, ox, oy))
+    if (lost.length) console.error(`[decor] chunk ${cx},${cy}: ${lost.length} cell(s) lost reach after settling: ${lost.join(' ')}`)
   }
 
   function update(pcx, pcy) {
@@ -135,6 +214,8 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
         scraps.delete(k)
         machines.delete(k)
         sights.delete(k)
+        stairs.delete(k)
+        if (onEvict) onEvict(k)
       }
     }
     for (let dy = -r; dy <= r; dy++) {
@@ -143,12 +224,13 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
         const key = `${cx},${cy}`
         if (scanned.has(key)) continue
         scanned.add(key)
-        placeChunk(cx, cy, pcx, pcy)
+        const bodies = placeChunk(cx, cy, pcx, pcy)
+        if (bodies.length && globalThis.__backroomsTestRun === true) assertReach(cx, cy, bodies, pcx, pcy)
       }
     }
     // the single authored exit for a fixed-map level — never chunk-bound, never evicted
     if (fixedExit && !exits.has('∅')) {
-      exits.set('∅', { key: '∅', x: fixedExit.x, y: fixedExit.y, target: exitTarget })
+      exits.set('∅', { key: '∅', x: fixedExit.x, y: fixedExit.y, target: exitTarget, kind: exitKind, label: exitLabel })
     }
   }
 
@@ -211,7 +293,66 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
 
   function getSights() { return [...sights.values()] }
 
-  function enterLevel(cfg) {
+  // ── the ways (exits + the stairs a pass added) and the props: the prompt, the compass, the search ──
+  function getStairs() {
+    const out = []
+    for (const sl of stairs.values()) for (const s of sl) out.push(s)
+    return out
+  }
+  function wayAt(cx, cy, kind) {
+    const sl = stairs.get(`${cx},${cy}`)
+    if (!sl) return null
+    for (const s of sl) if (s.kind === kind) return s
+    return null
+  }
+  function exitAt(cx, cy) { return exits.get(`${cx},${cy}`) ?? null }
+  function nearestWay(px, py, maxDist = 1.6) {
+    let best = null, bestD = maxDist * maxDist
+    for (const e of exits.values()) {
+      const d = (e.x - px) ** 2 + (e.y - py) ** 2
+      if (d < bestD) { bestD = d; best = e }
+    }
+    for (const sl of stairs.values()) for (const s of sl) {
+      const d = (s.x - px) ** 2 + (s.y - py) ** 2
+      if (d < bestD) { bestD = d; best = s }
+    }
+    return best
+  }
+  // nearest loaded way at ANY distance (the compass): one reused { rec, dist } object, or null
+  const anyWay = { rec: null, dist: 0 }
+  function nearestWayAny(px, py) {
+    let best = null, bestD = Infinity
+    for (const e of exits.values()) {
+      const d = (e.x - px) ** 2 + (e.y - py) ** 2
+      if (d < bestD) { bestD = d; best = e }
+    }
+    for (const sl of stairs.values()) for (const s of sl) {
+      const d = (s.x - px) ** 2 + (s.y - py) ** 2
+      if (d < bestD) { bestD = d; best = s }
+    }
+    if (!best) return null
+    anyWay.rec = best; anyWay.dist = Math.sqrt(bestD)
+    return anyWay
+  }
+  function nearestProp(px, py, maxDist = 1.5, pred = TRUE) {
+    let best = null, bestD = maxDist * maxDist
+    for (const list of props.values()) for (const p of list) {
+      if (!pred(p)) continue
+      const d = (p.x - px) ** 2 + (p.y - py) ** 2
+      if (d < bestD) { bestD = d; best = p }
+    }
+    return best
+  }
+  // every loaded way of one kind: the exits are the level's down way (whatever cfg.ways named it), stairs carry their own kind
+  function getKind(kind) {
+    const out = []
+    for (const e of exits.values()) if (e.kind === kind) out.push(e)
+    for (const sl of stairs.values()) for (const s of sl) if (s.kind === kind) out.push(s)
+    return out
+  }
+
+  function enterLevel(next) {
+    cfg = next
     propTypes = cfg.props?.types?.length ? cfg.props.types : propTypes
     propDens  = cfg.props?.density ?? propDens
     exitDenom = Math.max(1, cfg.exit?.denom ?? exitDenom)
@@ -222,14 +363,20 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0) {
     sightDenom = Math.max(0, cfg.sights?.denom ?? sightDenom)
     salt      = cfg.maze?.salt | 0
     fixedExit = cfg.exitAt || null
+    exitKind  = wayDown(cfg).kind
+    exitLabel = wayDown(cfg).label
     props.clear()
     exits.clear()
     npcs.clear()
     scraps.clear()
     machines.clear()
     sights.clear()
+    stairs.clear()
     scanned.clear()
   }
 
-  return { update, getProps, getExits, nearestExit, nearestExitAny, getNpcs, nearestNpc, getScraps, nearestScrap, getMachines, nearestMachine, getSights, enterLevel }
+  return {
+    update, getProps, getExits, nearestExit, nearestExitAny, getNpcs, nearestNpc, getScraps, nearestScrap, getMachines, nearestMachine, getSights, enterLevel,
+    getStairs, wayAt, exitAt, nearestWay, nearestWayAny, nearestProp, getKind,
+  }
 }
