@@ -25,19 +25,19 @@ function jitter(ix, iy, salt) {
   return ((h & 0xFFFF) / 0xFFFF - 0.5) * 1.2
 }
 
-function drawCells(ctx, view, pitch, ink, color) {
+function drawCells(ctx, view, pitch, ink, color, tx, ty) {
   ctx.fillStyle = color
   const { cells, dim, ox, oy } = view
   for (let i = 0; i < view.n; i++) {
     const dx = cells[2 * i], dy = cells[2 * i + 1]
     ctx.globalAlpha = dim[i] ? 0.22 : 0.55
-    ctx.fillRect(dx * pitch + jitter(ox + dx, oy + dy, 1), dy * pitch + jitter(ox + dx, oy + dy, 2), ink, ink)
+    ctx.fillRect(tx + dx * pitch + jitter(ox + dx, oy + dy, 1), ty + dy * pitch + jitter(ox + dx, oy + dy, 2), ink, ink)
   }
   ctx.globalAlpha = 0.55
   const fr = view.fresh
   for (let i = 0; i < view.nFresh; i++) {
     const dx = fr[2 * i], dy = fr[2 * i + 1]
-    ctx.fillRect(dx * pitch + jitter(ox + dx, oy + dy, 1), dy * pitch + jitter(ox + dx, oy + dy, 2), ink, ink)
+    ctx.fillRect(tx + dx * pitch + jitter(ox + dx, oy + dy, 1), ty + dy * pitch + jitter(ox + dx, oy + dy, 2), ink, ink)
   }
 }
 
@@ -47,9 +47,9 @@ function glyphFor(p) {
   return GLYPHS[p.type] ?? '·'
 }
 
-function drawPins(ctx, view, pitch, color) {
+function drawPins(ctx, view, pitch, color, tx, ty) {
   ctx.fillStyle = color
-  ctx.font = '11px monospace'
+  ctx.font = `${Math.round(11 * pitch / PITCH)}px monospace`     // 11 px at the base pitch; glyphs grow with the zoom
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   const half = pitch / 2
@@ -57,30 +57,57 @@ function drawPins(ctx, view, pitch, color) {
     const p = view.pins[i]
     // faint: lost, or stale (the chunk under it faded: the building moved, the glyph may not be where you drew it), or a note unread
     ctx.globalAlpha = (p.lost || view.faded.has(p.chunkKey) || (p.type === 'note' && !p.flag)) ? 0.5 : 0.9
-    ctx.fillText(glyphFor(p), (Math.floor(p.x) - view.ox) * pitch + half, (Math.floor(p.y) - view.oy) * pitch + half)
+    ctx.fillText(glyphFor(p), tx + (Math.floor(p.x) - view.ox) * pitch + half, ty + (Math.floor(p.y) - view.oy) * pitch + half)
   }
 }
 
-function drawPlayer(ctx, view, pitch, color) {
+function drawPlayer(ctx, view, pitch, color, tx, ty) {
+  const s = pitch / PITCH
   ctx.save()
   ctx.fillStyle = color
   ctx.globalAlpha = 0.95
-  ctx.translate((view.px - view.ox) * pitch, (view.py - view.oy) * pitch)
+  ctx.translate(tx + (view.px - view.ox) * pitch, ty + (view.py - view.oy) * pitch)
   ctx.rotate(view.angle)
   ctx.beginPath()
-  ctx.moveTo(5.5, 0)
-  ctx.lineTo(-4, 3.8)
-  ctx.lineTo(-4, -3.8)
+  ctx.moveTo(5.5 * s, 0)
+  ctx.lineTo(-4 * s, 3.8 * s)
+  ctx.lineTo(-4 * s, -3.8 * s)
   ctx.fill()
   ctx.restore()
 }
 
+// opts: pitch (px per cell, default 8), ink (rect size, default 7), tx / ty (px offset of the whole drawing, default 0), layer, color
 export function drawMap(ctx, view, opts = {}) {
   const pitch = opts.pitch ?? PITCH, ink = opts.ink ?? INK_PX, color = opts.color ?? INK
+  const tx = opts.tx ?? 0, ty = opts.ty ?? 0
   const layer = opts.layer ?? 'all'
-  if (layer !== 'player') { drawCells(ctx, view, pitch, ink, color); drawPins(ctx, view, pitch, color) }
-  if (layer !== 'cells') drawPlayer(ctx, view, pitch, color)
+  if (layer !== 'player') { drawCells(ctx, view, pitch, ink, color, tx, ty); drawPins(ctx, view, pitch, color, tx, ty) }
+  if (layer !== 'cells') drawPlayer(ctx, view, pitch, color, tx, ty)
   ctx.globalAlpha = 1
+}
+
+// Fit the sheet to what you have drawn. A fixed 8 px pitch over the 56-cell window leaves a short walk as a smudge in the middle of the
+// paper, so the pencil zooms to the bounds of the walked cells, the pins in the window and you, plus a margin of FIT_MARGIN cells, at the
+// largest step of FIT_PITCHES that fits `size` px. Steps (not a continuous zoom) keep the drawing from swimming as you walk with the sheet
+// up. At the base pitch the window already fills the sheet, so the layout is exactly the unzoomed one (tx = ty = 0).
+export const FIT_PITCHES = Object.freeze([28, 24, 20, 16, 14, 12, 10, 8])
+export const FIT_MARGIN = 2
+export function fitView(view, size, out = { pitch: PITCH, ink: INK_PX, tx: 0, ty: 0 }) {
+  let x0 = Math.floor(view.px) - view.ox, x1 = x0, y0 = Math.floor(view.py) - view.oy, y1 = y0
+  const grow = (x, y) => { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+  for (let i = 0; i < view.n; i++) grow(view.cells[2 * i], view.cells[2 * i + 1])
+  for (let i = 0; i < view.nFresh; i++) grow(view.fresh[2 * i], view.fresh[2 * i + 1])
+  for (let i = 0; i < view.pins.length; i++) grow(Math.floor(view.pins[i].x) - view.ox, Math.floor(view.pins[i].y) - view.oy)
+  const span = Math.max(x1 - x0 + 1, y1 - y0 + 1) + 2 * FIT_MARGIN
+  let pitch = PITCH
+  for (const p of FIT_PITCHES) if (p * span <= size) { pitch = p; break }
+  out.pitch = pitch
+  out.ink = pitch - 1
+  if (pitch === PITCH) { out.tx = 0; out.ty = 0; return out }
+  // centre the bounds on the sheet
+  out.tx = Math.round(size / 2 - (x0 + x1 + 1) / 2 * pitch)
+  out.ty = Math.round(size / 2 - (y0 + y1 + 1) / 2 * pitch)
+  return out
 }
 
 // `level 1 — habitable zone · 212 cells walked · 3 down · 1 up`: only the kinds that are on the map
@@ -109,15 +136,17 @@ export function createMapCard(doc, { fog, getLevel, getPlayer, onTap = null } = 
   let open = false
   let view = null
   let lastAngle = NaN
+  const fit = { pitch: PITCH, ink: INK_PX, tx: 0, ty: 0, layer: 'cells' }
 
   function levelName(lvl) { return lvl?.cfg?.levelName ?? lvl?.name ?? `level ${lvl?.index ?? '?'}` }
 
-  // the arrow layer: the cells layer composited, then the player
+  // the arrow layer: the cells layer composited, then the player at the same zoom
   function composite() {
     if (!ctx || !view) return
     if (ctx.clearRect) ctx.clearRect(0, 0, W, W)
     if (off && ctx.drawImage) ctx.drawImage(off, 0, 0)
-    drawMap(ctx, view, { layer: 'player' })
+    fit.layer = 'player'
+    drawMap(ctx, view, fit)
     lastAngle = view.angle
   }
 
@@ -125,9 +154,11 @@ export function createMapCard(doc, { fog, getLevel, getPlayer, onTap = null } = 
     const lvl = getLevel(), player = getPlayer()
     if (!lvl || !player) return
     view = buildMapView(fog, lvl.index, player, { cells: CELLS, out: view })
+    fitView(view, W, fit)
     if (octx) {
       if (octx.clearRect) octx.clearRect(0, 0, W, W)
-      drawMap(octx, view, { layer: 'cells' })
+      fit.layer = 'cells'
+      drawMap(octx, view, fit)
     }
     composite()
     setFooter(footerText(levelName(lvl), view.counts))

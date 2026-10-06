@@ -1,7 +1,7 @@
 // mapcard.js — the pencil drawing of the fog map and the thin DOM card that holds it (held, not modal).
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { GLYPHS, drawMap, createMapCard } from '../src/renderer/mapcard.js'
+import { GLYPHS, drawMap, createMapCard, fitView, FIT_PITCHES } from '../src/renderer/mapcard.js'
 import { createFogMap, buildMapView } from '../src/renderer/fogmap.js'
 import { WAY_KINDS } from '../src/renderer/topology.js'
 
@@ -137,6 +137,69 @@ describe('drawMap', () => {
     drawMap(p, view, { layer: 'player' })
     expect(c.count('fillRect')).toBe(25); expect(c.count('fillText')).toBe(5); expect(c.count('beginPath')).toBe(0)
     expect(p.count('fillRect')).toBe(0); expect(p.count('fillText')).toBe(0); expect(p.count('beginPath')).toBe(1)
+  })
+})
+
+describe('fitView — the pencil zooms to what you have drawn', () => {
+  const SIZE = 448
+
+  it('a short walk is drawn large and centred on the sheet, not as a smudge in the middle', () => {
+    const fog = createFogMap()
+    fog.step(0, 50.5, 50.5, 2, open)                                 // a 5x5 patch
+    const view = buildMapView(fog, 0, at(50.5, 50.5), { cells: 56 })
+    const f = fitView(view, SIZE)
+    expect(f.pitch).toBe(28)                                          // (5 + 2*FIT_MARGIN) * 28 = 252 <= 448
+    expect(f.ink).toBe(27)
+    const ctx = recorder()
+    drawMap(ctx, view, f)
+    const rects = ctx.calls.filter((c) => c[0] === 'fillRect')
+    const xs = rects.map((r) => r[1]), ys = rects.map((r) => r[2])
+    const cx = (Math.min(...xs) + Math.max(...xs) + f.ink) / 2, cy = (Math.min(...ys) + Math.max(...ys) + f.ink) / 2
+    expect(Math.abs(cx - SIZE / 2)).toBeLessThan(2)                   // centred
+    expect(Math.abs(cy - SIZE / 2)).toBeLessThan(2)
+    expect(Math.max(...xs) - Math.min(...xs) + f.ink).toBeGreaterThan(SIZE / 4)   // a real part of the sheet (5 cells at the 28 px cap = 140 px; was 39 px)
+    for (const [, x, y, w, h] of rects) {                             // nothing falls off the paper
+      expect(x).toBeGreaterThanOrEqual(-1); expect(y).toBeGreaterThanOrEqual(-1)
+      expect(x + w).toBeLessThanOrEqual(SIZE + 1); expect(y + h).toBeLessThanOrEqual(SIZE + 1)
+    }
+  })
+
+  it('pins and the player widen the bounds; the glyphs and the arrow grow with the pitch', () => {
+    const fog = fogWithPins()                                        // cells 48..52, pins out to 47..53
+    const view = buildMapView(fog, 0, at(50.5, 50.5), { cells: 56 })
+    const f = fitView(view, SIZE)
+    expect(f.pitch).toBe(28)                                          // (7 + 4) * 28 = 308 <= 448
+    const ctx = recorder()
+    let font = null
+    Object.defineProperty(ctx, 'font', { get: () => font, set: (v) => { font = v } })
+    drawMap(ctx, view, f)
+    expect(font).toBe(`${Math.round(11 * 28 / 8)}px monospace`)
+    for (const [, x, y] of ctx.glyphs) { expect(x).toBeGreaterThan(0); expect(x).toBeLessThan(SIZE); expect(y).toBeGreaterThan(0); expect(y).toBeLessThan(SIZE) }
+    expect(ctx.calls.find((c) => c[0] === 'moveTo')[1]).toBeCloseTo(5.5 * 28 / 8, 9)
+  })
+
+  it('steps down as the drawing grows, and a full window keeps the unzoomed layout exactly', () => {
+    const small = createFogMap(); small.step(0, 50.5, 50.5, 2, open)
+    const mid = createFogMap()
+    for (let x = 38.5; x <= 62.5; x += 1) mid.step(0, x, 50.5, 1, open)   // a hall 27 cells long (the flood reaches one past each end)
+    const big = createFogMap()
+    for (let x = 10.5; x <= 90.5; x += 1) big.step(0, x, 50.5, 1, open)   // wider than the 56-cell window
+    const p = (fog) => fitView(buildMapView(fog, 0, at(50.5, 50.5), { cells: 56 }), SIZE).pitch
+    expect(p(small)).toBe(28)
+    expect(p(mid)).toBe(14)                                           // (27 + 2*2) * 14 = 434 <= 448 < 31 * 16
+    const fBig = fitView(buildMapView(big, 0, at(50.5, 50.5), { cells: 56 }), SIZE)
+    expect(fBig).toEqual({ pitch: 8, ink: 7, tx: 0, ty: 0 })
+  })
+
+  it('reuses the out object', () => {
+    const fog = createFogMap(); fog.step(0, 5.5, 5.5, 1, open)
+    const out = { pitch: 0, ink: 0, tx: 0, ty: 0 }
+    expect(fitView(buildMapView(fog, 0, at(5.5, 5.5), { cells: 56 }), SIZE, out)).toBe(out)
+  })
+
+  it('FIT_PITCHES descends to the base pitch', () => {
+    expect([...FIT_PITCHES].sort((a, b) => b - a)).toEqual([...FIT_PITCHES])
+    expect(FIT_PITCHES[FIT_PITCHES.length - 1]).toBe(8)
   })
 })
 
