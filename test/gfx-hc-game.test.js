@@ -154,7 +154,7 @@ describe('game.js wiring (source guards)', () => {
     expect(game).toMatch(/if \(!getPref\('solidBodies'\)\) \{\r?\n\s*const pcx = Math\.floor\(player\.x \/ CHUNK_SIZE\)\r?\n\s*const pcy = Math\.floor\(player\.y \/ CHUNK_SIZE\)\r?\n\s*const r = movePoint\(player\.x, player\.y, nx, ny, level\.cache\.isWall, pcx, pcy\)\r?\n\s*player\.x = r\.x; player\.y = r\.y\r?\n\s*return\r?\n\s*\}/)
     expect(game).toMatch(/lastReport = level\.solid\.movePlayer\(player, nx, ny, lastDt, wantSprint, creaturesOn \? level\.entitySys\.getEntities\(\) : EMPTY\)\r?\n\s*noteContact\(lastReport\)/)
     expect(game).not.toMatch(/if \(!level\.cache\.isWall\(nx, player\.y, pcx, pcy\)\) player\.x = nx/)     // the inline point mover lives in collide.js movePoint now
-    expect((game.match(/(?<!function )tryMove\(/g) || []).length).toBe(1)                               // W/S/A/D sum into one step: one call site
+    expect((game.match(/(?<!function )tryMove\(/g) || []).length).toBe(2)                               // W/S/A/D sum into one step: one call site, plus the thin ward's recoil (origins, I5)
   })
   it('floors: game.js has no descend( definition and exactly one travel( definition; the keydown handler goes through takeKey', () => {
     expect(game).not.toMatch(/function descend\(/)

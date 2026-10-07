@@ -69,6 +69,7 @@ const SHELL = [
   'topology.js', 'levelmem.js', 'death.js', 'channels.js',
   'fogmap.js', 'sightpins.js', 'mapcard.js', 'compass.js',
   'dress.js', 'containers.js', 'haunts.js', 'papercard.js',
+  'origin-intake.js', 'origin-rules.js', 'origin-tenant.js', 'origin-anchored.js', 'origin-processed.js', 'origin-unnamed.js', 'origin-thin.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
 ]
 self.addEventListener('install', (e) => e.waitUntil((async () => {

@@ -58,7 +58,7 @@ describe('game.js: one aiCtx object, mutated per frame, handed to one update', (
     expect(game).not.toMatch(/let nearD2 = Infinity/)
     expect(game).not.toMatch(/nearD/)
     expect(game).not.toMatch(/if \(e\.stagger > 0\) continue\s+\/\/ reeling from a ward/)
-    expect(game).toMatch(/if \(!transitioning && creaturesLive && getPref\('damage'\) && invuln <= 0 && th\.dmg > 0\) \{\r?\n\s*player\.hp -= th\.dmg; invuln = 0\.7; hurt = 1; regenDelay = 6; shake = 1\r?\n\s*showMessage\(th\.dmgKind === 'arc' \? 'the current finds you\.' : 'it has you\.', PRIO\.urgent\)[^\n]*\r?\n\s*lastHitT = playT\r?\n\s*if \(mapOpen\) closeMap\(\); if \(noteOpen\) closeNoteCard\(\)\r?\n\s*cancelCommit\('the bandage slips\.'\)/)
+    expect(game).toMatch(/if \(!transitioning && creaturesLive && getPref\('damage'\) && invuln <= 0 && th\.dmg > 0\) \{\r?\n\s*player\.hp -= th\.dmg \* rules\.damageMul; invuln = 0\.7; hurt = 1; regenDelay = 6; shake = 1[^\n]*\r?\n\s*showMessage\(th\.dmgKind === 'arc' \? 'the current finds you\.' : 'it has you\.', PRIO\.urgent\)[^\n]*\r?\n\s*lastHitT = playT\r?\n\s*if \(mapOpen\) closeMap\(\); if \(noteOpen\) closeNoteCard\(\)\r?\n\s*cancelCommit\('the bandage slips\.'\)/)
     // the heartbeat block became tension.tick (fight-verbs; pinned in fight-wiring.test.js): the threat record still feeds it
     expect(game).not.toMatch(/const prox = 1 - th\.nearest \/ 12/)
     expect(game).toMatch(/const tn = tension\.tick\(dt, creaturesLive && !transitioning \? th : null, player\.hp\)/)

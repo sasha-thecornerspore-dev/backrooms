@@ -67,7 +67,7 @@ describe('game.js: buildLevel(index, at)', () => {
   })
   it('enters the items with what the floor remembers and takes the frame\'s vendedSet from levelmem (nothing for the block)', () => {
     expect(body).toContain('itemSys.enterLevel(cfg, cfg.map ? null : mem.takenFor(index), cfg.map ? null : mem.droppedFor(index))')
-    expect(body).toMatch(/vendedSet = mem\.vendedFor\(index, playT\)/)
+    expect(body).toMatch(/vendedSet = mem\.vendedFor\(index, filedFloors\.has\(floorKey\(worldSeed, index\)\) \? -Infinity : playT\)/)   // origins (I5): a filed floor never restocks
     expect(body).not.toContain('vendedSet.clear()')
   })
 })
@@ -93,7 +93,7 @@ describe('game.js: travel(way) replaces descend', () => {
     expect(body).toMatch(/const m = way\.kind === 'ring' \? mem\.get\(way\.target\) : null/)
     expect(body).toMatch(/const a = arrivalFor\(\{ way, fromCx: fromC\.cx, fromCy: fromC\.cy, partner, mem: m, floorFn: level\.grid\.floor, angle: player\.angle \}\)/)
     expect(body).toMatch(/closing = \{ key: partner\?\.key \?\? null, until: playT \+ 5 \}/)
-    expect(body).toMatch(/const rec = mem\.arrive\(way\.target, spawnChunk, playT\)\r?\n\s*vendedSet = mem\.vendedFor\(level\.index, playT\)[^\n]*\r?\n\s*const first = rec\.visits === 1\r?\n\s*const hp0 = player\.maxHp\r?\n\s*player\.maxHp = onArrive\(player\.maxHp, first\)/)
+    expect(body).toMatch(/const rec = mem\.arrive\(way\.target, spawnChunk, playT\)\r?\n\s*vendedSet = mem\.vendedFor\(level\.index, filedFloors\.has\(floorKey\(worldSeed, level\.index\)\) \? -Infinity : playT\)[^\n]*\r?\n\s*const first = rec\.visits === 1\r?\n\s*const hp0 = player\.maxHp\r?\n\s*player\.maxHp = onArrive\(player\.maxHp, first\)/)
     expect(body).toContain('vendLocked = false')
     expect(body).toMatch(/if \(!level\.cfg\.map\) fog\.pinThing\(way\.target, 'arrived:' \+ \(playT \| 0\), 'arrived', player\.x, player\.y\)/)
     expect(body).toContain('persist(true)')

@@ -13,7 +13,7 @@ import { writeSave } from './save.js'
 import { formatAnchor, driftMeters, anchorSeed } from './anchor.js'
 import { initTouchControls, isTouchDevice } from './touch.js'
 import { SCRAPS } from './scraps.js'
-import { createEventScheduler } from './events.js'
+import { createEventScheduler, EVENTS } from './events.js'
 import { createMessageQueue, PRIO } from './messages.js'
 import { takeKey } from './input.js'
 import { createSolidWorld, createColliderIndex, movePoint, PLAYER_R } from './collide.js'
@@ -35,7 +35,14 @@ import { dressPass } from './dress.js'
 import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog } from './containers.js'
 import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
 import { createCard, CARD_KEYS } from './papercard.js'
-import { createEvBus } from '../net/evbus.js'
+import { createEvBus, depthOf } from '../net/evbus.js'   // TODO(integrate:W3) I13: depthOf comes from status.js (both domains), the one depth helper
+import { intake, filingLine, formText, FORM_FOOT, parseIntakeCommand, normaliseIntakeCtx, identityOut, identityIn } from './origin-intake.js'
+import { rulesFor, LEGACY } from './origin-rules.js'
+import { DOOR_SANITY, isSealedMaterial, doorLine, facingCell } from './origin-tenant.js'
+import { MERCY_LINE, leashDebtStep } from './origin-anchored.js'
+import { floorKey } from './origin-processed.js'
+import { parseNameWish, spellCard, refileWithName, spelledLine, ONLINE_LINE } from './origin-unnamed.js'
+import { RECOIL_DIST, RECOIL_SHAKE, RECOIL_LINE, CURE_LINE } from './origin-thin.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -201,7 +208,7 @@ export function frameDue(ts, pacer, fpsCap, gate, relayout) {
   return true
 }
 
-export async function initGame(canvas, { worldSeed = null, mpClient = null, anchor = null, resume = null } = {}) {
+export async function initGame(canvas, { worldSeed = null, mpClient = null, anchor = null, resume = null, intakeCtx = null } = {}) {
   const base = await loadConfig()
 
   // ── player state — PERSISTS across level transitions (hp + inventory carry) ──
@@ -275,8 +282,30 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let beaconFired = false // the beacon was fired carrying the EXTENSION-30150A claim
   let seamHeld    = false // the counter-claim resolved — fire the finale only once
 
-  // ── Living Atmosphere — occasional ambient dread events ──
-  const eventSched = createEventScheduler()
+  // ── the file (origin-*.js): nobody chooses a column. The first way you take files you by how you arrived (travel()); until then — Level ∅,
+  //    the lobby before the first way — rules is LEGACY and the game is what it always was. intakeCtx holds the title screen's facts (the
+  //    route, the pin, the name; the arrival is written at the filing); thin is the layer (dropped in, or back from the dark); filedFloors
+  //    are the floors a processed beacon filed (they never restock); leashDebt / leashCalm are the anchored pull. Every read of a number or
+  //    a line the file could change is `rules.<key>`; rules is reassigned only through rulesFor (the filing, the cure, a re-file, a resume) ──
+  let origin = null, thin = false, filed = false, filedFloors = new Set(), leashDebt = 0, leashCalm = 0
+  let rules = LEGACY
+  intakeCtx = normaliseIntakeCtx(intakeCtx, { route: 'solo', arrival: null, anchor, name: '' })
+  const doorsSaid = new Set()   // the ∅ doors whose +3 was taken this session ('ix,iy')
+  // ∅ is one-way, so a column that only exists there could never meet a filed player: the doors and the form read the column the filing
+  // WILL write (a pure function of the title screen's facts); nothing else reads it, and the rules stay LEGACY until the filing
+  const provisionalOrigin = () => filed ? origin : intake(intakeCtx)
+  // the ONE drift helper: whole metres from where this floor set you down, plus the leash debt a death leaves an anchored player (0 without
+  // a pin) — the HUD, the leash row, the film's pin caption and the death read it
+  const driftD = () => anchor ? Math.round(driftMeters(player.x, player.y, spawnX, spawnY) + leashDebt) : 0
+
+  // ── Living Atmosphere — occasional ambient dread events. evConfig is the scheduler's ONE mutable config, read at every tick: the filing
+  //    writes the file's weights into it (a tenant sees the far crosser twice as often), retension() is the one writer of its tension ──
+  const evConfig = { events: EVENTS, tension: 0 }
+  const eventSched = createEventScheduler({ config: evConfig })   // TODO(integrate:W8) I14a: events.js reads `config` at every tick once W8's events.js edit is merged (until then it rolls EVENTS)
+  // the file the presence keeps (status.js / closings.js): the status, the closing, the ledger heard, the pages left unread — in prefs, never in the save
+  let file = { status: 'notice-mailed', at: 0, ledgerHeard: false, closing: null, redacted: [] }   // TODO(integrate:W3) I13: loadFile(getPref('file')); let co = closingOverlay(file.closing)
+  // the ONE writer of evConfig.tension: the room's standing on this floor (W8 ambientMods) and the closing's
+  function retension() { evConfig.tension = level?.amb?.tension ?? 0 }   // TODO(integrate:W3) I13: + (closingOverlay(file.closing).tension ?? 0)
   const ephemera   = []   // transient event-spawned apparitions (render-only, no collision; a haunt's figure carries vanishAt)
 
   // ── the drawers (containers.js) and the placed hauntings (haunts.js): the hold-to-search state, the keys opened on this floor
@@ -407,6 +436,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function buildLevel(index, at = null) {
     const tb    = performance.now()
     const cfg   = levelConfig(base, index)
+    // TODO(integrate:W8) I14a: the placement overlay, once from base.docket: const st = standing(base.docket, cfg.map ? null : depthOf(index)); applyPlacement(cfg, placementMods(st)) — then W3's closing overlay LAST (I13)
     cfg.ways    = waysFor(index)
     spawnChunk  = at ?? { cx: 0, cy: 0 }
     // HUD theme hook: index.html restyles body[data-level] ('0'..'3' | '∅') — light ink on dark plates below the lobby
@@ -465,13 +495,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // wall-tested through the proxy, so only now: before this, `level` is null on a resume and the floor you left on a travel), and the
     // machines you emptied stay empty until you have been away long enough (the block keeps nothing)
     itemSys.enterLevel(cfg, cfg.map ? null : mem.takenFor(index), cfg.map ? null : mem.droppedFor(index))
-    vendedSet = mem.vendedFor(index, playT)   // the keys still spent at this visit (travel / die re-read it once the visit is counted)
+    // the keys still spent at this visit (travel / die re-read it once the visit is counted); a floor the file has filed never restocks
+    vendedSet = mem.vendedFor(index, filedFloors.has(floorKey(worldSeed, index)) ? -Infinity : playT)
     // the haunt cooldowns are this floor's own: the chunk keys repeat on every floor (one coordinate system)
     haunts = hauntTrackers.get(index) ?? hauntTrackers.set(index, createHauntTracker({ now: () => playT })).get(index)
     decor.update(spawnChunk.cx, spawnChunk.cy); itemSys.update(spawnChunk.cx, spawnChunk.cy)
     msgQ.clear()                    // the old floor's lines do not follow you down (one fade if one was up)
     ephemera.length = 0             // nor its apparitions: a haunt's standing figure would otherwise stand on the new floor at its old x,y
     lastCellIx = NaN                // the compass recomputes on the floor's first frame
+    // the floor's depth (∅ reads as 0) and the room's standing on it; the literal above gains nothing
+    level.depth = depthOf(index); level.st = null; level.amb = null; retension()   // TODO(integrate:W8) I14a: level.st = st; level.amb = ambientMods(st, bus ? bus.roomStanding() : null)
     // Morph the bed into this level's mood — unless the player has chosen an
     // alternate track with N, in which case their choice follows them down.
     playSong(trackIdx < 0 ? cfg.music : TRACKS[trackIdx].mood)
@@ -518,6 +551,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     mem.setDropped(level.index, itemSys.getDropped())
     fadeThen(() => {
       buildLevel(way.target, fromC)
+      // the first way of a run files you (∅ -> the lobby solo; the lobby -> 1 online, where the form reaches you as this line): the arrival
+      // is the client's (fixed at join; 'walked' solo), the column is intake's, the layer is thin when you dropped into a room already live
+      if (!filed) {
+        intakeCtx.arrival = mpClient ? mpClient.arrival() : 'walked'
+        filed = true; origin = intake(intakeCtx); thin = intakeCtx.arrival === 'dropped'; rules = rulesFor(origin, thin)
+        evConfig.events = rules.eventWeights()
+        bus?.here(hereFields())
+        later(7600, filingLine(origin, thin), PRIO.discovery)   // after the level name, the hint (3.8 s) and the way line (7.5 s); it belongs to this arrival
+      }
       const partner = way.kind === 'down' ? level.decor.wayAt(fromC.cx, fromC.cy, 'up') : way.kind === 'up' ? level.decor.exitAt(fromC.cx, fromC.cy) : null
       const m = way.kind === 'ring' ? mem.get(way.target) : null
       // a ring floor remembers where you stood: stream that chunk first, so the arrival is validated against the right walls
@@ -531,7 +573,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       level.decor.update(spawnChunk.cx, spawnChunk.cy); itemSys.update(spawnChunk.cx, spawnChunk.cy)
       level.solid.settlePlayer(player)
       const rec = mem.arrive(way.target, spawnChunk, playT)
-      vendedSet = mem.vendedFor(level.index, playT)            // read again now the visit is counted: an absence long enough restocks
+      vendedSet = mem.vendedFor(level.index, filedFloors.has(floorKey(worldSeed, level.index)) ? -Infinity : playT)   // read again now the visit is counted: an absence long enough restocks (a filed floor never)
       const first = rec.visits === 1
       const hp0 = player.maxHp
       player.maxHp = onArrive(player.maxHp, first)           // a first visit gives five back (death.js: the one owner of maxHp)
@@ -554,6 +596,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if (s) later(7500, s, PRIO.discovery)
       }
       if (player.maxHp > hp0) later(11000, 'the floor remembers you less.', PRIO.discovery)
+      // a new floor sets you down beside the pin's drift origin again (buildLevel resets spawnX / spawnY): a mercy, said once per descent
+      if (origin === 'anchored') later(9500, MERCY_LINE, PRIO.discovery)
       bus?.here(hereFields())           // the room learns your new floor at once (a friend's chat says 'no-clipped deeper.')
     })
   }
@@ -594,7 +638,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       level.decor.update(spawnChunk.cx, spawnChunk.cy); itemSys.update(spawnChunk.cx, spawnChunk.cy)
       level.solid.settlePlayer(player)
       mem.arrive(level.index, spawnChunk, playT)
-      vendedSet = mem.vendedFor(level.index, playT)            // the visit is counted (the trays stay locked through vendLocked anyway)
+      vendedSet = mem.vendedFor(level.index, filedFloors.has(floorKey(worldSeed, level.index)) ? -Infinity : playT)   // the visit is counted (the trays stay locked through vendLocked anyway)
       renderHotbar()
       persist(true)
       showMessage(level.cfg.levelName, PRIO.combat)
@@ -645,10 +689,27 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (dialogEl) { dialogEl.style.display = 'flex'; wishText.value = ''; wishResp.textContent = ''; wishText.focus() }
   }
   function closeDialog() { dialogOpen = false; if (dialogEl) dialogEl.style.display = 'none' }
+  // the naming re-file (origin-unnamed.js): an unnamed player tells the presence 'call me ada'. The dialog closes at once and a card asks how
+  // it is spelled; only a confirm writes the name into the form and files you again (a tenant now, or anchored with a pin — never processed).
+  // Esc, or any forced close (a hit, a travel), leaves you unnamed and submits nothing. A re-file, not a filing: filed, thin and the file stay
+  function refileName(name) {
+    closeDialog(); if (wishText) wishText.disabled = false; const sub = document.getElementById('wish-submit'); if (sub) sub.disabled = false
+    document.activeElement?.blur?.()   // the hidden textarea / button must not keep the keys the card reads
+    openCard('confirm', { ...spellCard(name), onConfirm: () => {
+      intakeCtx = refileWithName(intakeCtx, name); origin = intake(intakeCtx); rules = rulesFor(origin, thin)
+      setPref('playerName', name)
+      showMessage(spelledLine(name, origin), PRIO.discovery)
+      if (mpClient) setTimeout(() => showMessage(ONLINE_LINE, PRIO.discovery), 2600)   // the server-attached name stays this session's
+      bus?.here(hereFields())
+    } })
+  }
   document.getElementById('wish-cancel')?.addEventListener('click', closeDialog)
   document.getElementById('wish-submit')?.addEventListener('click', async () => {
     const text = wishText?.value.trim()
     if (!text) return
+    // TODO(integrate:W4) I8: wishRoute's case 'name' calls refileName(r.name) (after a compliance close); until then the naming wish is read here
+    const name = origin === 'unnamed' ? parseNameWish(text) : null
+    if (name) { refileName(name); return }
     const claim = isClaim(text)
     if (wishResp) wishResp.textContent = claim
       ? 'you did not ask. you asserted. the file has no column to deny a claim made. received.'
@@ -684,7 +745,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     noteFootEl.textContent = s.foot
     const lines = s.lines
     noteFootEl.style.display = lines.length ? 'none' : ''
-    if (noteHintEl) noteHintEl.style.display = lines.length ? 'none' : ''
+    // (a confirm's foot is its own prompt — 'e · yes      esc · no' — so the put-it-back hint steps aside there too)
+    if (noteHintEl) noteHintEl.style.display = lines.length || s.mode === 'confirm' ? 'none' : ''
     if (!noteLinesEl) return
     noteLinesEl.textContent = ''
     for (let i = 0; i < lines.length; i++) {
@@ -735,7 +797,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function revealScrap() {
     const scrap = cardScrap
     if (!scrap || !card.state) return
-    if (!readSet.has(scrap.frag)) { readSet.add(scrap.frag); sanity = Math.min(100, sanity + 6) }   // not alone, for a moment   TODO(integrate:W2) I5: the +6 becomes rules.scrapSanity
+    if (!readSet.has(scrap.frag)) { readSet.add(scrap.frag); sanity = Math.min(100, sanity + rules.scrapSanity) }   // not alone, for a moment (+6; the file's column changes it)
     if (!level.cfg.map) fog.pinThing(level.index, 'n:' + scrap.key, 'note', scrap.x, scrap.y, true)       // on the map, filled in: read
     renderCard(card.setFoot(card.state, `${readSet.size} of ${SCRAPS.length} pages found`))
   }
@@ -750,6 +812,21 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function openNoteCard(scrap) {
     if (!scrap || !openCard('page', { text: SCRAPS[scrap.frag] ?? '' }, scrap)) return
     revealScrap()
+  }
+  // E at ∅'s form on the counter (decor's authored note, frag -1), and /intake: the file's view of you, read-only — no page count, no
+  // sanity, no pin; it closes on any close key like a page
+  function openForm() { openCard('form', { text: formText(intakeCtx, file.status).join('\n'), foot: FORM_FOOT }) }
+  // ∅'s sealed doors (origin-tenant.js): the cell an arm's length ahead, when it is block or plywood on the FIXED map (materialAt exists only
+  // there: callers check cfg.map). -> { ix, iy } or null
+  function doorAhead() {
+    const c = facingCell(player, 1.2)
+    return isSealedMaterial(level.cache.materialAt(c.ix + 0.5, c.iy + 0.5)) ? c : null
+  }
+  // the system's claim about an address, read off the door; the first time at each door steadies you
+  function knockDoor(c) {
+    showMessage(doorLine(c.ix, c.iy), PRIO.discovery)
+    const k = c.ix + ',' + c.iy
+    if (!doorsSaid.has(k)) { doorsSaid.add(k); sanity = Math.min(100, sanity + DOOR_SANITY) }
   }
 
   // ── the map card (mapcard.js): the pencil sheet over the lower view. HELD, NOT MODAL — the pointer lock stays, the loop gates the pace
@@ -785,7 +862,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   resize()
 
   const SPEED = 0.05
-  // ONE mover call per frame (the movement block sums W/S/A/D into one step). Solid furniture on: collide.js resolves the step against the
+  const RECOIL_STEPS = 4   // the thin ward's recoil (origin-thin.js RECOIL_DIST 1.7) marches 0.425 u a step: under a cell, so it never skips a wall
+  // ONE mover call per frame from the movement block (it sums W/S/A/D into one step); the thin ward's recoil is the only other caller. Solid furniture on: collide.js resolves the step against the
   // 0.12 wall box, the bodies and the creatures, and reports the contacts (noteContact). Off: the old point-vs-wall mover, verbatim.
   // movePlayer writes player.x/y itself and hands back ONE reused report; movePoint's result is reused too — read and drop.
   const EMPTY = []
@@ -805,11 +883,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
   // ── HUD (decluttered: level name only, plus optional anchor drift) ──
   const hudEl = document.getElementById('hud')
+  const leashEl = document.getElementById('leash-line')   // the settings panel's locate row: how far the pin is pulling (anchored only)
+  let leashText = ''
   function updateHud() {
     if (!hudEl || !level) return
     let text = level.cfg.levelName
-    if (anchor) text += `   ·   drift ${driftMeters(player.x, player.y, spawnX, spawnY)}m`
+    if (anchor) text += `   ·   drift ${driftD()}m`
     hudEl.textContent = text
+    const lt = rules.leash ? `leash ${driftD()} m` : ''
+    if (leashEl && lt !== leashText) { leashText = lt; leashEl.textContent = lt }   // written only when it changes (the panel is mostly hidden)
   }
 
   // ── HP bar ──
@@ -1039,7 +1121,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
           if (!m.stations.some(s => !rSolved(m.id, s.id)))
             setTimeout(() => showMessage(((m.reward && m.reward.key) || 'the case is read.') + ' — open the board at /recover/.'), 3000)
         } else showMessage('the file does not answer to that.')
-      } else showMessage('the file does not recognise that. try /recover, /cases or /file <answer>.')
+      } else if (cmd === 'intake') {
+        // the form again, read-only; anything typed after it is an amendment, and the file does not take those
+        const r = parseIntakeCommand(arg)
+        if (r.refuse) showMessage(r.refuse)
+        else openForm()
+      } else showMessage('the file does not recognise that. try /recover, /cases, /file <answer> or /intake.')   // TODO(integrate:W3) I13/I15: the ONE string 'the file does not recognise that. try /recover, /cases, /file <answer>, /intake or /status.' once /status lands
     } catch (e) {
       // desktop: a fetch that never reached the site (offline, DNS, blocked) says so plainly
       if (RECOVER_REMOTE && e && e.name === 'TypeError') showMessage('no signal. the file is kept online —\nconnect to the internet and try again.')
@@ -1068,6 +1155,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     mpClient.onEv(bus.receive)
     // a friend's floor change is a people line: 'no-clipped deeper.' / 'climbed back.' / 'fell in.' (none when the depth held)
     bus.onFloorChange((id, name, from, to, line) => { if (line) addChatLine(name || 'someone', line, true) })
+    // TODO(integrate:W8) I14a: bus.onRoomChange(() => { if (level) { level.amb = ambientMods(level.st, bus.roomStanding()); retension() } })
     // the kinds, registered in this one place (the bus believes nothing it was not told about); each item's handlers land in its own step
     // TODO(integrate:W5) I9/I10: register whistle / kneel / woke from W5's evKinds(() => mpClient.id) — whistle: lvl int 0..4 && finite x/y && c <= 32, minGapMs 8000, posKeys ['x','y']; kneel: to === my id, maxDist 2.0, minGapMs 350; woke: by === my id, maxDist 3.0
     // TODO(integrate:W6) I11: bus.register('cache', { check: (p) => isCachePayload(p, ITEM_NAMES), replayable: true, posKeys: ['x', 'y'], minGapMs: 3000 }); bus.register('take', { check: isTakePayload, replayable: true, minGapMs: 500 })
@@ -1083,9 +1171,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     hereObj.lit = flashlight
     hereObj.st = 'ok'                    // TODO(integrate:W5) I9: kneel.st ? 'kneel' : down.st
     hereObj.seen = false                 // TODO(integrate:W7) I12: evidence.active(playT)
-    hereObj.o = null                     // TODO(integrate:W2) I5: origin
-    hereObj.thin = false                 // TODO(integrate:W2) I5: thin
-    hereObj.status = 'notice-mailed'     // TODO(integrate:W3) I14a/I13: file.status (I14a declares `file`)
+    hereObj.o = origin
+    hereObj.thin = thin
+    hereObj.status = file.status
     hereObj.aseed = myAseed
     return hereObj
   }
@@ -1131,6 +1219,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (b.hit) showMessage('the flash catches it. it reels, blind.', PRIO.interaction)
     // the caption develops from the LIVE frame, so it works in the browser too
     // (no save bridge). A capture is a small counter-claim — it steadies you.
+    // TODO(integrate:W4) I8: polaroidCaption({ rules, ..., D: driftD(), thinFirstShot }) replaces the caption / sanity / glyph lines below (rules.polaroid, rules.canDevelopClaim)
     const thinNear = ephemera.some(a => a.variant === 'thin' && (a.x - player.x) ** 2 + (a.y - player.y) ** 2 < 16)
     const finalizing = sanity < 40 || (level?.index ?? 0) >= 3
     sanity = Math.min(100, sanity + 8); wardPulse()
@@ -1152,6 +1241,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // reads the ledger aloud, one number group at a time — not talking to you,
   // reading a list, counting DOWN to your line.
   function readRadio(on) {
+    // TODO(integrate:W4) I8: radioLine({ on, rules, ... }) replaces this body (rules.radio: the heartbeat and the follow-up line)
     const dfloor = level?.index ?? 0
     const deep = dfloor === 2 || dfloor === 3
     if (on && deep) {
@@ -1169,6 +1259,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // presence AND fired the beacon registered to EXTENSION-30150A. Renderer-side,
   // so it resolves in the browser build too (no Electron bridge required).
   function tryFinale() {
+    // TODO(integrate:W4) I8: finaleGate({ seamHeld, claimFiled, beaconFired, rules, status: file.status, closing: file.closing }) (rules.canHoldSeam)
     if (seamHeld || !claimFiled || !beaconFired) return
     seamHeld = true
     wardPulse(); calmTimer = 600; flickTgt = 1; flickTimer = 1.2; sanity = Math.min(100, sanity + 30)
@@ -1181,10 +1272,21 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function applyItemEffect(eff) {
     if (!eff) return
     const dfloor = level?.index ?? 0
+    // the file's own reading of a thing first (origin-rules.js): the one frozen LEGACY_EFFECT for every item but a thin player's glowstick
+    const r = rules.itemEffect(eff, dfloor)
+    if (r && !r.legacy) {
+      fogTimer = r.fog; calmTimer = Math.max(calmTimer, r.calm); if (r.blip) blip()
+      sanity = Math.max(0, Math.min(100, sanity + r.sanity)); showMessage(r.line); renderHotbar(); return
+    }
     if (eff.type === 'almond-water') {
       if (eff.sour) {
         level.entitySys.noise(player.x, player.y, 6)        // the retch: the things hear it
-        if (dfloor === 3) {
+        // TODO(integrate:W3) I13: the extension status's 'advance' (statusMods(file.status).sourWater) is read BEFORE the column's rule and wins
+        const sw = rules.sourWater(dfloor)                  // processed: the ledger moved years ago — no slam, no whisper, no sanity
+        if (sw) {
+          sanity = Math.max(0, Math.min(100, sanity + sw.sanity)); if (sw.slam) doorSlam(); if (sw.whisper) whisper(); if (sw.flicker) { flickTgt = 0.5; flickTimer = 0.3 }
+          showMessage(sw.line)
+        } else if (dfloor === 3) {
           sanity = Math.max(0, sanity - 14); doorSlam()
           showMessage('the water is sour, and something reads the withdrawal. a line moves in a ledger you cannot see.')
         } else {
@@ -1192,7 +1294,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
           showMessage('the water is sour on your tongue. it takes something from you, and gives nothing back.')
         }
       } else {
-        stamina = 100; calmTimer = 20; sanity = Math.min(100, sanity + 35); wardPulse()
+        stamina = 100; calmTimer = 20; sanity = Math.min(100, sanity + rules.sweetWater); wardPulse()   // +35 (unnamed: 20)
         quietTimer = QUIET_SECONDS                          // and your steps go soft for a while (tactics.quiet halves the footstep noise)
         showMessage('the water is sweet. the lights steady, and so does your mind.')
       }
@@ -1222,9 +1324,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       // true floor, made present: the drop-in-thinness antidote. Never sours.
       calmTimer = 30; stamina = 100; flickTgt = 1; flickTimer = 1.2
       showMessage('you set both feet and mean it. your whole weight arrives. the dark cannot read a thing this here.')
+      // and it cures thin for good: the whole of you arrives (the layer comes off the column; the room learns it at once)
+      if (thin) { thin = false; rules = rulesFor(origin, false); setTimeout(() => showMessage(CURE_LINE, PRIO.discovery), 2600); bus?.here(hereFields()) }
     } else if (eff.type === 'extension-slip') {
       // 30150A — the one line the system never closed. Hands the concept, not the
       // literal claim: the phrase itself is earned from the numbers station.
+      // TODO(integrate:W3) I13: the line below becomes slipText(origin, file.status, file.closing)
       sanity = Math.min(100, sanity + 20); wardPulse()
       showMessage('notice 30150A. status: EXTENSION — the one line the system never closed. a door left ajar it cannot foreclose. make your claim where the presence waits.')
     }
@@ -1238,18 +1343,22 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const dfloor = level?.index ?? 0
     // on the deep stacks, sometimes it is not a thing but a faint drop-in — a
     // person minted thin from far away, drifting slow enough to photograph.
-    const thin = (dfloor === 2 || dfloor === 3) && Math.random() < 0.3
+    const faint = (dfloor === 2 || dfloor === 3) && Math.random() < 0.3   // TODO(integrate:W8) I14a: Math.random() < level.amb.thinChance behind this deep-floor gate
     const ahead = 7 + Math.random() * 4                        // out in the fog ahead
     const bx = player.x + Math.cos(player.angle) * ahead
     const by = player.y + Math.sin(player.angle) * ahead
     const perp = player.angle + Math.PI / 2                     // crossing your line of sight
     const dir = Math.random() < 0.5 ? 1 : -1
-    const sp = thin ? 1.1 : 2.6, span = 1.7
-    ephemera.push({
+    const sp = faint ? 1.1 : 2.6, span = 1.7
+    const a = {
       x: bx - Math.cos(perp) * dir * span, y: by - Math.sin(perp) * dir * span,
       vx: Math.cos(perp) * dir * sp, vy: Math.sin(perp) * dir * sp,
-      ttl: (span * 2) / sp + 0.2, variant: thin ? 'thin' : (Math.random() < 0.5 ? 'shade' : 'lurker'),
-    })
+      ttl: (span * 2) / sp + 0.2, variant: faint ? 'thin' : (Math.random() < 0.5 ? 'shade' : 'lurker'),
+    }
+    // a thin player sees the other drop-in stop halfway and wave (origin-thin.js CROSSER; the loop's apparition step pauses it). EF.apparition
+    // copies only x / y / variant / vx / vy, so these fields never reach the renderer
+    if (faint && rules.crosserPause()) { a.pauseAtTtl = a.ttl / 2; a.pauseT = 0; a.paused = false }
+    ephemera.push(a)
   }
   // fireEvent(id, prio): the scheduled events murmur at ambient (dropped unless the line is idle); a drawer's haunt is the result of a search,
   // so containers.js fires it at interaction and the line shows behind 'you rummage.' (door-slam / crosser keep their interaction default)
@@ -1367,6 +1476,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const pool = ['almond-water', 'almond-water', 'glowstick', 'bandage']
     // Field Recovery caches surface in the deep stacks — a strain gauge, ballast, an exhibit
     if (dfloor === 2 || dfloor === 3) pool.push('plumb', 'ballast', 'extension-slip')
+    // TODO(integrate:W8) I14a: const lean = trayLean(level.st); if (lean.item) pool.push(lean.item, lean.item) — and the clunk gains ` the tray is stamped ${lean.stamp}.`
     const type = pool[Math.floor(Math.random() * pool.length)]
     const sour = type === 'almond-water' && dfloor >= 2 && Math.random() < 0.4
     const extra = type === 'plumb' ? { tool: true } : (sour ? { sour: true } : {})
@@ -1405,6 +1515,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
     if (full || !fogExport) fogExport = fog.export()      // the pencil sheets, per floor
     s.fog = fogExport
+    // who the file has you as: the column, the layer, the form's facts and the floors it filed (origin-intake.js; plain data, the Set as an array)
+    Object.assign(s, identityOut({ origin, thin, filed, intakeCtx, filedFloors }))
+    // TODO(integrate:W6) I11: s.caches = ledger.snapshot()
     return s
   }
   let saveTimer = 0, persistN = 0
@@ -1452,6 +1565,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // the decor / item scan at the resumed chunk -> the dispelled chunks -> the fog -> the settle. A v:1 save missing every new field loads
     // to today's behaviour. The clock is set first: buildLevel's vendedFor and the dispelled chunks' remaining seconds count from it (the
     // entity system reads playT through deps.now, so restoreDispelled is handed the list alone — never applyResume's literal clock).
+    // Who the file has you as is read BEFORE applyResume (its buildLevel reads filedFloors for the vend memory), validated in one call: a
+    // v:1 save without the fields resumes unfiled and files on its next way.
+    ;({ origin, thin, filed, intakeCtx, filedFloors } = identityIn(resume, intakeCtx))
+    rules = rulesFor(origin, thin); evConfig.events = rules.eventWeights()
+    // TODO(integrate:W6) I11: ledger.restore(resume.caches) directly here, under identityIn
     playT = Number(resume.playT) || 0
     const r = applyResume(resume, {
       mem, buildLevel,
@@ -1533,6 +1651,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const L = level.index, floor = level.grid.floor
     let n = visibleWays(player, level.decor.getExits(), floor, reach * 1.35, HF, seenWays)
     for (let i = 0; i < n; i++) { const e = seenWays[i]; fog.pinWay(L, e, epochOf(Math.floor(e.x / CHUNK_SIZE), Math.floor(e.y / CHUNK_SIZE))) }
+    // a tenant's map also marks every exit the floor has loaded, seen or not (the file has the building's plans; everyone else draws what they saw)
+    if (rules.wayReveal === 'loaded') { const ex = level.decor.getExits(); for (let i = 0; i < ex.length; i++) fog.pinWay(L, ex[i], epochOf(Math.floor(ex[i].x / CHUNK_SIZE), Math.floor(ex[i].y / CHUNK_SIZE))) }
     n = visibleWays(player, level.decor.getStairs(), floor, reach * 1.35, HF, seenWays)
     for (let i = 0; i < n; i++) { const s = seenWays[i]; fog.pinWay(L, s, epochOf(s.cx, s.cy)) }
     n = visibleWays(player, level.decor.getSights(), floor, reach, HF, seenSights)
@@ -1640,9 +1760,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       wardPulse(); shake = Math.max(shake, w.charged ? 0.7 : 0.45)
       if      (res.dispelled > 0) showMessage(res.dispelled > 1 ? 'they come apart in the light.' : 'it comes apart in the light.')
       else if (res.opening > 0)   showMessage('you catch it turning. it reels.')
-      else if (res.hit > 0)       showMessage(res.hit > 1 ? 'they recoil from you.' : 'it recoils from you.')
+      else if (res.hit > 0)       showMessage(res.hit > 1 ? (rules.wardRecoil ? 'they recoil from you. so do you.' : 'they recoil from you.') : (rules.wardRecoil ? RECOIL_LINE : 'it recoils from you.'))
       else                        showMessage('you push at the dark. it gives nothing back.')
       sanity = Math.min(100, sanity + 10 * res.dispelled)
+      // thin: whatever the push meets pushes back — RECOIL_DIST along your own facing, through the same mover as a step (a body or a creature
+      // stops it), marched in RECOIL_STEPS so the shove never passes through a wall one cell thick
+      if (rules.wardRecoil && res.hit > 0) {
+        for (let i = 0; i < RECOIL_STEPS; i++) tryMove(player.x - Math.cos(player.angle) * (RECOIL_DIST / RECOIL_STEPS), player.y - Math.sin(player.angle) * (RECOIL_DIST / RECOIL_STEPS))
+        shake = Math.max(shake, RECOIL_SHAKE)
+      }
     }
     // ── the bandage commit (tactics.js): 1.2 s of holding still at 0.4 speed; the heal and the consume land at the end (a hit
     //    cancels it in the HP block below, and the bandage stays in your hand) ──
@@ -1650,6 +1776,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (c === 'running') verbMul *= 0.4
     else if (c === 'done') applyItemEffect(itemSys.consumeSelected())
     if (quietTimer > 0) quietTimer -= dt
+    // the anchored leash: a pin caption's calm runs out, a death's debt pays itself off at a metre a second (both 0 for everyone else)
+    if (leashCalm > 0) leashCalm -= dt
+    leashDebt = leashDebtStep(leashDebt, dt)
 
     let moved = false, stepped = false   // moved: a movement key is held; stepped: the player actually went somewhere
     wantSprint = false
@@ -1761,7 +1890,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // ── items: pickup prompt ──
     const nearItem = itemSys.nearestItem(player.x, player.y, 1.4)
     // ── the ways (exits, and the stairs a pass adds): the prompt (wider grab range) ──
-    const nearExit = level.decor.nearestWay(player.x, player.y, 1.6)
+    const nearExit = level.decor.nearestWay(player.x, player.y, rules.exitGrab)   // 1.6 (a tenant's hands find a way from 2.4)
     const nearNpc  = level.decor.nearestNpc(player.x, player.y, 1.8)
     const nearScrap = level.decor.nearestScrap(player.x, player.y, 1.8)
     const nearMachine = level.decor.nearestMachine(player.x, player.y, 1.6)
@@ -1786,7 +1915,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.textContent = closing && nearExit.key === closing.key && playT < closing.until ? 'f · the way is still closing.' : `f · ${wayLabel(nearExit)}`
         itemHintEl.style.opacity = '1'
       } else if (nearScrap) {
-        itemHintEl.textContent = 'e · read the scrap'
+        itemHintEl.textContent = nearScrap.form ? 'e · read the form' : 'e · read the scrap'
         itemHintEl.style.opacity = '1'
       } else if (nearNpc) {
         itemHintEl.textContent = 'e · speak to the lost soul'
@@ -1850,6 +1979,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (K['KeyL']) { K['KeyL'] = false; flashlight = !flashlight; lightToggles++; showMessage(flashlight ? 'flashlight on.' : 'flashlight off — the dark leans in.') }   // the counter: a haunt only restores a light you did not touch
       if (K['KeyB']) {
         K['KeyB'] = false
+        // TODO(integrate:W4) I8: beaconDecision({ effect, target, rules, ... }) — rules.beacon: the pin in the payload (anchored), the floor filed (processed: filedFloors.add(floorKey(worldSeed, level.index))), the line
         const effect = getPref('beaconEffect')
         const target = (getPref('beaconWebhook') || '').toLowerCase().replace(/[^a-z0-9]/g, '')
         const counterClaim = target.includes('extension30150a')
@@ -1874,11 +2004,18 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         const code = `Digit${i + 1}`
         if (K[code]) { K[code] = false; cancelCommit(); itemSys.select(i); renderHotbar() }   // a slot change ends a wrap (consume takes the SELECTED item)
       }
+      // E — the presence, else the form or the scrap, else (∅, a tenant-to-be) the sealed door ahead, else the lost soul
       if (K['KeyE']) {
         K['KeyE'] = false
+        const door = cfg.map && !nearPresence && !nearScrap && provisionalOrigin() === 'tenant' ? doorAhead() : null
         if (nearPresence) openDialog()
-        else if (nearScrap) openNoteCard(nearScrap)
-        else if (nearNpc) showMessage(NPC_LINES[Math.floor(Math.random() * NPC_LINES.length)])
+        else if (nearScrap) nearScrap.form ? openForm() : openNoteCard(nearScrap)   // TODO(integrate:W3) I13: an unread page under compliance opens 'sealed' (mods.sealedCards)
+        else if (door) knockDoor(door)
+        else if (nearNpc) {
+          const r = rules.npcLine()                       // processed: the soul sees the stamp and will not talk
+          if (r) { showMessage(r.text); sanity = Math.max(0, Math.min(100, sanity + r.sanity)) }
+          else showMessage(NPC_LINES[Math.floor(Math.random() * NPC_LINES.length)])   // TODO(integrate:W3) I13: the pool is NPC_LINES.concat(npcLines(file.status))
+        }
       }
       // Space — the ward — is the charger block at the head of the frame (ward.js reads the press / release edge counts)
     }
@@ -1932,6 +2069,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     aiCtx.flashlight = flashlight; aiCtx.sprinting = moved && wantSprint; aiCtx.dark = !cfg.lights; aiCtx.fog = cfg.fogDistance
     aiCtx.radioOn = itemSys.isRadioOn(); aiCtx.t = playT; aiCtx.playerAngle = player.angle; aiCtx.damage = cfg.entities?.damage ?? 16
     // (aiCtx.lures was refreshed above, with the dropped things' clocks)
+    // TODO(integrate:W4) I6: the four trailing perception fields from perceptionFor({ rules, depth: level.depth, ... }) (rules.perception)
     // footsteps: walk 3 / sprint 7, halved by sweet water (tactics.quiet); the flood reads the grid at this frame's chunk
     if (footstep && creaturesLive) level.entitySys.noise(player.x, player.y, (aiCtx.sprinting ? 7 : 3) * quiet(quietTimer))
     const th = creaturesOn ? level.entitySys.update(dt, player, pcx, pcy, aiCtx) : (level.entitySys.getThreat().reset(), level.entitySys.getThreat())
@@ -1953,7 +2091,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // ── HP: contact damage, i-frames, delayed regen, death ──
     if (invuln > 0) invuln -= dt
     if (!transitioning && creaturesLive && getPref('damage') && invuln <= 0 && th.dmg > 0) {
-      player.hp -= th.dmg; invuln = 0.7; hurt = 1; regenDelay = 6; shake = 1
+      player.hp -= th.dmg * rules.damageMul; invuln = 0.7; hurt = 1; regenDelay = 6; shake = 1   // (thin: there is less of you to hit)
       showMessage(th.dmgKind === 'arc' ? 'the current finds you.' : 'it has you.', PRIO.urgent)   // the hit's line lands with the hit
       lastHitT = playT
       if (mapOpen) closeMap(); if (noteOpen) closeNoteCard()
@@ -1965,7 +2103,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (hurt > 0) hurt = Math.max(0, hurt - dt * 2)
     const hurtEl = document.getElementById('hurt')
     if (hurtEl) hurtEl.style.opacity = (hurt * 0.55).toFixed(2)
-    if (player.hp <= 0) { player.hp = 0; die() }
+    if (player.hp <= 0) { player.hp = 0; die() }   // TODO(integrate:W4) I9: deathDecision({ mp, peers, downSt, rules, filed, thin, D: driftD(), timeout: false }) -> die(d) (rules.deathEffects: d.mintThin && filed mints thin, d.leashDebt, d.line)
 
     // ── tension (tension.js): the hunted state as heartbeat and music. The hunt's report drives it (Level 0 / ∅, a fade and creatures
     //    off read as calm — null); the heart comes into your ears as the level rises, the floor's own song thickens on 'enter' and takes
@@ -1982,6 +2120,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (tn.close && playT - lastSeenLine > 1.6) showMessage('it is close.', PRIO.combat)
 
     // ── sanity — dark, the hunt and a thing's gaze drain it; light, almond water, a friend restore it ──
+    // TODO(integrate:W4) I7: sanityStep(sanCtx) replaces this block (rules.lightTerm, rules.friendBase, rules.leash + leashDrain over drift + leashDebt)
     let sdelta = flashlight ? 2 : -2
     sdelta -= (level.index >= 0 && level.index <= 3 ? level.index : 0) * 0.5   // Level ∅ (index 4) does not drain like a fourth floor
     if (th.hunted) sdelta -= 3                 // something is on you
@@ -2004,7 +2143,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // ── assemble sprites and render ──
     // advance any event apparitions (render-only; no collision or damage)
     for (let i = ephemera.length - 1; i >= 0; i--) {
-      const a = ephemera[i]; a.x += a.vx * dt; a.y += a.vy * dt; a.ttl -= dt
+      const a = ephemera[i]
+      if (a.pauseT > 0) { a.pauseT -= dt; continue }                // another drop-in, stopped to wave at a thin player (spawnCrosser)
+      a.x += a.vx * dt; a.y += a.vy * dt; a.ttl -= dt
+      if (a.pauseAtTtl != null && !a.paused && a.ttl <= a.pauseAtTtl) {
+        a.paused = true
+        const cp = rules.crosserPause()                               // null once the ballast has cured you: it walks on
+        if (cp) { a.pauseT = cp.pause; sanity = Math.min(100, sanity + cp.sanity); showMessage(cp.line, PRIO.discovery) }
+      }
       if (a.vanishAt && (a.x - player.x) ** 2 + (a.y - player.y) ** 2 < a.vanishAt * a.vanishAt) a.ttl = 0   // the still figure: gone when you come close
       if (a.ttl <= 0) ephemera.splice(i, 1)
     }

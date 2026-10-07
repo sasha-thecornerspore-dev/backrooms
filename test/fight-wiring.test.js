@@ -82,7 +82,7 @@ describe('game.js: the charger block at the head of the frame', () => {
   it('the lines: dispelled, the opening caught, recoil, nothing — and a dispel steadies you by 10', () => {
     expect(block).toMatch(/if\s+\(res\.dispelled > 0\) showMessage\(res\.dispelled > 1 \? 'they come apart in the light\.' : 'it comes apart in the light\.'\)/)
     expect(block).toMatch(/else if \(res\.opening > 0\)\s+showMessage\('you catch it turning\. it reels\.'\)/)
-    expect(block).toMatch(/else if \(res\.hit > 0\)\s+showMessage\(res\.hit > 1 \? 'they recoil from you\.' : 'it recoils from you\.'\)/)
+    expect(block).toMatch(/else if \(res\.hit > 0\)\s+showMessage\(res\.hit > 1 \? \(rules\.wardRecoil \? 'they recoil from you\. so do you\.' : 'they recoil from you\.'\) : \(rules\.wardRecoil \? RECOIL_LINE : 'it recoils from you\.'\)\)/)   // origins (I5): thin's recoil line
     expect(block).toMatch(/else\s+showMessage\('you push at the dark\. it gives nothing back\.'\)/)
     expect(block).toMatch(/sanity = Math\.min\(100, sanity \+ 10 \* res\.dispelled\)/)
     // the order: dispelled before the opening before the plain hit

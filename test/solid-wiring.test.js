@@ -38,7 +38,7 @@ describe('game.js: buildLevel order (cache -> grid -> bodies -> decor(hooks) -> 
     // (the vendedSet is read once the new level object stands, below the clears: itemSys.enterLevel must see the new walls — W-R1)
     const build = game.slice(game.indexOf('function buildLevel(index, at = null) {'), game.indexOf('const fader = createFader('))
     expect(build).toMatch(/\n\s*bumpSaid\.clear\(\); clutterSeen\.clear\(\)/)
-    expect(build.indexOf('bumpSaid.clear(); clutterSeen.clear()')).toBeLessThan(build.indexOf('vendedSet = mem.vendedFor(index, playT)'))
+    expect(build.indexOf('bumpSaid.clear(); clutterSeen.clear()')).toBeLessThan(build.indexOf('vendedSet = mem.vendedFor(index, filedFloors.has(floorKey(worldSeed, index)) ? -Infinity : playT)'))
     expect(game).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\)\]\.filter\(Boolean\),/)   // stairs -> dress -> haunts
     expect(game).not.toMatch(/TODO\(integrate:dress\)/)
     // the creatures step: hunt.js is the one creature-solidity / hostility rule (the placeholders are gone)
@@ -55,7 +55,7 @@ describe('game.js: one mover call per frame', () => {
     expect(game).toMatch(/if \(K\['KeyS'\] \|\| K\['ArrowDown'\]\) \{ mx -= ca \* sp \* 0\.6; my -= sa \* sp \* 0\.6; moved = true \}/)
     expect(game).toMatch(/if \(K\['KeyA'\]\)\s+\{ mx \+= Math\.cos\(player\.angle - Math\.PI\/2\) \* sp \* 0\.7; my \+= Math\.sin\(player\.angle - Math\.PI\/2\) \* sp \* 0\.7; moved = true \}/)
     expect(game).toMatch(/if \(moved\) \{\r?\n\s*lastDt = dt\r?\n\s*const mult2 = getPref\('solidBodies'\) \? level\.solid\.clutterAt\(player\.x, player\.y\) : 1\r?\n\s*const x0 = player\.x, y0 = player\.y\r?\n\s*tryMove\(player\.x \+ mx \* mult2, player\.y \+ my \* mult2\)\r?\n\s*stepped = \(player\.x - x0\) \*\* 2 \+ \(player\.y - y0\) \*\* 2 > 1e-6[^\n]*\r?\n\s*\}/)
-    expect((game.match(/(?<!function )tryMove\(/g) || []).length).toBe(1)
+    expect((game.match(/(?<!function )tryMove\(/g) || []).length).toBe(2)          // the movement block's one, and the thin ward's recoil (origins, I5)
   })
   it('the sprint flag the hard-bump rule reads is the one the movement block set this frame; creaturesOn is read at the top of the frame', () => {
     expect(game).toMatch(/let wantSprint = false/)
@@ -106,7 +106,7 @@ describe('game.js: settle on resume and on the pref', () => {
 
 describe('game.js: the ways and the stairs', () => {
   it("the prompt and F use nearestWay with the way's label and floor (wayLabel); the compass reads the reused { rec, dist } as its fallback", () => {
-    expect(game).toMatch(/const nearExit = level\.decor\.nearestWay\(player\.x, player\.y, 1\.6\)/)
+    expect(game).toMatch(/const nearExit = level\.decor\.nearestWay\(player\.x, player\.y, rules\.exitGrab\)/)   // origins (I5): LEGACY 1.6, a tenant 2.4
     expect(game).not.toMatch(/nearestExit\(/)
     expect(game).not.toMatch(/nearestExitAny\(/)
     expect(game).toMatch(/'f · the way is still closing\.' : `f · \$\{wayLabel\(nearExit\)\}`/)

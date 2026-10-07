@@ -27,7 +27,7 @@ describe('W-R1 / RT-A / DS-R1: the items meet the new floor\'s walls, never null
     const lv = buildBody.indexOf('level = { index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages }')
     expect(lv).toBeGreaterThan(0)
     const enter = buildBody.indexOf('itemSys.enterLevel(cfg, cfg.map ? null : mem.takenFor(index), cfg.map ? null : mem.droppedFor(index))')
-    const vend = buildBody.indexOf('vendedSet = mem.vendedFor(index, playT)')
+    const vend = buildBody.indexOf('vendedSet = mem.vendedFor(index, filedFloors.has(floorKey(worldSeed, index)) ? -Infinity : playT)')
     const scan = buildBody.indexOf('decor.update(spawnChunk.cx, spawnChunk.cy); itemSys.update(spawnChunk.cx, spawnChunk.cy)')
     expect(enter).toBeGreaterThan(lv); expect(vend).toBeGreaterThan(lv)
     expect(enter).toBeLessThan(scan); expect(vend).toBeLessThan(scan)
@@ -69,8 +69,8 @@ describe('W-R1 / RT-A / DS-R1: the items meet the new floor\'s walls, never null
 
 describe('W-R2: an emptied machine restocks on the first return after a long enough absence', () => {
   it('travel and die re-read vendedFor once the visit is counted (mem.arrive), so the spent set is the arrival\'s', () => {
-    expect(travelBody.indexOf('vendedSet = mem.vendedFor(level.index, playT)')).toBeGreaterThan(travelBody.indexOf('const rec = mem.arrive(way.target, spawnChunk, playT)'))
-    expect(dieBody.indexOf('vendedSet = mem.vendedFor(level.index, playT)')).toBeGreaterThan(dieBody.indexOf('mem.arrive(level.index, spawnChunk, playT)'))
+    expect(travelBody.indexOf('vendedSet = mem.vendedFor(level.index, filedFloors.has(floorKey(worldSeed, level.index)) ? -Infinity : playT)')).toBeGreaterThan(travelBody.indexOf('const rec = mem.arrive(way.target, spawnChunk, playT)'))
+    expect(dieBody.indexOf('vendedSet = mem.vendedFor(level.index, filedFloors.has(floorKey(worldSeed, level.index)) ? -Infinity : playT)')).toBeGreaterThan(dieBody.indexOf('mem.arrive(level.index, spawnChunk, playT)'))
   })
   it('replayed on the real levelmem: buildLevel\'s read is still spent, the read after arrive is not, and wasRestocked agrees', () => {
     const mem = createLevelMemory()
@@ -211,7 +211,7 @@ describe('FEEL-1 / FEEL-4: an arrival\'s delayed lines belong to that arrival', 
     expect(travelBody).toMatch(/transitioning = true\r?\n\s*arrivalGen\+\+/)
     expect(dieBody).toMatch(/transitioning = true\r?\n\s*arrivalGen\+\+/)
     for (const b of [travelBody, dieBody]) expect(b).not.toMatch(/setTimeout\(\(\) => showMessage/)
-    expect((travelBody.match(/later\(/g) || []).length).toBe(5)
+    expect((travelBody.match(/later\(/g) || []).length).toBe(7)                    // + the filing line and the anchored mercy line (origins, I5)
     expect((dieBody.match(/later\(/g) || []).length).toBe(2)
   })
   it('later() drops a line when a newer arrival has begun (replayed from game.js\'s own source)', () => {

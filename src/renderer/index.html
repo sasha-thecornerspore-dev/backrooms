@@ -261,7 +261,7 @@
       transform: rotate(-0.6deg); cursor: pointer;
     }
     #note-text { white-space: pre-wrap; }
-    #note-foot { margin-top: 20px; font-size: 11px; letter-spacing: 2px; color: #54461f; }
+    #note-foot { margin-top: 20px; font-size: 11px; letter-spacing: 2px; color: #54461f; white-space: pre-wrap; }   /* a confirm's 'e · yes      esc · no' keeps its gap */
     /* the card's option lines (papercard.js: a sealed page's read / leave, the cache menu): faint pencil, each its own tap target */
     #note-lines { margin-top: 18px; display: flex; flex-direction: column; gap: 2px; }
     #note-lines:empty { display: none; }
@@ -489,6 +489,7 @@
       </div>
       <div id="locate-row" style="display:none;margin-top:12px;">
         <button id="btn-locate" style="background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:13px;padding:8px 16px;cursor:pointer;letter-spacing:2px;">locate your body ⌖</button>
+        <div id="leash-line" class="set-hint" style="margin-top:8px;color:#c9ba72;font-family:monospace;"></div>
       </div>
       <div class="modal-foot">
         <div class="modal-btns">
@@ -565,7 +566,8 @@
     <div id="chat-log"></div>
     <div id="chat-typing"></div>
   </div>
-  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file …)" spellcheck="false" style="display:none"/>
+  <!-- TODO(integrate:W3) I13/I15: the placeholder ends ' · /intake · /status)' once W3's /status lands -->
+  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file … · /intake)" spellcheck="false" style="display:none"/>
   <div id="msg"></div>
   <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x set down</span><span class="k-map"> · tab map</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span></div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
@@ -685,23 +687,28 @@
       return applyIdentity({ anchor: parseAnchor(anchorInput.value) })
     }
 
-    async function startSolo() {
-      const anchor = takeAnchor()
-      hideStart()
-      await initGame(canvas, anchor
-        ? { worldSeed: anchorSeed(anchor.lat, anchor.lng), anchor }
-        : {})
-    }
-
     // player name (persisted)
     const nameInput = document.getElementById('player-name')
     nameInput.value = getPrefs().playerName || ''
     nameInput.addEventListener('input', () => setPref('playerName', nameInput.value.slice(0, 24)))
     const getName = () => (nameInput.value.trim() || 'wanderer').slice(0, 24)
 
+    // the facts the file will write you into a column from, on the first way you take (game.js travel(); origin-intake.js): how you came
+    // in (solo, the relay, a LAN you joined or hosted), the pin, the name. The arrival is written by the game at the filing.
+    const intakeFor = (route, anchor) => ({ route, arrival: null, anchor: anchor || null, name: getName() })
+
+    async function startSolo() {
+      const anchor = takeAnchor()
+      const intakeCtx = intakeFor('solo', anchor)
+      hideStart()
+      await initGame(canvas, anchor
+        ? { worldSeed: anchorSeed(anchor.lat, anchor.lng), anchor, intakeCtx }
+        : { intakeCtx })
+    }
+
     // one connection attempt at a time: a double click on HOST / ENTER must not join the room twice (or start the game twice)
     let mpBusy = false
-    async function startMultiplayer(serverUrl, roomId, statusEl) {
+    async function startMultiplayer(serverUrl, roomId, statusEl, route = 'lan') {
       if (mpBusy) return
       mpBusy = true
       const st = statusEl || joinStatus
@@ -715,7 +722,7 @@
         joinModal.style.display = 'none'
         document.getElementById('online-modal').style.display = 'none'
         hideStart()
-        await initGame(canvas, { worldSeed, mpClient, anchor })
+        await initGame(canvas, { worldSeed, mpClient, anchor, intakeCtx: intakeFor(route, anchor) })
       } catch (e) {
         st.textContent = `failed: ${e.message || 'could not connect'}`
         mpBusy = false                                   // (a started game keeps it set: there is no second start)
@@ -755,7 +762,7 @@
           badge.textContent = lines.join('\n')
           badge.hidden = false
         }
-        await startMultiplayer(`ws://localhost:${port}`, room, startStatus)
+        await startMultiplayer(`ws://localhost:${port}`, room, startStatus, r ? 'host' : 'lan')   // 'host' only when this app started the server
         if (startEl.style.display !== 'none') badge.hidden = true   // still on the title: the join failed
       } catch (e) {
         startStatus.textContent = `host failed: ${e.message}`
@@ -770,7 +777,7 @@
     document.getElementById('join-connect').onclick = () => {
       const url = document.getElementById('join-url').value.trim()
       const room = document.getElementById('join-room').value.trim() || 'backrooms'
-      startMultiplayer(url, room)
+      startMultiplayer(url, room, null, 'lan')
     }
 
     // ── play online (Cloudflare relay — one public URL, no host, no setup) ──
@@ -785,7 +792,7 @@
     }
     document.getElementById('online-connect').onclick = () => {
       const code = (document.getElementById('online-room').value.trim() || 'default').slice(0, 32)
-      startMultiplayer(`${RELAY_URL}/?room=${encodeURIComponent(code)}`, code, document.getElementById('online-status'))
+      startMultiplayer(`${RELAY_URL}/?room=${encodeURIComponent(code)}`, code, document.getElementById('online-status'), 'online')
     }
 
     // ── continue a saved run ──
@@ -799,8 +806,10 @@
         // on this path, so a resumed anchored run had a working drift HUD but a
         // hidden, dead "locate your body" button.
         const anchor = applyIdentity({ anchor: savedRun.anchor ?? null })
+        // the form's facts as the run saved them (game.js validates them); a save from before the file carries none: a solo form today
+        const intakeCtx = savedRun.intakeCtx && typeof savedRun.intakeCtx === 'object' ? savedRun.intakeCtx : intakeFor('solo', anchor)
         hideStart()
-        await initGame(canvas, { worldSeed: savedRun.worldSeed ?? null, anchor, resume: savedRun })
+        await initGame(canvas, { worldSeed: savedRun.worldSeed ?? null, anchor, resume: savedRun, intakeCtx })
       }
     }
 

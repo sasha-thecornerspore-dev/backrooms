@@ -695,7 +695,7 @@ const LEVEL_SPRITES = {
   '1': { props: ['pallet', 'barrel', 'crate', 'couch', 'cart', 'box'], items: ['almond-water', 'glowstick', 'bandage', 'polaroid', 'radio'], creatures: ['smiler', 'hound', 'watcher'], notes: true, sights: true },
   '2': { props: ['pipe', 'valve', 'drum', 'toolbox', 'vent', 'crate'], items: ['almond-water', 'glowstick', 'bandage', 'radio'], creatures: ['lurker', 'hound', 'crawler'], notes: true, sights: true },
   '3': { props: ['transformer', 'cabinet-e', 'spool', 'sign', 'drum'], items: ['almond-water', 'glowstick', 'bandage', 'radio'], creatures: ['tesla', 'smiler', 'watcher'], notes: true, sights: true },
-  '∅': { props: ['trash', 'tire', 'weeds', 'box'], items: ['polaroid'], creatures: [] },
+  '∅': { props: ['trash', 'tire', 'weeds', 'box'], items: ['polaroid'], creatures: [], notes: true },   // the intake form on the counter (levels.js notes)
 }
 let LAST_LEVEL = null
 const LEVEL_QUEUED = new Set()     // level keys whose own config list was queued (prewarmSprites / queueLevelSprites): LEVEL_SPRITES is not needed

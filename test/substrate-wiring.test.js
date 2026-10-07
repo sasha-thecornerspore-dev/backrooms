@@ -13,7 +13,7 @@ const count = (re) => (game.match(re) || []).length
 
 describe('game.js: the event bus (I3)', () => {
   it('imports createEvBus from ../net/evbus.js and anchorSeed beside the anchor helpers', () => {
-    expect(game).toMatch(/import \{ createEvBus \} from '\.\.\/net\/evbus\.js'/)
+    expect(game).toMatch(/import \{ createEvBus, depthOf \} from '\.\.\/net\/evbus\.js'/)   // depthOf: level.depth (I14a; W3's status.js takes it over in I13)
     expect(game).toMatch(/import \{ formatAnchor, driftMeters, anchorSeed \} from '\.\/anchor\.js'/)
   })
   it('builds ONE bus, null solo, after the chat is registered and before the loop: the players list\'s sendEv / mergeRemote, a ms clock, the reused roster', () => {
@@ -107,12 +107,12 @@ describe('game.js: the paper card (I4)', () => {
   it('the reveal binds the card\'s scrap and keeps the pinned map line; a page opens revealed (today\'s card: +6 once, the pin, the pages-found foot)', () => {
     const reveal = game.slice(at('function revealScrap() {'), at('function redactScrap() {'))
     expect(reveal).toMatch(/const scrap = cardScrap\r?\n/)
-    expect(reveal).toContain('if (!readSet.has(scrap.frag)) { readSet.add(scrap.frag); sanity = Math.min(100, sanity + 6) }')
+    expect(reveal).toContain('if (!readSet.has(scrap.frag)) { readSet.add(scrap.frag); sanity = Math.min(100, sanity + rules.scrapSanity) }')   // origins (I5): LEGACY +6
     expect(reveal).toContain("if (!level.cfg.map) fog.pinThing(level.index, 'n:' + scrap.key, 'note', scrap.x, scrap.y, true)")
     expect(reveal).toContain('renderCard(card.setFoot(card.state, `${readSet.size} of ${SCRAPS.length} pages found`))')
     expect(game.slice(at('function redactScrap() {'), at('function openNoteCard(scrap) {'))).toMatch(/const scrap = cardScrap\r?\n/)
     expect(game).toMatch(/function openNoteCard\(scrap\) \{\r?\n\s*if \(!scrap \|\| !openCard\('page', \{ text: SCRAPS\[scrap\.frag\] \?\? '' \}, scrap\)\) return\r?\n\s*revealScrap\(\)/)
-    expect(game).toContain('else if (nearScrap) openNoteCard(nearScrap)')
+    expect(game).toContain('else if (nearScrap) nearScrap.form ? openForm() : openNoteCard(nearScrap)')   // origins (I5): ∅'s form note opens the form card
   })
   it('index.html: the option lines sit between the text and the foot, faint and tappable', () => {
     expect(html).toMatch(/<p id="note-text"><\/p>\r?\n\s*<div id="note-lines"><\/div>\r?\n\s*<p id="note-foot"><\/p>/)
