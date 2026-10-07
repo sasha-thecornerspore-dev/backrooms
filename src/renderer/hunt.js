@@ -88,17 +88,19 @@ export function solidCreature(e) {
 // A 31x31 window around the noise cell; a 4-connected BFS over open cells pops at most 160 of them. loudness(cell) =
 // L / (1 + pathLen / 4): a walk (3) carries 8 path cells, a sprint (7) 24, a ward (12) 44. Everything is reused: the
 // Int16 queue, the Uint16 generation stamps (a cell belongs to the flood whose stamp it carries) and the Float32 field.
+// `who` is whose noise it was: 'player' (the default) is scaled by ctx.noiseMul where it is heard; a lure ('lure') and a
+// friend's relayed ward ('friend') never are.
 export function createNoiseField() {
   return {
     lo: new Float32Array(NOISE_CELLS), gen: new Uint16Array(NOISE_CELLS), q: new Int16Array(NOISE_CELLS), pl: new Uint8Array(NOISE_CELLS),
-    stamp: 0, ox: 0, oy: 0, x: 0, y: 0, L: 0, t: -Infinity, id: 0, popped: 0,
+    stamp: 0, ox: 0, oy: 0, x: 0, y: 0, L: 0, t: -Infinity, id: 0, who: 'player', popped: 0,
   }
 }
 
 export function floodNoise(field, noise, floorFn) {
   const cx = Math.floor(noise.x), cy = Math.floor(noise.y)
   field.ox = cx - NOISE_R; field.oy = cy - NOISE_R
-  field.x = noise.x; field.y = noise.y; field.L = noise.L; field.t = noise.t
+  field.x = noise.x; field.y = noise.y; field.L = noise.L; field.t = noise.t; field.who = noise.who ?? 'player'
   field.id++
   if (field.stamp === 65535) { field.gen.fill(0); field.stamp = 0 }
   const stamp = ++field.stamp
@@ -138,14 +140,18 @@ export function loudnessAt(field, ix, iy) {
 
 // ── sight ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 // sight = spec.sight (x1.5 for a tesla hearing your radio) halved in the dark, +3 in the dark when your flashlight is
-// on; the hound and the crawler ignore the dark. Within 2 u no line is needed.
+// on; the hound and the crawler ignore the dark; then x ctx.sightMul (the file's reading of you, 1 when absent). Within
+// 2 u no line is needed. ctx.hidden (still and silent, the file says) means nothing sees you; the line itself (e.los) is
+// still read, so your gaze still holds a smiler.
 function rangeFor(e, spec, ctx) {
   let r = sightRange(spec, ctx)
   if (ctx.dark && e.variant !== 'hound' && e.variant !== 'crawler') { r *= 0.5; if (ctx.flashlight) r += 3 }
+  r *= (ctx.sightMul ?? 1)
   return r
 }
 
 export function sees(e, player, ctx, spec, floorFn) {
+  if (ctx.hidden === true) return false
   const dx = player.x - e.x, dy = player.y - e.y
   const d = Math.sqrt(dx * dx + dy * dy)
   if (d > SIGHT_SKIP || d > rangeFor(e, spec, ctx)) return false
@@ -166,7 +172,7 @@ function perceive(e, d, spec, ctx, env) {
   else if (env.losBudget > 0) { env.losBudget--; los = lineOfSight(e.x, e.y, p.x, p.y, env.floor) }
   else return                                                 // skipped: keep the old verdict, retry next frame
   e.los = los
-  e.seen = los && d <= rangeFor(e, spec, ctx)
+  e.seen = !(ctx.hidden === true) && los && d <= rangeFor(e, spec, ctx)
   e.fresh = true
   const base = HUNTING.has(e.ai) ? PERC_HUNT : PERC_ROAM        // every hunting phase, or a tesla's arc lands through a wall
   e.percT = base * (0.85 + 0.3 * entityPhase(e))             // the phase offsets the cadence so a brood drifts apart
@@ -373,7 +379,8 @@ export function stepAI(e, dt, ctx, spec, env, threat) {
   if (spec.hostilePhases.size > 0 && !(e.stagger > 0) && d < threat.nearest) { threat.nearest = d; threat.nearestEntity = e }
 
   // hearing: every live flood not yet heard (ids rise with each noise), read once each at this creature's cell; the
-  // loudest audible one is reacted to, and everything audible up to the newest counts as heard
+  // loudest audible one is reacted to, and everything audible up to the newest counts as heard. Your own noises carry
+  // x ctx.noiseMul; a lure's and a friend's never do.
   const fs = env.fields
   if (fs) {
     const ix = Math.floor(e.x), iy = Math.floor(e.y)
@@ -382,7 +389,7 @@ export function stepAI(e, dt, ctx, spec, env, threat) {
       const f = fs[k]
       if (!(f.id > e.heardId) || env.now - f.t > NOISE_LIVE) continue
       const l = loudnessAt(f, ix, iy)
-      if (l * spec.hearK < 1) continue
+      if (l * spec.hearK * (f.who === 'player' ? (ctx.noiseMul ?? 1) : 1) < 1) continue
       if (f.id > top) top = f.id
       if (l > bestL) { bestL = l; best = f }
     }
@@ -442,7 +449,7 @@ export function stepAI(e, dt, ctx, spec, env, threat) {
         e.huntT += dt
         if (e.burstT > 0) e.burstT -= dt
         moveToward(e, e.lastSeenX, e.lastSeenY, spec.hunt * (e.burstT > 0 ? 1.33 : 1), env)
-        if (e.lostT > spec.loseTrack) { if (e.huntT >= 4) threat.emit('lost', e, d); enterSearch(e, e.lastSeenX, e.lastSeenY) }
+        if (e.lostT > spec.loseTrack * (ctx.loseTrackMul ?? 1)) { if (e.huntT >= 4) threat.emit('lost', e, d); enterSearch(e, e.lastSeenX, e.lastSeenY) }
         break
       }
       case 'search': {

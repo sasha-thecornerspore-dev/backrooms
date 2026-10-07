@@ -105,7 +105,7 @@ export function createEntitySystem(config, isWallFn, deps = null) {
   const threat = createThreat()
   // one flood per ring slot: several noises in one frame (a ward, a bump, the lures, a footstep) are all heard
   const ring = [], fields = []
-  for (let i = 0; i < NOISE_SLOTS; i++) { ring.push({ x: 0, y: 0, L: 0, t: 0 }); fields.push(createNoiseField()) }
+  for (let i = 0; i < NOISE_SLOTS; i++) { ring.push({ x: 0, y: 0, L: 0, t: 0, who: 'player' }); fields.push(createNoiseField()) }
   let ringN = 0, woke = 0, huntMode = false, rr = 0
   // the hunt path reads cells through the grid reader (no key string per ask); without one, isWallFn at the cell centre
   const env = { dt: 0, now: 0, pcx: 0, pcy: 0, player: null, ctx: null, isWall: null, floor: null, obstacles, fields, losBudget: LOS_BUDGET, damage, helpers: null, threat }
@@ -373,13 +373,14 @@ export function createEntitySystem(config, isWallFn, deps = null) {
     return flashRes
   }
 
-  // noise(x, y, L): the only way sound reaches the things. Eight slots, oldest dropped; each floods its own field now,
-  // stamped with the running count so a creature can tell which ones it has already heard.
-  function noise(x, y, L) {
+  // noise(x, y, L, who): the only way sound reaches the things. Eight slots, oldest dropped; each floods its own field now,
+  // stamped with the running count so a creature can tell which ones it has already heard. `who` is whose it was: 'player'
+  // (yours, scaled by aiCtx.noiseMul where it is heard), 'lure', 'friend'.
+  function noise(x, y, L, who = 'player') {
     const k = ringN % NOISE_SLOTS
     const slot = ring[k], f = fields[k]
     ringN++
-    slot.x = x; slot.y = y; slot.L = L; slot.t = clock()
+    slot.x = x; slot.y = y; slot.L = L; slot.who = who; slot.t = clock()
     floodNoise(f, slot, env.floor)
     f.id = ringN
   }

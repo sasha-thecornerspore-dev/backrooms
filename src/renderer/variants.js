@@ -5,8 +5,11 @@
 // held it and set its phase; hunt.stepAI skips its own move and transitions) and FALSE when the shared machine should run. Variant phases
 // (freeze, windup, lunge, recover, retreat, shadow, still, arcCharge) are entirely the variant's; the shared ones it only intercepts.
 //
-// ctx is hunt's one aiCtx object: { flashlight, sprinting, dark, fog, radioOn, lures, t, hf, playerAngle, player, damage }; `player`
-// (x, y, angle) is where the thing looks for you and `damage` is the floor's contact damage. helpers (hunt.js; stubbed in tests) =
+// ctx is hunt's one aiCtx object: { flashlight, sprinting, dark, fog, radioOn, lures, t, hf, playerAngle, player, damage, sightMul,
+// hidden, loseTrackMul, noiseMul }; `player` (x, y, angle) is where the thing looks for you and `damage` is the floor's contact damage.
+// The four trailing fields are the file's reading of you (compose-perception.js; every read here is `?? default`, so an 11-key ctx is
+// today's game): the watcher's sight x sightMul and memory x loseTrackMul, and neither the watcher nor the crawler acts on a hidden
+// player (the watcher's gaze still reads the raw line: watching it back costs you either way). helpers (hunt.js; stubbed in tests) =
 // { moveToward(e, x, y, speed) -> blocked, moveAway(e, x, y, speed) -> blocked, los(e, x, y) -> boolean, dist(e, x, y), hashT(e, salt),
 // event(kind, e, extra) }. Nothing here allocates per frame: the per-entity fields are added once, events go through helpers.event.
 import { inViewCone } from './raycaster.js'
@@ -135,12 +138,14 @@ function lurkerStep(e, dt, ctx, H, threat) {
 function watcherStep(e, dt, ctx, H, threat) {
   const p = ctx.player
   const d = H.dist(e, p.x, p.y)
-  const seen = d <= WATCHER.sight && H.los(e, p.x, p.y)
-  if (d < 12 && watched(e, p, hf(ctx), ctx.fog, seen)) raiseGaze(threat, 3)
+  const sight = WATCHER.sight * (ctx.sightMul ?? 1)
+  const los = (d <= sight || d < 12) && H.los(e, p.x, p.y)       // the raw line, read once: the gaze needs it within 12 either way
+  const seen = !(ctx.hidden === true) && d <= sight && los
+  if (d < 12 && watched(e, p, hf(ctx), ctx.fog, los)) raiseGaze(threat, 3)
   if (e.ai === 'shadow') {
     e.phaseT += dt
     if (seen) e.unseenT = 0
-    else if ((e.unseenT += dt) > WATCHER.loseTrack) { e.unseenT = 0; enter(e, 'roam'); return true }
+    else if ((e.unseenT += dt) > WATCHER.loseTrack * (ctx.loseTrackMul ?? 1)) { e.unseenT = 0; enter(e, 'roam'); return true }
     if (d < 4.5) { enter(e, 'retreat'); H.moveAway(e, p.x, p.y, 1.4); return true }
     if (d < 6) H.moveAway(e, p.x, p.y, 1.4)
     else if (d > 9) H.moveToward(e, p.x, p.y, 1.4)
@@ -177,7 +182,7 @@ function crawlerStep(e, dt, ctx, H, threat) {
   const d = H.dist(e, p.x, p.y)
   if (d < 3.0) {
     const seen = H.los(e, p.x, p.y)
-    if (seen && !litAt(e, ctx, watched(e, p, hf(ctx), ctx.fog, seen))) { enter(e, 'lunge'); face(e, p.x, p.y) }
+    if (seen && !(ctx.hidden === true) && !litAt(e, ctx, watched(e, p, hf(ctx), ctx.fog, seen))) { enter(e, 'lunge'); face(e, p.x, p.y) }
   }
   return true
 }
