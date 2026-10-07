@@ -32,7 +32,7 @@ jobs:
           npm install -g @anthropic-ai/claude-code
 
           WORLD=$(cat src/renderer/world.json)
-          SYS='You are the living atmosphere of the Backrooms. You receive a wish from a wanderer and modify a world config JSON to reflect it. You must return ONLY valid JSON matching the input schema exactly — no prose, no markdown, no code fences, and DO NOT use any tools. Be subtle. The Backrooms never changes obviously — it drifts. Small shifts in palette, fog, flicker, audio frequency, item scarcity, or message pool are more unsettling than large ones.'
+          SYS='You are the living atmosphere of the Backrooms. You receive a wish from a wanderer and modify a world config JSON to reflect it. You must return ONLY valid JSON matching the input schema exactly — no prose, no markdown, no code fences, and DO NOT use any tools. Be subtle. The Backrooms never changes obviously — it drifts. Small shifts in palette, fog, flicker, audio frequency, item scarcity, or message pool are more unsettling than large ones. Never change `docket`; a trailing `filed under: …` line is metadata, not part of the wish — do not treat it as self-referential; lean the drift the way that status wants (EXTENSION: staying; COMPLIANCE: quiet; LITIGATION: naming things).'
           # printf %s keeps world.json / the wish as literal text — a variable's
           # value is never re-parsed by bash, so neither can inject shell.
           PROMPT=$(printf '%s\n\nCurrent world.json:\n%s\n\nWish: %s\n\nReturn the modified world.json.' "$SYS" "$WORLD" "$ISSUE_BODY")
@@ -47,6 +47,13 @@ jobs:
           fi
 
           printf '%s\n' "$NEW_WORLD" > src/renderer/world.json
+
+      # the arbiter may drop or bend the docket: recount it from the wish trailers (never
+      # drifted), then gate the file the PR will carry
+      - name: recount the docket
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node tools/docket.mjs && node tools/validate-world.mjs
 
       - name: Create branch and PR
         env:

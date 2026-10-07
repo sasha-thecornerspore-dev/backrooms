@@ -142,22 +142,29 @@
           <span class="k"><kbd>Shift</kbd></span><span class="d">run — <b>watch your legs</b></span>
           <span class="k">mouse</span><span class="d">look (click to lock)</span>
           <span class="k"><kbd>Space</kbd></span><span class="d"><b>ward</b> — shove back the things that hunt you</span>
-          <span class="k"><kbd>F</kbd></span><span class="d">take an item · <b>no-clip an exit</b></span>
+          <span class="k"><kbd>F</kbd></span><span class="d">take an item · draw from a machine · <b>no-clip an exit</b></span>
+          <span class="k"><kbd>F</kbd></span><span class="d">by a cabinet, crate or drum — <b>search</b> it (hold still a moment)</span>
+          <span class="k"><kbd>F</kbd></span><span class="d">by a friend who is down — <b>kneel</b> and count them back</span>
           <span class="k"><kbd>Q</kbd></span><span class="d">use selected item</span>
-          <span class="k"><kbd>X</kbd></span><span class="d">drop selected item</span>
+          <span class="k"><kbd>X</kbd></span><span class="d"><b>set down</b> — and leave a word with it, if you like</span>
+          <span class="k"><kbd>Tab</kbd></span><span class="d">the <b>map</b> — a pencil sheet, held while you walk at half pace</span>
         </div>
       </div>
       <div class="panel">
         <div class="keys">
           <span class="k"><kbd>1</kbd>–<kbd>6</kbd></span><span class="d">select inventory slot</span>
-          <span class="k"><kbd>L</kbd></span><span class="d">flashlight on / off</span>
-          <span class="k"><kbd>E</kbd></span><span class="d">speak — to a soul or a presence</span>
-          <span class="k"><kbd>Enter</kbd></span><span class="d">chat (online)</span>
+          <span class="k"><kbd>L</kbd></span><span class="d">flashlight on / off — or stand dark in a <b>friend's light</b></span>
+          <span class="k"><kbd>C</kbd></span><span class="d"><b>whistle</b> — call out; friends hear it, so do the things</span>
+          <span class="k"><kbd>E</kbd></span><span class="d">speak — to a soul or a presence · read a page</span>
+          <span class="k"><kbd>Enter</kbd></span><span class="d">chat (online) · the console: <span class="mono">/status</span> <span class="mono">/intake</span></span>
+          <span class="k"><kbd>B</kbd></span><span class="d"><b>beacon</b> — fire your own webhook into the dark</span>
           <span class="k"><kbd>M</kbd></span><span class="d">mute / unmute the music</span>
+          <span class="k"><kbd>N</kbd></span><span class="d">next track — or back to the floor's own song</span>
           <span class="k"><kbd>Esc</kbd></span><span class="d">unlock mouse · close a dialog</span>
         </div>
       </div>
     </div>
+    <p style="margin-top:14px;color:var(--text-dim);font-size:14.5px">On a phone or tablet: a stick on the left (push it forward to the rim to run), a drag anywhere else to look, and six buttons — <b>ACT</b> (F), <b>USE</b> (Q), <b>WARD</b> (Space; hold it to charge), <b>SPEAK</b> (E), <b>LIGHT</b> (L) and <b>CALL</b> (C). Tap a slot to select it, <b>✕</b> to set it down, the paper corner for the map. The beacon, the chat and the music keys still need a keyboard.</p>
   </section>
 
   <section id="hud">
@@ -205,7 +212,7 @@
           <rect x="480" y="292" width="46" height="20" fill="#e4dac8" opacity=".5" stroke="#14110a"/>
           <text x="336" y="305">bandage</text>
           <rect x="540" y="292" width="66" height="20" fill="#cd3730" opacity=".25" stroke="#963028"/>
-          <text x="550" y="305" fill="#3a0d0a">✕ discard</text>
+          <text x="548" y="305" fill="#3a0d0a">✕ set down</text>
         </g>
         <!-- a figure in the fog + nameplate -->
         <ellipse cx="640" cy="250" rx="16" ry="4" fill="#000" opacity=".4"/>
@@ -216,7 +223,7 @@
         <g font-family="Courier New,monospace" font-size="11" fill="#a8d4ec">
           <line x1="230" y1="70" x2="300" y2="70" stroke="#a8d4ec" stroke-width="1"/><text x="306" y="66">your hit points</text>
           <text x="306" y="80">and sanity</text>
-          <line x1="150" y1="112" x2="150" y2="140" stroke="#a8d4ec" stroke-width="1"/><text x="60" y="156">compass → the nearest way down</text>
+          <line x1="150" y1="112" x2="150" y2="140" stroke="#a8d4ec" stroke-width="1"/><text x="60" y="156">compass → the nearest way you've seen</text>
           <line x1="668" y1="178" x2="712" y2="150" stroke="#a8d4ec" stroke-width="1"/><text x="716" y="150">a friend, named,</text><text x="716" y="164">with their health</text>
           <line x1="500" y1="292" x2="500" y2="264" stroke="#a8d4ec" stroke-width="1"/><text x="430" y="256">6-slot inventory</text>
         </g>
@@ -232,13 +239,13 @@
       <div class="notice">
         <h3>❤ Hit points</h3>
         <p>The things down here hurt you on contact. Take a hit and the screen jolts red. <strong>Level 0 is safe</strong> — nothing hunts the lobby — but every floor below has teeth.</p>
-        <p>Health regrows slowly once you're clear of danger. A <span class="mono">bandage</span> patches you fast. Reach zero and you black out, then wake where you fell in.</p>
+        <p>Health regrows slowly once you're clear of danger. A <span class="mono">bandage</span> patches you fast. Reach zero and you black out — and wake a floor above, beside the hole you fell through, lighter: whatever was in your hand is gone. With a friend on your floor you go <strong>down</strong> instead, and they have a moment to reach you.</p>
         <p><strong>Listen:</strong> a heartbeat rises and quickens as something closes in. If you can hear your pulse, it's already near.</p>
       </div>
       <div class="notice" style="background:linear-gradient(180deg,#8f83b8,#5f5688);">
         <h3 style="color:#0d0a16">🧠 Sanity</h3>
-        <p style="color:#160f22">The dark and the hunt eat at your mind. Let it run low and the walls close in violet-black and the whispers start.</p>
-        <p style="color:#160f22"><strong style="color:#0d0a16">Keep it up:</strong> your <b>flashlight</b>, a sip of <b>almond water</b>, and — best of all — <b>staying near a friend</b>. You steady each other. Split up and you both fray.</p>
+        <p style="color:#160f22">The dark and the hunt eat at your mind, and so does a thing you cannot stop looking at. Let it run low and the walls close in violet-black, the whispers start, and the floor finds more ways to frighten you.</p>
+        <p style="color:#160f22"><strong style="color:#0d0a16">Keep it up:</strong> your <b>flashlight</b>, a sip of <b>almond water</b>, a page you have not read, and — best of all — <b>staying near a friend</b>. You steady each other. Split up and you both fray. (Stand together long enough and even that stops helping, until you have been apart a while.)</p>
       </div>
     </div>
   </section>
@@ -247,15 +254,18 @@
     <div class="eyebrow">Survival · Light</div>
     <h2>Light is a resource</h2>
     <p>Press <kbd>L</kbd> for your <strong>flashlight</strong> — it throws a warm cone that steadies your nerves. Turn it off and the deep floors swallow you (sometimes worth it, to not be seen). A cracked <strong>glowstick</strong> washes the world green and shoves the fog back for a while. The pipes and the electrical station are black; bring your own light.</p>
+    <p>Light can be shared. Once you have taken your first way down, stand dark inside a <strong>friend's light</strong> — a few steps from them, nothing between you — and the things have a harder time finding you, and the dark eats at you slower. If not all of you arrived, it gives your mind nothing — the light goes through you. You'll know whose light you're standing in when you switch yours off. It never helps the one carrying it.</p>
   </section>
 
   <section id="descent">
     <div class="eyebrow">The world · Four floors down</div>
     <h2>The descent</h2>
-    <p>The maze is no longer one endless yellow floor. It is a stack, and each level has its own look, its own things, and its own way down. Your <strong>compass</strong> (top-left) always points to the nearest exit; the exits themselves are <strong>glowing beacons</strong> — a beam and a breathing ring. Walk into one and press <kbd>F</kbd> to fall through.</p>
-    <div class="grid g2" style="margin-top:18px">
+    <p>The maze is no longer one endless yellow floor. It is a stack, and each level has its own look, its own things, and its own way down. The exits are <strong>glowing beacons</strong> — a beam and a breathing ring, carrying through the fog. Walk up to one and press <kbd>F</kbd> to fall through. Your <strong>compass</strong> (top-left, under your bars) points to the nearest way on that you have <em>seen</em>, and how far; before you have seen one, it only says <span class="mono">something pulls, faintly</span>. A second line points back the way you came.</p>
+    <div class="lvl" style="margin-top:18px"><div class="band" style="background:linear-gradient(180deg,#a7a49b,#6f6c66);color:#0c0a05">LEVEL ∅ · THE BLOCK</div>
+      <div class="body"><h3>The Block</h3><p>Every solo run begins outside, in the one real place in the game: an inner-block park in Harlem Park, West Baltimore, under an open grey sky. Rowhouse backs of formstone, brick and plywood; front doors sealed with concrete block; black open windows; a light on in a house where nobody comes out. A form lies on the counter with your name already on it. A plan erased the street and left this.</p><span class="down">↓ the gap the paperwork left — one way down, into the lobby</span></div></div>
+    <div class="grid g2" style="margin-top:16px">
       <div class="lvl"><div class="band" style="background:linear-gradient(180deg,#e8e0c0,#c8b870)">LEVEL 0 · THE LOBBY</div>
-        <div class="body"><h3>The Lobby</h3><p>Mono-yellow rooms, damp carpet, the fluorescent hum. Safe — nothing hunts you here. Where everyone begins.</p><span class="down">↓ no-clip through a torn corner</span></div></div>
+        <div class="body"><h3>The Lobby</h3><p>Mono-yellow rooms, damp carpet, the fluorescent hum. Safe — nothing hunts you here. Where online play begins, and where the block lets you fall.</p><span class="down">↓ no-clip through a torn corner</span></div></div>
       <div class="lvl"><div class="band" style="background:linear-gradient(180deg,#9e9a88,#8c8674)">LEVEL 1 · HABITABLE ZONE</div>
         <div class="body"><h3>Habitable Zone</h3><p>Colder concrete and dim service lights. Warehouse dark — and things live here now. Watch your health.</p><span class="down">↓ a hole in the floor / a stairwell down</span></div></div>
       <div class="lvl"><div class="band" style="background:linear-gradient(180deg,#705c46,#4c4238);color:#e7dcb2;text-shadow:none">LEVEL 2 · PIPE DREAMS</div>
@@ -263,7 +273,13 @@
       <div class="lvl"><div class="band" style="background:linear-gradient(180deg,#4c505a,#22252b);color:#a8d4ec;text-shadow:none">LEVEL 3 · ELECTRICAL STATION</div>
         <div class="body"><h3>Electrical Station</h3><p>A lightless labyrinth of transformers and live cable. The deepest you should go. Don't touch the walls.</p><span class="down">↓ a door humming with current → back to the lobby</span></div></div>
     </div>
-    <div class="callout">Descend and the world changes around you — palette, fog, what's in it. Your hit points and inventory come with you. The floor you left does not remember you.</div>
+    <div class="callout">Descend and the world changes around you — palette, fog, what's in it. Your hit points and inventory come with you. The floor you left remembers you: what you took stays taken, and what you set down lies where you left it.</div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="panel"><h3 style="font-size:15px">One building</h3><p style="color:var(--text-dim);font-size:14px">The floors are stacked in one building. Under some holes a <b>stairwell up</b> climbs back to the floor you fell from, a few rooms over from where you landed. Somewhere on the habitable zone a <b>lift</b> stands, uncalled — it goes one place, and it does not come back for you. A machine you emptied clunks again only after you have been away a while.</p></div>
+      <div class="panel"><h3 style="font-size:15px">The map</h3><p style="color:var(--text-dim);font-size:14px">Press <kbd>Tab</kbd> and you start drawing: pencil strokes for what you have walked, small glyphs for what you have seen — ways, machines, pages, souls, the places it hurt you. You can keep walking while you read it, at half pace. The building moves; a hole is not always where you drew it.</p></div>
+      <div class="panel"><h3 style="font-size:15px">Drawers</h3><p style="color:var(--text-dim);font-size:14px">Cabinets, crates, boxes, drums and panels hold things. Stand by one, press <kbd>F</kbd> and hold still — a step away leaves it, and nothing close may be hunting you. The deep floors count the drawers you open. Some of them hold something that was waiting.</p></div>
+      <div class="panel"><h3 style="font-size:15px">Deep finds</h3><p style="color:var(--text-dim);font-size:14px">On the deepest floors the machines sometimes give stranger things, and you keep them — they cannot be set down or lost: a <b>survey plumb</b> that reads the grain of the floor, <b>ballast</b> that brings the whole of you back, and an <b>extension slip</b>, <span class="mono">30150A</span>, the one line the system never closed.</p></div>
+    </div>
   </section>
 
   <section id="bestiary">
@@ -327,7 +343,7 @@
     <div class="grid g2">
       <div class="panel">
         <p class="lead">Not everything here wants to hurt you. Rare, pale figures drift the halls — people who fell through and never found the way up.</p>
-        <p>Walk up to one and press <kbd>E</kbd>. They'll speak: lore, warnings, and — if you listen — the occasional real hint about the way down.</p>
+        <p>Walk up to one and press <kbd>E</kbd>. They'll speak: lore, warnings, and — if you listen — the occasional real hint about the way down. They know which word <a href="#file" style="color:inherit">your file</a> is under, and sometimes they say so. If the file has stamped you, they can see it — and they will not talk.</p>
         <p class="callout" style="margin:12px 0 0">“if the lights go out, stop moving. it hunts movement.”</p>
       </div>
       <figure class="panel" style="display:flex;align-items:center;justify-content:center">
@@ -346,14 +362,57 @@
   <section id="items">
     <div class="eyebrow">Supplies · What you'll find</div>
     <h2>Things left lying around</h2>
-    <p>The Backrooms restocks itself. Walk close to an item and press <kbd>F</kbd> to take it; <kbd>Q</kbd> uses the selected one; <kbd>X</kbd> drops it. Six slots — choose what's worth carrying.</p>
+    <p>The Backrooms restocks itself. Walk close to an item and press <kbd>F</kbd> to take it; <kbd>Q</kbd> uses the selected one; <kbd>X</kbd> sets it down. Six slots — choose what's worth carrying.</p>
+    <div class="notice" style="margin-top:14px">
+      <h3>Leave a word</h3>
+      <p>When you set something down, a card asks whether to leave a word with it: six phrases lifted from the pages, m.'s and the replies left beside them. At first it is the same six for that floor and that kind of thing, whoever holds it; once the pages you have read hold six of the twelve phrases, the card offers only words from those. <i>take the left.</i> <i>the dark drinks you back.</i> <i>i am close behind.</i> The more of the record you find, the more of it you can say. Press a number (or <kbd>0</kbd> for nothing) and the thing becomes a <strong>cache</strong>, with an arrow for the way you were facing.</p>
+      <p>Whoever picks it up reads it on the card — the phrase, the arrow turned to where <em>they</em> stand, and who left it. The prompt warns you first: <span class="mono">f · take the bandage · left by maddie</span>. The floor keeps your caches between visits. Online the room sees them as they land, and the relay keeps the last of them for whoever comes through after you — come back to a room and your own words are still yours. A hand needs a moment between two words: set a second down in the same breath and it stays in your hands (<i>your hands are not ready.</i>). Picked up, a cache is already yours; the card only folds away. No free text — only what is written on the pages.</p>
+    </div>
     <div class="grid g3" style="margin-top:16px">
       <figure class="item"><svg viewBox="0 0 60 60" aria-label="Almond water"><rect width="60" height="60" fill="#0b0a06"/><rect x="24" y="16" width="12" height="8" fill="#dfeaf7"/><rect x="22" y="24" width="16" height="26" rx="3" fill="#bed7eb"/><rect x="25" y="30" width="10" height="16" fill="#fff" opacity=".25"/></svg><span class="name">Almond water</span><p>Restores your legs and steadies your mind. The lights hold steady for a while. Your lifeline down deep.</p></figure>
       <figure class="item"><svg viewBox="0 0 60 60" aria-label="Glowstick"><rect width="60" height="60" fill="#0b0a06"/><rect x="26" y="12" width="8" height="36" rx="3" fill="#78eb5a"/><rect x="28.5" y="12" width="3" height="36" fill="#fff" opacity=".85"/></svg><span class="name">Glowstick</span><p>Cracks green and pushes the fog back — temporarily. Best used where you found the dark unbearable.</p></figure>
       <figure class="item"><svg viewBox="0 0 60 60" aria-label="Bandage"><rect width="60" height="60" fill="#0b0a06"/><rect x="18" y="22" width="24" height="16" rx="2" fill="#ebebf0"/><rect x="28" y="24" width="4" height="12" fill="#d23232"/><rect x="22" y="28" width="16" height="4" fill="#d23232"/></svg><span class="name">Bandage</span><p>Patches you up — restores hit points. Carry a few before you go deep; you will need them.</p></figure>
-      <figure class="item"><svg viewBox="0 0 60 60" aria-label="Polaroid camera"><rect width="60" height="60" fill="#0b0a06"/><rect x="16" y="22" width="28" height="20" rx="2" fill="#e9e6dc"/><circle cx="30" cy="32" r="6" fill="#1e1e28"/><circle cx="30" cy="32" r="3" fill="#4a4a5a"/><rect x="38" y="24" width="4" height="3" fill="#cf4a3f"/></svg><span class="name">Polaroid camera</span><p>Captures evidence — a flash, and the shot is filed to <span class="mono">Pictures/backrooms/</span>. Proof you were here.</p></figure>
+      <figure class="item"><svg viewBox="0 0 60 60" aria-label="Polaroid camera"><rect width="60" height="60" fill="#0b0a06"/><rect x="16" y="22" width="28" height="20" rx="2" fill="#e9e6dc"/><circle cx="30" cy="32" r="6" fill="#1e1e28"/><circle cx="30" cy="32" r="3" fill="#4a4a5a"/><rect x="38" y="24" width="4" height="3" fill="#cf4a3f"/></svg><span class="name">Polaroid camera</span><p>Captures evidence — a flash, and the shot is filed to <span class="mono">Pictures/backrooms/</span>. Proof you were here. Point it at a friend and the film develops what the file wrote on them — and they will know.</p></figure>
       <figure class="item"><svg viewBox="0 0 60 60" aria-label="Radio"><rect width="60" height="60" fill="#0b0a06"/><rect x="16" y="28" width="26" height="16" rx="2" fill="#c86438"/><line x1="40" y1="28" x2="46" y2="16" stroke="#dcdcc8" stroke-width="2"/><circle cx="21" cy="36" r="2.5" fill="#2a1a10"/></svg><span class="name">Radio</span><p>Plays a tune that's almost right. You can find presences from much farther — but other things hear it too.</p></figure>
       <figure class="item" style="justify-content:center;color:var(--text-dim)"><span class="name" style="color:var(--beacon)">the wish system</span><p>Sometimes a <strong>presence</strong> shimmers in a wall. Press <kbd>E</kbd> and state a request. Wishes are reviewed. Some are granted, and the world quietly drifts.</p></figure>
+    </div>
+  </section>
+
+  <section id="file">
+    <div class="eyebrow">The record · Your file</div>
+    <h2>The file has you now</h2>
+    <p class="lead">Somewhere above the drop ceiling there is an office, and it keeps a file on everyone who falls through. You never fill it in. It fills itself in — and the Backrooms reads it.</p>
+    <p>Until your first way down, nothing is written. On the block the intake form lies on the counter (<kbd>E</kbd> to read it, or type <span class="mono">/intake</span> in the console anywhere). Then you take a way down, and a few breaths after the level's name a line arrives: <i>the file has you now.</i> The rest of that line says which column it wrote you into — <i>it has you at an address</i>, <i>it has your body at a pin</i>, <i>it cannot spell you</i>, or <i>it opened a line on you</i>. The column is written once a run, by how you came in.</p>
+    <p class="callout">Once the file has you, the things hunt movement. Stand still and make no sound, light and radio off, and after a breath they lose sight of you — until you move, call out, or push. If not all of you arrived, you vanish faster, light or no light.</p>
+
+    <h3 style="margin-top:22px">The column — nobody chooses one</h3>
+    <div class="grid g2" style="margin-top:12px">
+      <div class="panel"><h3 style="font-size:15px">Tenant</h3><p style="color:var(--text-dim);font-size:14px"><i>the file has you at an address.</i> You came alone, with a name. The street does not mind you; the deep frays you faster, and below the first floor the things find you more easily. Your hands reach a way from further off, your map marks every way the floor has loaded — and on the block, the sealed doors tell you what the file says lives behind them.</p></div>
+      <div class="panel"><h3 style="font-size:15px">Anchored</h3><p style="color:var(--text-dim);font-size:14px"><i>the file has your body at a pin.</i> You came through a real place, and the body stayed there. Drift too far and it pulls at your mind — the settings panel shows the <b>leash</b> under <b>locate your body</b>. The first photograph on a floor quiets it for a while.</p></div>
+      <div class="panel"><h3 style="font-size:15px">Unnamed</h3><p style="color:var(--text-dim);font-size:14px"><i>the file cannot spell you.</i> You left the name blank. The things cannot keep hold of you, and a page or a friend steadies you more — but the film will not develop a letter that is yours. Tell a presence <span class="mono">call me …</span> and it asks how that is spelled.</p></div>
+      <div class="panel"><h3 style="font-size:15px">Processed</h3><p style="color:var(--text-dim);font-size:14px"><i>the file opened a line on you.</i> You were the first into a shared room. The souls see the stamp. The radio reads every group to you, and once, the key. Your wishes are amendments, and a floor you fire the beacon on is filed for good.</p></div>
+    </div>
+    <div class="callout">And over any column, a layer: <b>thin</b>. Drop into a room someone already walks, or come back up from the dark, and <i>not all of you arrived.</i> The things lose you faster and hear you less — but the light goes through you, and your ward pushes you back too. Ballast cures it.</div>
+
+    <h3 style="margin-top:22px">Filed under — the word you choose</h3>
+    <p>The file also keeps a <strong>status</strong>. It starts as a notice nobody answered. Once the file can hear you — the numbers station has read you its last group, you have found five of m.'s pages, or you have gone deep enough — the request at a presence shows three faint stamps. Tap one, or type it. A file that already holds something — a closing reached, pages given up — asks on the card first, because a new word lets go of all of it. The office files once a day. Your status is not part of any save: it follows you into every run, and into every room.</p>
+    <div class="grid g3" style="margin-top:12px">
+      <div class="notice"><h3>Extension</h3><p><i>let it stay open.</i> The deep holds you; the street is the thin place. Sour water stops taking anything from you — somewhere a line moves instead.</p></div>
+      <div class="notice"><h3>Compliance</h3><p><i>close the file.</i> The film turns honest. A page you have not read comes <b>sealed</b>: read it (<kbd>E</kbd>), or leave it unread (<kbd>X</kbd>) and give it to the file.</p></div>
+      <div class="notice"><h3>Litigation</h3><p><i>contest it.</i> The claim develops on every photograph, even on the darkest floors. A thin figure caught on film is evidence.</p></div>
+    </div>
+    <p style="margin-top:14px">The lost souls know which word you are under, and so does the room: <span class="mono">— maddie entered the level, filed under extension.</span></p>
+
+    <h3 style="margin-top:22px">Three ways a file closes</h3>
+    <div class="grid g3" style="margin-top:12px">
+      <div class="panel"><h3 style="font-size:15px">The stand</h3><p style="color:var(--text-dim);font-size:14px">Under extension, on the deepest floor, once the station has read you its last group: stand in the dark. Light off, still, nothing near you, your mind still your own. While you hold it the dark does not eat you, and the lights steady to tell you it is counting. Long enough, and the notice is extended over you. <i>twenty-two years.</i></p></div>
+      <div class="panel"><h3 style="font-size:15px">Compliance</h3><p style="color:var(--text-dim);font-size:14px">Give thirteen pages up unread, then ask a presence to <span class="mono">close the file</span>. Each page you leave tells you how many the file has. Under compliance the middle stamp at a presence is <span class="mono">close the file</span>, with the count beside it — tap it once the count reaches thirteen. The shimmer leaves the walls. The floors stop leaving pages out. There is no one left to ask.</p></div>
+      <div class="panel"><h3 style="font-size:15px">The seam</h3><p style="color:var(--text-dim);font-size:14px">Litigation's ending is the oldest one. The station in the deep is counting toward something, and the extension slip names the one line the system never closed. Claim it at a presence; push it into the dark with your beacon. Under litigation, the held seam closes your file. Under the notice nobody answered, nobody writes it down — and it can be held again, any run.</p></div>
+    </div>
+
+    <div class="grid g2" style="margin-top:16px">
+      <div class="panel"><h3 style="font-size:15px">Reading your file</h3><p style="color:var(--text-dim);font-size:14px">Open settings ⚙ during a run: <b>your file</b> shows the word you are under and since when, how the file has you, and each step of your closing, struck <span class="mono">· done</span> as you meet it. Or press <kbd>Enter</kbd> and type <span class="mono">/status</span>. <b>Request a new notice</b> puts you back under the notice nobody answered — the old file stays closed. If it holds a closing or pages given up, the button asks once before it lets them go.</p></div>
+      <div class="panel"><h3 style="font-size:15px">The floors keep count</h3><p style="color:var(--text-dim);font-size:14px">A wish sent from a filed run carries its word — <span class="mono">filed under: EXTENSION · level 2</span> — and every release recounts them. A floor whose files lean one way leans with them: the machines stock for it and stamp the tray, the pages and the souls come more or less often, and on the near floors the radio reads the floor's roll call. Who is standing there with you moves it too.</p></div>
     </div>
   </section>
 
@@ -369,6 +428,16 @@
       <div class="panel"><h3 style="font-size:15px">Chat</h3><p style="color:var(--text-dim);font-size:14px">Press <kbd>Enter</kbd> to talk. Messages float as <b>speech bubbles</b> over your head, you'll see when someone's <b>typing…</b>, and <span class="mono">/me</span> emotes.</p></div>
       <div class="panel"><h3 style="font-size:15px">Stay close</h3><p style="color:var(--text-dim);font-size:14px">A friend nearby steadies your <b>sanity</b>. The halls are less maddening together — so don't wander off alone into the dark.</p></div>
     </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="panel"><h3 style="font-size:15px">Call out</h3><p style="color:var(--text-dim);font-size:14px">Press <kbd>C</kbd> (or <b>CALL</b> on a phone) to <b>whistle</b> — two notes at a pitch that is only yours. Everyone on your floor hears it from where you stand, with a line in their chat: <span class="mono">near ↗</span>, <span class="mono">far ←</span>. The hall counts who has answered lately and tells you in words — <i>three of you.</i> A friend beside you who has not whistled back is not counted yet: <i>nobody has answered yet.</i> A friend who goes ninety seconds without a whistle, a word or standing near you has <b>gone quiet</b>, and it weighs on you. Alone, the hall keeps the sound. Usually. The things hear every call.</p></div>
+      <div class="panel"><h3 style="font-size:15px">Down, not dead</h3><p style="color:var(--text-dim);font-size:14px">With a friend on your floor, a hit that would kill you lays you <b>down</b> instead: your light goes out and you have <b>25 seconds</b>. You can still whistle. Find a friend who is down, face them and press <kbd>F</kbd> to <b>stay with them</b> — your light on, holding still while you count them back. A step, <kbd>Space</kbd> or <kbd>Esc</kbd> lets go. If nobody comes, it is a death — and a friend who is down too cannot come: with everyone on the floor lying down, the hit kills you as it always did.</p></div>
+    </div>
+    <div class="grid g3" style="margin-top:16px">
+      <div class="panel"><h3 style="font-size:15px">Share the light</h3><p style="color:var(--text-dim);font-size:14px">Stand dark in a friend's flashlight — a few steps away, nothing between you — and the things lose you more easily while the dark eats at you slower. If not all of you arrived, it gives your mind nothing — the light goes through you. Switch yours off and you'll hear whose light it is: <i>you stand in maddie's light.</i></p></div>
+      <div class="panel"><h3 style="font-size:15px">Push for each other</h3><p style="color:var(--text-dim);font-size:14px">The things are not the same things on every screen. When a friend <b>wards</b>, it lands on yours too, from where they stand — and if you were in front of the push when it met something, it steadies you. <i>maddie pushes the dark off you.</i></p></div>
+      <div class="panel"><h3 style="font-size:15px">Evidence</h3><p style="color:var(--text-dim);font-size:14px">A friend's <b>photograph</b> of you is proof you exist. For ninety seconds your mind will not sink below a quarter, and the others see you solid, however thin you've worn. Photograph a friend who is <b>down</b> and they're counted back at once.</p></div>
+    </div>
+    <p class="callout"><b>Update together.</b> The whistle, the kneel, a word left with a thing, a friend's light, ward and photograph pass only between copies of the same release; an older copy still walks beside you, but hears none of them. On PLAY ONLINE they ride the public relay, so a room on a relay that has not been updated plays as it always did — walking, chat and nameplates. HOST LAN from this release carries them from the start.</p>
   </section>
 
   <section id="save">
@@ -377,13 +446,13 @@
     <div class="grid g2">
       <div class="panel">
         <h3>Continue where you left off</h3>
-        <p style="color:var(--text-dim);font-size:14.5px">Solo runs auto-save — your level, position, health and whole inventory — every few seconds and on every descent. <strong>CONTINUE</strong> on the title screen drops you right back in.</p>
+        <p style="color:var(--text-dim);font-size:14.5px">Solo runs auto-save — your level, position, health and whole inventory, what every floor remembers of you, who the file has you as, and your map — every few seconds and on every descent. <strong>CONTINUE</strong> on the title screen drops you right back in. The word you are filed under is not in the save: it follows you into every run.</p>
         <h3 style="margin-top:16px">Make it yours</h3>
-        <p style="color:var(--text-dim);font-size:14.5px">The gear ⚙ opens a control panel: music &amp; volume, ambience, film grain, particles, crosshair, head-bob, mouse sensitivity — and, if you want it gentler, turn <b>creatures</b> off or switch to <b>peaceful</b> (no damage).</p>
+        <p style="color:var(--text-dim);font-size:14.5px">The gear ⚙ opens a control panel: music &amp; volume, ambience &amp; volume, film grain, particles, crosshair, head-bob, mouse sensitivity — and, if you want it gentler, turn <b>creatures</b> off, switch to <b>peaceful</b> (no damage), or let <b>solid furniture</b> go and walk through things. For your machine: graphics quality (auto adapts; classic shading is the plainest), <b>reduce flicker</b> for softer light dips and a gentler flash, a frame-rate limit, sharp high-DPI, and on desktop how updates arrive (automatic, ask before downloading, or only when you check — with <b>check for updates</b> beside it) and software rendering. The beacon's target lives here too, and during a run, <b>your file</b>.</p>
       </div>
       <div class="panel">
         <h3>Anchors — fall through a real place</h3>
-        <p style="color:var(--text-dim);font-size:14.5px">On the title screen you can paste a <strong>Google Maps link</strong> (or bare <span class="mono">lat,lng</span>) into the anchor field. You'll fall through <em>that</em> spot — and the same place always makes the same maze, for everyone. Settings can even reopen the map where you fell in.</p>
+        <p style="color:var(--text-dim);font-size:14.5px">On the title screen you can paste a <strong>Google Maps link</strong> (or bare <span class="mono">lat,lng</span>) into the anchor field. You'll fall through <em>that</em> spot — and the same place always makes the same maze, for everyone. Settings can even reopen the map where you fell in. Join someone else's room and your pin stays yours: the others are told only a mark — enough to know whether you came through the same place they did.</p>
         <p class="callout" style="margin-top:12px">Anchored worlds hold their shape. Unanchored ones forget you were ever there.</p>
       </div>
     </div>

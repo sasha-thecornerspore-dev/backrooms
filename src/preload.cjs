@@ -2,7 +2,7 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('backrooms', {
-  submitWish: (text) => ipcRenderer.invoke('submit-wish', text),
+  submitWish: (text, meta) => ipcRenderer.invoke('submit-wish', text, meta),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   saveSettings: (s) => ipcRenderer.invoke('save-settings', s),
   startLocalServer: () => ipcRenderer.invoke('start-local-server'),

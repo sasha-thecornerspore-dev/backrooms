@@ -8,7 +8,8 @@ import { mulberry32 } from '../src/renderer/gfx-util.js'
 
 // the assembly exactly as game.js wrote it before the pooling (verbatim maps, same spread order)
 function legacyAssemble(w) {
-  const remoteEntities = w.mp ? w.remote.map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle, chatText: p.chatText, hp: p.hp })) : []
+  // (the six trailing fields are a friend's heartbeat as the event bus merges it onto the record: undefined / false for a legacy peer)
+  const remoteEntities = w.mp ? w.remote.map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle, chatText: p.chatText, hp: p.hp, st: p.st, lit: p.lit, thin: !!p.thin, origin: p.origin, status: p.status, seen: !!p.seen })) : []
   const propEntities = w.props.map(p => ({ x: p.x, y: p.y, kind: 'prop', type: p.type, rot: p.rot, key: p.key }))
   const exitEntities = w.exits.map(e => ({ x: e.x, y: e.y, kind: 'exit', target: e.target, key: e.key }))
   const npcEntities  = w.npcs.map(n => ({ x: n.x, y: n.y, kind: 'npc', name: 'a lost soul', key: n.key }))
@@ -44,7 +45,11 @@ function randomWorld(rnd) {
   const xy = () => ({ x: rnd() * 40 - 20, y: rnd() * 40 - 20 })
   return {
     mp: rnd() < 0.6, creaturesOn: rnd() < 0.7,
-    remote: list(4, (i) => ({ ...xy(), name: rnd() < 0.3 ? '' : `w${i}`, angle: rnd() * 6, chatText: rnd() < 0.5 ? null : 'hi', hp: n(100), id: 'extra-field-not-forwarded' })),
+    remote: list(4, (i) => ({
+      ...xy(), name: rnd() < 0.3 ? '' : `w${i}`, angle: rnd() * 6, chatText: rnd() < 0.5 ? null : 'hi', hp: n(100), id: 'extra-field-not-forwarded',
+      // a friend whose heartbeat the bus merged (st / lit / thin / origin / status / seen), or a legacy peer without any of them
+      ...(rnd() < 0.6 ? { st: ['ok', 'down', 'kneel'][n(3)], lit: rnd() < 0.5, thin: rnd() < 0.3, origin: [null, 'tenant', 'unnamed'][n(3)], status: ['notice-mailed', 'extension'][n(2)], seen: rnd() < 0.2, legacy: false } : {}),
+    })),
     enemies: list(5, (i) => ({ ...xy(), type: 'stalker', variant: 'smiler', state: 'idle', dir: 0, stagger: 0, key: `e${i}` })),
     npcs: list(3, (i) => ({ ...xy(), key: `n${i}`, line: 'x' })),
     props: list(60, (i) => ({ ...xy(), type: ['chair', 'box', 'drum'][i % 3], rot: n(4), key: `p${i}` })),
@@ -144,5 +149,55 @@ describe('game.js wiring (source guards)', () => {
     expect(game).toMatch(/settleFrames = SETTLE_FRAMES, settleMaxMs = SETTLE_MAX_MS/)
     expect(game).toMatch(/const fader = createFader\(\{ el: fadeEl, frames: \(\) => frameCount \}\)/)       // behaviour: test/gfx-jc-game.test.js
     expect(game).not.toMatch(/requestAnimationFrame\(\(\) => \{ fadeEl\.style\.opacity = '0' \}\)/)
+  })
+  it('solid bodies (collide): tryMove dispatches to level.solid.movePlayer (Solid furniture on) or the legacy movePoint (off); the movement block has exactly one tryMove( call site', () => {
+    expect(game).toMatch(/if \(!getPref\('solidBodies'\)\) \{\r?\n\s*const pcx = Math\.floor\(player\.x \/ CHUNK_SIZE\)\r?\n\s*const pcy = Math\.floor\(player\.y \/ CHUNK_SIZE\)\r?\n\s*const r = movePoint\(player\.x, player\.y, nx, ny, level\.cache\.isWall, pcx, pcy\)\r?\n\s*player\.x = r\.x; player\.y = r\.y\r?\n\s*return\r?\n\s*\}/)
+    expect(game).toMatch(/lastReport = level\.solid\.movePlayer\(player, nx, ny, lastDt, wantSprint, creaturesOn \? level\.entitySys\.getEntities\(\) : EMPTY\)\r?\n\s*noteContact\(lastReport\)/)
+    expect(game).not.toMatch(/if \(!level\.cache\.isWall\(nx, player\.y, pcx, pcy\)\) player\.x = nx/)     // the inline point mover lives in collide.js movePoint now
+    expect((game.match(/(?<!function )tryMove\(/g) || []).length).toBe(2)                               // W/S/A/D sum into one step: one call site, plus the thin ward's recoil (origins, I5)
+  })
+  it('floors: game.js has no descend( definition and exactly one travel( definition; the keydown handler goes through takeKey', () => {
+    expect(game).not.toMatch(/function descend\(/)
+    expect(game).not.toMatch(/\bdescend\(/)
+    expect((game.match(/function travel\(/g) || []).length).toBe(1)
+    expect(game).toMatch(/window\.addEventListener\('keydown', e => \{\r?\n\s*const r = takeKey\(e, /)
+  })
+})
+
+// The release's cross-cutting rules (plan sharedConventions), pinned at the wiring: one build order, one pass order, one entity update
+// per frame behind the grid reader, one save shape that only grows, and the one new settings row.
+describe('game.js wiring (release rules)', () => {
+  const game = fs.readFileSync(new URL('../src/renderer/game.js', import.meta.url), 'utf8')
+  const html = fs.readFileSync(new URL('../src/renderer/index.html', import.meta.url), 'utf8')
+  const build = game.slice(game.indexOf('function buildLevel(index, at = null) {'), game.indexOf('const messages = ['))
+  const loop = game.slice(game.indexOf('function loop(ts) {'))
+  const sim = loop.slice(0, loop.indexOf('const wallFn = '))          // the frame up to the render call (the raycaster takes its own wall function)
+  const order = (src, ...needles) => needles.map(n => { const i = src.indexOf(n); expect(i, n).toBeGreaterThanOrEqual(0); return i })
+  it('buildLevel builds cache -> grid -> bodies -> decor(hooks) -> solid -> entitySys -> gfx, and the passes run stairs -> dress -> haunts', () => {
+    const idx = order(build, 'createChunkCache(cfg, worldSeed)', 'createGridReader(', 'createColliderIndex()', 'createDecorSystem(cfg, isWall, worldSeed, {', 'createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature })', 'createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => playT })', 'makeGfx(cfg, cache)')
+    for (let i = 1; i < idx.length; i++) expect(idx[i]).toBeGreaterThan(idx[i - 1])
+    expect(build).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\)\]\.filter\(Boolean\)/)
+    expect(build).toMatch(/onChunk: \(k, bundle\) => bodies\.setChunk\(k, bundle\.colliders\)/)
+    expect(build).toMatch(/onEvict: \(k\) => bodies\.dropChunk\(k\)/)
+    expect(game).toMatch(/level = \{ index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages \}/)      // the level object carries them all
+  })
+  it('the loop: the grid reader is pointed at the chunk before the ONE entity update, which comes after the stream and the map step and before the haunt check and the damage block', () => {
+    expect((loop.match(/level\.entitySys\.update\(/g) || []).length).toBe(1)
+    const idx = order(loop, 'level.grid.setPlayerChunk(pcx, pcy)', 'level.cache.preload(pcx, pcy)', 'level.decor.update(pcx, pcy)', 'fog.step(level.index, player.x, player.y, revealRadius(level.index), level.grid.floor, epochOf)', 'compassLines(compassState, compassOut)', 'level.entitySys.update(dt, player, pcx, pcy, aiCtx)', 'level.entitySys.drainEvents(entEvents)', 'haunts.check(player.x, player.y, level.decor.getHaunts(), true)', 'th.dmg > 0')
+    for (let i = 1; i < idx.length; i++) expect(idx[i]).toBeGreaterThan(idx[i - 1])
+    expect(sim).not.toMatch(/level\.cache\.isWall\(/)                                                    // hot paths read the grid reader, never the key-string wall test
+  })
+  it('snapshot() keeps every v:1 field and only ADDS memory / playT / deaths / dispelled / fog; persist stays solo-only', () => {
+    const snap = game.slice(game.indexOf('function snapshot(full = false) {'), game.indexOf('let saveTimer = 0'))
+    for (const k of ['level:', 'x: player.x, y: player.y, angle: player.angle', 'hp: player.hp, maxHp: player.maxHp', 'inventory:', 'selected: itemSys.selected', 'pagesRead: [...readSet]', 'worldSeed, anchor', 'dispelled: level?.entitySys.getDispelled() ?? []', 'memory: mem.export(), playT, deaths', 's.fog = fogExport']) expect(snap).toContain(k)
+    expect(game).toMatch(/function persist\(full = false\) \{ if \(mpClient\) return; persistN\+\+; writeSave\(snapshot\(full \|\| persistN % 4 === 0\)\) \}/)
+    expect(game).toMatch(/window\.addEventListener\('beforeunload', \(\) => persist\(true\)\)/)
+  })
+  it('the Solid furniture row is the one new settings toggle, wired to the solidBodies pref and read live by the mover', () => {
+    expect(html).toContain(`<label class="toggle-row"><span>Solid furniture <span class="set-hint">walk around things</span></span><input type="checkbox" id="set-solid"/></label>`)
+    expect(html).toContain(`prefChk('set-solid', 'solidBodies')`)
+    expect(html).toMatch(/document\.getElementById\('set-solid'\)\.checked\s*= p\.solidBodies/)
+    expect(game).toMatch(/else if \(k === 'solidBodies'\) \{ if \(v && level\) level\.solid\.settlePlayer\(player\) \}/)
+    expect(game).toMatch(/const mult2 = getPref\('solidBodies'\) \? level\.solid\.clutterAt\(player\.x, player\.y\) : 1/)
   })
 })

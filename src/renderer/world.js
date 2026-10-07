@@ -34,6 +34,15 @@ export const DEFAULT_CONFIG = {
   // landmark set-pieces — the rarest; a memorable sight to orient by
   sights: { denom: 28 },
   particles: { count: 45, color: [235, 228, 190], size: 1.4, sway: 0.35, speed: 0.25 },
+  // the docket: open files per status per floor (0..3), recounted from the wish trailers by
+  // tools/docket.mjs and shipped in world.json. a literal (this module imports nothing); zeros
+  // lean nothing, so a drifted world.json without the key is today (docket.js EMPTY_DOCKET)
+  docket: {
+    '0': { extension: 0, compliance: 0, litigation: 0 },
+    '1': { extension: 0, compliance: 0, litigation: 0 },
+    '2': { extension: 0, compliance: 0, litigation: 0 },
+    '3': { extension: 0, compliance: 0, litigation: 0 },
+  },
 }
 
 export async function loadConfig() {
@@ -163,6 +172,12 @@ export function generateChunk(cx, cy, epoch, opts = {}) {
   return cell
 }
 
+// How many chunks the cache keeps before it forgets any: the whole keep zone at the default radius (everything within evictRadius + 2 of the
+// player is an 11x11 block = 121 chunks), so the building forgets only what is genuinely behind you. decor.js / items.js / entities.js drop
+// their records at the same evictRadius + 2, so no subsystem ever holds a record (a remembered exit, a creature's chunk) on a chunk the cache
+// has regenerated under a new epoch.
+export const MAX_RESIDENT = 121
+
 export function createChunkCache(config, fixedSeed = null) {
   // Accept either a config object or a bare evictRadius number (legacy/test usage)
   const evictRadius = (typeof config === 'object' && config !== null)
@@ -178,11 +193,14 @@ export function createChunkCache(config, fixedSeed = null) {
 
   function key(cx, cy) { return `${cx},${cy}` }
 
+  // Forget only past the cap, and only chunks beyond the keep zone the other subsystems use (Chebyshev > evictRadius + 2: decor.js:130,
+  // items.js:67, entities.js:68). This is a superset of gfx-world.js memoSafe's contract (evicts only chunks more than evictRadius away).
   function evict(pcx, pcy) {
-    if (chunks.size <= 49) return
+    if (chunks.size <= MAX_RESIDENT) return
+    const keep = evictRadius + 2
     for (const [k] of chunks) {
       const [ex, ey] = k.split(',').map(Number)
-      if (Math.max(Math.abs(ex - pcx), Math.abs(ey - pcy)) > evictRadius) {
+      if (Math.max(Math.abs(ex - pcx), Math.abs(ey - pcy)) > keep) {
         if (fixedSeed === null) {
           epochs.set(k, (epochs.get(k) ?? 0) + 1)
         }
@@ -190,6 +208,9 @@ export function createChunkCache(config, fixedSeed = null) {
       }
     }
   }
+
+  // How many times (cx, cy) has been forgotten and regenerated — 0 for a fresh chunk, always 0 under a fixed seed (layouts never change).
+  function epochOf(cx, cy) { return epochs.get(key(cx, cy)) ?? 0 }
 
   function getChunk(cx, cy, playerCx = cx, playerCy = cy) {
     const k = key(cx, cy)
@@ -222,5 +243,26 @@ export function createChunkCache(config, fixedSeed = null) {
         getChunk(pcx + dx, pcy + dy, pcx, pcy)
   }
 
-  return { getChunk, isWall, preload }
+  return { getChunk, isWall, preload, epochOf }
+}
+
+// The grid the hot paths read (hunt perception, fog, LOS, collision): floor(ix, iy) -> true when the integer cell is open. It keeps the last
+// (cx, cy, Uint8Array) and asks cache.getChunk(cx, cy, pcx, pcy) only when the cell crosses a chunk border, indexing the array otherwise —
+// cache.isWall builds a key string per call, which a few hundred asks a frame cannot afford. setPlayerChunk(pcx, pcy) is the chunk the
+// cache evicts relative to (set it each frame before the subsystems run). Without a getChunk (createFixedMap: Level ∅) it wraps
+// isWallFn at the cell centre.
+export function createGridReader(cache, isWallFn) {
+  let pcx = 0, pcy = 0
+  function setPlayerChunk(x, y) { pcx = x; pcy = y }
+  if (!cache || typeof cache.getChunk !== 'function') {
+    return { floor: (ix, iy) => !isWallFn(ix + 0.5, iy + 0.5), setPlayerChunk }
+  }
+  const N = CHUNK_SIZE
+  let ccx = NaN, ccy = NaN, cells = null                       // NaN: the first ask always loads
+  function floor(ix, iy) {
+    const cx = Math.floor(ix / N), cy = Math.floor(iy / N)
+    if (cx !== ccx || cy !== ccy) { ccx = cx; ccy = cy; cells = cache.getChunk(cx, cy, pcx, pcy) }
+    return cells[(iy - cy * N) * N + (ix - cx * N)] === 0
+  }
+  return { floor, setPlayerChunk }
 }

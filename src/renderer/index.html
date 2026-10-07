@@ -239,6 +239,12 @@
       letter-spacing: 1px; line-height: 1.7;
     }
     #wish-text:focus { outline: none; border-color: var(--wall); }
+    /* the file's faint lines under the request (game.js renderWishSub): read-only, except a stamp ('extension · let it stay open'),
+       which a tap types and submits */
+    #wish-sub { display: flex; flex-direction: column; gap: 4px; margin-top: -8px; color: var(--text-dim); font-size: 11px; letter-spacing: 1px; line-height: 1.5; opacity: 0.8; }
+    #wish-sub:empty { display: none; }
+    #wish-sub .wish-line.stamp { cursor: pointer; touch-action: manipulation; }
+    #wish-sub .wish-line.stamp:hover { color: var(--wall); }
     #wish-actions { display: flex; gap: 12px; }
     #wish-actions button {
       background: #2a1e00; color: var(--wall); border: 1px solid #6a5424;
@@ -250,17 +256,52 @@
     /* found-scrap reading card — aged paper, with the notice panel's inset hairline */
     #note-card { position: fixed; inset: 0; background: rgba(0,0,0,0.74);
       display: flex; align-items: center; justify-content: center; z-index: 55; }
-    #note-inner {
+    #note-inner, .paper {
       background: #e6ddc4; color: #241c0c; border: 1px solid #b8a878;
       box-shadow: 0 12px 40px rgba(0,0,0,0.6), inset 0 0 60px rgba(150,130,80,0.22);
       outline: 1px solid rgba(36,28,12,0.24); outline-offset: -6px;
+    }
+    #note-inner {
       padding: 34px 30px 20px; max-width: 460px; width: 86%;
       font: 15px/1.85 var(--mono); letter-spacing: 0.3px;
       transform: rotate(-0.6deg); cursor: pointer;
     }
     #note-text { white-space: pre-wrap; }
-    #note-foot { margin-top: 20px; font-size: 11px; letter-spacing: 2px; color: #54461f; }
+    #note-foot { margin-top: 20px; font-size: 11px; letter-spacing: 2px; color: #54461f; white-space: pre-wrap; }   /* a confirm's 'e · yes      esc · no' keeps its gap */
+    /* the card's option lines (papercard.js: a sealed page's read / leave, the cache menu): faint pencil, each its own tap target */
+    #note-lines { margin-top: 18px; display: flex; flex-direction: column; gap: 2px; }
+    #note-lines:empty { display: none; }
+    #note-lines .note-line {
+      font-size: 13px; line-height: 1.6; letter-spacing: 1px; color: #54461f;
+      padding: 4px 8px; margin: 0 -8px; cursor: pointer; border-left: 2px solid transparent;
+    }
+    #note-lines .note-line:hover { color: #241c0c; background: rgba(84,70,31,0.08); border-left-color: rgba(84,70,31,0.5); }
     #note-hint { margin-top: 6px; font-size: 10px; letter-spacing: 2px; color: #5c4d26; }
+    /* the map card (mapcard.js): a sheet of cream paper (.paper: the note's look) risen over the lower two-thirds of the view — held, not
+       modal: the scene keeps running behind it at half pace, and the top third stays visible (max-height 62vh) */
+    #map-card {
+      position: fixed; left: 0; right: 0; bottom: 0; top: 38vh; display: none; align-items: flex-start; justify-content: center;
+      z-index: 55; pointer-events: none;
+    }
+    #map-inner {
+      display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 16px 10px;
+      max-height: 62vh; max-width: 86vw; pointer-events: auto; transform: rotate(0.4deg); cursor: pointer;
+    }
+    #map-canvas { display: block; width: min(448px, calc(86vw - 34px), calc(62vh - 74px)); height: auto; image-rendering: pixelated; }
+    #map-foot { font: 11px var(--mono); letter-spacing: 2px; color: #54461f; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    #map-hint { font: 10px var(--mono); letter-spacing: 2px; color: #5c4d26; }
+    /* while the sheet is up, the building's line reads over it (game.js sets body.map-open): #msg sits at 34%, the card rises from 38vh.
+       Only then — the base #msg keeps no z-index, so the modal note card still covers a murmur */
+    body.map-open #msg { z-index: 56; }
+    /* the paper corner under the HUD plate: the map's tab on touch only (the keyboard has Tab); a tap reads as Tab (game.js) */
+    #map-tab {
+      display: none; width: 36px; height: 36px; align-items: center; justify-content: center;
+      font: 700 9px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: #54461f; cursor: pointer;
+      transform: rotate(-2deg); outline-offset: -4px;
+    }
+    @media (pointer: coarse) { #map-tab { display: flex; pointer-events: auto; } }
+    /* the block (Level ∅) has no map: neither the paper corner nor the hint row offers one there */
+    body[data-level="∅"] #map-tab, body[data-level="∅"] #hint .k-map { display: none; }
     #presence-hint {
       position: fixed; bottom: 140px; left: 50%; transform: translateX(-50%);
       padding: 5px 16px 6px; font: 700 11px var(--mono);
@@ -279,6 +320,12 @@
     .toggle-row input[type=checkbox] { accent-color:#c9ba72; width:16px; height:16px; cursor:pointer; }
     .set-section { border-top:1px solid #3a2f14; margin:16px 0 4px; padding-top:12px; color:#8a7a3a; font-family:monospace; font-size:11px; letter-spacing:3px; }
     .set-hint { font-size:10px; opacity:0.5; letter-spacing:1px; }
+    /* the 'your file' row (game.js renderFileRow): the office's lines on you, one a line, typed in faint ink; the last is its button */
+    #file-lines { display:flex; flex-direction:column; gap:3px; margin:8px 0 12px; color:#b9a862; font:12px/1.5 monospace; letter-spacing:1px; max-width:420px; }
+    #file-lines .file-line:first-child { color:#c9ba72; }
+    #btn-new-notice { background:none; border:1px solid #8a7a3a; color:#c9ba72; font-family:monospace; font-size:13px; padding:8px 16px; cursor:pointer; letter-spacing:2px; }
+    #btn-new-notice:hover { background:rgba(58,44,23,0.88); }
+    #file-reply { margin-top:8px; color:#c9ba72; font-family:monospace; min-height:12px; }
     #anchor-wrap { display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px; }
     #anchor-input {
       width: min(460px, 90vw); background: rgba(14,12,7,0.72); border: 1px solid #6a5a2a; color: var(--text);
@@ -327,6 +374,14 @@
       background: radial-gradient(ellipse at center, rgba(140,0,0,0) 45%, rgba(150,0,0,0.75) 100%);
       transition: opacity 0.25s;
     }
+    /* lying down (downed.js): its own veil, never #fade (the fader owns that inline opacity) — above the hurt / insanity / flash washes,
+       below the touch controls (46), the touch HUD (47) and #fade (49); game.js lifts it as a friend counts you back. The line you are
+       told reads over it (body.down, set while you are down: the base #msg keeps no z-index) */
+    #down {
+      position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 45;
+      transition: opacity 0.4s;
+    }
+    body.down #msg { z-index: 46; }
     #fade {
       position: fixed; inset: 0; background: #000; opacity: 0;
       pointer-events: none; z-index: 49; transition: opacity 0.55s;
@@ -423,6 +478,7 @@
       <label class="toggle-row"><span>Head-bob</span><input type="checkbox" id="set-headbob"/></label>
       <label class="toggle-row"><span>Mouse sensitivity</span><input type="range" id="set-sens" min="25" max="250" step="5"/></label>
       <label class="toggle-row"><span>Creatures <span class="set-hint">below level 0</span></span><input type="checkbox" id="set-creatures"/></label>
+      <label class="toggle-row"><span>Solid furniture <span class="set-hint">walk around things</span></span><input type="checkbox" id="set-solid"/></label>
       <label class="toggle-row"><span>Can take damage <span class="set-hint">peaceful = off</span></span><input type="checkbox" id="set-damage"/></label>
 
       <div class="set-section">GRAPHICS &amp; COMFORT</div>
@@ -462,8 +518,16 @@
         <input type="text" id="set-beacon-webhook" spellcheck="false" style="width:200px;"/>
       </label>
 
+      <!-- your file (game.js renderFileRow, on 'backrooms:settings-open'): what the office has on you — hidden on the title screen -->
+      <div id="file-row" style="display:none;margin-top:12px;">
+        <div class="set-section">YOUR FILE</div>
+        <p id="file-lines"></p>
+        <button id="btn-new-notice">request a new notice</button>
+        <div id="file-reply" class="set-hint"></div>
+      </div>
       <div id="locate-row" style="display:none;margin-top:12px;">
         <button id="btn-locate" style="background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:13px;padding:8px 16px;cursor:pointer;letter-spacing:2px;">locate your body ⌖</button>
+        <div id="leash-line" class="set-hint" style="margin-top:8px;color:#c9ba72;font-family:monospace;"></div>
       </div>
       <div class="modal-foot">
         <div class="modal-btns">
@@ -528,9 +592,10 @@
       <div id="hp-wrap"><span id="hp-label">HP</span><div id="hp-bar"><div id="hp-fill"></div></div></div>
       <div id="san-wrap"><span id="san-label">SAN</span><div id="san-bar"><div id="san-fill"></div></div></div>
     </div>
+    <div id="map-tab" class="paper" title="the map (tab)">map</div>
     <div id="hotbar-dock">
       <div id="hotbar"></div>
-      <button id="btn-discard" title="drop the selected item (x)">✕ discard</button>
+      <button id="btn-discard" title="set the selected item down (x)">✕ set down</button>
     </div>
     <div id="exit-compass"></div>
     <div id="lan-badge" hidden></div>
@@ -539,20 +604,22 @@
     <div id="chat-log"></div>
     <div id="chat-typing"></div>
   </div>
-  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file …)" spellcheck="false" style="display:none"/>
+  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file … · /intake · /status)" spellcheck="false" style="display:none"/>
   <div id="msg"></div>
-  <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x drop</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span></div>
+  <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>space ward</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x set down</span> · <span>c whistle</span><span class="k-map"> · tab map</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span></div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
   <div id="item-hint" style="opacity:0"></div>
   <div id="stamina-wrap"><div id="stamina-fill"></div></div>
   <div id="insanity"></div>
   <div id="hurt"></div>
+  <div id="down"></div>
   <div id="fade"></div>
   <div id="flash"></div>
   <div id="wish-dialog" style="display:none">
     <div id="wish-inner">
       <p id="wish-prompt">state your request.</p>
       <textarea id="wish-text" maxlength="280" rows="3" placeholder="speak."></textarea>
+      <p id="wish-sub"></p>
       <div id="wish-actions">
         <button id="wish-submit">submit</button>
         <button id="wish-cancel">cancel</button>
@@ -564,8 +631,17 @@
   <div id="note-card" style="display:none">
     <div id="note-inner">
       <p id="note-text"></p>
+      <div id="note-lines"></div>
       <p id="note-foot"></p>
       <div id="note-hint">tap · e · esc — put it back</div>
+    </div>
+  </div>
+
+  <div id="map-card" style="display:none">
+    <div id="map-inner" class="paper">
+      <canvas id="map-canvas" width="448" height="448"></canvas>
+      <p id="map-foot"></p>
+      <div id="map-hint">tab · esc — fold it</div>
     </div>
   </div>
 
@@ -650,23 +726,28 @@
       return applyIdentity({ anchor: parseAnchor(anchorInput.value) })
     }
 
-    async function startSolo() {
-      const anchor = takeAnchor()
-      hideStart()
-      await initGame(canvas, anchor
-        ? { worldSeed: anchorSeed(anchor.lat, anchor.lng), anchor }
-        : {})
-    }
-
     // player name (persisted)
     const nameInput = document.getElementById('player-name')
     nameInput.value = getPrefs().playerName || ''
     nameInput.addEventListener('input', () => setPref('playerName', nameInput.value.slice(0, 24)))
     const getName = () => (nameInput.value.trim() || 'wanderer').slice(0, 24)
 
+    // the facts the file will write you into a column from, on the first way you take (game.js travel(); origin-intake.js): how you came
+    // in (solo, the relay, a LAN you joined or hosted), the pin, the name. The arrival is written by the game at the filing.
+    const intakeFor = (route, anchor) => ({ route, arrival: null, anchor: anchor || null, name: getName() })
+
+    async function startSolo() {
+      const anchor = takeAnchor()
+      const intakeCtx = intakeFor('solo', anchor)
+      hideStart()
+      await initGame(canvas, anchor
+        ? { worldSeed: anchorSeed(anchor.lat, anchor.lng), anchor, intakeCtx }
+        : { intakeCtx })
+    }
+
     // one connection attempt at a time: a double click on HOST / ENTER must not join the room twice (or start the game twice)
     let mpBusy = false
-    async function startMultiplayer(serverUrl, roomId, statusEl) {
+    async function startMultiplayer(serverUrl, roomId, statusEl, route = 'lan') {
       if (mpBusy) return
       mpBusy = true
       const st = statusEl || joinStatus
@@ -680,7 +761,7 @@
         joinModal.style.display = 'none'
         document.getElementById('online-modal').style.display = 'none'
         hideStart()
-        await initGame(canvas, { worldSeed, mpClient, anchor })
+        await initGame(canvas, { worldSeed, mpClient, anchor, intakeCtx: intakeFor(route, anchor) })
       } catch (e) {
         st.textContent = `failed: ${e.message || 'could not connect'}`
         mpBusy = false                                   // (a started game keeps it set: there is no second start)
@@ -720,7 +801,7 @@
           badge.textContent = lines.join('\n')
           badge.hidden = false
         }
-        await startMultiplayer(`ws://localhost:${port}`, room, startStatus)
+        await startMultiplayer(`ws://localhost:${port}`, room, startStatus, r ? 'host' : 'lan')   // 'host' only when this app started the server
         if (startEl.style.display !== 'none') badge.hidden = true   // still on the title: the join failed
       } catch (e) {
         startStatus.textContent = `host failed: ${e.message}`
@@ -735,7 +816,7 @@
     document.getElementById('join-connect').onclick = () => {
       const url = document.getElementById('join-url').value.trim()
       const room = document.getElementById('join-room').value.trim() || 'backrooms'
-      startMultiplayer(url, room)
+      startMultiplayer(url, room, null, 'lan')
     }
 
     // ── play online (Cloudflare relay — one public URL, no host, no setup) ──
@@ -750,7 +831,7 @@
     }
     document.getElementById('online-connect').onclick = () => {
       const code = (document.getElementById('online-room').value.trim() || 'default').slice(0, 32)
-      startMultiplayer(`${RELAY_URL}/?room=${encodeURIComponent(code)}`, code, document.getElementById('online-status'))
+      startMultiplayer(`${RELAY_URL}/?room=${encodeURIComponent(code)}`, code, document.getElementById('online-status'), 'online')
     }
 
     // ── continue a saved run ──
@@ -764,8 +845,10 @@
         // on this path, so a resumed anchored run had a working drift HUD but a
         // hidden, dead "locate your body" button.
         const anchor = applyIdentity({ anchor: savedRun.anchor ?? null })
+        // the form's facts as the run saved them (game.js validates them); a save from before the file carries none: a solo form today
+        const intakeCtx = savedRun.intakeCtx && typeof savedRun.intakeCtx === 'object' ? savedRun.intakeCtx : intakeFor('solo', anchor)
         hideStart()
-        await initGame(canvas, { worldSeed: savedRun.worldSeed ?? null, anchor, resume: savedRun })
+        await initGame(canvas, { worldSeed: savedRun.worldSeed ?? null, anchor, resume: savedRun, intakeCtx })
       }
     }
 
@@ -777,7 +860,7 @@
     prefChk('set-music', 'music');       prefRange('set-musicvol', 'musicVolume'); prefChk('set-ambience', 'ambience')
     prefRange('set-ambiencevol', 'ambienceVolume')
     prefChk('set-grain', 'grain');       prefChk('set-particles', 'particles');    prefChk('set-crosshair', 'crosshair');    prefChk('set-headbob', 'headBob')
-    prefRange('set-sens', 'mouseSensitivity'); prefChk('set-creatures', 'creatures'); prefChk('set-damage', 'damage')
+    prefRange('set-sens', 'mouseSensitivity'); prefChk('set-creatures', 'creatures'); prefChk('set-solid', 'solidBodies'); prefChk('set-damage', 'damage')
     // graphics & comfort — prefs.js validates every value; game.js applies them live (quality, fps cap, DPR, flicker)
     document.getElementById('set-quality').addEventListener('change', e => setPref('graphicsQuality', e.target.value))
     document.getElementById('set-fpscap').addEventListener('change', e => setPref('fpsCap', +e.target.value))
@@ -803,6 +886,7 @@
       document.getElementById('set-headbob').checked    = p.headBob
       document.getElementById('set-sens').value         = p.mouseSensitivity
       document.getElementById('set-creatures').checked  = p.creatures
+      document.getElementById('set-solid').checked      = p.solidBodies
       document.getElementById('set-damage').checked     = p.damage
       document.getElementById('set-quality').value      = p.graphicsQuality
       document.getElementById('set-reduceflicker').checked = p.reduceFlicker
@@ -823,10 +907,15 @@
         if (v) document.getElementById('version-line').textContent = `the backrooms v${v}`
       } catch { /* dev mode */ }
       settingsMod.style.display = 'flex'
+      // the 'your file' row is the running game's to draw (game.js listens; on the title screen nobody does, and the row stays hidden)
+      document.dispatchEvent(new CustomEvent('backrooms:settings-open'))
     }
     document.getElementById('btn-locate').onclick = () => {
       if (currentAnchor) window.backrooms?.openExternal?.(bodyUrl(currentAnchor))
     }
+    // request a new notice: the game re-files you under the notice nobody answered (once a day, like any filing) and redraws the row.
+    // The button lets go of the focus at once, so an Enter meant for the chat later can never press it again
+    document.getElementById('btn-new-notice').onclick = (e) => { e.currentTarget.blur(); document.dispatchEvent(new CustomEvent('backrooms:new-notice')) }
     // one save-and-close path for the CLOSE button, Esc and a click on the dimmed backdrop
     async function closeSettings() {
       const updateMode = document.getElementById('set-updatemode').value

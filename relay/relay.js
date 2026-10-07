@@ -4,13 +4,18 @@
 //
 // Speaks the exact same JSON protocol as server/index.js:
 //   → join {roomId, worldSeed?, name}  → pos {x,y,angle}  → chat {text}
-//   ← welcome {playerId, worldSeed}     ← players [...]     ← joined/left/chat
+//   → ev {kind, payload, keep?, drop?}
+//   ← welcome {playerId, worldSeed, first}  ← players [...]  ← joined/left/chat
+//   ← ev {id, name, kind, payload, t, replay?}
 //
 // Uses the WebSocket Hibernation API + a SQLite-backed class so it runs on the
-// Workers free plan. Per-connection state (id, name, position) rides in each
-// socket's attachment, so it survives hibernation between bursts of traffic.
+// Workers free plan. Per-connection state (id, name, position, the ev token
+// bucket) rides in each socket's attachment, so it survives hibernation
+// between bursts of traffic.
 import { DurableObject } from 'cloudflare:workers'
 import { roomSeed } from './seed.js'
+import { evKindOk, evFrameOk, evBucket } from './evguard.js'
+import { createEvLog } from './evlog.js'
 
 export class Room extends DurableObject {
   async fetch(request) {
@@ -28,10 +33,21 @@ export class Room extends DurableObject {
     return new Response(null, { status: 101, webSocket: client })
   }
 
+  // The keep/drop log (relay/evlog.js) — the only server state the ev
+  // substrate adds, behind the owner's opt-in (wrangler var EV_LOG; '0' turns
+  // it off). It lives in this instance's memory: a hibernated or evicted
+  // object forgets it, which is acceptable for a leave-behind log.
+  evLog() {
+    if (!this._evLog) this._evLog = createEvLog({ max: 64, perName: 6 })
+    return this._evLog
+  }
+
   async webSocketMessage(ws, raw) {
     let msg
     try { msg = JSON.parse(raw) } catch { return }
     const att = ws.deserializeAttachment() || {}
+    const env = this.env || {}
+    const LOG = env.EV_LOG !== '0'
 
     if (msg.type === 'join') {
       att.name = String(msg.name || 'wanderer').slice(0, 24)
@@ -44,7 +60,11 @@ export class Room extends DurableObject {
       const stored = await this.ctx.storage.get('seed')
       const seed = roomSeed(msg.worldSeed, stored)
       if (stored == null) await this.ctx.storage.put('seed', seed)
-      ws.send(JSON.stringify({ type: 'welcome', playerId: att.id, worldSeed: seed, roomId }))
+      // first = no OTHER live socket in the room at join (the accepting socket is
+      // already in the list). NOT `stored == null`: the seed is kept forever, which
+      // would mint every returning visitor to an empty room thin.
+      ws.send(JSON.stringify({ type: 'welcome', playerId: att.id, worldSeed: seed, roomId, first: this.ctx.getWebSockets().length === 1 }))
+      if (LOG) for (const f of this.evLog().replay()) { try { ws.send(JSON.stringify({ ...f, replay: true })) } catch { /* ignore */ } }
       this.broadcast({ type: 'joined', id: att.id, name: att.name }, att.id)
       this.pushPlayers()
     } else if (msg.type === 'pos') {
@@ -56,6 +76,19 @@ export class Room extends DurableObject {
       if (text.trim()) this.broadcast({ type: 'chat', id: att.id, name: att.name, text }, att.id)
     } else if (msg.type === 'typing') {
       this.broadcast({ type: 'typing', id: att.id, name: att.name, on: !!msg.on }, att.id)
+    } else if (msg.type === 'ev') {
+      // one generic relayed event — mirrored textually in server/index.js. The relay
+      // never inspects kind semantics or payload: size, spelling, rate, attach, forward.
+      if (!evFrameOk(raw)) return
+      const kind = typeof msg.kind === 'string' ? msg.kind : ''
+      if (!evKindOk(kind)) return
+      const ok = evBucket(att, Date.now())
+      ws.serializeAttachment(att)                  // evTok/evT ride the attachment
+      if (!ok) return
+      const out = { type: 'ev', id: att.id, name: att.name, kind, payload: msg.payload, t: Date.now() }
+      if (LOG && typeof msg.keep === 'string') this.evLog().keep(msg.keep.slice(0, 48), att.name, out)
+      else if (LOG && typeof msg.drop === 'string') this.evLog().drop(msg.drop.slice(0, 48))
+      this.broadcast(out, att.id)
     }
   }
 

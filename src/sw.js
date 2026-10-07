@@ -3,16 +3,27 @@
 // any browser. Cross-origin requests (the Cloudflare multiplayer relay) are
 // never intercepted, so online play is unaffected. This file is only ever
 // registered over http(s); under Electron's file:// it is never loaded.
-const CACHE = 'backrooms-pwa-v9'
+const CACHE = 'backrooms-pwa-v10'
 const SHELL = [
   '/renderer/index.html',
-  '/renderer/game.js', '/renderer/touch.js', '/renderer/scraps.js', '/renderer/events.js', '/renderer/anchor.js', '/renderer/items.js', '/renderer/save.js',
+  '/renderer/game.js', '/renderer/touch.js', '/renderer/scraps.js', '/renderer/events.js', '/renderer/anchor.js', '/renderer/items.js', '/renderer/tactics.js', '/renderer/save.js',
   '/renderer/world.js', '/renderer/decor.js', '/renderer/fixedmap.js', '/renderer/level-null-map.js',
   '/renderer/levels.js', '/renderer/raycaster.js', '/renderer/renderer.js', '/renderer/entities.js',
   '/renderer/gfx-util.js', '/renderer/gfx-textures.js', '/renderer/gfx-world.js', '/renderer/gfx-sprites.js', '/renderer/gfx-post.js', '/renderer/gfx-cpu.js', '/renderer/gfx-sky.js', '/renderer/gfx-light.js', '/renderer/gfx-quality.js', '/renderer/gfx-attract.js',
   '/renderer/gfx-frame.js', '/renderer/gfx-gl-g4-validate.js', '/renderer/gfx-gl-post-math.js', '/renderer/gfx-gl-post-particles.js', '/renderer/gfx-gl-post-shaders.js', '/renderer/gfx-gl-sprites-atlas.js', '/renderer/gfx-gl-sprites-plan.js', '/renderer/gfx-gl.js', '/renderer/gfx-gl-util.js', '/renderer/gfx-gl-world.js', '/renderer/gfx-gl-world-data.js', '/renderer/gfx-gl-world-shader.js', '/renderer/gfx-gl-sprites.js', '/renderer/gfx-gl-post.js', '/renderer/gfx-stats.js', '/renderer/gfx-bench.js',
-  '/renderer/audio.js', '/renderer/prefs.js',
-  '/net/client.js', '/settings.js',
+  '/renderer/audio.js', '/renderer/prefs.js', '/renderer/messages.js', '/renderer/input.js',
+  '/renderer/collide.js', '/renderer/placement.js', '/renderer/reach.js', '/renderer/feedback.js',
+  '/renderer/hunt.js', '/renderer/variants.js', '/renderer/ward.js', '/renderer/tension.js',
+  '/renderer/topology.js', '/renderer/levelmem.js', '/renderer/death.js', '/renderer/channels.js',
+  '/renderer/fogmap.js', '/renderer/sightpins.js', '/renderer/mapcard.js', '/renderer/compass.js',
+  '/renderer/dress.js', '/renderer/containers.js', '/renderer/haunts.js', '/renderer/papercard.js',
+  '/renderer/origin-intake.js', '/renderer/origin-rules.js', '/renderer/origin-tenant.js', '/renderer/origin-anchored.js',
+  '/renderer/origin-processed.js', '/renderer/origin-unnamed.js', '/renderer/origin-thin.js',
+  '/renderer/compose-perception.js', '/renderer/stillness.js', '/renderer/compose-sanity.js', '/renderer/rollcall.js', '/renderer/downed.js',
+  '/renderer/status.js', '/renderer/closings.js', '/renderer/docket.js',
+  '/renderer/compose-polaroid.js', '/renderer/compose-radio.js', '/renderer/compose-wish.js', '/renderer/compose-gates.js', '/renderer/evidence.js',
+  '/renderer/caches.js', '/renderer/lightshare.js',
+  '/net/client.js', '/net/evbus.js', '/settings.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png',
 ]
 

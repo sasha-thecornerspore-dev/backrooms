@@ -56,6 +56,10 @@ jobs:
           gh label create granted     --color 2ea44f --description "wish granted"        --force >/dev/null 2>&1 || true
           gh label create denied      --color b60205 --description "wish denied"         --force >/dev/null 2>&1 || true
           gh label create auto-failed --color d93f0b --description "auto-grant errored"  --force >/dev/null 2>&1 || true
+          gh label create amendment         --color c5def5 --description "a processed wanderer wish" --force >/dev/null 2>&1 || true
+          gh label create status:extension  --color fbca04 --description "filed under extension"    --force >/dev/null 2>&1 || true
+          gh label create status:compliance --color 0e8a16 --description "filed under compliance"   --force >/dev/null 2>&1 || true
+          gh label create status:litigation --color 5319e7 --description "filed under litigation"   --force >/dev/null 2>&1 || true
 
           # oldest OPEN wish still 'pending', older than 48h, not already decided/failed
           CUTOFF=$(( $(date +%s) - 48*3600 ))
@@ -101,7 +105,7 @@ jobs:
           fi
 
           WORLD=$(cat src/renderer/world.json)
-          SYS='You are the living atmosphere of the Backrooms, acting as an automated arbiter because the keeper did not answer within 48 hours. You receive a wanderer'"'"'s wish and the current world.json. You have FULL DISCRETION: grant it, partially grant it, or deny it. Deny anything impossible within the schema, hostile, self-referential about the game/repo, or outside atmospheric drift. The Backrooms drifts subtly — small shifts in palette, fog, flicker, audio, item scarcity, or the message pool unsettle more than large ones. Return ONLY a JSON object, no markdown, no prose, and DO NOT use any tools: {"verdict":"grant"|"partial"|"deny","world":<the full modified world.json of the SAME schema, or null when denying>,"note":<one short eerie in-fiction sentence for the wanderer>}.'
+          SYS='You are the living atmosphere of the Backrooms, acting as an automated arbiter because the keeper did not answer within 48 hours. You receive a wanderer'"'"'s wish and the current world.json. You have FULL DISCRETION: grant it, partially grant it, or deny it. Deny anything impossible within the schema, hostile, self-referential about the game/repo, or outside atmospheric drift. The Backrooms drifts subtly — small shifts in palette, fog, flicker, audio, item scarcity, or the message pool unsettle more than large ones. Return ONLY a JSON object, no markdown, no prose, and DO NOT use any tools: {"verdict":"grant"|"partial"|"deny","world":<the full modified world.json of the SAME schema, or null when denying>,"note":<one short eerie in-fiction sentence for the wanderer>}. Never change `docket`; a trailing `filed under: …` line is metadata, not part of the wish — do not treat it as self-referential; lean the drift the way that status wants (EXTENSION: staying; COMPLIANCE: quiet; LITIGATION: naming things).'
           # Build the prompt with printf (%s = literal): a variable'"'"'s VALUE is never
           # re-parsed by bash, so world.json / the wish cannot inject shell.
           PROMPT=$(printf '%s\n\nCurrent world.json:\n%s\n\nWish: %s\n\nDecide.' "$SYS" "$WORLD" "$BODY")
@@ -127,7 +131,8 @@ jobs:
 
           # write the drift, then TEST it before it can ship
           echo "$OUT" | jq '.world' > src/renderer/world.json
-          if ! ( jq . src/renderer/world.json >/dev/null 2>&1 && node tools/validate-world.mjs && npm test ); then
+          # the docket is recounted from the trailers, never drifted (a recount failure is a failed grant)
+          if ! ( jq . src/renderer/world.json >/dev/null 2>&1 && node tools/docket.mjs && node tools/validate-world.mjs && npm test ); then
             git checkout -- src/renderer/world.json
             gh issue edit "$NUM" --add-label auto-failed
             gh issue comment "$NUM" --body "the spirits reached for it and the world rejected the shape of it. a keeper must look. ($NOTE)"

@@ -21,30 +21,35 @@ export const EVENTS = [
 
 // Seconds between event *attempts*, scaled by tension: deeper floors and lower
 // sanity pull events closer together. Returns a [min,max] window. Pure.
-export function eventInterval(level, sanity) {
+// `tension` is the docket's / the closing's lean (±0.15, −0.3): added INSIDE the 0..1 clamp so
+// a calm lobby cannot go below calm nor a frayed floor past frayed; 0 is the old window exactly.
+export function eventInterval(level, sanity, tension = 0) {
   const lvl = (typeof level === 'number' && level > 0) ? level : 0
   const depth = Math.min(3, lvl) / 3                                  // 0..1
   const dread = 1 - Math.max(0, Math.min(100, sanity ?? 100)) / 100   // 0 calm .. 1 frayed
-  const tension = Math.min(1, depth * 0.6 + dread * 0.6)              // 0..1
-  const base = 80 - tension * 45                                      // ~80s calm → ~35s tense
+  const t = Math.max(0, Math.min(1, depth * 0.6 + dread * 0.6 + (Number.isFinite(tension) ? tension : 0)))   // 0..1
+  const base = 80 - t * 45                                            // ~80s calm → ~35s tense
   return [base * 0.6, base * 1.4]
 }
 
 // Create a scheduler. `rng` is injectable for tests (defaults to Math.random).
 // The tension-scaled interval (min ~21s) always dominates any fixed cooldown, so
 // there is no separate cooldown — the interval IS the gap between events.
-export function createEventScheduler({ rng = Math.random, events = EVENTS } = {}) {
+// `config` ({ events, tension }) is read at every tick and never rebuilt: game.js swaps the
+// catalogue at filing and its one retension() writes the lean; absent, one is built from `events`.
+export function createEventScheduler({ rng = Math.random, events = EVENTS, config = null } = {}) {
+  const cfg = config ?? { events, tension: 0 }
   let timer = 0
   let next = pickWindow(0, 100)   // first event after a calm interval, whatever the floor
 
   function pickWindow(level, sanity) {
-    const [a, b] = eventInterval(level, sanity)
+    const [a, b] = eventInterval(level, sanity, cfg.tension)
     return a + rng() * (b - a)
   }
 
   // Weighted roll over the events eligible at this depth. null if none.
   function pick(level) {
-    const pool = events.filter((e) => (level ?? 0) >= (e.minLevel ?? 0))
+    const pool = cfg.events.filter((e) => (level ?? 0) >= (e.minLevel ?? 0))
     const total = pool.reduce((s, e) => s + e.weight, 0)
     if (total <= 0) return null
     let r = rng() * total
@@ -65,5 +70,6 @@ export function createEventScheduler({ rng = Math.random, events = EVENTS } = {}
       return pick(ctx.level)
     },
     _pick: pick,   // exposed for tests
+    config: cfg,   // the mutable { events, tension } every tick reads
   }
 }

@@ -34,5 +34,11 @@
   "items": {
     "density": 5,
     "types": ["almond-water", "glowstick", "polaroid", "radio"]
+  },
+  "docket": {
+    "0": { "extension": 0, "compliance": 0, "litigation": 0 },
+    "1": { "extension": 0, "compliance": 0, "litigation": 0 },
+    "2": { "extension": 0, "compliance": 0, "litigation": 0 },
+    "3": { "extension": 0, "compliance": 0, "litigation": 0 }
   }
 }

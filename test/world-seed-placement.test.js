@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { createItemSystem } from '../src/renderer/items.js'
 import { createDecorSystem } from '../src/renderer/decor.js'
 import { levelConfig } from '../src/renderer/levels.js'
-import { DEFAULT_CONFIG } from '../src/renderer/world.js'
+import { DEFAULT_CONFIG, createChunkCache } from '../src/renderer/world.js'
 
 // Phase 1b: the world seed must reach items, props, exits and NPCs — not just
 // walls. Before this, every world had byte-identical furniture at the same
@@ -84,5 +84,23 @@ describe('seed and level stay orthogonal', () => {
     const worldA = items(createItemSystem(cfg, open, 100))
     const worldB = items(createItemSystem(cfg, open, 200))
     expect(worldA).not.toBe(worldB)
+  })
+})
+
+describe('the authored notes (cfg.notes) leave the hashed placement alone', () => {
+  it('a notes cfg yields L0\'s scraps plus exactly the one form record', () => {
+    const walls = (seed) => { const cache = createChunkCache(L0, seed); return (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy) }
+    const plain = createDecorSystem(L0, walls(7), 7); plain.update(0, 0)
+    const noted = createDecorSystem({ ...L0, notes: [{ x: 6.5, y: 6.5 }] }, walls(7), 7); noted.update(0, 0)
+    const forms = noted.getScraps().filter((s) => s.key === '∅:n0')
+    expect(forms).toEqual([{ key: '∅:n0', x: 6.5, y: 6.5, frag: -1, form: true }])
+    expect(noted.getScraps().filter((s) => s.key !== '∅:n0')).toEqual(plain.getScraps())
+    expect(JSON.stringify({ props: noted.getProps(), exits: noted.getExits(), npcs: noted.getNpcs() }))
+      .toBe(JSON.stringify({ props: plain.getProps(), exits: plain.getExits(), npcs: plain.getNpcs() }))
+    expect(plain.getScraps().length).toBeGreaterThan(0)
+  })
+
+  it('levels 0-3 carry no notes, so every golden above runs on a notes-free cfg', () => {
+    for (const i of [0, 1, 2, 3]) expect(levelConfig(DEFAULT_CONFIG, i).notes).toBeUndefined()
   })
 })

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { LEVELS, levelConfig, levelCount } from '../src/renderer/levels.js'
 import { DEFAULT_CONFIG } from '../src/renderer/world.js'
+import { createFixedMap } from '../src/renderer/fixedmap.js'
+import { NULL_MAP } from '../src/renderer/level-null-map.js'
 
 describe('levels', () => {
   it('defines the four descent levels plus Level ∅', () => {
@@ -52,9 +54,36 @@ describe('levels', () => {
     expect(c.palette.wall).not.toBe(DEFAULT_CONFIG.palette.wall)      // overridden
   })
 
+  it('ships a dress denom per level: 2, 2, 3, 3 and 0 for ∅; levelConfig merges dress', () => {
+    expect(LEVELS.map(l => l.config.dress)).toEqual([{ denom: 2 }, { denom: 2 }, { denom: 3 }, { denom: 3 }, { denom: 0 }])
+    expect([0, 1, 2, 3, 4].map(i => levelConfig(DEFAULT_CONFIG, i).dress.denom)).toEqual([2, 2, 3, 3, 0])
+    // DEFAULT_CONFIG stays untouched: no dress key, and absence merges to {} (which the pass reads as 0)
+    expect('dress' in DEFAULT_CONFIG).toBe(false)
+    expect(levelConfig({}, 0).dress).toEqual({ denom: 2 })
+    expect(levelConfig({ dress: { denom: 9, extra: 1 } }, 1).dress).toEqual({ denom: 2, extra: 1 })   // the level's denom wins, base keys kept
+  })
+
+  it('ships a haunts denom per level: 14, 8, 8, 8 and 0 for ∅; levelConfig merges haunts', () => {
+    expect(LEVELS.map(l => l.config.haunts)).toEqual([{ denom: 14 }, { denom: 8 }, { denom: 8 }, { denom: 8 }, { denom: 0 }])
+    expect([0, 1, 2, 3, 4].map(i => levelConfig(DEFAULT_CONFIG, i).haunts.denom)).toEqual([14, 8, 8, 8, 0])
+    // DEFAULT_CONFIG stays untouched: no haunts key, and absence merges to {} (which the pass reads as 0)
+    expect('haunts' in DEFAULT_CONFIG).toBe(false)
+    expect(levelConfig({}, 0).haunts).toEqual({ denom: 14 })
+    expect(levelConfig({ haunts: { denom: 9, extra: 1 } }, 1).haunts).toEqual({ denom: 8, extra: 1 })   // the level's denom wins, base keys kept
+  })
+
   it('addresses ∅ at index 4 and wraps past it', () => {
     expect(levelConfig(DEFAULT_CONFIG, 4).levelIndex).toBe('∅')   // ∅ is index 4
     expect(levelConfig(DEFAULT_CONFIG, 5).levelIndex).toBe(0)     // wraps back to the lobby
     expect(levelConfig(DEFAULT_CONFIG, -1).levelIndex).toBe('∅')  // -1 wraps to the last (∅)
+  })
+
+  it('∅ carries the one authored note (the form on the counter) on open ground; levels 0-3 carry none', () => {
+    expect(levelConfig(DEFAULT_CONFIG, 4).notes).toEqual([{ x: 6.5, y: 6.5 }])
+    for (const i of [0, 1, 2, 3]) expect(levelConfig(DEFAULT_CONFIG, i).notes).toBeUndefined()
+    expect('notes' in DEFAULT_CONFIG).toBe(false)
+    const fm = createFixedMap(NULL_MAP)
+    expect(fm.isWall(6.5, 6.5)).toBe(false)
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) expect(fm.isWall(6.5 + dx, 6.5 + dy)).toBe(false)
   })
 })
