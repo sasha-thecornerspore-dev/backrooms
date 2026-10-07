@@ -334,7 +334,22 @@ describe('DEFAULT_CONFIG.docket', () => {
     expect({ ...DEFAULT_CONFIG, ...file }.docket).toEqual(ZEROS)
   })
 
-  it('the shipped world.json carries a zero docket', () => {
-    expect(JSON.parse(text).docket).toEqual(ZEROS)
+  // the shape, never the values: the recount (tools/docket.mjs) writes live counts here, and
+  // wish-auto runs `npm test` right after it — pinning zeros would fail every grant once a wish is filed
+  const wellShaped = (d) =>
+    JSON.stringify(Object.keys(d).sort()) === '["0","1","2","3"]' &&
+    Object.values(d).every((r) =>
+      JSON.stringify(Object.keys(r).sort()) === '["compliance","extension","litigation"]' &&
+      Object.values(r).every((v) => Number.isInteger(v) && v >= 0))
+
+  it('the shipped world.json carries a well-shaped docket', () => {
+    expect(wellShaped(JSON.parse(text).docket)).toBe(true)
+  })
+
+  it('a recounted, non-zero docket is still well-shaped; a broken one is not', () => {
+    expect(wellShaped({ ...ZEROS, '2': { extension: 1, compliance: 0, litigation: 3 } })).toBe(true)
+    expect(wellShaped({ ...ZEROS, '2': { extension: -1, compliance: 0, litigation: 0 } })).toBe(false)
+    expect(wellShaped({ ...ZEROS, '2': { extension: 1.5, compliance: 0, litigation: 0 } })).toBe(false)
+    expect(wellShaped({ '0': ZEROS['0'], '1': ZEROS['1'], '2': ZEROS['2'] })).toBe(false)
   })
 })
