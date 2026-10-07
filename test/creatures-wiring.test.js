@@ -59,7 +59,9 @@ describe('game.js: one aiCtx object, mutated per frame, handed to one update', (
   })
   it('the nearest-stalker loop is gone: the threat record drives contact damage, the heartbeat and sanity', () => {
     expect(game).not.toMatch(/let nearD2 = Infinity/)
-    expect(game).not.toMatch(/nearD/)
+    // (I13: the one nearD left is the stand's ctx field — closings.js standConditions' own key — and the threat record fills it)
+    expect(game).toContain('standCtx.nearD = th.nearest')
+    expect(game.replace('standCtx.nearD = th.nearest', '').replace('nearD: Infinity', '')).not.toMatch(/nearD/)
     expect(game).not.toMatch(/if \(e\.stagger > 0\) continue\s+\/\/ reeling from a ward/)
     // (I9: lying down, nothing more lands — the down term closes the condition)
     expect(game).toMatch(/if \(!transitioning && creaturesLive && getPref\('damage'\) && invuln <= 0 && th\.dmg > 0 && down\.st !== 'down'\) \{\r?\n\s*player\.hp -= th\.dmg \* rules\.damageMul; invuln = 0\.7; hurt = 1; regenDelay = 6; shake = 1[^\n]*\r?\n\s*showMessage\(th\.dmgKind === 'arc' \? 'the current finds you\.' : 'it has you\.', PRIO\.urgent\)[^\n]*\r?\n\s*lastHitT = playT\r?\n\s*if \(mapOpen\) closeMap\(\); if \(noteOpen\) closeNoteCard\(\)\r?\n\s*cancelCommit\('the bandage slips\.'\)/)

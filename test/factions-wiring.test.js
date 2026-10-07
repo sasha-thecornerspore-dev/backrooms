@@ -30,6 +30,10 @@ import { inViewCone } from '../src/renderer/raycaster.js'
 import { HF } from '../src/renderer/gfx-frame.js'
 import { loadFile, canFile, STRINGS } from '../src/renderer/status.js'
 import { closingLines, NO_STANDING } from '../src/renderer/closings.js'
+import { standConditions, standTick, closingProgress, yourFileLines, slipText } from '../src/renderer/closings.js'
+import { npcLines, fileStatus, DAY_MS } from '../src/renderer/status.js'
+import { createCard } from '../src/renderer/papercard.js'
+import { SCRAPS } from '../src/renderer/scraps.js'
 import { OPENED_LINE, RELEASE_LINE, RADIO_KEY_LINE } from '../src/renderer/origin-processed.js'
 import { LEGACY_LAST_LINE } from '../src/renderer/origin-rules.js'
 import { createDownState, createKneel, DOWN_LINE, WOKEN_LINE, KNEELER_LINE, HANDS_LINE, LIGHT_STAYS_LINE, KNEEL_HINT, WAKE, KNEELER_SANITY, DOWN_BEAT } from '../src/renderer/downed.js'
@@ -284,7 +288,9 @@ describe('I5: the file (origin-*.js) in game.js', () => {
 describe('I5: the form, the doors, the soul, the console, the naming', () => {
   it('E: the presence, else the form (or a page), else ∅\'s sealed door ahead for a tenant-to-be, else the soul (the processed refusal first)', () => {
     const e = slice("if (K['KeyE']) {", "if (K['Escape'] && dialogOpen)")
-    const order = ['if (nearPresence) openDialog()', 'else if (nearScrap) nearScrap.form ? openForm() : openNoteCard(nearScrap)', 'else if (door) knockDoor(door)', 'else if (nearNpc) {'].map((s) => e.indexOf(s))
+    // (I13: the page opens sealed under compliance until it is read or given up)
+    const order = ['if (nearPresence) openDialog()', 'else if (nearScrap) nearScrap.form ? openForm() : mods.sealedCards && !readSet.has(nearScrap.frag) ? openSealed(nearScrap) : openNoteCard(nearScrap)',
+      'else if (door) knockDoor(door)', 'else if (nearNpc) {'].map((s) => e.indexOf(s))
     for (let i = 0; i < order.length; i++) expect(order[i], String(i)).toBeGreaterThan(i ? order[i - 1] : 0)
     expect(e).toContain("const door = cfg.map && !nearPresence && !nearScrap && provisionalOrigin() === 'tenant' ? doorAhead() : null")
     expect(e).toMatch(/const r = rules\.npcLine\(\)[^\n]*\r?\n\s*if \(r\) \{ showMessage\(r\.text\); sanity = Math\.max\(0, Math\.min\(100, sanity \+ r\.sanity\)\) \}/)
@@ -314,7 +320,7 @@ describe('I5: the form, the doors, the soul, the console, the naming', () => {
   it('/intake re-opens the form or refuses an amendment; the fallback names it', () => {
     const cmd = slice('async function handleCommand(t) {', '// desktop: a fetch that never reached the site')
     expect(cmd).toMatch(/\} else if \(cmd === 'intake'\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const r = parseIntakeCommand\(arg\)\r?\n\s*if \(r\.refuse\) showMessage\(r\.refuse\)\r?\n\s*else openForm\(\)/)
-    expect(cmd).toContain("showMessage('the file does not recognise that. try /recover, /cases, /file <answer> or /intake.')")
+    expect(cmd).toContain("showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake or /status.')")   // (the ONE string, I13)
   })
   it('the naming re-file: an unnamed player\'s naming wish closes the dialog and asks how it is spelled; only a confirm files the name', () => {
     const fn = slice('function refileName(name) {', "document.getElementById('wish-cancel')")
@@ -351,7 +357,7 @@ describe('I5: index.html — the form\'s facts on the four start paths, the leas
   })
   it('the locate row carries the leash line; the console placeholder names /intake', () => {
     expect(html).toMatch(/<button id="btn-locate"[^\n]*\r?\n\s*<div id="leash-line" class="set-hint"[^>]*><\/div>/)
-    expect(html).toContain('/recover · /cases · /file … · /intake)')
+    expect(html).toContain('/recover · /cases · /file … · /intake · /status)')   // (I13: /status landed)
   })
 })
 
@@ -556,8 +562,9 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     expect(game).toMatch(/import \{ finaleGate, beaconDecision, deathDecision \} from '\.\/compose-gates\.js'/)   // (deathDecision: I9)
     expect(game).toMatch(/import \{ SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame\b[^}]*\} from '\.\/evidence\.js'/)   // (I12 adds the evidence clock after them)
     expect(game).toMatch(/import \{ lineOfSight, inViewCone \} from '\.\/raycaster\.js'/)
-    expect(game).toMatch(/import \{ depthOf, loadFile, saveFile, statusMods, canFile, canRefile, wishPrompt \} from '\.\/status\.js'/)
-    expect(game).toMatch(/import \{ closingOverlay, closingLines, isWishOpen, CLOSED_OFFICE \} from '\.\/closings\.js'/)
+    // (I13 adds the npc pool, the settings control's filing and the strings; the stand, the progress, the slip and the 'your file' lines)
+    expect(game).toMatch(/import \{ depthOf, loadFile, saveFile, statusMods, npcLines, canFile, canRefile, wishPrompt, fileStatus, STRINGS as FILE \} from '\.\/status\.js'/)
+    expect(game).toMatch(/import \{ standConditions, standTick, closingOverlay, closingLines, isWishOpen, closingProgress, slipText, yourFileLines, CLOSED_OFFICE \} from '\.\/closings\.js'/)
     expect(game).toMatch(/import \{ createCompany, createRollCall\b[^}]*\} from '\.\/rollcall\.js'/)   // (I9 / I10 add the kinds and the whistle's names after them)
     for (const re of [/const RADIO_GROUPS = /, /const isClaim = /, /const finalizing = /, /iwashere/, /extension30150a/]) expect(game).not.toMatch(re)
     // each seam is ONE call
@@ -1663,5 +1670,191 @@ describe('I11 / I12: the README and the field manual say what a cache, a friend\
     for (const s of ['<h3>Leave a word</h3>', '<h3 style="font-size:15px">Share the light</h3>', '<h3 style="font-size:15px">Push for each other</h3>', '<h3 style="font-size:15px">Evidence</h3>']) expect(manual).toContain(s)
     expect(manual).not.toContain('wake where you fell in')
     expect(manual).not.toContain('The floor you left does not remember you.')
+  })
+})
+
+describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\' word, the sour water, the slip, /status and the \'your file\' row', () => {
+  const loop = game.slice(loopAt)
+  const ext = { ...loadFile(null), status: 'extension', at: Date.UTC(2026, 9, 6), ledgerHeard: true }
+  it('nothing of W3 is left to do: no marker in game.js or index.html, and the slip\'s line is the closings\' own', () => {
+    expect(game).not.toMatch(/TODO\(integrate:W3\)/)
+    expect(html).not.toMatch(/TODO\(integrate:W3\)/)
+    expect(game).not.toContain('make your claim where the presence waits')
+    const slip = slice("} else if (eff.type === 'extension-slip') {", 'renderHotbar()')
+    expect(slip).toMatch(/sanity = Math\.min\(100, sanity \+ 20\); wardPulse\(\)\r?\n\s*showMessage\(slipText\(origin, file\.status, file\.closing\)\)/)
+    // under LEGACY (no column, the notice nobody answered) the slip says today's line byte for byte
+    expect(slipText(null, 'notice-mailed', null)).toBe('notice 30150A. status: EXTENSION — the one line the system never closed. a door left ajar it cannot foreclose. make your claim where the presence waits.')
+  })
+  it('the stand: ONE standCtx before the loop, refilled and ticked once a frame right after the bar (the sanity block\'s slice is untouched)', () => {
+    expect(count(/const standCtx = /g)).toBe(1)
+    expect(at('const standCtx = {')).toBeLessThan(loopAt)
+    expect(loop).not.toMatch(/standCtx = \{/)
+    for (const re of [/standTick\(/g, /standConditions\(/g, /(?<!function )closeExtension\(\)/g]) expect(count(re), String(re)).toBe(1)
+    expect(at('standCtx.status = file.status;', loopAt)).toBeGreaterThan(at('updateSanity()', loopAt))
+    expect(at('standCtx.status = file.status;', loopAt)).toBeLessThan(at('const insane = ', loopAt))
+    const block = slice('standCtx.status = file.status;', 'const insane = ')
+    expect(block).toContain('standCtx.standFloor = level.amb.standFloor')
+    expect(block).toMatch(/const sd = standTick\(standHeld, dt, standConditions\(standCtx\)\)\r?\n\s*standHeld = sd\.held\r?\n\s*if \(sd\.done\) closeExtension\(\)/)
+  })
+  it('the stand, lifted and replayed against the real closings: 45 s dark, still and heard on the deepest floor closes the extension ONCE; a step, the light, a thing near, the wrong floor or word, never', () => {
+    const block = slice('standCtx.status = file.status;', 'const insane = ')
+    const standCtx = new Function(`return ${game.match(/const standCtx = (\{[^\n]*\})/)[1]}`)()
+    const fn = new Function('standCtx', 'standTick', 'standConditions', 'closeExtension', 'st',
+      `let { file, level, flashlight, moved, th, sanity, transitioning, standHeld, dt } = st\n${block}\nst.standHeld = standHeld`)
+    const fresh = (o = {}) => ({ file: ext, level: { depth: 3, amb: { standFloor: 3 } }, flashlight: false, moved: false, th: { nearest: Infinity }, sanity: 60, transitioning: false, standHeld: 0, dt: 0.5, ...o })
+    const run = (st, frames) => { let closed = 0; for (let i = 0; i < frames; i++) fn(standCtx, standTick, standConditions, () => closed++, st); return closed }
+    let st = fresh()
+    expect(run(st, 89)).toBe(0)                                               // 44.5 s
+    expect(run(st, 1)).toBe(1)                                                // the crossing frame
+    for (const o of [{ moved: true }, { flashlight: true }, { th: { nearest: 9 } }, { level: { depth: 2, amb: { standFloor: 3 } } }, { file: loadFile(null) },
+      { file: { ...ext, ledgerHeard: false } }, { file: { ...ext, closing: 'extension' } }, { sanity: 30 }, { transitioning: true }]) {
+      st = fresh(o)
+      expect(run(st, 100), JSON.stringify(o)).toBe(0)
+      expect(st.standHeld).toBe(0)
+    }
+    st = fresh({ level: { depth: 2, amb: { standFloor: 2 } } })              // where the room leads extension on the pipes, a floor shallower
+    expect(run(st, 90)).toBe(1)
+    st = fresh(); run(st, 60); st.moved = true; run(st, 1); st.moved = false   // a step halfway: it starts again
+    expect(run(st, 89)).toBe(0); expect(run(st, 1)).toBe(1)
+  })
+  it('the extension closes over you: on the file first, then the lights and your mind, the slip in your hands, and the three lines on the closing\'s timers', () => {
+    const src = slice('function closeExtension() {', "document.getElementById('wish-cancel')")
+    const out = { applied: [], granted: [], hotbar: 0, timers: [], said: [] }
+    const fn = new Function('applyFile', 'itemSys', 'renderHotbar', 'closingLines', 'closingTimers', 'setTimeout', 'showMessage', 'PRIO', 'st',
+      `let { file, calmTimer, flickTgt, flickTimer, sanity } = st\n${src}\ncloseExtension()\nObject.assign(st, { calmTimer, flickTgt, flickTimer, sanity })`)
+    const st = { file: ext, calmTimer: 0, flickTgt: 0.4, flickTimer: 0, sanity: 80 }
+    const timers = []
+    fn((f) => out.applied.push(f), { grant: (t) => { out.granted.push(t); return { ok: true } } }, () => out.hotbar++, closingLines, timers,
+      (f, ms) => { out.timers.push(ms); f(); return out.timers.length }, (m, p) => out.said.push([m, p]), PRIO, st)
+    expect(out.applied).toEqual([{ ...ext, closing: 'extension' }])
+    expect([st.calmTimer, st.flickTgt, st.flickTimer, st.sanity]).toEqual([600, 1, 1.2, 100])
+    expect([out.granted, out.hotbar, timers.length, out.timers]).toEqual([['extension-slip'], 1, 3, [0, 2600, 5600]])
+    expect(out.said).toEqual(closingLines('extension').map((l) => [l, PRIO.discovery]))
+    expect(buildBody).toContain('for (const t of closingTimers) clearTimeout(t); closingTimers.length = 0; standHeld = 0')   // a new floor drops them
+  })
+  it('a closed file: the shimmer is gone from the walls before the hint is written, and E finds no presence', () => {
+    const k = at('if (!isWishOpen(file.closing)) nearPresence = false', loopAt)
+    expect(k).toBeGreaterThan(at('if ((player.x - px2) ** 2 + (player.y - py2) ** 2 < presenceRange) nearPresence = true', loopAt))
+    expect(k).toBeLessThan(at("const hintEl = document.getElementById('presence-hint')", loopAt))
+    expect(k).toBeLessThan(at("if (K['KeyE']) {", loopAt))
+  })
+  it('the sealed pages, lifted and run on the real card: under compliance an unread page opens sealed; read it and it is a page, leave it and the file has it — once', () => {
+    expect(game).toContain("function openSealed(scrap) { openCard('sealed', { text: SCRAPS[scrap.frag] ?? '', foot: '', redacted: file.redacted.includes(scrap.frag) }, scrap) }")
+    expect(statusMods('compliance').sealedCards).toBe(true)
+    for (const s of ['notice-mailed', 'extension', 'litigation']) expect(statusMods(s).sealedCards).toBe(false)
+    const src = slice('function redactScrap() {', '// E at a scrap:')
+    const out = { applied: [], pins: 0 }
+    const fn = new Function('applyFile', 'level', 'fog', 'st', `let { file, cardScrap } = st\nfunction applyFile2(f) { file = f; applyFile(f) }\n${src.replace('applyFile(', 'applyFile2(')}\nredactScrap(); st.file = file`)
+    const scrap = { frag: 4, key: 'k', x: 1, y: 2 }
+    const st = { file: { ...loadFile(null), status: 'compliance', at: 1, redacted: [2] }, cardScrap: scrap }
+    const level = { cfg: { map: null }, index: 2 }, fog = { pinThing: () => out.pins++ }
+    fn((f) => out.applied.push(f), level, fog, st)
+    fn((f) => out.applied.push(f), level, fog, st)                            // the same page again: the file already has it
+    expect(out.applied.map((f) => f.redacted)).toEqual([[2, 4]])
+    expect([out.pins, st.file.redacted]).toEqual([2, [2, 4]])
+    // the real card: the sealed page is blocks until read; X gives it up (the redact action), a given-up page reopens as blocks with no choice
+    const card = createCard()
+    let s = card.open('sealed', { text: SCRAPS[4], foot: '', redacted: false })
+    expect(s.text).not.toBe(SCRAPS[4])
+    expect(card.step(s, 'KeyX').action).toEqual({ type: 'redact' })
+    s = card.open('sealed', { text: SCRAPS[4], foot: '', redacted: true })
+    expect(s.lines.length).toBe(0)
+    s = card.open('sealed', { text: SCRAPS[4], foot: '', redacted: false })
+    const r = card.step(s, 'KeyE')
+    expect([r.action, r.state.mode, r.state.text]).toEqual([{ type: 'reveal' }, 'page', SCRAPS[4]])
+  })
+  it('the souls know the word you are under, lifted and replayed: a notice nobody answered is today\'s twelve and today\'s pick; a filed word adds its line', () => {
+    const src = game.match(/const pool = NPC_LINES\.concat\(npcLines\(file\.status\)\)\r?\n\s*showMessage\(pool\[Math\.floor\(Math\.random\(\) \* pool\.length\)\]\)/)[0]
+    const NPC_LINES = new Function(`return ${game.match(/const NPC_LINES = (\[[^]*?\r?\n\])/)[1]}`)()
+    expect(NPC_LINES.length).toBe(12)
+    const say = (status, r) => { let said = null; new Function('NPC_LINES', 'npcLines', 'file', 'Math', 'showMessage', src)(NPC_LINES, npcLines, { status }, { floor: Math.floor, random: () => r }, (m) => { said = m }); return said }
+    for (const r of [0, 0.3, 0.5, 0.999]) expect(say('notice-mailed', r)).toBe(NPC_LINES[Math.floor(r * NPC_LINES.length)])
+    expect(say('extension', 0.999)).toBe('you can stop looking for the stairs now.')
+    expect(say('compliance', 0.999)).toBe(statusMods('compliance').npcLine)
+    expect(say('litigation', 0.999)).toBe(statusMods('litigation').npcLine)
+    expect(slice("if (K['KeyE']) {", "if (K['Escape'] && dialogOpen)")).toMatch(/const r = rules\.npcLine\(\)[^\n]*\r?\n\s*if \(r\) \{[^\n]*\}\r?\n\s*else \{/)   // the processed refusal still first
+  })
+  it('the sour water, lifted and replayed: under extension it advances the station (no slam, no whisper, nothing taken) and wins over the column; else today\'s', () => {
+    const src = slice('if (eff.sour) {', 'stamina = 100; calmTimer = 20;').replace(/\}\s*else\s*\{\s*$/, '}')
+    const fn = new Function('level', 'player', 'rules', 'dfloor', 'mods', 'RADIO_GROUPS', 'FILE', 'showMessage', 'doorSlam', 'whisper', 'eff', 'st',
+      `let { stationIdx, sanity, flickTgt, flickTimer } = st\n${src}\nObject.assign(st, { stationIdx, sanity, flickTgt, flickTimer })`)
+    const drink = (o) => {
+      const out = { noise: [], said: [], slams: 0, whispers: 0 }
+      const st = { stationIdx: o.stationIdx ?? 0, sanity: 50, flickTgt: 1, flickTimer: 0 }
+      fn({ entitySys: { noise: (x, y, l) => out.noise.push(l) } }, { x: 0, y: 0 }, o.rules ?? LEGACY, o.dfloor ?? 3, statusMods(o.status ?? 'notice-mailed'), RADIO_GROUPS, STRINGS,
+        (m) => out.said.push(m), () => out.slams++, () => out.whispers++, { sour: true }, st)
+      return { ...out, st }
+    }
+    let d = drink({ status: 'extension', stationIdx: 3 })
+    expect([d.noise, d.said, d.slams, d.whispers, d.st.sanity, d.st.stationIdx]).toEqual([[6], [STRINGS.SOUR_ADVANCE], 0, 0, 50, 0])
+    d = drink({ status: 'extension', rules: rulesFor('processed', false), stationIdx: 1 })   // the status wins over the column's rule
+    expect([d.said, d.st.stationIdx]).toEqual([[STRINGS.SOUR_ADVANCE], 2])
+    d = drink({})                                                             // a notice nobody answered, the deepest floor: today's
+    expect([d.said, d.slams, d.st.sanity, d.st.stationIdx]).toEqual([['the water is sour, and something reads the withdrawal. a line moves in a ledger you cannot see.'], 1, 36, 0])
+    d = drink({ dfloor: 2, status: 'compliance' })
+    expect([d.whispers, d.st.sanity, d.st.flickTgt]).toEqual([1, 42, 0.5])
+  })
+  it('/status, lifted and replayed: the file in one line — the word, the column, the closing\'s steps; the fallback is the ONE string', () => {
+    const cmd = slice('async function handleCommand(t) {', '// desktop: a fetch that never reached the site')
+    expect(cmd).toMatch(/\} else if \(cmd === 'status'\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*showMessage\(fileLines\(\)\.slice\(0, -1\)\.join\(' · '\)\)\r?\n\s*\} else showMessage\('the file does not recognise that\. try \/recover, \/cases, \/file <answer>, \/intake or \/status\.'\)/)
+    expect(count(/const fileLines = /g)).toBe(1)
+    const line = game.match(/const fileLines = \(\) => [^\n]*/)[0]
+    const status = (file, origin, claimFiled = false, beaconFired = false) => new Function('yourFileLines', 'closingProgress', 'file', 'origin', 'claimFiled', 'beaconFired',
+      `${line}\nreturn fileLines().slice(0, -1).join(' · ')`)(yourFileLines, closingProgress, file, origin, claimFiled, beaconFired)
+    expect(status(loadFile(null), null)).toBe('notice mailed. unanswered. · the file does not have you yet.')
+    expect(status(ext, 'tenant')).toBe('filed under extension · since 2026-10-06 · the file has you at an address. · the station has read its last group to you · done · standing in the dark on the deepest floor')
+    expect(status({ ...ext, status: 'compliance', redacted: [1, 2, 3] }, 'processed')).toContain('three of thirteen pages given up · the file, closed')
+    expect(status({ ...ext, status: 'litigation' }, 'anchored', true, false)).toContain('the claim, typed · done · the beacon, pushed')
+    for (const s of [status(loadFile(null), null), status(ext, 'unnamed')]) { expect(s).toBe(s.toLowerCase()); expect(s).not.toContain('!') }
+  })
+  it('the \'your file\' row: drawn on the panel\'s open, hidden on the title screen; the control files a new notice under the office\'s day (lifted, on a fake DOM)', () => {
+    expect(html).toMatch(/<div id="file-row" style="display:none;[^"]*">\r?\n\s*<div class="set-section">YOUR FILE<\/div>\r?\n\s*<p id="file-lines"><\/p>\r?\n\s*<button id="btn-new-notice">request a new notice<\/button>/)
+    expect(html.indexOf('id="file-row"')).toBeGreaterThan(html.indexOf('id="settings-modal"'))
+    expect(html.indexOf('id="file-row"')).toBeLessThan(html.indexOf('id="locate-row"'))
+    expect(html.indexOf('id="file-row"')).toBeLessThan(html.indexOf('<div class="modal-foot">'))
+    const open = html.slice(html.indexOf("document.getElementById('btn-settings').onclick"), html.indexOf("document.getElementById('btn-locate').onclick"))
+    expect(open).toMatch(/settingsMod\.style\.display = 'flex'\r?\n(\s*\/\/[^\n]*\r?\n)*\s*document\.dispatchEvent\(new CustomEvent\('backrooms:settings-open'\)\)/)
+    expect(html).toContain("document.getElementById('btn-new-notice').onclick = (e) => { e.currentTarget.blur(); document.dispatchEvent(new CustomEvent('backrooms:new-notice')) }")
+    expect(game).toContain("document.addEventListener('backrooms:settings-open', () => renderFileRow())")
+    expect(count(/document\.addEventListener\('backrooms:new-notice'/g)).toBe(1)
+    // the row on a fake DOM: every line but the last is a faint line, the last is the button; the reply under it
+    const mk = () => { const el = { children: [], style: {}, className: '' }; let t = ''; Object.defineProperty(el, 'textContent', { get: () => t, set: (v) => { t = v; if (v === '') el.children.length = 0 } }); el.appendChild = (c) => el.children.push(c); return el }
+    const row = mk(), lines = mk(), btn = mk(), reply = mk()
+    const render = new Function('fileRowEl', 'fileLinesEl', 'newNoticeEl', 'fileReplyEl', 'fileLines', 'document', `${slice("function renderFileRow(reply = '') {", "document.addEventListener('backrooms:settings-open'")}\nreturn renderFileRow`)
+    const want = yourFileLines(ext, 'tenant', closingProgress('extension', { ledgerHeard: true, closing: null }))
+    render(row, lines, btn, reply, () => want, { createElement: mk })('a new notice is mailed to you.')
+    expect([lines.children.map((c) => c.textContent), lines.children.every((c) => c.className === 'file-line'), btn.textContent, reply.textContent, row.style.display])
+      .toEqual([want.slice(0, -1), true, 'request a new notice', 'a new notice is mailed to you.', 'block'])
+    const bare = mk(); render(null, bare, mk(), mk(), () => want, { createElement: mk })()   // no row in the page: nothing is drawn
+    expect(bare.children.length).toBe(0)
+    // the control, lifted and replayed against the real fileStatus: back to the notice nobody answered — once a day, never twice under the same word
+    const body = game.match(/document\.addEventListener\('backrooms:new-notice', \(\) => \{\r?\n([^]*?)\r?\n  \}\)/)[1]
+    const press = (file, now) => {
+      const out = { applied: [], said: [], rendered: [] }
+      const st = { file, photoIdx: 4, stationIdx: 2, claimFiled: true }
+      new Function('fileStatus', 'Date', 'applyFile', 'showMessage', 'PRIO', 'renderFileRow', 'st',
+        `let { file, photoIdx, stationIdx, claimFiled } = st\n${body}\nObject.assign(st, { photoIdx, stationIdx, claimFiled })`)(fileStatus, { now: () => now }, (f) => out.applied.push(f),
+        (m, p) => out.said.push([m, p]), PRIO, (r) => out.rendered.push(r), st)
+      return { ...out, st }
+    }
+    let p = press({ ...ext, closing: 'extension' }, ext.at + DAY_MS)
+    expect(p.applied).toEqual([{ status: 'notice-mailed', at: ext.at + DAY_MS, ledgerHeard: true, closing: null, redacted: [] }])
+    expect([p.said, p.rendered, p.st.photoIdx, p.st.stationIdx, p.st.claimFiled]).toEqual([[[STRINGS.NEW_NOTICE, PRIO.discovery]], [STRINGS.NEW_NOTICE], 0, 0, false])
+    p = press(ext, ext.at + DAY_MS - 1)                                        // the office's day is not up
+    expect([p.applied, p.said, p.st.photoIdx]).toEqual([[], [[STRINGS.OFFICE_CLOSED, PRIO.discovery]], 4])
+    p = press(loadFile(null), 5)                                               // already the notice nobody answered
+    expect([p.applied, p.said]).toEqual([[], [[STRINGS.SAME_STATUS, PRIO.discovery]]])
+  })
+  it('the README and the field manual say what the file is: the column, the status and its three stamps, the closings, the row, /status, the floors\' count', () => {
+    const readme = read('../README.md'), manual = read('../docs/manual.html')
+    const sec = readme.slice(readme.indexOf('## the file'), readme.indexOf('## controls'))
+    for (const s of ['**tenant**', '**anchored**', '**unnamed**', '**processed**', '**thin**', '**extension** · *let it stay open*', '**compliance** · *close the file*',
+      '**litigation** · *contest it*', '**three ways a file closes.**', '**request a new notice**', '`/status`', '`filed under: EXTENSION · level 2`']) expect(sec, s).toContain(s)
+    expect(readme).toMatch(/^\| your file \| [^\n]*\*\*request a new notice\*\* \|$/m)
+    expect(readme).toMatch(/^\| enter \| [^\n]*`\/status`/m)
+    expect(manual).toContain('<section id="file">')
+    for (const s of ['<h2>The file has you now</h2>', '<h3 style="font-size:15px">The stand</h3>', '<span class="mono">/status</span>', '<h3>Compliance</h3>']) expect(manual, s).toContain(s)
+    expect(manual.indexOf('<section id="file">')).toBeLessThan(manual.indexOf('<section id="coop">'))
+    for (const doc of [sec, manual.slice(manual.indexOf('<section id="file">'), manual.indexOf('<section id="coop">'))]) expect(doc).not.toContain('!')
   })
 })

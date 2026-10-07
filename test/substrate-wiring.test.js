@@ -117,7 +117,8 @@ describe('game.js: the paper card (I4)', () => {
     expect(reveal).toContain('renderCard(card.setFoot(card.state, `${readSet.size} of ${SCRAPS.length} pages found`))')
     expect(game.slice(at('function redactScrap() {'), at('function openNoteCard(scrap) {'))).toMatch(/const scrap = cardScrap\r?\n/)
     expect(game).toMatch(/function openNoteCard\(scrap\) \{\r?\n\s*if \(!scrap \|\| !openCard\('page', \{ text: SCRAPS\[scrap\.frag\] \?\? '' \}, scrap\)\) return\r?\n\s*revealScrap\(\)/)
-    expect(game).toContain('else if (nearScrap) nearScrap.form ? openForm() : openNoteCard(nearScrap)')   // origins (I5): ∅'s form note opens the form card
+    // origins (I5): ∅'s form note opens the form card; status (I13): under compliance an unread page opens sealed, else the page as today
+    expect(game).toContain('else if (nearScrap) nearScrap.form ? openForm() : mods.sealedCards && !readSet.has(nearScrap.frag) ? openSealed(nearScrap) : openNoteCard(nearScrap)')
   })
   it('index.html: the option lines sit between the text and the foot, faint and tappable', () => {
     expect(html).toMatch(/<p id="note-text"><\/p>\r?\n\s*<div id="note-lines"><\/div>\r?\n\s*<p id="note-foot"><\/p>/)

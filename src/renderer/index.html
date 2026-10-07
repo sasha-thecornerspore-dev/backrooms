@@ -315,6 +315,12 @@
     .toggle-row input[type=checkbox] { accent-color:#c9ba72; width:16px; height:16px; cursor:pointer; }
     .set-section { border-top:1px solid #3a2f14; margin:16px 0 4px; padding-top:12px; color:#8a7a3a; font-family:monospace; font-size:11px; letter-spacing:3px; }
     .set-hint { font-size:10px; opacity:0.5; letter-spacing:1px; }
+    /* the 'your file' row (game.js renderFileRow): the office's lines on you, one a line, typed in faint ink; the last is its button */
+    #file-lines { display:flex; flex-direction:column; gap:3px; margin:8px 0 12px; color:#b9a862; font:12px/1.5 monospace; letter-spacing:1px; max-width:420px; }
+    #file-lines .file-line:first-child { color:#c9ba72; }
+    #btn-new-notice { background:none; border:1px solid #8a7a3a; color:#c9ba72; font-family:monospace; font-size:13px; padding:8px 16px; cursor:pointer; letter-spacing:2px; }
+    #btn-new-notice:hover { background:rgba(58,44,23,0.88); }
+    #file-reply { margin-top:8px; color:#c9ba72; font-family:monospace; min-height:12px; }
     #anchor-wrap { display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px; }
     #anchor-input {
       width: min(460px, 90vw); background: rgba(14,12,7,0.72); border: 1px solid #6a5a2a; color: var(--text);
@@ -501,6 +507,13 @@
       <div id="update-ready-msg" style="display:none;color:#c9ba72;font-family:monospace;font-size:13px;margin-top:12px;">
         update ready — <button id="btn-restart" style="background:none;border:none;color:#c9ba72;cursor:pointer;font-family:monospace;text-decoration:underline;">restart now</button>
       </div>
+      <!-- your file (game.js renderFileRow, on 'backrooms:settings-open'): what the office has on you — hidden on the title screen -->
+      <div id="file-row" style="display:none;margin-top:12px;">
+        <div class="set-section">YOUR FILE</div>
+        <p id="file-lines"></p>
+        <button id="btn-new-notice">request a new notice</button>
+        <div id="file-reply" class="set-hint"></div>
+      </div>
       <div id="locate-row" style="display:none;margin-top:12px;">
         <button id="btn-locate" style="background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:13px;padding:8px 16px;cursor:pointer;letter-spacing:2px;">locate your body ⌖</button>
         <div id="leash-line" class="set-hint" style="margin-top:8px;color:#c9ba72;font-family:monospace;"></div>
@@ -580,8 +593,7 @@
     <div id="chat-log"></div>
     <div id="chat-typing"></div>
   </div>
-  <!-- TODO(integrate:W3) I13/I15: the placeholder ends ' · /intake · /status)' once W3's /status lands -->
-  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file … · /intake)" spellcheck="false" style="display:none"/>
+  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file … · /intake · /status)" spellcheck="false" style="display:none"/>
   <div id="msg"></div>
   <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x set down</span> · <span>c whistle</span><span class="k-map"> · tab map</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span></div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
@@ -884,10 +896,15 @@
         if (v) document.getElementById('version-line').textContent = `the backrooms v${v}`
       } catch { /* dev mode */ }
       settingsMod.style.display = 'flex'
+      // the 'your file' row is the running game's to draw (game.js listens; on the title screen nobody does, and the row stays hidden)
+      document.dispatchEvent(new CustomEvent('backrooms:settings-open'))
     }
     document.getElementById('btn-locate').onclick = () => {
       if (currentAnchor) window.backrooms?.openExternal?.(bodyUrl(currentAnchor))
     }
+    // request a new notice: the game re-files you under the notice nobody answered (once a day, like any filing) and redraws the row.
+    // The button lets go of the focus at once, so an Enter meant for the chat later can never press it again
+    document.getElementById('btn-new-notice').onclick = (e) => { e.currentTarget.blur(); document.dispatchEvent(new CustomEvent('backrooms:new-notice')) }
     // one save-and-close path for the CLOSE button, Esc and a click on the dimmed backdrop
     async function closeSettings() {
       const autoUpdate = document.getElementById('chk-autoupdate').checked

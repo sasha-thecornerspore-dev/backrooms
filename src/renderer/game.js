@@ -49,8 +49,8 @@ import { createStillness, HUNTS_MOVEMENT_LINE } from './stillness.js'
 import { sanityStep, EXHAUSTED_LINE, DISAGREE_LINE } from './compose-sanity.js'
 import { createCompany, createRollCall, evKinds, whistlePitch, bearingLabel, whistleGain, whistlePan, countLine, WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY, FAR_BONUS, ECHO, NO_ANSWER_LINE, ECHO_LINE } from './rollcall.js'
 import { createDownState, createKneel, downedInFront, DOWN_LINE, KNEEL_HINT, HANDS_LINE, LIGHT_STAYS_LINE, WOKEN_LINE, KNEELER_LINE, WAKE, KNEELER_SANITY, DOWN_BEAT } from './downed.js'
-import { depthOf, loadFile, saveFile, statusMods, canFile, canRefile, wishPrompt } from './status.js'
-import { closingOverlay, closingLines, isWishOpen, CLOSED_OFFICE } from './closings.js'
+import { depthOf, loadFile, saveFile, statusMods, npcLines, canFile, canRefile, wishPrompt, fileStatus, STRINGS as FILE } from './status.js'
+import { standConditions, standTick, closingOverlay, closingLines, isWishOpen, closingProgress, slipText, yourFileLines, CLOSED_OFFICE } from './closings.js'
 import { standing, placementMods, applyPlacement, ambientMods, trayLean, rollCall } from './docket.js'
 import { polaroidCaption } from './compose-polaroid.js'
 import { radioLine, RADIO_GROUPS } from './compose-radio.js'
@@ -332,7 +332,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const stillness = createStillness({ now: () => playT })
   const stillNote = { moving: false, flashlight: true, radioOn: false, t: 0 }
   let wasHidden = false, huntsMovementSaid = false
-  let standHeld = 0   // TODO(integrate:W3) I13: the stand tick writes it (closings.js standTick); buildLevel, the ward and the whistle reset it already — the hunts line keeps quiet while it runs
+  // the stand (closings.js): seconds held dark and still on the floor the extension is extended over you; the loop's stand tick writes it,
+  // a floor, a ward and a whistle start it again, and the hunts line keeps quiet while it runs
+  let standHeld = 0
   // ── company (rollcall.js): the pool a fresh friend within 6 steadies you out of — it drains while you stand together and stops helping
   //    when it is empty, then refills while you are apart; sanityStep says how it moves each frame. The two files' disagreement is said once ──
   const company = createCompany()
@@ -835,6 +837,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const c = chunkUnder(); level.decor.update(c.cx, c.cy)
     retension()
   }
+  // the extension closes over you (the loop's stand tick, done): the notice is extended — twenty-two years — and you are in it. The lights
+  // hold, your mind comes back to you, and the slip is yours now; the three lines are the closing's (they do not follow you to a new floor)
+  function closeExtension() {
+    applyFile({ ...file, closing: 'extension' })
+    calmTimer = 600; flickTgt = 1; flickTimer = 1.2; sanity = Math.min(100, sanity + 30)
+    itemSys.grant('extension-slip'); renderHotbar()
+    const L = closingLines('extension')
+    closingTimers.push(setTimeout(() => showMessage(L[0], PRIO.discovery), 0), setTimeout(() => showMessage(L[1], PRIO.discovery), 2600), setTimeout(() => showMessage(L[2], PRIO.discovery), 5600))
+  }
   document.getElementById('wish-cancel')?.addEventListener('click', closeDialog)
   // what you typed is routed (compose-wish.js wishRoute), in this order: closing the file (compliance), a name (the unnamed), a status word,
   // the claim, an ordinary wish. The first three are the file's own business and never leave the room; the claim and the wish are sent
@@ -955,11 +966,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (!level.cfg.map) fog.pinThing(level.index, 'n:' + scrap.key, 'note', scrap.x, scrap.y, true)       // on the map, filled in: read
     renderCard(card.setFoot(card.state, `${readSet.size} of ${SCRAPS.length} pages found`))
   }
-  // a sealed page left unread: the file notes it (compliance counts it); it still goes on the map
+  // a sealed page left unread: the file notes it (compliance counts it — thirteen given up and the file can close); it still goes on the map
   function redactScrap() {
     const scrap = cardScrap
     if (!scrap) return
-    // TODO(integrate:W3) I13: applyFile({ ...file, redacted: [...file.redacted, scrap.frag] }) — W3's one write seam (sealed cards open only once W3 lands)
+    if (!file.redacted.includes(scrap.frag)) applyFile({ ...file, redacted: [...file.redacted, scrap.frag] })
     if (!level.cfg.map) fog.pinThing(level.index, 'n:' + scrap.key, 'note', scrap.x, scrap.y, true)
   }
   // E at a scrap: m.'s page, revealed as it opens (today's card byte for byte: the text, '{n} of 26 pages found', +6 the first time, the pin)
@@ -967,6 +978,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (!scrap || !openCard('page', { text: SCRAPS[scrap.frag] ?? '' }, scrap)) return
     revealScrap()
   }
+  // under compliance a page you have not read comes sealed (mods.sealedCards): read it (E) or leave it unread (X) for the file. One you
+  // already gave up opens as the blocks it is now
+  function openSealed(scrap) { openCard('sealed', { text: SCRAPS[scrap.frag] ?? '', foot: '', redacted: file.redacted.includes(scrap.frag) }, scrap) }
   // E at ∅'s form on the counter (decor's authored note, frag -1), and /intake: the file's view of you, read-only — no page count, no
   // sanity, no pin; it closes on any close key like a page
   function openForm() { openCard('form', { text: formText(intakeCtx, file.status).join('\n'), foot: FORM_FOOT }) }
@@ -1316,7 +1330,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         const r = parseIntakeCommand(arg)
         if (r.refuse) showMessage(r.refuse)
         else openForm()
-      } else showMessage('the file does not recognise that. try /recover, /cases, /file <answer> or /intake.')   // TODO(integrate:W3) I13/I15: the ONE string 'the file does not recognise that. try /recover, /cases, /file <answer>, /intake or /status.' once /status lands
+      } else if (cmd === 'status') {
+        // the file as the office keeps it, in one line: the word you are under, how it has you, how far its closing has come (the settings
+        // panel's 'your file' row reads the same lines)
+        showMessage(fileLines().slice(0, -1).join(' · '))
+      } else showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake or /status.')
     } catch (e) {
       // desktop: a fetch that never reached the site (offline, DNS, blocked) says so plainly
       if (RECOVER_REMOTE && e && e.name === 'TypeError') showMessage('no signal. the file is kept online —\nconnect to the internet and try again.')
@@ -1328,6 +1346,36 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     mpClient.onTyping(showTyping)
     addChatLine('', 'connected — Enter to chat · /me to emote', true)
   }
+
+  // ── your file (status.js / closings.js): what the office has on you, as lines — the word you are under (and since when), how the file
+  //    has you (the column), each step of that word's closing (' · done' once met), and last the control's own label. /status joins all
+  //    but the last; the settings panel's 'your file' row shows them and makes the last its button. The panel's script (index.html) and
+  //    this one meet through two document events: 'backrooms:settings-open' (the row is drawn from the file now — it stays hidden on the
+  //    title screen, where there is no run to read) and 'backrooms:new-notice' (the file goes back to the notice nobody answered, under the
+  //    office's day: the old file stays closed, the claim's letters, the station and the claim start over) ──
+  const fileLines = () => yourFileLines(file, origin, closingProgress(file.status, { ledgerHeard: file.ledgerHeard, redacted: file.redacted, claimFiled, beaconFired, closing: file.closing }))
+  const fileRowEl = document.getElementById('file-row'), fileLinesEl = document.getElementById('file-lines')
+  const newNoticeEl = document.getElementById('btn-new-notice'), fileReplyEl = document.getElementById('file-reply')
+  function renderFileRow(reply = '') {
+    if (!fileRowEl || !fileLinesEl) return
+    const lines = fileLines()
+    fileLinesEl.textContent = ''
+    for (let i = 0; i < lines.length - 1; i++) {
+      const s = document.createElement('span')
+      s.className = 'file-line'; s.textContent = lines[i]
+      fileLinesEl.appendChild(s)
+    }
+    if (newNoticeEl) newNoticeEl.textContent = lines[lines.length - 1]
+    if (fileReplyEl) fileReplyEl.textContent = reply
+    fileRowEl.style.display = 'block'
+  }
+  document.addEventListener('backrooms:settings-open', () => renderFileRow())
+  document.addEventListener('backrooms:new-notice', () => {
+    const r = fileStatus(file, 'notice-mailed', Date.now(), true)
+    if (r.file !== file) { applyFile(r.file); photoIdx = 0; stationIdx = 0; claimFiled = false }
+    showMessage(r.reply, PRIO.discovery)
+    renderFileRow(r.reply)
+  })
 
   // ── the event bus (src/net/evbus.js): the one relayed 'ev' every co-op verb rides, and 'here' — the heartbeat that tells the room which
   //    floor you are on and what the file knows of you (and you of them: the bus merges a friend's onto their players-list record, the
@@ -1623,9 +1671,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (eff.type === 'almond-water') {
       if (eff.sour) {
         level.entitySys.noise(player.x, player.y, 6)        // the retch: the things hear it
-        // TODO(integrate:W3) I13: the extension status's 'advance' (statusMods(file.status).sourWater) is read BEFORE the column's rule and wins
         const sw = rules.sourWater(dfloor)                  // processed: the ledger moved years ago — no slam, no whisper, no sanity
-        if (sw) {
+        // the extension status reads it BEFORE the column's rule, and wins (status.js statusMods sourWater 'advance'): you have stopped
+        // tasting the difference — no slam, no whisper, nothing taken; the station moves on a group instead
+        if (mods.sourWater === 'advance') {
+          stationIdx = (stationIdx + 1) % RADIO_GROUPS.length
+          showMessage(FILE.SOUR_ADVANCE)
+        } else if (sw) {
           sanity = Math.max(0, Math.min(100, sanity + sw.sanity)); if (sw.slam) doorSlam(); if (sw.whisper) whisper(); if (sw.flicker) { flickTgt = 0.5; flickTimer = 0.3 }
           showMessage(sw.line)
         } else if (dfloor === 3) {
@@ -1671,9 +1723,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     } else if (eff.type === 'extension-slip') {
       // 30150A — the one line the system never closed. Hands the concept, not the
       // literal claim: the phrase itself is earned from the numbers station.
-      // TODO(integrate:W3) I13: the line below becomes slipText(origin, file.status, file.closing)
+      // (closings.js slipText: today's line for everyone else; the processed read their own, and under extension it is yours now)
       sanity = Math.min(100, sanity + 20); wardPulse()
-      showMessage('notice 30150A. status: EXTENSION — the one line the system never closed. a door left ajar it cannot foreclose. make your claim where the presence waits.')
+      showMessage(slipText(origin, file.status, file.closing))
     }
     renderHotbar()
   }
@@ -2056,6 +2108,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const sanCtx = { rules, mods, closingOverlay: co, flashlight, litNear: false, index: 0, depth: 0, hunted: false, gaze: false, gazeRate: 0, origin: null,
     drift: 0, leashDebt: 0, leashCalm: 0, down: false, company: 0, companyWas: 0, disagreeSaid: false, dt: 0,
     player, self: selfFile, remotes: remoteOnFloor, fresh: bus ? bus.fresh : null, onFloor: bus ? bus.onFloor : null }
+  // what the stand reads (closings.js standConditions): ONE object, refilled per frame where the stand ticks — the file's word and closing,
+  // the floor's depth and the floor the room's files make deepest (level.amb.standFloor), your light, the ledger heard, a step, the nearest
+  // thing, your mind, a fade
+  const standCtx = { status: 'notice-mailed', closing: null, depth: 0, standFloor: 3, flashlight: true, ledgerHeard: false, moving: false, nearD: Infinity, sanity: 100, transitioning: false }
   let last = 0
   let frameCount = 0
   let loopErrs = 0
@@ -2254,6 +2310,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if ((player.x - px2) ** 2 + (player.y - py2) ** 2 < presenceRange) nearPresence = true
       }
     }
+    // a file closed in compliance: the shimmer is gone from the walls (closings.js isWishOpen; the overlay's presence: false)
+    if (!isWishOpen(file.closing)) nearPresence = false
     const hintEl = document.getElementById('presence-hint')
     if (hintEl) hintEl.style.opacity = nearPresence ? '1' : '0'
 
@@ -2402,17 +2460,22 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         const code = `Digit${i + 1}`
         if (K[code]) { K[code] = false; cancelCommit(); itemSys.select(i); renderHotbar() }   // a slot change ends a wrap (consume takes the SELECTED item)
       }
-      // E — the presence, else the form or the scrap, else (∅, a tenant-to-be) the sealed door ahead, else the lost soul
+      // E — the presence, else the form or the scrap (sealed, under compliance, until you read it or give it up), else (∅, a tenant-to-be)
+      // the sealed door ahead, else the lost soul
       if (K['KeyE']) {
         K['KeyE'] = false
         const door = cfg.map && !nearPresence && !nearScrap && provisionalOrigin() === 'tenant' ? doorAhead() : null
         if (nearPresence) openDialog()
-        else if (nearScrap) nearScrap.form ? openForm() : openNoteCard(nearScrap)   // TODO(integrate:W3) I13: an unread page under compliance opens 'sealed' (mods.sealedCards)
+        else if (nearScrap) nearScrap.form ? openForm() : mods.sealedCards && !readSet.has(nearScrap.frag) ? openSealed(nearScrap) : openNoteCard(nearScrap)
         else if (door) knockDoor(door)
         else if (nearNpc) {
           const r = rules.npcLine()                       // processed: the soul sees the stamp and will not talk
           if (r) { showMessage(r.text); sanity = Math.max(0, Math.min(100, sanity + r.sanity)) }
-          else showMessage(NPC_LINES[Math.floor(Math.random() * NPC_LINES.length)])   // TODO(integrate:W3) I13: the pool is NPC_LINES.concat(npcLines(file.status))
+          else {
+            // the souls know the word you are under: its line joins their pool (a notice nobody answered adds none — today's twelve)
+            const pool = NPC_LINES.concat(npcLines(file.status))
+            showMessage(pool[Math.floor(Math.random() * pool.length)])
+          }
         }
       }
       // Space — the ward — is the charger block at the head of the frame (ward.js reads the press / release edge counts)
@@ -2567,6 +2630,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // someone has evidence of you: for 90 s the floor under you is 25 (not calm — the whispers still come at 25)
     if (evidence.active(playT)) sanity = Math.max(sanity, EVIDENCE_FLOOR)
     updateSanity()
+    // ── the stand (closings.js), on this frame's mind (after the clamp and the evidence floor): filed under extension, on the floor the room's
+    //    files make deepest, dark, still, the station's last group heard, nothing within 10 and your mind above 30 — held 45 s, the notice is
+    //    extended over you (closeExtension). One reused record, read now; a step, your light, a ward or a whistle start it again ──
+    standCtx.status = file.status; standCtx.closing = file.closing; standCtx.depth = level.depth; standCtx.standFloor = level.amb.standFloor
+    standCtx.flashlight = flashlight; standCtx.ledgerHeard = file.ledgerHeard; standCtx.moving = moved; standCtx.nearD = th.nearest
+    standCtx.sanity = sanity; standCtx.transitioning = transitioning
+    const sd = standTick(standHeld, dt, standConditions(standCtx))
+    standHeld = sd.held
+    if (sd.done) closeExtension()
     const insane = Math.max(0, Math.min(1, (42 - sanity) / 42))
     if (insaneEl) insaneEl.style.opacity = (insane * 0.6).toFixed(2)
     // the whispers come closer together the higher the tension runs (the window shrinks by up to half)

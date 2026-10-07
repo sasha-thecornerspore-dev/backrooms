@@ -152,8 +152,9 @@
           <span class="k"><kbd>1</kbd>–<kbd>6</kbd></span><span class="d">select inventory slot</span>
           <span class="k"><kbd>L</kbd></span><span class="d">flashlight on / off — or stand dark in a <b>friend's light</b></span>
           <span class="k"><kbd>C</kbd></span><span class="d"><b>whistle</b> — call out; friends hear it, so do the things</span>
-          <span class="k"><kbd>E</kbd></span><span class="d">speak — to a soul or a presence</span>
-          <span class="k"><kbd>Enter</kbd></span><span class="d">chat (online)</span>
+          <span class="k"><kbd>E</kbd></span><span class="d">speak — to a soul or a presence · read a page</span>
+          <span class="k"><kbd>Enter</kbd></span><span class="d">chat (online) · the console: <span class="mono">/status</span> <span class="mono">/intake</span></span>
+          <span class="k"><kbd>B</kbd></span><span class="d"><b>beacon</b> — fire your own webhook into the dark</span>
           <span class="k"><kbd>M</kbd></span><span class="d">mute / unmute the music</span>
           <span class="k"><kbd>Esc</kbd></span><span class="d">unlock mouse · close a dialog</span>
         </div>
@@ -329,7 +330,7 @@
     <div class="grid g2">
       <div class="panel">
         <p class="lead">Not everything here wants to hurt you. Rare, pale figures drift the halls — people who fell through and never found the way up.</p>
-        <p>Walk up to one and press <kbd>E</kbd>. They'll speak: lore, warnings, and — if you listen — the occasional real hint about the way down.</p>
+        <p>Walk up to one and press <kbd>E</kbd>. They'll speak: lore, warnings, and — if you listen — the occasional real hint about the way down. They know which word <a href="#file" style="color:inherit">your file</a> is under, and sometimes they say so. If the file has stamped you, they can see it — and they will not talk.</p>
         <p class="callout" style="margin:12px 0 0">“if the lights go out, stop moving. it hunts movement.”</p>
       </div>
       <figure class="panel" style="display:flex;align-items:center;justify-content:center">
@@ -361,6 +362,43 @@
       <figure class="item"><svg viewBox="0 0 60 60" aria-label="Polaroid camera"><rect width="60" height="60" fill="#0b0a06"/><rect x="16" y="22" width="28" height="20" rx="2" fill="#e9e6dc"/><circle cx="30" cy="32" r="6" fill="#1e1e28"/><circle cx="30" cy="32" r="3" fill="#4a4a5a"/><rect x="38" y="24" width="4" height="3" fill="#cf4a3f"/></svg><span class="name">Polaroid camera</span><p>Captures evidence — a flash, and the shot is filed to <span class="mono">Pictures/backrooms/</span>. Proof you were here. Point it at a friend and the film develops what the file wrote on them — and they will know.</p></figure>
       <figure class="item"><svg viewBox="0 0 60 60" aria-label="Radio"><rect width="60" height="60" fill="#0b0a06"/><rect x="16" y="28" width="26" height="16" rx="2" fill="#c86438"/><line x1="40" y1="28" x2="46" y2="16" stroke="#dcdcc8" stroke-width="2"/><circle cx="21" cy="36" r="2.5" fill="#2a1a10"/></svg><span class="name">Radio</span><p>Plays a tune that's almost right. You can find presences from much farther — but other things hear it too.</p></figure>
       <figure class="item" style="justify-content:center;color:var(--text-dim)"><span class="name" style="color:var(--beacon)">the wish system</span><p>Sometimes a <strong>presence</strong> shimmers in a wall. Press <kbd>E</kbd> and state a request. Wishes are reviewed. Some are granted, and the world quietly drifts.</p></figure>
+    </div>
+  </section>
+
+  <section id="file">
+    <div class="eyebrow">The record · Your file</div>
+    <h2>The file has you now</h2>
+    <p class="lead">Somewhere above the drop ceiling there is an office, and it keeps a file on everyone who falls through. You never fill it in. It fills itself in — and the Backrooms reads it.</p>
+    <p>Until your first way down, nothing is written. On the block the intake form lies on the counter (<kbd>E</kbd> to read it, or type <span class="mono">/intake</span> in the console anywhere). Then you take a way down, and a few breaths after the level's name a line arrives: <i>the file has you now.</i> The column is written once a run, by how you came in.</p>
+
+    <h3 style="margin-top:22px">The column — nobody chooses one</h3>
+    <div class="grid g2" style="margin-top:12px">
+      <div class="panel"><h3 style="font-size:15px">Tenant</h3><p style="color:var(--text-dim);font-size:14px"><i>the file has you at an address.</i> You came alone, with a name. The street does not mind you; the deep frays you faster, and below the first floor the things find you more easily. Your hands reach a way from further off, your map marks every way the floor has loaded — and on the block, the sealed doors tell you what the file says lives behind them.</p></div>
+      <div class="panel"><h3 style="font-size:15px">Anchored</h3><p style="color:var(--text-dim);font-size:14px"><i>the file has your body at a pin.</i> You came through a real place, and the body stayed there. Drift too far and it pulls at your mind — the settings panel shows the <b>leash</b> under <b>locate your body</b>. The first photograph on a floor quiets it for a while.</p></div>
+      <div class="panel"><h3 style="font-size:15px">Unnamed</h3><p style="color:var(--text-dim);font-size:14px"><i>the file cannot spell you.</i> You left the name blank. The things cannot keep hold of you, and a page or a friend steadies you more — but the film will not develop a letter that is yours. Tell a presence <span class="mono">call me …</span> and it asks how that is spelled.</p></div>
+      <div class="panel"><h3 style="font-size:15px">Processed</h3><p style="color:var(--text-dim);font-size:14px"><i>the file opened a line on you.</i> You were the first into a shared room. The souls see the stamp. The radio reads every group to you, and once, the key. Your wishes are amendments, and a floor you fire the beacon on is filed for good.</p></div>
+    </div>
+    <div class="callout">And over any column, a layer: <b>thin</b>. Drop into a room someone already walks, or come back up from the dark, and <i>not all of you arrived.</i> The things lose you faster and hear you less — but the light goes through you, and your ward pushes you back too. Ballast cures it.</div>
+
+    <h3 style="margin-top:22px">Filed under — the word you choose</h3>
+    <p>The file also keeps a <strong>status</strong>. It starts as a notice nobody answered. Once the file can hear you — the numbers station has read you its last group, you have found five of m.'s pages, or you have gone deep enough — the request at a presence shows three faint stamps. Tap one, or type it. The office files once a day. Your status is not part of any save: it follows you into every run, and into every room.</p>
+    <div class="grid g3" style="margin-top:12px">
+      <div class="notice"><h3>Extension</h3><p><i>let it stay open.</i> The deep holds you; the street is the thin place. Sour water stops taking anything from you — somewhere a line moves instead.</p></div>
+      <div class="notice"><h3>Compliance</h3><p><i>close the file.</i> The film turns honest. A page you have not read comes <b>sealed</b>: read it (<kbd>E</kbd>), or leave it unread (<kbd>X</kbd>) and give it to the file.</p></div>
+      <div class="notice"><h3>Litigation</h3><p><i>contest it.</i> The claim develops on every photograph, even on the darkest floors. A thin figure caught on film is evidence.</p></div>
+    </div>
+    <p style="margin-top:14px">The lost souls know which word you are under, and so does the room: <span class="mono">— maddie entered the level, filed under extension.</span></p>
+
+    <h3 style="margin-top:22px">Three ways a file closes</h3>
+    <div class="grid g3" style="margin-top:12px">
+      <div class="panel"><h3 style="font-size:15px">The stand</h3><p style="color:var(--text-dim);font-size:14px">Under extension, on the deepest floor, once the station has read you its last group: stand in the dark. Light off, still, nothing near you, your mind still your own. Long enough, and the notice is extended over you. <i>twenty-two years.</i></p></div>
+      <div class="panel"><h3 style="font-size:15px">Compliance</h3><p style="color:var(--text-dim);font-size:14px">Give thirteen pages up unread, then ask a presence to <span class="mono">close the file</span>. The shimmer leaves the walls. The floors stop leaving pages out. There is no one left to ask.</p></div>
+      <div class="panel"><h3 style="font-size:15px">The seam</h3><p style="color:var(--text-dim);font-size:14px">Litigation's ending is the oldest one. The station in the deep is counting toward something, and the extension slip names the one line the system never closed. Claim it at a presence; push it into the dark with your beacon.</p></div>
+    </div>
+
+    <div class="grid g2" style="margin-top:16px">
+      <div class="panel"><h3 style="font-size:15px">Reading your file</h3><p style="color:var(--text-dim);font-size:14px">Open settings ⚙ during a run: <b>your file</b> shows the word you are under and since when, how the file has you, and each step of your closing, struck <span class="mono">· done</span> as you meet it. Or press <kbd>Enter</kbd> and type <span class="mono">/status</span>. <b>Request a new notice</b> puts you back under the notice nobody answered — the old file stays closed.</p></div>
+      <div class="panel"><h3 style="font-size:15px">The floors keep count</h3><p style="color:var(--text-dim);font-size:14px">A wish sent from a filed run carries its word — <span class="mono">filed under: EXTENSION · level 2</span> — and every release recounts them. A floor whose files lean one way leans with them: the machines stock for it and stamp the tray, the pages and the souls come more or less often, and on the near floors the radio reads the floor's roll call. Who is standing there with you moves it too.</p></div>
     </div>
   </section>
 

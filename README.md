@@ -39,7 +39,7 @@ an infinite procedural first-person horror maze that descends through four level
 
 **[open the illustrated field manual →](https://thecornerspore.dev/manual/)**
 
-everything in one place: controls, how to read your instruments, the four-floor descent, the items, the beacon, and the deeper record. it renders in any browser.
+everything in one place: controls, how to read your instruments, the four-floor descent, the items, the file the office keeps on you, the beacon, and the deeper record. it renders in any browser.
 
 ---
 
@@ -91,6 +91,45 @@ the spirits decide. or rather, i do.
 
 ---
 
+## the file
+
+> *the file has you now.*
+
+somewhere above the drop ceiling there is an office, and it keeps a file on everyone who falls through. you never fill it in. it fills itself in — and the backrooms reads it.
+
+**the column.** nobody chooses one. the first way you take down, the file writes you in by how you arrived:
+
+| how you came in | the file writes | what that means down here |
+|------|---------|---------|
+| alone, with a name | **tenant** — *the file has you at an address.* | the street does not mind you; the deep frays you faster. your hands find a way from further off, your map marks every way the floor has loaded, and on the block the sealed doors tell you whose address they are. |
+| with an anchor | **anchored** — *the file has your body at a pin.* | the body stays where you fell through. drift too far from it and it pulls — settings ⚙ shows the *leash*. a photograph quiets it for a while. |
+| with no name | **unnamed** — *the file cannot spell you.* | the things cannot keep hold of you; a page or a friend steadies you more. tell a presence *call me …* and it will ask how that is spelled. |
+| first into a shared room | **processed** — *the file opened a line on you.* | the souls see the stamp. the radio reads everything to you, and once, the key. your wishes are amendments. |
+
+and over any of them, a layer: **thin**. drop into a room someone already walks, or come back up from the dark, and *not all of you arrived*. the things lose you faster and hear you less — but the light goes through you, and a ward pushes you back as well as them. ballast cures it. until the first way down nothing is written: on the block, the form lies on the counter (**e** to read it; `/intake` reads it anywhere).
+
+**filed under.** the file also keeps a **status**, and this one is yours to choose. it begins as a notice nobody answered. once the file can hear you — the numbers station has read you its last group, or you have found five of m.'s pages, or you are deep enough — a presence offers three stamps under the request. tap one, or type it:
+
+| status | what it turns inside out |
+|------|---------|
+| **extension** · *let it stay open* | the deep holds you and the street frays you. sour water stops taking anything — somewhere a line moves instead. |
+| **compliance** · *close the file* | the film turns honest. a page you have not read comes **sealed**: read it, or leave it unread (**x**) and give it to the file. |
+| **litigation** · *contest it* | the claim develops on every photograph, even on the dark floors. a thin figure in frame is evidence. |
+
+the lost souls know which word you are under, and so does the room — *entered the level, filed under extension.* the office files once a day. after that it is closed until tomorrow. and the status is not part of any save: it follows you into every run, and into every room.
+
+**three ways a file closes.** each status has its ending, and none of them is a door out.
+
+- **extension** — on the deepest floor, after the station has read you its last group: stand in the dark, light off, still, with nothing near. long enough, and the notice is extended over you. *twenty-two years.*
+- **compliance** — give thirteen pages up unread, then tell a presence to *close the file*. the shimmer leaves the walls, and the floors stop leaving pages out.
+- **litigation** — hold the seam. the station in the deep is counting toward something, and the extension slip names the one line the system never closed. claim it at a presence, then push it into the dark with your beacon (**b**).
+
+**your file** (settings ⚙) shows what the office has on you — the word you are under and since when, how the file has you, and how far your closing has come — with a **request a new notice** button that puts you back under the notice nobody answered (once a day: the old file stays closed). solo or online, press **enter** and type `/status` for the same lines.
+
+**the floors keep count.** a wish sent from a filed run carries its word with it — `filed under: EXTENSION · level 2` — and every release recounts them. a floor whose files lean one way leans with them: its machines stock for it and stamp the tray (*the tray is stamped COMPLIANCE.*), its pages and souls come more or less often, and the radio on the near floors reads the floor's roll call. who is standing on the floor with you moves it too.
+
+---
+
 ## controls
 
 | key | action |
@@ -108,8 +147,9 @@ the spirits decide. or rather, i do.
 | c · whistle | call out — a two-note whistle the floor and your friends hear; the things hear it too |
 | l | flashlight on / off — go dark in a friend's light and the things see you less |
 | 1–6 | select inventory slot |
-| e | speak to a presence |
-| enter | chat (in online play) |
+| e | speak to a presence or a lost soul · read a page, or the form on the counter |
+| enter | chat (in online play) — and the field console, solo too: `/status` (your file), `/intake` (the form), `/recover` · `/cases` · `/file` |
+| b | fire your beacon — your own webhook, set in settings ⚙ |
 | m | mute / unmute the music |
 | n | next track — cycle the ambient beds, or back to the floor's own song |
 | esc | unlock mouse / close dialog |
@@ -133,8 +173,9 @@ hit the gear ⚙ (top-right) for the control panel. everything added is optional
 | creatures | turn every entity off for pure liminal exploration |
 | solid furniture | walk around things — the chairs, crates, cabinets and machines have bodies, and so do the things in the fog; off, you pass through them as before |
 | can take damage | off for a peaceful, no-stakes wander |
+| your file | what the office has on you, once a run is under way — the word you are under, how the file has you, how far your closing has come — and **request a new notice** |
 
-auto-update and software rendering live in the same panel.
+auto-update and software rendering live in the same panel, and so does **locate your body** for an anchored run (with the leash, when the file has you at a pin).
 
 ---
 
