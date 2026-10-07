@@ -145,7 +145,7 @@ describe('game.js: the machines and the memory of what you took', () => {
   it('a pickup notes the key as taken (a set-down item is not); the dropped list is written on the one itemsDirty read', () => {
     expect(game).toMatch(/if \(res\.ok\) \{ showMessage\(`you take the \$\{ITEM_NAMES\[res\.item\.type\] \?\? res\.item\.type\}\.`\); if \(!nearItem\.key\.startsWith\('d:'\)\) mem\.noteTaken\(level\.index, nearItem\.key\) \}/)
     expect(game).toMatch(/if \(itemsDirty\) \{ mem\.setDropped\(level\.index, itemSys\.getDropped\(\)\); persist\(\) \}/)
-    expect((game.match(/mem\.setDropped\(/g) || []).length).toBe(3)        // travel, die, the loop
+    expect((game.match(/mem\.setDropped\(/g) || []).length).toBe(4)        // travel, die, the loop — and removeCache, a cache taken on another floor (I11)
   })
 })
 

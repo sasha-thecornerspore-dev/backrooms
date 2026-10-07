@@ -2,7 +2,7 @@ import { loadConfig, CHUNK_SIZE, createChunkCache, createGridReader } from './wo
 import { createFixedMap } from './fixedmap.js'
 import { levelConfig, TRACKS } from './levels.js'
 import { createEntitySystem } from './entities.js'
-import { createItemSystem } from './items.js'
+import { createItemSystem, KEPT } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
 import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, drawerSlide, whistle, bump } from './audio.js'
@@ -21,7 +21,7 @@ import { bumpKindFor, bumpIntensity, isHardBump, createBumpGate, BUMP_LINES } fr
 import { CLUTTER_LINES } from './placement.js'
 import { hostile, solidCreature } from './hunt.js'
 import { quiet, lureWithin, createCommit, QUIET_SECONDS } from './tactics.js'
-import { createWardCharger, wardOpts } from './ward.js'
+import { createWardCharger, wardOpts, WARD_TAP } from './ward.js'
 import { createTension, huntDelta, calmDelta } from './tension.js'
 import { FOV, HF } from './gfx-frame.js'
 import { waysFor, stairsPass, chunkMid, findOpenNear, arrivalFor, wayMessage, wayLabel } from './topology.js'
@@ -35,7 +35,7 @@ import { lineOfSight, inViewCone } from './raycaster.js'
 import { dressPass } from './dress.js'
 import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog } from './containers.js'
 import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
-import { createCard, CARD_KEYS } from './papercard.js'
+import { createCard, CARD_KEYS, readText } from './papercard.js'
 import { createEvBus } from '../net/evbus.js'
 import { intake, filingLine, formText, FORM_FOOT, parseIntakeCommand, normaliseIntakeCtx, identityOut, identityIn } from './origin-intake.js'
 import { rulesFor, LEGACY } from './origin-rules.js'
@@ -56,7 +56,9 @@ import { polaroidCaption } from './compose-polaroid.js'
 import { radioLine, RADIO_GROUPS } from './compose-radio.js'
 import { wishRoute } from './compose-wish.js'
 import { finaleGate, beaconDecision, deathDecision } from './compose-gates.js'
-import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame } from './evidence.js'
+import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame, createEvidence, photoOutcome, EVIDENCE_FLOOR, EVIDENCE_LINE, COUNTED_LINE } from './evidence.js'
+import { PHRASES, NOTE_NONE, menuFor, cacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger } from './caches.js'
+import { LIT_RANGE, litFriendNear, inCone, wardOutcome, wardLine, litOffLine } from './lightshare.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -233,6 +235,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
   // inventory lives in itemSys and persists; its wall test reads the CURRENT level
   const itemSys = createItemSystem(base, (wx, wy, pcx, pcy) => level.cache.isWall(wx, wy, pcx, pcy), worldSeed)
+  // ── the caches (caches.js): a thing set down with one of m.'s phrases is a dropped item carrying a note (items.js keeps it, levelmem
+  //    remembers it per floor, the save carries it). The ledger is only the INDEX — whose each cache is, which 'd:' key holds it on this
+  //    residency, the per-owner caps, and a friend's cache waiting for its floor. The outbox keeps a 'cache' / 'take' the bus's outgoing
+  //    gap refused (3 s / 0.5 s), flushed in order beside its tick: a second cache in a breath reaches the room late, never not at all.
+  //    Solo there is no id: every cache on the floor is yours ──
+  const ledger = createCacheLedger()
+  const evOutbox = []
+  const myId = () => (mpClient ? mpClient.id ?? null : null)
+  const myName = () => (mpClient ? mpClient.getName() : (String(getPref('playerName') ?? '').trim().slice(0, 24) || 'wanderer'))
+  const isMine = (rec) => (rec.byId ?? null) === myId()
 
   // persistent effect / combat timers
   let stamina    = 100
@@ -557,6 +569,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // wall-tested through the proxy, so only now: before this, `level` is null on a resume and the floor you left on a travel), and the
     // machines you emptied stay empty until you have been away long enough (the block keeps nothing)
     itemSys.enterLevel(cfg, cfg.map ? null : mem.takenFor(index), cfg.map ? null : mem.droppedFor(index))
+    // the caches a friend set down here while you were on another floor (or the relay handed you at the welcome) are laid down now — on the
+    // nearest open cell when the floor has moved under one, gone when nothing is open within three; then the ledger learns this residency's
+    // 'd:' keys for every cache the floor remembers, yours and theirs, and adopts the ones it did not know
+    for (const c of ledger.pendingFor(index)) {
+      const open = grid.floor(Math.floor(c.pending.x), Math.floor(c.pending.y)) ? c.pending : findOpenNear(c.pending.x, c.pending.y, grid.floor)
+      if (open) itemSys.dropAt(open.x, open.y, c.pending.type, c.pending.extra, null); else ledger.take(c.key)
+    }
+    ledger.clearPending(index); ledger.rebind(index, itemSys.getWorldItems())
     // the keys still spent at this visit (travel / die re-read it once the visit is counted); a floor the file has filed never restocks
     vendedSet = mem.vendedFor(index, filedFloors.has(floorKey(worldSeed, index)) ? -Infinity : playT)
     // the haunt cooldowns are this floor's own: the chunk keys repeat on every floor (one coordinate system)
@@ -1079,22 +1099,57 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       el.addEventListener('click', () => { cancelCommit(); itemSys.select(+el.dataset.slot); renderHotbar() })   // a slot change ends a wrap
     }
   }
-  // X and the dock's ✕: set the selected item down (items.js throwSelected — 1.2 u ahead, or at your feet against a wall). A radio
-  // keeps talking where it lies (the things go to it), a glowstick is a breadcrumb; the deep-stack finds are kept.
-  function throwSelected() {
-    const r = itemSys.throwSelected(player.x, player.y, player.angle, playT)
+  // X and the dock's ✕: set the selected item down. setDown asks first, on the paper card, whether to leave a word with it — six of m.'s
+  // twelve phrases (caches.js menuFor: the same six for this floor and this kind of thing, whoever holds it), or nothing. Nothing (0, Esc)
+  // is today's plain drop; the thing stays in your hand until you pick, and a hit that folds the card sets nothing down. The deep-stack
+  // finds are refused before anything is offered. No card to ask on: today's X exactly
+  function setDown() {
+    const it = itemSys.peekSelected()
+    if (!it || !noteCardEl) { throwSelected(null); return }
+    if (KEPT.has(it.type) || it.tool) { showMessage('you do not put that down.'); return }
+    const menu = menuFor(level.index, it.type)
+    openCard('choose', { text: `leave a word with the ${ITEM_NAMES[it.type] ?? it.type}, for whoever finds it.`, menu: menu.map((i) => PHRASES[i]),
+      onPick: (i) => throwSelected(i == null ? NOTE_NONE : { ph: menu[i], oct: octOf(player.angle), by: myName(), byId: myId() ?? undefined }) })
+  }
+  // items.js throwSelected — 1.2 u ahead, or at your feet against a wall. A radio keeps talking where it lies (the things go to it), a
+  // glowstick is a breadcrumb. With a note it is a cache: its key is the cell it LANDED in (one live cache a cell — a second replaces the
+  // first), the ledger counts it as yours (the oldest of seven goes), and the room is told — the relay keeps it for whoever comes later
+  function throwSelected(note = null) {
+    const r = itemSys.throwSelected(player.x, player.y, player.angle, playT, note)
     if (!r.ok) { if (r.reason === 'kept') showMessage('you do not put that down.') }
     else {
       cancelCommit()                                          // the bandage you were wrapping is on the floor now
       const t = r.item.type
+      if (note) {
+        const cx = Math.floor(r.x), cy = Math.floor(r.y), ck = cacheKey(level.index, cx, cy)
+        r.item.cacheKey = ck                                  // the live record: getDropped exports it, levelmem keeps it
+        const old = ledger.place({ key: ck, lvl: level.index, cx, cy, id: myId(), name: myName(), t: playT })
+        if (old.replaced) removeCache(old.replaced)
+        for (const e of old.evicted) removeCache(e)
+        ledger.bind(ck, r.item.key)
+        relayLater('cache', { lvl: level.index, cx, cy, x: r.x, y: r.y, type: t, ex: exOf(r.item), ph: note.ph, oct: note.oct }, { keep: ck })
+      }
       showMessage(t === 'radio' && r.item.on ? 'you set the radio down, still talking. let it talk.'
                 : t === 'glowstick'          ? 'you leave the green light where it lies.'
+                : note                       ? 'you set it down.'
                 :                              `you drop the ${ITEM_NAMES[t] ?? t}.`)
     }
     renderHotbar()
     // (the floor's memory of what lies here is written by the loop on its one itemsDirty read: mem.setDropped)
   }
-  document.getElementById('btn-discard')?.addEventListener('click', throwSelected)
+  // a cache leaves the world wherever it lies: on this floor through items.js (dirty -> the loop's one memory write), on another floor out
+  // of that floor's memory, so it is not there when you go back; one still waiting for its floor was never laid down
+  function removeCache(e) {
+    if (e.pending) return
+    if (e.lvl === level.index) { if (e.localKey) itemSys.takeDropped(e.localKey) }
+    else if (mem.get(e.lvl)) mem.setDropped(e.lvl, mem.droppedFor(e.lvl).filter((r) => r.cacheKey !== e.key))
+  }
+  // the room hears a cache or a take now — or, inside the kind's outgoing gap, from the outbox, behind whatever is already waiting (in order:
+  // a take never overtakes the cache it takes). Solo: nobody to tell
+  function relayLater(kind, payload, opts) { if (!bus) return; if (evOutbox.length || !bus.emit(kind, payload, opts)) evOutbox.push([kind, payload, opts]) }
+  // the flags a cache carries on the wire (a relayed radio arrives silent; the clocks stay with whoever set it down)
+  const exOf = (it) => ({ ...(it.sour && { sour: true }), ...(it.tool && { tool: true }) })
+  document.getElementById('btn-discard')?.addEventListener('click', setDown)
 
   // ── multiplayer chat ──
   const chatLogEl    = document.getElementById('chat-log')
@@ -1285,6 +1340,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // in it develops on the film, a lost soul in it shows the door behind them. Hoisted once: the photo allocates no options
   const frameLos = (ax, ay, bx, by) => lineOfSight(ax, ay, bx, by, level.grid.floor)
   const FRAME_OPTS = { pos: peerPos, cone: inViewCone, hf: HF, maxCells: SUBJECT_RANGE, los: frameLos }
+  // a friend's light (lightshare.js): who lights you, by the same walls-only line of sight, six cells; hoisted, the per-frame ask allocates nothing
+  const LIT_OPTS = { cells: LIT_RANGE, los: frameLos, pos: peerPos }
+  // your ward on the wire (one reused payload: sendEv serialises it at once), and a friend's, re-run on YOUR things from where they stand
+  const wardOut = { x: 0, y: 0, a: 0, lvl: 0 }
+  const wardProbe = { x: 0, y: 0, angle: 0 }
+  // someone has evidence of you (evidence.js): a friend's photograph holds you over 25 sanity for 90 s on the play clock, and says so on 'here'
+  const evidence = createEvidence()
   // who you could kneel by (downed.js downedInFront): the same walls-only line of sight, hoisted so the per-frame ask allocates nothing
   const DN_OPTS = { los: frameLos }
   // the two kinds that name the RECEIVER (rollcall.js evKinds: a kneel's `to`, a woke's `by` must be my id) — and emit() runs that same
@@ -1322,8 +1384,54 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     bus.on('kneel', ({ id }) => { if (down.st === 'down' && down.kneelTick(id) === 'woken') wakeUp(id) })
     // the one you knelt by came back (their 'woke' lands after their 'here' already said 'ok': the kneel remembers whom, 2 s)
     bus.on('woke', ({ id }) => { if (kneel.wasKneelingOn(id)) { sanity = Math.min(100, sanity + KNEELER_SANITY); showMessage(KNEELER_LINE, PRIO.interaction) } })
-    // TODO(integrate:W6) I11: bus.register('cache', { check: (p) => isCachePayload(p, ITEM_NAMES), replayable: true, posKeys: ['x', 'y'], minGapMs: 3000 }); bus.register('take', { check: isTakePayload, replayable: true, minGapMs: 500 })
-    // TODO(integrate:W7) I12: bus.register('ward', { check: lvl int && finite x/y/a, posKeys: ['x', 'y'], minGapMs: 600 }) and 'photo' { maxDist: 11, minGapMs: 4000 } — NB emit() runs check() on the OUTGOING payload too, so a photo check of `p.of === mpClient.id` refuses every photo you send: check the receiver side in the handler, not in check()
+    // a cache and its taking (caches.js): replayable — the relay keeps the last ones and hands them, stamped replay, to whoever comes later;
+    // a live cache must be set down where the list has its owner standing (x / y within the slack)
+    bus.register('cache', { check: (p) => isCachePayload(p, ITEM_NAMES), replayable: true, posKeys: ['x', 'y'], minGapMs: 3000 })
+    bus.register('take', { check: isTakePayload, replayable: true, minGapMs: 500 })
+    // a friend's ward and a friend's photograph (lightshare.js / evidence.js): never replayed — a push or a picture from before you came means
+    // nothing. emit() runs the same check on what I send, which names a friend, so the photo's check is its shape and the handler asks
+    // whether it is of me
+    bus.register('ward', { check: (p) => Number.isInteger(p.lvl) && p.lvl >= 0 && p.lvl <= 4 && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.a), posKeys: ['x', 'y'], minGapMs: 600 })
+    bus.register('photo', { check: (p) => typeof p.of === 'string' && Number.isInteger(p.lvl) && p.lvl >= 0 && p.lvl <= 4, maxDist: 11, minGapMs: 4000 })
+    // a friend sets a cache down: on this floor it is laid where they stood (the nearest open cell if the floor has moved), with a people line
+    // when it happens live; for another floor it waits in the ledger until you get there (buildLevel). Same cell: the newest wins; the
+    // seventh from one owner retires their oldest
+    bus.on('cache', ({ id, name, payload: p, replay }) => {
+      if (!level) return
+      const key = cacheKey(p.lvl, p.cx, p.cy), here = p.lvl === level.index
+      const r = ledger.place({ key, lvl: p.lvl, cx: p.cx, cy: p.cy, id, name, t: playT, pending: here ? null : { x: p.x, y: p.y, type: p.type, extra: extraFor(p, id, name, key) } })
+      if (r.replaced) removeCache(r.replaced)
+      for (const e of r.evicted) removeCache(e)
+      if (here) {
+        const open = level.grid.floor(Math.floor(p.x), Math.floor(p.y)) ? p : findOpenNear(p.x, p.y, level.grid.floor)
+        if (open) ledger.bind(key, itemSys.dropAt(open.x, open.y, p.type, extraFor(p, id, name, key), null).key); else ledger.take(key)
+        if (!replay) addChatLine(name || 'someone', 'sets something down.', true)
+      }
+    })
+    // someone took a cache: it is gone from wherever it lies for you too
+    bus.on('take', ({ payload: { key } }) => { const e = ledger.take(key); if (e) removeCache(e) })
+    // a friend wards on this floor: their tap is re-run on YOUR things from where they stand (the things are each client's own) — what it
+    // staggers, throws or takes apart, it does here too, and they are a noise of 10 the things hear (theirs: never your stillness, never your
+    // noiseMul). Only when you stood in its cone and it met something does it reach you: steadied
+    bus.on('ward', ({ id, name, payload: p }) => {
+      if (!level || p.lvl !== level.index || !bus.onFloor(id)) return
+      wardProbe.x = p.x; wardProbe.y = p.y; wardProbe.angle = p.a
+      const res = getPref('creatures') ? level.entitySys.ward(wardProbe, WARD_TAP) : EMPTY_WARD
+      level.entitySys.noise(p.x, p.y, 10, 'friend')
+      const out = wardOutcome(inCone(p, player), res)
+      if (out === 'steadied') { sanity = Math.min(100, sanity + 8); calmTimer = Math.max(calmTimer, 4); hurt = 0; wardPulse(); shake = Math.max(shake, 0.2) }
+      const line = wardLine(out, name || 'someone', res)
+      if (line) showMessage(line, PRIO.interaction)
+    })
+    // a friend photographs you: evidence — 90 s you do not go under 25, and the room sees you solid. Lying down, it counts you back at once
+    // (the ONE wake: never die(), never a layer, never the pin's debt)
+    bus.on('photo', ({ id, payload: p }) => {
+      if (!level || p.of !== mpClient.id || p.lvl !== level.index || !bus.onFloor(id)) return
+      evidence.seen(id, playT)
+      if (photoOutcome(down.st) === 'counted' && down.wakeNow() === 'woken') wakeUp(id, COUNTED_LINE)
+      else { sanity = Math.min(100, sanity + 6); wardPulse(); showMessage(EVIDENCE_LINE, PRIO.discovery) }
+      bus.here(hereFields())
+    })
   }
   // what 'here' says of you (bus.here sends it at once when a field changed, else every 3 s from tick): ONE object, filled per call (the bus
   // copies it). Sent about once a second from the loop, and at once after a travel or a death
@@ -1336,7 +1444,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     hereObj.lvl = level ? level.index : 0
     hereObj.lit = flashlight
     hereObj.st = kneel.st ? 'kneel' : down.st
-    hereObj.seen = false                 // TODO(integrate:W7) I12: evidence.active(playT)
+    hereObj.seen = evidence.active(playT)   // a friend's photograph of you is still developing: they draw you solid (thin or not)
     hereObj.o = origin
     hereObj.thin = thin
     hereObj.status = file.status
@@ -1347,7 +1455,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
   // ── down, and counted back (downed.js). goDown: the fatal hit laid you down — your light goes out (the stillness rule hides a still,
   //    dark body like any other), the veil comes over, the room hears 'down'. wakeUp is the ONE wake: a friend's eighth kneel tick, or
-  //    (I12) a friend's photograph — where you fell, 60 hp, never through die(), never a layer minted, never the pin's debt. It does not
+  //    a friend's photograph (COUNTED_LINE) — where you fell, 60 hp, never through die(), never a layer minted, never the pin's debt. It does not
   //    flip down.st: the caller did (kneelTick / wakeNow returned 'woken'). The kneel: F by a downed friend in front lights you and holds
   //    you still beside them; F again, a step, Space, Esc, or their leaving 'down' or six cells ends it ──
   function goDown() {
@@ -1358,7 +1466,6 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     showMessage(DOWN_LINE, PRIO.combat)
     bus?.here(hereFields())
   }
-  // TODO(integrate:W7) I12: the photo is the second caller — if (photoOutcome(down.st) === 'counted' && down.wakeNow() === 'woken') wakeUp(id, COUNTED_LINE)
   function wakeUp(byId, line = WOKEN_LINE) {
     player.hp = Math.min(WAKE.hp, player.maxHp); sanity = Math.min(100, sanity + WAKE.sanity)
     invuln = WAKE.invuln; regenDelay = WAKE.regenDelay; hurt = 0
@@ -1755,7 +1862,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     s.fog = fogExport
     // who the file has you as: the column, the layer, the form's facts and the floors it filed (origin-intake.js; plain data, the Set as an array)
     Object.assign(s, identityOut({ origin, thin, filed, intakeCtx, filedFloors }))
-    // TODO(integrate:W6) I11: s.caches = ledger.snapshot()
+    // the caches' index (caches.js): whose each one is, for the caps (where they lie is the floors' memory, above)
+    s.caches = ledger.snapshot()
     return s
   }
   let saveTimer = 0, persistN = 0
@@ -1807,7 +1915,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // v:1 save without the fields resumes unfiled and files on its next way.
     ;({ origin, thin, filed, intakeCtx, filedFloors } = identityIn(resume, intakeCtx))
     rules = rulesFor(origin, thin); evConfig.events = rules.eventWeights()
-    // TODO(integrate:W6) I11: ledger.restore(resume.caches) directly here, under identityIn
+    ledger.restore(resume.caches)   // the caches' index before buildLevel rebinds it (a save without it: empty, the floor's own caches adopted)
     playT = Number(resume.playT) || 0
     const r = applyResume(resume, {
       mem, buildLevel,
@@ -1941,6 +2049,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // what perceptionFor reads (ONE object, refilled per frame): the column, the depth, the stillness clocks, your light and radio, a friend's light
   const perCtx = { rules, depth: 0, stillFor: 0, noiseFor: 0, flashlight, radioOn: false, litNear: false }
   let litNear = false   // a friend's light reaches you this frame (lightshare.js litFriendNear, written in the net block; never solo)
+  let litRec = null     // whose light it is (their bus record: L names them when you go dark in it)
   // what sanityStep reads (ONE object, refilled per frame where the sanity block is). Set once: you, your own file, this floor's remote
   // players (the reused array fillRemotes refills; empty solo) and the bus's two questions — a peer it has no fresh 'here' for is the old
   // friend rule (+3), a fresh one draws on the company pool. leashDebt stays 0: driftD() carries the debt already
@@ -2008,6 +2117,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       const res = getPref('creatures') ? level.entitySys.ward(player, wardOpts(w.charged)) : EMPTY_WARD
       level.entitySys.noise(player.x, player.y, 12)   // a ward is loud: the things round the corner hear it
       stillness.noise(playT); standHeld = 0          // and it is yours: the stillness clocks start again (and the stand with them)
+      // the room's things are each its own: a friend on this floor re-runs your tap where you stand (lightshare.js; one reused payload)
+      if (bus) { wardOut.x = player.x; wardOut.y = player.y; wardOut.a = +player.angle.toFixed(2); wardOut.lvl = level.index; bus.emit('ward', wardOut) }
       wardPulse(); shake = Math.max(shake, w.charged ? 0.7 : 0.45)
       if      (res.dispelled > 0) showMessage(res.dispelled > 1 ? 'they come apart in the light.' : 'it comes apart in the light.')
       else if (res.opening > 0)   showMessage('you catch it turning. it reels.')
@@ -2167,7 +2278,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.textContent = KNEEL_HINT
         itemHintEl.style.opacity = kneel.st ? kneel.dim().toFixed(2) : '1'   // fainter as you count (no numbers on screen)
       } else if (nearItem) {
-        itemHintEl.textContent = `f · take the ${ITEM_NAMES[nearItem.type] ?? nearItem.type}`
+        // a cache says whose it is: yours, or who left it (the record itself carries the note)
+        itemHintEl.textContent = `f · take the ${ITEM_NAMES[nearItem.type] ?? nearItem.type}` + (nearItem.cacheKey ? (isMine(nearItem) ? ' · yours' : ` · left by ${nearItem.by ?? 'wanderer'}`) : '')
         itemHintEl.style.opacity = '1'
       } else if (nearMachine && !vendedSet.has(nearMachine.key)) {
         itemHintEl.textContent = 'f · draw from the machine'
@@ -2230,6 +2342,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
           const res = itemSys.pickUp(nearItem.key)
           if (res.ok) { showMessage(`you take the ${ITEM_NAMES[res.item.type] ?? res.item.type}.`); if (!nearItem.key.startsWith('d:')) mem.noteTaken(level.index, nearItem.key) }   // a chunk spawn never respawns; a set-down item is not 'taken'
           else if (res.reason === 'full') showMessage('your hands are full.')
+          // a cache: the word left with it is read on the card ('you left this.' for your own; a stranger's steadies you — not alone, for a
+          // moment) and the room is told it is gone. The page count never moves: a cache is not a page
+          if (res.ok && res.item.cacheKey) {
+            if (!isMine(res.item)) sanity = Math.min(100, sanity + 4)
+            ledger.take(res.item.cacheKey)
+            relayLater('take', { key: res.item.cacheKey }, { drop: res.item.cacheKey })
+            if (res.item.ph >= 0 || res.item.oct >= 0) openCard('read', readText(isMine(res.item) ? 'you left this.' : (res.item.by ?? 'wanderer'), res.item.ph >= 0 ? PHRASES[res.item.ph] : '', arrowFor(res.item.oct, player.angle)))
+          }
           renderHotbar()
         } else if (nearMachine && !vendedSet.has(nearMachine.key)) {
           dispenseFromMachine(nearMachine)
@@ -2246,14 +2366,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if (it?.type === 'bandage' && level.index >= 1 && level.index <= 3) { if (!commit.active) { commit.start(); showMessage('you hold still and wrap it.') } }
         else applyItemEffect(itemSys.useSelected())
       }
-      if (K['KeyX']) { K['KeyX'] = false; throwSelected() }
+      if (K['KeyX']) { K['KeyX'] = false; setDown() }
       if (K['KeyC']) { K['KeyC'] = false; whistleOut(creaturesLive) }   // C — call out (the touch CALL button sets the same key; lying down too)
       if (K['KeyM']) { K['KeyM'] = false; const on = !getPref('music'); setPref('music', on); showMessage(on ? 'the music seeps back in.' : 'the music stops.') }
       if (K['KeyN']) { K['KeyN'] = false; cycleTrack() }
       if (K['KeyL']) {
         K['KeyL'] = false
         if (kneel.st) showMessage(LIGHT_STAYS_LINE)        // kneeling, the light is theirs
-        else { flashlight = !flashlight; lightToggles++; showMessage(flashlight ? 'flashlight on.' : 'flashlight off — the dark leans in.') }   // the counter: a haunt only restores a light you did not touch
+        else { flashlight = !flashlight; lightToggles++; showMessage(flashlight ? 'flashlight on.' : litOffLine(litRec ? litRec.name : null)) }   // the counter: a haunt only restores a light you did not touch; dark in a friend's light, the line names them
       }
       if (K['KeyB']) {
         K['KeyB'] = false
@@ -2341,6 +2461,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // 'here' about once a second (the bus sends only a change, or the 3 s beat)
     fillRemotes()
     if (bus) { bus.tick(performance.now()); hereTimer += dt; if (hereTimer >= 1) { hereTimer = 0; bus.here(hereFields()) } }
+    // a cache or a take the outgoing gap held back goes now, in order (relayLater)
+    if (bus) while (evOutbox.length && bus.emit(evOutbox[0][0], evOutbox[0][1], evOutbox[0][2])) evOutbox.shift()
     // kneeling: a tick to the friend every 500 ms while they stay down, on this floor and within six; else the kneel ends and your light
     // comes back (they woke, walked off, dropped off the floor)
     if (kneel.st) {
@@ -2353,7 +2475,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // the roll call (rollcall.js), on the list the bus just recounted: a friend on this floor who has not whistled, spoken or stood within six
     // for 90 s has gone quiet — said at a murmur's priority, and it costs you, again every 90 s it stays true. Its one reused list, read now
     if (bus) { const qs = rollcall.tick(performance.now(), bus.freshPeersOnFloor()); for (let i = 0; i < qs.length; i++) { sanity = Math.max(0, sanity - QUIET_SANITY); showMessage(qs[i].line, PRIO.ambient) } }
-    // TODO(integrate:W7) I12: litRec = bus ? litFriendNear(player, bus.freshPeersOnFloor(), LIT_OPTS) : null; litNear = litRec !== null — here, before the perception and the sanity read it (LIT_OPTS's los is frameLos, hoisted with FRAME_OPTS)
+    // a friend's light (lightshare.js): the nearest friend on this floor whose light is on, within six and in sight — standing in it unlit
+    // the things see you less (perceptionFor) and the dark eats at you slower (sanityStep). Here, before both read it; solo, never
+    litRec = bus ? litFriendNear(player, bus.freshPeersOnFloor(), LIT_OPTS) : null; litNear = litRec !== null
     // ── the things: what they know about you this frame, then one update; the threat record it returns drives contact damage, the
     //    heartbeat and sanity (no second pass over the list). Creatures can be switched off entirely (pure liminal exploration;
     //    creaturesOn was read at the top of the frame): the record is then reset, so everything below reads zero. ──
@@ -2440,7 +2564,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     company.add(s.companyDelta)
     if (s.exhaustedNow) showMessage(EXHAUSTED_LINE, PRIO.discovery)
     if (s.disagreeNow) { disagreeSaid = true; showMessage(DISAGREE_LINE, PRIO.discovery) }
-    // TODO(integrate:W7) I12: if (evidence.active(playT)) sanity = Math.max(sanity, EVIDENCE_FLOOR) — the evidence floor, after the clamp
+    // someone has evidence of you: for 90 s the floor under you is 25 (not calm — the whispers still come at 25)
+    if (evidence.active(playT)) sanity = Math.max(sanity, EVIDENCE_FLOOR)
     updateSanity()
     const insane = Math.max(0, Math.min(1, (42 - sanity) / 42))
     if (insaneEl) insaneEl.style.opacity = (insane * 0.6).toFixed(2)

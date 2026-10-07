@@ -144,13 +144,13 @@
           <span class="k"><kbd>Space</kbd></span><span class="d"><b>ward</b> — shove back the things that hunt you</span>
           <span class="k"><kbd>F</kbd></span><span class="d">take an item · <b>no-clip an exit</b></span>
           <span class="k"><kbd>Q</kbd></span><span class="d">use selected item</span>
-          <span class="k"><kbd>X</kbd></span><span class="d">drop selected item</span>
+          <span class="k"><kbd>X</kbd></span><span class="d"><b>set down</b> — and leave a word with it, if you like</span>
         </div>
       </div>
       <div class="panel">
         <div class="keys">
           <span class="k"><kbd>1</kbd>–<kbd>6</kbd></span><span class="d">select inventory slot</span>
-          <span class="k"><kbd>L</kbd></span><span class="d">flashlight on / off</span>
+          <span class="k"><kbd>L</kbd></span><span class="d">flashlight on / off — or stand dark in a <b>friend's light</b></span>
           <span class="k"><kbd>C</kbd></span><span class="d"><b>whistle</b> — call out; friends hear it, so do the things</span>
           <span class="k"><kbd>E</kbd></span><span class="d">speak — to a soul or a presence</span>
           <span class="k"><kbd>Enter</kbd></span><span class="d">chat (online)</span>
@@ -233,7 +233,7 @@
       <div class="notice">
         <h3>❤ Hit points</h3>
         <p>The things down here hurt you on contact. Take a hit and the screen jolts red. <strong>Level 0 is safe</strong> — nothing hunts the lobby — but every floor below has teeth.</p>
-        <p>Health regrows slowly once you're clear of danger. A <span class="mono">bandage</span> patches you fast. Reach zero and you black out, then wake where you fell in.</p>
+        <p>Health regrows slowly once you're clear of danger. A <span class="mono">bandage</span> patches you fast. Reach zero and you black out — and wake a floor above, beside the hole you fell through, lighter: whatever was in your hand is gone. With a friend on your floor you go <strong>down</strong> instead, and they have a moment to reach you.</p>
         <p><strong>Listen:</strong> a heartbeat rises and quickens as something closes in. If you can hear your pulse, it's already near.</p>
       </div>
       <div class="notice" style="background:linear-gradient(180deg,#8f83b8,#5f5688);">
@@ -248,6 +248,7 @@
     <div class="eyebrow">Survival · Light</div>
     <h2>Light is a resource</h2>
     <p>Press <kbd>L</kbd> for your <strong>flashlight</strong> — it throws a warm cone that steadies your nerves. Turn it off and the deep floors swallow you (sometimes worth it, to not be seen). A cracked <strong>glowstick</strong> washes the world green and shoves the fog back for a while. The pipes and the electrical station are black; bring your own light.</p>
+    <p>Light can be shared. Once you have taken your first way down, stand dark inside a <strong>friend's light</strong> — a few steps from them, nothing between you — and the things have a harder time finding you, and the dark eats at you slower. You'll know whose light you're standing in when you switch yours off. It never helps the one carrying it.</p>
   </section>
 
   <section id="descent">
@@ -264,7 +265,7 @@
       <div class="lvl"><div class="band" style="background:linear-gradient(180deg,#4c505a,#22252b);color:#a8d4ec;text-shadow:none">LEVEL 3 · ELECTRICAL STATION</div>
         <div class="body"><h3>Electrical Station</h3><p>A lightless labyrinth of transformers and live cable. The deepest you should go. Don't touch the walls.</p><span class="down">↓ a door humming with current → back to the lobby</span></div></div>
     </div>
-    <div class="callout">Descend and the world changes around you — palette, fog, what's in it. Your hit points and inventory come with you. The floor you left does not remember you.</div>
+    <div class="callout">Descend and the world changes around you — palette, fog, what's in it. Your hit points and inventory come with you. The floor you left remembers you: what you took stays taken, and what you set down lies where you left it.</div>
   </section>
 
   <section id="bestiary">
@@ -347,12 +348,17 @@
   <section id="items">
     <div class="eyebrow">Supplies · What you'll find</div>
     <h2>Things left lying around</h2>
-    <p>The Backrooms restocks itself. Walk close to an item and press <kbd>F</kbd> to take it; <kbd>Q</kbd> uses the selected one; <kbd>X</kbd> drops it. Six slots — choose what's worth carrying.</p>
+    <p>The Backrooms restocks itself. Walk close to an item and press <kbd>F</kbd> to take it; <kbd>Q</kbd> uses the selected one; <kbd>X</kbd> sets it down. Six slots — choose what's worth carrying.</p>
+    <div class="notice" style="margin-top:14px">
+      <h3>Leave a word</h3>
+      <p>When you set something down, a card asks whether to leave a word with it: six of m.'s phrases — the same six for that floor and that kind of thing, whoever holds it. <i>take the left.</i> <i>the water here is sour.</i> <i>i am close behind.</i> Press a number (or <kbd>0</kbd> for nothing) and the thing becomes a <strong>cache</strong>, with an arrow for the way you were facing.</p>
+      <p>Whoever picks it up reads it on the card — the phrase, the arrow turned to where <em>they</em> stand, and who left it. The prompt warns you first: <span class="mono">f · take the bandage · left by maddie</span>. The floor keeps your caches between visits. Online the room sees them as they land, and the relay keeps the last of them for whoever comes through after you. No free text — only what m. wrote.</p>
+    </div>
     <div class="grid g3" style="margin-top:16px">
       <figure class="item"><svg viewBox="0 0 60 60" aria-label="Almond water"><rect width="60" height="60" fill="#0b0a06"/><rect x="24" y="16" width="12" height="8" fill="#dfeaf7"/><rect x="22" y="24" width="16" height="26" rx="3" fill="#bed7eb"/><rect x="25" y="30" width="10" height="16" fill="#fff" opacity=".25"/></svg><span class="name">Almond water</span><p>Restores your legs and steadies your mind. The lights hold steady for a while. Your lifeline down deep.</p></figure>
       <figure class="item"><svg viewBox="0 0 60 60" aria-label="Glowstick"><rect width="60" height="60" fill="#0b0a06"/><rect x="26" y="12" width="8" height="36" rx="3" fill="#78eb5a"/><rect x="28.5" y="12" width="3" height="36" fill="#fff" opacity=".85"/></svg><span class="name">Glowstick</span><p>Cracks green and pushes the fog back — temporarily. Best used where you found the dark unbearable.</p></figure>
       <figure class="item"><svg viewBox="0 0 60 60" aria-label="Bandage"><rect width="60" height="60" fill="#0b0a06"/><rect x="18" y="22" width="24" height="16" rx="2" fill="#ebebf0"/><rect x="28" y="24" width="4" height="12" fill="#d23232"/><rect x="22" y="28" width="16" height="4" fill="#d23232"/></svg><span class="name">Bandage</span><p>Patches you up — restores hit points. Carry a few before you go deep; you will need them.</p></figure>
-      <figure class="item"><svg viewBox="0 0 60 60" aria-label="Polaroid camera"><rect width="60" height="60" fill="#0b0a06"/><rect x="16" y="22" width="28" height="20" rx="2" fill="#e9e6dc"/><circle cx="30" cy="32" r="6" fill="#1e1e28"/><circle cx="30" cy="32" r="3" fill="#4a4a5a"/><rect x="38" y="24" width="4" height="3" fill="#cf4a3f"/></svg><span class="name">Polaroid camera</span><p>Captures evidence — a flash, and the shot is filed to <span class="mono">Pictures/backrooms/</span>. Proof you were here.</p></figure>
+      <figure class="item"><svg viewBox="0 0 60 60" aria-label="Polaroid camera"><rect width="60" height="60" fill="#0b0a06"/><rect x="16" y="22" width="28" height="20" rx="2" fill="#e9e6dc"/><circle cx="30" cy="32" r="6" fill="#1e1e28"/><circle cx="30" cy="32" r="3" fill="#4a4a5a"/><rect x="38" y="24" width="4" height="3" fill="#cf4a3f"/></svg><span class="name">Polaroid camera</span><p>Captures evidence — a flash, and the shot is filed to <span class="mono">Pictures/backrooms/</span>. Proof you were here. Point it at a friend and the film develops what the file wrote on them — and they will know.</p></figure>
       <figure class="item"><svg viewBox="0 0 60 60" aria-label="Radio"><rect width="60" height="60" fill="#0b0a06"/><rect x="16" y="28" width="26" height="16" rx="2" fill="#c86438"/><line x1="40" y1="28" x2="46" y2="16" stroke="#dcdcc8" stroke-width="2"/><circle cx="21" cy="36" r="2.5" fill="#2a1a10"/></svg><span class="name">Radio</span><p>Plays a tune that's almost right. You can find presences from much farther — but other things hear it too.</p></figure>
       <figure class="item" style="justify-content:center;color:var(--text-dim)"><span class="name" style="color:var(--beacon)">the wish system</span><p>Sometimes a <strong>presence</strong> shimmers in a wall. Press <kbd>E</kbd> and state a request. Wishes are reviewed. Some are granted, and the world quietly drifts.</p></figure>
     </div>
@@ -373,6 +379,11 @@
     <div class="grid g2" style="margin-top:16px">
       <div class="panel"><h3 style="font-size:15px">Call out</h3><p style="color:var(--text-dim);font-size:14px">Press <kbd>C</kbd> (or <b>CALL</b> on a phone) to <b>whistle</b> — two notes at a pitch that is only yours. Everyone on your floor hears it from where you stand, with a line in their chat: <span class="mono">near ↗</span>, <span class="mono">far ←</span>. The hall counts who has answered lately and tells you in words — <i>three of you.</i> A friend who goes ninety seconds without a whistle, a word or standing near you has <b>gone quiet</b>, and it weighs on you. Alone, the hall keeps the sound. Usually. The things hear every call.</p></div>
       <div class="panel"><h3 style="font-size:15px">Down, not dead</h3><p style="color:var(--text-dim);font-size:14px">With a friend on your floor, a hit that would kill you lays you <b>down</b> instead: your light goes out and you have <b>25 seconds</b>. You can still whistle. Find a friend who is down, face them and press <kbd>F</kbd> to <b>stay with them</b> — your light on, holding still while you count them back. A step, <kbd>Space</kbd> or <kbd>Esc</kbd> lets go. If nobody comes, it is a death.</p></div>
+    </div>
+    <div class="grid g3" style="margin-top:16px">
+      <div class="panel"><h3 style="font-size:15px">Share the light</h3><p style="color:var(--text-dim);font-size:14px">Stand dark in a friend's flashlight — a few steps away, nothing between you — and the things lose you more easily while the dark eats at you slower. Switch yours off and you'll hear whose light it is: <i>you stand in maddie's light.</i></p></div>
+      <div class="panel"><h3 style="font-size:15px">Push for each other</h3><p style="color:var(--text-dim);font-size:14px">The things are not the same things on every screen. When a friend <b>wards</b>, it lands on yours too, from where they stand — and if you were in front of the push when it met something, it steadies you. <i>maddie pushes the dark off you.</i></p></div>
+      <div class="panel"><h3 style="font-size:15px">Evidence</h3><p style="color:var(--text-dim);font-size:14px">A friend's <b>photograph</b> of you is proof you exist. For ninety seconds your mind will not sink below a quarter, and the others see you solid, however thin you've worn. Photograph a friend who is <b>down</b> and they're counted back at once.</p></div>
     </div>
   </section>
 

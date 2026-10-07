@@ -71,7 +71,7 @@ const SHELL = [
   'dress.js', 'containers.js', 'haunts.js', 'papercard.js',
   'origin-intake.js', 'origin-rules.js', 'origin-tenant.js', 'origin-anchored.js', 'origin-processed.js', 'origin-unnamed.js', 'origin-thin.js',
   'compose-perception.js', 'stillness.js', 'compose-sanity.js', 'rollcall.js', 'downed.js', 'status.js', 'closings.js', 'docket.js',
-  'compose-polaroid.js', 'compose-radio.js', 'compose-wish.js', 'compose-gates.js', 'evidence.js',
+  'compose-polaroid.js', 'compose-radio.js', 'compose-wish.js', 'compose-gates.js', 'evidence.js', 'caches.js', 'lightshare.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
 ]
 self.addEventListener('install', (e) => e.waitUntil((async () => {

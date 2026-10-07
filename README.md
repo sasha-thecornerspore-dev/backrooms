@@ -70,10 +70,12 @@ the backrooms restocks itself. things are left lying around; walk close and pres
 | almond water | restores your legs, and the lights hold steady for a while |
 | glowstick | pushes the fog back. temporarily. |
 | bandage | patches you up — restores hit points. carry a few before you go deep. |
-| polaroid camera | captures evidence — saved to `Pictures/backrooms/` |
+| polaroid camera | captures evidence — saved to `Pictures/backrooms/`. point it at a friend and the film develops what the file wrote on them, and they will know |
 | radio | plays a tune that is almost right. presences can be found from much farther away. other things also hear it. |
 
-six slots. `1–6` selects, `q` uses, `x` drops. some things are worth carrying, some are worth using where you found them, some are worth leaving behind.
+six slots. `1–6` selects, `q` uses, `x` sets it down. some things are worth carrying, some are worth using where you found them, some are worth leaving behind.
+
+**leave a word.** when you set something down, a card asks whether to leave a word with it — six of m.'s phrases, the same six for that floor and that kind of thing, whoever is holding it. *take the left.* *the water here is sour.* *i am close behind.* pick one (or **0** for nothing) and the thing becomes a **cache**: it lies where it fell, with an arrow for the way you were facing. whoever picks it up reads it on the card — the phrase, the arrow turned to where *they* stand, and who left it. the prompt tells you before you take it: *f · take the bandage · left by maddie*. the floor remembers your caches between visits and across a quit; online, the room sees them as you set them down, and the relay keeps the last of them for whoever comes through after you. a stranger's word steadies you, a little. no free text, ever — only what m. wrote.
 
 ---
 
@@ -102,8 +104,9 @@ the spirits decide. or rather, i do.
 | f · search a cabinet | by a cabinet, crate, box, drum or panel: hold still for a moment and the drawer gives up what it holds — a step away leaves it; not while something is close |
 | tab | the map (hold your pace) |
 | q | use selected item |
-| x · set down | set the selected item down where you stand — a talking radio keeps talking where it lies |
+| x · set down | set the selected item down where you stand, with one of m.'s phrases and an arrow for whoever finds it — a talking radio keeps talking where it lies |
 | c · whistle | call out — a two-note whistle the floor and your friends hear; the things hear it too |
+| l | flashlight on / off — go dark in a friend's light and the things see you less |
 | 1–6 | select inventory slot |
 | e | speak to a presence |
 | enter | chat (in online play) |
@@ -144,6 +147,14 @@ type your **name**, hit **PLAY ONLINE**, pick a **room code**, and share it. any
 - the first person into a room fixes its world; everyone else inherits it.
 
 **the whistle (c).** call out, and everyone on your floor hears two notes at a pitch that is only yours — panned to where you stand, fainter the farther you are, with a line in their chat that says *near* or *far* and which way. the hall counts who has answered lately and tells you, in words: *two of you, counting yourself.* a friend who goes a minute and a half without a whistle, a word, or standing near you has gone quiet, and you will feel it. alone, the hall keeps the sound. sometimes it does not, and the pitch that answers is wrong. the things hear every call — a whistle carries further than a ward. on a phone it is the **CALL** button.
+
+**a friend's light (l).** the things see by light. once you have taken your first way down, stand dark in a friend's flashlight — a few steps from them, nothing between you — and the things in the fog have a harder time finding you, and the dark eats at you slower. the game names whose light it is when you go dark in it. their light helps the people standing in it, never the one carrying it.
+
+**push for each other (space).** the things are not the same things on every screen. when a friend wards, everyone on that floor feels it where the friend stands: what was in front of them reels, or comes apart, on your side too — and if you were standing in front of their push when it met something, it steadies you. *maddie pushes the dark off you.*
+
+**evidence (the polaroid).** photograph a friend and the film develops what the file wrote on them — and the photograph reaches them. *someone has evidence of you. you are harder to erase.* for a minute and a half their mind will not sink below a quarter, and the others see them solid, however thin they have become. photograph a friend who is down and they are counted back at once.
+
+**down, not dead.** with a friend on your floor, a hit that would kill you lays you **down** instead: your light goes out and you have twenty-five seconds in the dark. you can still whistle. a friend who finds you, faces you and presses **f** stays with you — light on, holding still — and counts you back. a photograph does it faster. if nobody comes, it is a death.
 
 ## save & continue
 

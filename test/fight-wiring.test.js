@@ -25,7 +25,7 @@ const loopAt = game.indexOf('function loop(ts) {')
 describe('game.js: the real exported names, and the fight-verbs placeholders are gone', () => {
   it('imports the charger and wardOpts, the tactics quartet, the tension trio and audio.setMood', () => {
     expect(game).toMatch(/import \{ quiet, lureWithin, createCommit, QUIET_SECONDS \} from '\.\/tactics\.js'/)
-    expect(game).toMatch(/import \{ createWardCharger, wardOpts \} from '\.\/ward\.js'/)
+    expect(game).toMatch(/import \{ createWardCharger, wardOpts(, WARD_TAP)? \} from '\.\/ward\.js'/)   // (WARD_TAP: a friend's ward re-run on your things, I12)
     expect(game).toMatch(/import \{ createTension, huntDelta, calmDelta \} from '\.\/tension\.js'/)
     expect(game).toMatch(/import \{ [^}]*\bsetMood\b[^}]* \} from '\.\/audio\.js'/)
   })
@@ -92,15 +92,15 @@ describe('game.js: the charger block at the head of the frame', () => {
 })
 
 describe('game.js: set down (X and the dock ✕), the dropped things\' clocks, the lures', () => {
-  it('X and #btn-discard both call one throwSelected(); the old discardSelected wrapper is gone', () => {
-    expect(game).toMatch(/if \(K\['KeyX'\]\) \{ K\['KeyX'\] = false; throwSelected\(\) \}/)
-    expect(game).toMatch(/document\.getElementById\('btn-discard'\)\?\.addEventListener\('click', throwSelected\)/)
+  it('X and #btn-discard both call one setDown() (the cache card first, I11), which ends in the one throwSelected(note); the old discardSelected wrapper is gone', () => {
+    expect(game).toMatch(/if \(K\['KeyX'\]\) \{ K\['KeyX'\] = false; setDown\(\) \}/)
+    expect(game).toMatch(/document\.getElementById\('btn-discard'\)\?\.addEventListener\('click', setDown\)/)
     expect(game).not.toMatch(/function discardSelected\(\)/)
     expect(game).not.toMatch(/itemSys\.discardSelected\(\)/)
   })
   it('throwSelected: items.throwSelected on the play clock, the four outcomes, then the hotbar; the memory write is the loop\'s, on its one dirty read', () => {
-    const fn = game.slice(game.indexOf('function throwSelected()'), game.indexOf("document.getElementById('btn-discard')"))
-    expect(fn).toContain('const r = itemSys.throwSelected(player.x, player.y, player.angle, playT)')
+    const fn = game.slice(game.indexOf('function throwSelected(note = null)'), game.indexOf("document.getElementById('btn-discard')"))
+    expect(fn).toContain('const r = itemSys.throwSelected(player.x, player.y, player.angle, playT, note)')
     expect(fn).toMatch(/if \(!r\.ok\) \{ if \(r\.reason === 'kept'\) showMessage\('you do not put that down\.'\) \}/)
     expect(fn).toContain("t === 'radio' && r.item.on ? 'you set the radio down, still talking. let it talk.'")
     expect(fn).toContain("t === 'glowstick'          ? 'you leave the green light where it lies.'")

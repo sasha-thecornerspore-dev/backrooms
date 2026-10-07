@@ -40,6 +40,14 @@ import { createRollCall, whistlePitch, bearingLabel, whistleGain, whistlePan, co
   NO_ANSWER_LINE, ECHO_LINE } from '../src/renderer/rollcall.js'
 import { ACTIONS } from '../src/renderer/touch.js'
 import { takeKey } from '../src/renderer/input.js'
+import { createItemSystem, KEPT } from '../src/renderer/items.js'
+import { PHRASES, NOTE_NONE, menuFor, cacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger } from '../src/renderer/caches.js'
+import { readText, READ_FOOT, chooseLines } from '../src/renderer/papercard.js'
+import { createLevelMemory } from '../src/renderer/levelmem.js'
+import { findOpenNear } from '../src/renderer/topology.js'
+import { LIT_RANGE, litFriendNear, inCone, wardOutcome, wardLine, litOffLine } from '../src/renderer/lightshare.js'
+import { createEvidence, photoOutcome, EVIDENCE_FLOOR, EVIDENCE_LINE, COUNTED_LINE } from '../src/renderer/evidence.js'
+import { WARD_TAP } from '../src/renderer/ward.js'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const game = read('../src/renderer/game.js')
@@ -394,9 +402,10 @@ describe('I6: the file\'s reading of you, as the things perceive it (compose-per
     const lure = slice('lureNoiseT += dt', '// ── presence proximity')
     expect(lure).not.toContain('stillness.')
   })
-  it('the lure is the one tagged noise (\'lure\'); every other noise call keeps three arguments and is yours', () => {
+  it('the lure and a friend\'s relayed ward (I12) are the two tagged noises; every other noise call keeps three arguments and is yours', () => {
     expect(game).toContain("level.entitySys.noise(lures[i].x, lures[i].y, 8, 'lure')")
-    expect([...game.matchAll(/entitySys\.noise\([^\n]*?, '(\w+)'\)/g)].map((m) => m[1])).toEqual(['lure'])
+    expect(game).toContain("level.entitySys.noise(p.x, p.y, 10, 'friend')")
+    expect([...game.matchAll(/entitySys\.noise\([^\n]*?, '(\w+)'\)/g)].map((m) => m[1]).sort()).toEqual(['friend', 'lure'])
   })
   it('\'it hunts movement.\' once a run: the first frame it hides you with a thing within 12 (last frame\'s record), never during a stand', () => {
     expect(at('let wasHidden = false, huntsMovementSaid = false')).toBeLessThan(loopAt)
@@ -482,8 +491,9 @@ describe('I7: the one sanity step (compose-sanity.js)', () => {
   // the block lifted from game.js (and the literal it fills), run against the real step and a real pool
   const lit = game.match(/const sanCtx = (\{[^]*?\})\r?\n/)[1]
   const mkCtx = new Function('rules', 'mods', 'co', 'flashlight', 'player', 'selfFile', 'remoteOnFloor', 'bus', `return ${lit}`)
-  const run = new Function('sanCtx', 'company', 'sanityStep', 'showMessage', 'EXHAUSTED_LINE', 'DISAGREE_LINE', 'PRIO', 'driftD', 'st',
-    `let { rules, mods, co, flashlight, litNear, level, th, origin, leashCalm, disagreeSaid, dt, sanity, playT, down = { st: 'ok' } } = st\n${block}\nst.sanity = sanity; st.disagreeSaid = disagreeSaid`)   // (down: I9)
+  // (down: I9; the evidence floor, I12: nobody's photograph of you unless a case hands one in)
+  const run = new Function('sanCtx', 'company', 'sanityStep', 'showMessage', 'EXHAUSTED_LINE', 'DISAGREE_LINE', 'PRIO', 'driftD', 'st', 'evidence = { active: () => false }', 'EVIDENCE_FLOOR = 25',
+    `let { rules, mods, co, flashlight, litNear, level, th, origin, leashCalm, disagreeSaid, dt, sanity, playT, down = { st: 'ok' } } = st\n${block}\nst.sanity = sanity; st.disagreeSaid = disagreeSaid`)
   const NM = statusMods('notice-mailed'), CO = closingOverlay(null), DT = 1 / 60
   const legacy = (f, index, hunted, gaze, rate, friend) => {
     let sdelta = f ? 2 : -2
@@ -544,7 +554,7 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     expect(game).toMatch(/import \{ radioLine, RADIO_GROUPS \} from '\.\/compose-radio\.js'/)
     expect(game).toMatch(/import \{ wishRoute \} from '\.\/compose-wish\.js'/)
     expect(game).toMatch(/import \{ finaleGate, beaconDecision, deathDecision \} from '\.\/compose-gates\.js'/)   // (deathDecision: I9)
-    expect(game).toMatch(/import \{ SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame \} from '\.\/evidence\.js'/)
+    expect(game).toMatch(/import \{ SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame\b[^}]*\} from '\.\/evidence\.js'/)   // (I12 adds the evidence clock after them)
     expect(game).toMatch(/import \{ lineOfSight, inViewCone \} from '\.\/raycaster\.js'/)
     expect(game).toMatch(/import \{ depthOf, loadFile, saveFile, statusMods, canFile, canRefile, wishPrompt \} from '\.\/status\.js'/)
     expect(game).toMatch(/import \{ closingOverlay, closingLines, isWishOpen, CLOSED_OFFICE \} from '\.\/closings\.js'/)
@@ -902,9 +912,10 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     expect(wake).not.toMatch(/\bdown\.(st|reset|wakeNow|kneelTick|goDown)\b/)                    // the caller flipped down.st
     expect(wake).not.toMatch(/\bthin\b|leashDebt/)                                               // never a layer, never the pin's debt
     expect(fn('goDown')).not.toMatch(/(?<!function )die\(/)
-    // wakeUp is called from the kneel handler only (the photo path joins it in I12) — never from die()
-    expect((code.match(/(?<!function )\bwakeUp\(/g) || []).length).toBe(1)
+    // wakeUp is called from the kneel handler and the photo handler (I12) — never from die()
+    expect((code.match(/(?<!function )\bwakeUp\(/g) || []).length).toBe(2)
     expect(game).toContain("bus.on('kneel', ({ id }) => { if (down.st === 'down' && down.kneelTick(id) === 'woken') wakeUp(id) })")
+    expect(game).toContain("if (photoOutcome(down.st) === 'counted' && down.wakeNow() === 'woken') wakeUp(id, COUNTED_LINE)")
     const mk = new Function('kneel', 'down', 'player', 'showMessage', 'PRIO', 'bus', 'hereFields', 'document', 'downEl', 'wardInput', 'performance',
       'WAKE', 'WOKEN_LINE', 'DOWN_LINE', 'wokeOut', 'st',
       `let { flashlight, savedLight, sanity, invuln, regenDelay, hurt } = st\n${helpers}\nreturn { goDown, wakeUp, startKneel, stopKneel, read: () => ({ flashlight, savedLight, sanity, invuln, regenDelay, hurt }) }`)
@@ -984,7 +995,8 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     const K2 = { KeyF: true }; new Function('down', 'K', SWEEP)({ st: 'ok' }, K2); expect(K2.KeyF).toBe(true)
     expect(loop).toMatch(/if \(!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen\) \{\r?\n(\s*\/\/[^\n]*\r?\n)+\s*if \(K\['KeyF'\] && \(kneel\.st \|\| dnFront\)\) \{ K\['KeyF'\] = false; if \(kneel\.st\) stopKneel\(null\); else startKneel\(dnFront\) \}\r?\n\s*if \(K\['KeyF'\]\) \{/)
     expect(loop).toMatch(/if \(kneel\.st && K\['Escape'\]\) \{ K\['Escape'\] = false; stopKneel\(null\) \}[^\n]*\r?\n(\s*\r?\n)?(\s*\/\/[^\n]*\r?\n)*\s*if \(mapOpen && \(K\['Escape'\] \|\| K\['Tab'\]\)\)/)
-    expect(loop).toMatch(/if \(K\['KeyL'\]\) \{\r?\n\s*K\['KeyL'\] = false\r?\n\s*if \(kneel\.st\) showMessage\(LIGHT_STAYS_LINE\)[^\n]*\r?\n\s*else \{ flashlight = !flashlight; lightToggles\+\+; showMessage\(flashlight \? 'flashlight on\.' : 'flashlight off — the dark leans in\.'\) \}/)
+    // (the off line is lightshare.js litOffLine since I12: today's 'flashlight off — the dark leans in.' when nobody's light reaches you)
+    expect(loop).toMatch(/if \(K\['KeyL'\]\) \{\r?\n\s*K\['KeyL'\] = false\r?\n\s*if \(kneel\.st\) showMessage\(LIGHT_STAYS_LINE\)[^\n]*\r?\n\s*else \{ flashlight = !flashlight; lightToggles\+\+; showMessage\(flashlight \? 'flashlight on\.' : litOffLine\(litRec \? litRec\.name : null\)\) \}/)
     expect(LIGHT_STAYS_LINE).toBe('your light stays on them.')
   })
   it('the prompt: who is down in front (the hoisted options, last frame\'s fill) heads the ladder, dimming as you count; the kneel ticks after the remote fill', () => {
@@ -1014,7 +1026,7 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     const company = createCompany(); company.add(-30)
     const st = { rules: LEGACY, mods: statusMods('notice-mailed'), co: closingOverlay(null), flashlight: true, litNear: false, level: { index: 2, depth: 2 }, th: { hunted: true, gaze: true, gazeRate: 3 },
       origin: null, leashCalm: 0, disagreeSaid: false, dt: 1 / 60, sanity: 50, playT: 0, down: { st: 'down' } }
-    new Function('sanCtx', 'company', 'sanityStep', 'showMessage', 'EXHAUSTED_LINE', 'DISAGREE_LINE', 'PRIO', 'driftD', 'st',
+    new Function('sanCtx', 'company', 'sanityStep', 'showMessage', 'EXHAUSTED_LINE', 'DISAGREE_LINE', 'PRIO', 'driftD', 'st', 'evidence = { active: () => false }', 'EVIDENCE_FLOOR = 25',   // (the evidence floor: I12)
       `let { rules, mods, co, flashlight, litNear, level, th, origin, leashCalm, disagreeSaid, dt, sanity, playT, down } = st\n${block}\nst.sanity = sanity`)(sanCtx, company, sanityStep, () => {}, EXHAUSTED_LINE, DISAGREE_LINE, PRIO, () => 0, st)
     expect(st.sanity).toBe(50 - 1 / 60)
     expect(company.value).toBe(30)
@@ -1050,7 +1062,7 @@ describe('I10 (W5): the whistle — the C edge, your call, a friend\'s, the roll
     expect([WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY]).toEqual([10000, 14, 4, 2])
   })
   it('C is an edge in the verbs block right after X (lying down too: the sweep spares it); the touch CALL button is a plain key into the same edge', () => {
-    expect(loop).toMatch(/if \(K\['KeyX'\]\) \{ K\['KeyX'\] = false; throwSelected\(\) \}\r?\n\s*if \(K\['KeyC'\]\) \{ K\['KeyC'\] = false; whistleOut\(creaturesLive\) \}/)
+    expect(loop).toMatch(/if \(K\['KeyX'\]\) \{ K\['KeyX'\] = false; setDown\(\) \}\r?\n\s*if \(K\['KeyC'\]\) \{ K\['KeyC'\] = false; whistleOut\(creaturesLive\) \}/)   // (X asks on the card first since I11)
     const c = loop.indexOf(C_LINE)
     expect(c).toBeGreaterThan(loop.indexOf('if (!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen) {'))
     expect(c).toBeLessThan(loop.indexOf("if (K['Escape'] && dialogOpen)"))
@@ -1213,5 +1225,443 @@ describe('I10 (W5): the whistle — the C edge, your call, a friend\'s, the roll
     expect(manual).toContain('<span class="k"><kbd>C</kbd></span><span class="d"><b>whistle</b>')
     expect(manual).toContain('<h3 style="font-size:15px">Call out</h3>')
     for (const s of [NO_ANSWER_LINE, ECHO_LINE, countLine(1), countLine(2), countLine(7), countLine(40)]) { expect(s).toBe(s.toLowerCase()); expect(s).not.toContain('!') }
+  })
+})
+
+describe('I11 (W6): the caches — a thing set down with a word, read on the card, the room told, the floor remembering it', () => {
+  const loop = game.slice(loopAt)
+  const lift = (re) => { const m = game.match(re); expect(m, String(re)).not.toBeNull(); return m[0] }
+  const ITEM_NAMES = new Function(`return ${lift(/const ITEM_NAMES = \{[\s\S]*?\n\}/).replace(/^const ITEM_NAMES = /, '')}`)()
+  const setDownSrc = slice('function setDown() {', "document.getElementById('btn-discard')?.addEventListener('click', setDown)")
+  const pickupSrc = lift(/if \(res\.ok && res\.item\.cacheKey\) \{[\s\S]*?\r?\n {10}\}/)
+  const cacheOn = lift(/bus\.on\('cache', \(\{ id, name, payload: p, replay \}\) => \{[\s\S]*?\r?\n {4}\}\)/)
+  const takeOn = lift(/bus\.on\('take', [^\n]*/)
+  const regs = ['cache', 'take'].map((k) => lift(new RegExp(`bus\\.register\\('${k}'[^\\n]*`)))
+  const replace = slice('for (const c of ledger.pendingFor(index)) {', '// the keys still spent at this visit')
+  // setDown / throwSelected / removeCache / relayLater lifted out of game.js, their world faked around the REAL items, ledger and floors' memory
+  const mkSetDown = (deps) => new Function(...Object.keys(deps), `${setDownSrc}\nreturn { setDown, throwSelected, removeCache, relayLater }`)(...Object.values(deps))
+  function rig({ inv = ['bandage'], cardEl = {}, bus = null, id = null, name = 'wanderer', level = { index: 1 } } = {}) {
+    const items = createItemSystem({ ...DEFAULT_CONFIG }, () => false, 0)
+    for (const t of inv) items.grant(t, t === 'plumb' ? { tool: true } : {})
+    items.select(0)
+    const out = { said: [], cards: [], hot: 0, cancels: 0 }
+    const ledger = createCacheLedger(), evOutbox = [], mem = createLevelMemory(), player = { x: 10.5, y: 10.5, angle: 0 }
+    const h = mkSetDown({ itemSys: items, noteCardEl: cardEl, KEPT, showMessage: (m) => out.said.push(m), menuFor, level, openCard: (mode, opts) => { out.cards.push([mode, opts]); return {} },
+      ITEM_NAMES, PHRASES, NOTE_NONE, octOf, player, myName: () => name, myId: () => id, playT: 42, cancelCommit: () => out.cancels++, cacheKey, ledger,
+      renderHotbar: () => out.hot++, mem, bus, evOutbox })
+    return { h, items, out, ledger, evOutbox, mem, player, level }
+  }
+
+  it('imports caches.js, KEPT and readText by their real names; caches.js is in both offline shells; nothing of W6 is left to do', () => {
+    expect(game).toMatch(/import \{ PHRASES, NOTE_NONE, menuFor, cacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger \} from '\.\/caches\.js'/)
+    expect(game).toMatch(/import \{ createItemSystem, KEPT \} from '\.\/items\.js'/)
+    expect(game).toMatch(/import \{ createCard, CARD_KEYS, readText \} from '\.\/papercard\.js'/)
+    expect(sw).toContain("'/renderer/caches.js'"); expect(build).toContain("'caches.js'")
+    expect(game).not.toMatch(/TODO\(integrate:W6\)/)
+    for (const s of ['const ledger = createCacheLedger()', 'const evOutbox = []', 'const isMine = (rec) => (rec.byId ?? null) === myId()']) {
+      expect(at(s), s).toBeLessThan(loopAt)
+      expect(game.split(s).length - 1, s).toBe(1)
+    }
+    expect(count(/createCacheLedger\(/g)).toBe(1)
+  })
+  it('X and the dock\'s ✕ both ask on the card (setDown); the ONE items.throwSelected call carries the note; without the card element X is today\'s', () => {
+    expect(loop).toContain("if (K['KeyX']) { K['KeyX'] = false; setDown() }")
+    expect(game).toContain("document.getElementById('btn-discard')?.addEventListener('click', setDown)")
+    expect(count(/itemSys\.throwSelected\(/g)).toBe(1)
+    expect(game).toContain('const r = itemSys.throwSelected(player.x, player.y, player.angle, playT, note)')
+    expect(setDownSrc).toContain('if (!it || !noteCardEl) { throwSelected(null); return }')
+    expect(count(/function setDown\(/g)).toBe(1)
+  })
+  it('set down, lifted and replayed: the card offers the floor\'s six for this thing; a word makes a cache (the landing cell its key, yours, the hand empty); nothing is today\'s drop', () => {
+    let r = rig()
+    r.h.setDown()
+    expect(r.out.cards.length).toBe(1)
+    const [mode, opts] = r.out.cards[0]
+    const menu = menuFor(1, 'bandage')
+    expect(mode).toBe('choose')
+    expect(opts.menu).toEqual(menu.map((i) => PHRASES[i]))
+    expect(opts.text).toBe('leave a word with the bandage, for whoever finds it.')
+    expect(chooseLines(opts.menu).at(-1)).toBe('0 · nothing')
+    expect(r.items.inventory.length).toBe(1)                                         // only peeked while the card is up
+    opts.onPick(2)
+    const row = r.items.getDropped()
+    expect(row).toEqual([{ x: 11.7, y: 10.5, type: 'bandage', ph: menu[2], oct: 0, by: 'wanderer', cacheKey: 'c:1:11,10' }])   // solo: no id, so it is yours
+    expect(r.ledger.get('c:1:11,10')).toMatchObject({ lvl: 1, cx: 11, cy: 10, id: null, name: 'wanderer', t: 42, localKey: 'd:0', pending: null })
+    expect([r.out.said, r.out.cancels, r.out.hot, r.items.inventory.length, r.evOutbox.length]).toEqual([['you set it down.'], 1, 1, 0, 0])   // solo: nobody to tell
+    // nothing (0, Esc): today's plain drop, byte for byte
+    r = rig(); r.h.setDown(); r.out.cards[0][1].onPick(null)
+    expect(r.items.getDropped()).toEqual([{ x: 11.7, y: 10.5, type: 'bandage' }])
+    expect([r.out.said, r.ledger.size]).toEqual([['you drop the bandage.'], 0])
+    // the finds are refused before anything is offered; an empty hand is silent; no card element: X exactly as it was
+    r = rig({ inv: ['plumb'] }); r.h.setDown()
+    expect([r.out.cards.length, r.out.said, r.items.inventory.length]).toEqual([0, ['you do not put that down.'], 1])
+    r = rig({ inv: [] }); r.h.setDown()
+    expect([r.out.cards.length, r.out.said, r.out.hot]).toEqual([0, [], 1])
+    r = rig({ cardEl: null }); r.h.setDown()
+    expect([r.out.cards.length, r.out.said, r.items.getDropped()]).toEqual([0, ['you drop the bandage.'], [{ x: 11.7, y: 10.5, type: 'bandage' }]])
+    // a talking radio keeps its own line with a word too
+    r = rig({ inv: ['radio'] }); r.items.inventory[0].on = true; r.h.setDown(); r.out.cards[0][1].onPick(0)
+    expect(r.out.said).toEqual(['you set the radio down, still talking. let it talk.'])
+    expect(r.items.getDropped()[0]).toMatchObject({ on: true, ph: menuFor(1, 'radio')[0], cacheKey: 'c:1:11,10' })
+  })
+  it('online: the room is told through the outbox — at once, or (inside the kind\'s gap) in order behind what waits; a take never overtakes its cache', () => {
+    let ok = true
+    const sent = []
+    const bus = { emit: (k, p, o) => { if (!ok) return false; sent.push([k, JSON.parse(JSON.stringify(p)), o]); return true } }
+    const r = rig({ inv: ['almond-water', 'bandage', 'glowstick'], bus, id: 'me', name: 'maddie' })
+    r.items.inventory[0].sour = true
+    r.h.setDown(); r.out.cards[0][1].onPick(1)
+    const ph = menuFor(1, 'almond-water')[1]
+    expect(sent).toEqual([['cache', { lvl: 1, cx: 11, cy: 10, x: 11.7, y: 10.5, type: 'almond-water', ex: { sour: true }, ph, oct: 0 }, { keep: 'c:1:11,10' }]])
+    expect(r.items.getDropped()[0]).toMatchObject({ sour: true, by: 'maddie', byId: 'me' })
+    expect(isCachePayload(sent[0][1], ITEM_NAMES)).toBe(true)
+    ok = false
+    r.player.x = 20.5; r.h.setDown(); r.out.cards[1][1].onPick(0)                    // refused by the gap: it waits
+    ok = true
+    r.player.x = 30.5; r.h.setDown(); r.out.cards[2][1].onPick(0)                    // the gap is open again, but it queues behind
+    r.h.relayLater('take', { key: 'c:1:21,10' }, { drop: 'c:1:21,10' })
+    expect([sent.length, r.evOutbox.map(([k, p]) => [k, p.cx ?? p.key])]).toEqual([1, [['cache', 21], ['cache', 31], ['take', 'c:1:21,10']]])
+    // the loop's flush, lifted
+    const flush = lift(/if \(bus\) while \(evOutbox\.length && bus\.emit\(evOutbox\[0\]\[0\], evOutbox\[0\]\[1\], evOutbox\[0\]\[2\]\)\) evOutbox\.shift\(\)/)
+    new Function('bus', 'evOutbox', flush)(bus, r.evOutbox)
+    expect(sent.map(([k, p]) => [k, p.cx ?? p.key])).toEqual([['cache', 11], ['cache', 21], ['cache', 31], ['take', 'c:1:21,10']])
+    expect(r.evOutbox).toEqual([])
+    expect(loop.indexOf(flush)).toBeGreaterThan(loop.indexOf('if (bus) { bus.tick(performance.now());'))
+  })
+  it('one live cache a cell (the newest wins), six an owner (the oldest goes): the record leaves the world; another floor\'s is taken out of that floor\'s memory', () => {
+    const r = rig({ inv: ['bandage', 'bandage'], id: 'me', name: 'maddie' })
+    r.h.setDown(); r.out.cards[0][1].onPick(0)
+    r.h.setDown(); r.out.cards[1][1].onPick(3)                                       // the same landing cell
+    expect(r.items.getDropped().map((d) => [d.cacheKey, d.ph])).toEqual([['c:1:11,10', menuFor(1, 'bandage')[3]]])
+    expect(r.ledger.size).toBe(1)
+    const rr = rig({ inv: [], id: 'me', name: 'maddie' })
+    for (let i = 0; i < 7; i++) {
+      rr.items.grant('bandage'); rr.items.select(0)
+      rr.player.x = 10.5 + i * 3; rr.h.setDown(); rr.out.cards[i][1].onPick(0)
+    }
+    expect(rr.ledger.size).toBe(6)
+    expect(rr.items.getDropped().map((d) => d.cacheKey)).not.toContain('c:1:11,10')            // the first one is gone from the floor
+    expect(rr.items.getDropped().length).toBe(6)
+    // another floor: its memory loses the row; a pending one was never laid down
+    rr.mem.setDropped(2, [{ x: 1.5, y: 1.5, type: 'bandage', cacheKey: 'c:2:1,1' }, { x: 3.5, y: 3.5, type: 'glowstick' }])
+    rr.h.removeCache({ key: 'c:2:1,1', lvl: 2, localKey: 'd:9', pending: null })
+    expect(rr.mem.droppedFor(2)).toEqual([{ x: 3.5, y: 3.5, type: 'glowstick' }])
+    rr.h.removeCache({ key: 'c:2:3,3', lvl: 2, localKey: null, pending: { x: 3.5, y: 3.5, type: 'bandage', extra: {} } })
+    expect(rr.mem.droppedFor(2).length).toBe(1)
+    rr.h.removeCache({ key: 'c:3:0,0', lvl: 3, localKey: null, pending: null })     // a floor you never stood on: nothing made up for it
+    expect(rr.mem.get(3)).toBeNull()
+    expect(count(/mem\.setDropped\(/g)).toBe(4)
+  })
+  it('F on a cache, lifted and replayed: the word read on the card (whose, the arrow from where you stand), +4 for a stranger\'s, the ledger and the room let go of it', () => {
+    expect(game).toMatch(/if \(res\.ok\) \{ showMessage\(`you take the \$\{ITEM_NAMES\[res\.item\.type\] \?\? res\.item\.type\}\.`\); if \(!nearItem\.key\.startsWith\('d:'\)\) mem\.noteTaken\(level\.index, nearItem\.key\) \}[^\n]*\r?\n\s*else if \(res\.reason === 'full'\) showMessage\('your hands are full\.'\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(res\.ok && res\.item\.cacheKey\) \{/)
+    expect(pickupSrc).toContain('if (!isMine(res.item)) sanity = Math.min(100, sanity + 4)')
+    const run = new Function('res', 'isMine', 'st', 'ledger', 'relayLater', 'openCard', 'readText', 'PHRASES', 'arrowFor', 'player', `let { sanity } = st\n${pickupSrc}\nst.sanity = sanity`)
+    const go = (rec, mine, angle = 0) => {
+      const items = createItemSystem({ ...DEFAULT_CONFIG }, () => false, 0), ledger = createCacheLedger(), cards = [], relayed = [], st = { sanity: 50 }
+      const d = items.dropAt(5.5, 5.5, 'bandage', rec, null)
+      ledger.place({ key: rec.cacheKey, lvl: 1, cx: 5, cy: 5, id: rec.byId ?? null, name: rec.by ?? null })
+      const res = items.pickUp(d.key)
+      run(res, () => mine, st, ledger, (...a) => relayed.push(a), (m, o) => cards.push([m, o]), readText, PHRASES, arrowFor, { angle })
+      return { cards, relayed, st, ledger, inv: items.inventory }
+    }
+    let o = go({ ph: 2, oct: 0, by: 'maddie', byId: 'f', cacheKey: 'c:1:5,5' }, false)
+    expect(o.cards).toEqual([['read', { text: `${PHRASES[2]} ↑\n— maddie`, foot: READ_FOOT }]])
+    expect([o.st.sanity, o.relayed, o.ledger.size, o.inv]).toEqual([54, [['take', { key: 'c:1:5,5' }, { drop: 'c:1:5,5' }]], 0, [{ type: 'bandage' }]])
+    o = go({ ph: 9, oct: 2, by: 'wanderer', cacheKey: 'c:1:5,5' }, true, Math.PI / 2)           // your own, read facing the other way
+    expect(o.cards).toEqual([['read', { text: `${PHRASES[9]} ${arrowFor(2, Math.PI / 2)}\n— you left this.`, foot: READ_FOOT }]])
+    expect(o.st.sanity).toBe(50)
+    // the prompt says whose it is (the record itself is the prompt's nearItem)
+    expect(game).toContain("itemHintEl.textContent = `f · take the ${ITEM_NAMES[nearItem.type] ?? nearItem.type}` + (nearItem.cacheKey ? (isMine(nearItem) ? ' · yours' : ` · left by ${nearItem.by ?? 'wanderer'}`) : '')")
+  })
+  it('the room through the real bus: the registrations as lifted; a live cache here is laid down with whose it is and a people line, a replay silently, another floor\'s waits; a take removes it', () => {
+    const pos = { f: { x: 20.5, y: 10.5 } }
+    let t = 10000
+    const bus = createEvBus({ send: () => {}, now: () => t, self: () => ({ x: 10, y: 10, lvl: 1 }), peerPos: (id) => pos[id] ?? null, peerIds: () => new Set(Object.keys(pos)), selfId: () => 'me' })
+    new Function('bus', 'isCachePayload', 'isTakePayload', 'ITEM_NAMES', regs.join('\n'))(bus, isCachePayload, isTakePayload, ITEM_NAMES)
+    const level = { index: 1, grid: { floor: (x, y) => !(x === 40 && y === 10) } }
+    const r = rig({ level, id: 'me', name: 'jo' }), lines = []
+    new Function('bus', 'level', 'cacheKey', 'ledger', 'playT', 'extraFor', 'removeCache', 'findOpenNear', 'itemSys', 'addChatLine', `${cacheOn}\n${takeOn}`)(
+      bus, level, cacheKey, r.ledger, 7, extraFor, r.h.removeCache, findOpenNear, r.items, (...a) => lines.push(a))
+    const frame = (id, payload, n, extra = {}) => ({ id, name: id === 'f' ? 'maddie' : id, kind: 'cache', payload: { ...payload, n }, t: 1, ...extra })
+    const p = { lvl: 1, cx: 20, cy: 10, x: 20.5, y: 10.5, type: 'almond-water', ex: { sour: true }, ph: 3, oct: 2 }
+    expect(bus.receive(frame('f', p, 1))).toBe(true)
+    expect(r.items.getDropped()).toEqual([{ x: 20.5, y: 10.5, type: 'almond-water', sour: true, ph: 3, oct: 2, by: 'maddie', byId: 'f', cacheKey: 'c:1:20,10' }])
+    expect(lines).toEqual([['maddie', 'sets something down.', true]])
+    expect(r.ledger.get('c:1:20,10')).toMatchObject({ id: 'f', name: 'maddie', localKey: 'd:0' })
+    t += 1000
+    expect(bus.receive(frame('f', { ...p, cx: 21, x: 21.5 }, 2))).toBe(false)                     // inside the 3 s gap
+    t += 3000
+    expect(bus.receive(frame('f', { ...p, cx: 24, x: 24.5 }, 3))).toBe(false)                     // not where the list has them
+    expect(bus.receive(frame('f', { ...p, ph: 12 }, 4))).toBe(false)                             // not one of the twelve
+    expect(bus.receive(frame('g', { ...p, cx: 40, x: 40.5 }, 1, { replay: true }))).toBe(true)  // the relay's keep, on a cell that is wall here now
+    expect(r.items.getDropped()[1]).toMatchObject({ x: 40.5, y: 9.5, by: 'g', byId: 'g', cacheKey: 'c:1:40,10' })
+    expect(lines.length).toBe(1)                                                                // a replay says nothing
+    expect(bus.receive(frame('g', { ...p, lvl: 2, cx: 3, cy: 3, x: 3.5, y: 3.5 }, 2, { replay: true }))).toBe(true)
+    expect([r.items.getDropped().length, r.ledger.pendingFor(2).map((e) => e.key)]).toEqual([2, ['c:2:3,3']])
+    expect(bus.receive({ id: 'f', name: 'maddie', kind: 'take', payload: { key: 'c:1:20,10', n: 9 }, t: 1 })).toBe(true)
+    expect(r.items.getDropped().map((d) => d.cacheKey)).toEqual(['c:1:40,10'])
+    expect(r.ledger.get('c:1:20,10')).toBeNull()
+    expect(bus.receive({ id: 'f', name: 'maddie', kind: 'take', payload: { key: 'c:2:3,3', n: 10 }, t: 1 })).toBe(false)   // inside the take's 0.5 s
+    t += 600
+    expect(bus.receive({ id: 'f', name: 'maddie', kind: 'take', payload: { key: 'c:2:3,3', n: 11 }, t: 1 })).toBe(true)
+    expect(r.ledger.pendingFor(2)).toEqual([])                                                  // never laid down, never will be
+    expect(bus.receive({ id: 'f', name: 'maddie', kind: 'take', payload: { key: 'x', n: 12 }, t: 1, replay: true })).toBe(false)
+    for (const s of regs) expect(s).toMatch(/replayable: true/)
+    expect(regs[0]).toContain("posKeys: ['x', 'y'], minGapMs: 3000")
+    expect(regs[1]).toContain('minGapMs: 500')
+  })
+  it('buildLevel lays down what waited for this floor (the nearest open cell, or gone) and rebinds the floor\'s caches, between the items and the vend memory', () => {
+    const enter = buildBody.indexOf('itemSys.enterLevel(cfg, cfg.map ? null : mem.takenFor(index), cfg.map ? null : mem.droppedFor(index))')
+    expect(enter).toBeGreaterThan(0)
+    expect(buildBody.indexOf('for (const c of ledger.pendingFor(index)) {')).toBeGreaterThan(enter)
+    expect(buildBody.indexOf('ledger.clearPending(index); ledger.rebind(index, itemSys.getWorldItems())')).toBeLessThan(buildBody.indexOf('vendedSet = mem.vendedFor(index,'))
+    expect(buildBody.indexOf('ledger.clearPending(index); ledger.rebind(index, itemSys.getWorldItems())')).toBeGreaterThan(buildBody.indexOf('for (const c of ledger.pendingFor(index)) {'))
+    const items = createItemSystem({ ...DEFAULT_CONFIG }, () => false, 0), ledger = createCacheLedger()
+    items.enterLevel({ ...DEFAULT_CONFIG }, null, [{ x: 5.5, y: 5.5, type: 'bandage', ph: 1, oct: 0, by: 'jo', cacheKey: 'c:2:5,5' }])   // yours, from the floor's memory
+    const wait = (cx, cy, extra) => ledger.place({ key: cacheKey(2, cx, cy), lvl: 2, cx, cy, id: 'f', name: 'maddie', t: cx, pending: { x: cx + 0.5, y: cy + 0.5, type: 'glowstick', extra } })
+    wait(8, 8, extraFor({ ph: 4, oct: 1 }, 'f', 'maddie', 'c:2:8,8'))
+    wait(12, 8, extraFor({ ph: 5, oct: 1 }, 'f', 'maddie', 'c:2:12,8'))
+    wait(60, 8, extraFor({ ph: 6, oct: 1 }, 'f', 'maddie', 'c:2:60,8'))
+    const grid = { floor: (x, y) => !(x === 12 && y === 8) && !(x >= 50 && x <= 70) }        // one cell walled up, one whole region
+    new Function('ledger', 'index', 'grid', 'findOpenNear', 'itemSys', replace)(ledger, 2, grid, findOpenNear, items)
+    expect(items.getDropped().map((d) => [d.cacheKey, d.x, d.y])).toEqual([['c:2:5,5', 5.5, 5.5], ['c:2:8,8', 8.5, 8.5], ['c:2:12,8', 12.5, 7.5]])
+    expect(ledger.get('c:2:60,8')).toBeNull()                                                   // nothing open within three: gone
+    expect(ledger.pendingFor(2)).toEqual([])
+    expect(ledger.get('c:2:5,5')).toMatchObject({ name: 'jo', localKey: 'd:0' })               // adopted from what the floor remembered
+    expect(ledger.get('c:2:8,8').localKey).toBe('d:1')
+  })
+  describe('the caches\' index through save.js, the way game.js writes and reads it', () => {
+    afterEach(() => vi.unstubAllGlobals())
+    const stub = () => { const store = new Map(); vi.stubGlobal('localStorage', { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) }) }
+    it('snapshot adds `caches` after the fog; the resume restores it right under the identity, above the pinned clock line', () => {
+      const snap = slice('function snapshot(full = false) {', 'let saveTimer = 0')
+      expect(snap.indexOf('s.caches = ledger.snapshot()')).toBeGreaterThan(snap.indexOf('s.fog = fogExport'))
+      expect(resumeBody).toMatch(/rules = rulesFor\(origin, thin\); evConfig\.events = rules\.eventWeights\(\)\r?\n\s*ledger\.restore\(resume\.caches\)[^\n]*\r?\n\s*playT = Number\(resume\.playT\) \|\| 0\r?\n\s*const r = applyResume\(resume, \{/)
+    })
+    it('a v:1 save without `caches` resumes with an empty index; one with an own cache restores it (where it lies is the floors\' memory)', () => {
+      stub()
+      writeSave({ level: 1, x: 2.5, y: 2.5, playT: 40 })
+      const a = createCacheLedger(); a.restore(readSave().caches)
+      expect(a.size).toBe(0)
+      const own = createCacheLedger(); own.place({ key: 'c:1:11,10', lvl: 1, cx: 11, cy: 10, id: null, name: 'wanderer', t: 42 }); own.bind('c:1:11,10', 'd:0')
+      writeSave({ level: 1, x: 2.5, y: 2.5, playT: 40, caches: own.snapshot() })
+      const b = createCacheLedger(); b.restore(readSave().caches)
+      expect(b.get('c:1:11,10')).toEqual({ key: 'c:1:11,10', lvl: 1, cx: 11, cy: 10, id: null, name: 'wanderer', t: 42, localKey: null, pending: null })
+    })
+  })
+})
+
+describe('I12 (W7): a friend\'s light, a friend\'s ward, a friend\'s photograph — and the floor under you while someone has evidence of you', () => {
+  const loop = game.slice(loopAt)
+  const lift = (re) => { const m = game.match(re); expect(m, String(re)).not.toBeNull(); return m[0] }
+  const wardOn = lift(/bus\.on\('ward', \(\{ id, name, payload: p \}\) => \{[\s\S]*?\r?\n {4}\}\)/)
+  const photoOn = lift(/bus\.on\('photo', \(\{ id, payload: p \}\) => \{[\s\S]*?\r?\n {4}\}\)/)
+  const regs = ['ward', 'photo'].map((k) => lift(new RegExp(`bus\\.register\\('${k}'[^\\n]*`)))
+  const LIT_LINE = 'litRec = bus ? litFriendNear(player, bus.freshPeersOnFloor(), LIT_OPTS) : null; litNear = litRec !== null'
+  const EMIT = "if (bus) { wardOut.x = player.x; wardOut.y = player.y; wardOut.a = +player.angle.toFixed(2); wardOut.lvl = level.index; bus.emit('ward', wardOut) }"
+  const FLOOR = 'if (evidence.active(playT)) sanity = Math.max(sanity, EVIDENCE_FLOOR)'
+  const mkBus = (pos, clock) => {
+    const sent = []
+    const bus = createEvBus({ send: (k, p) => sent.push([k, JSON.parse(JSON.stringify(p))]), now: () => clock.t, self: () => ({ x: 10, y: 10, lvl: 1 }), peerPos: (id) => pos[id] ?? null,
+      peerIds: () => new Set(Object.keys(pos)), selfId: () => 'me' })
+    new Function('bus', regs.join('\n'))(bus)
+    return { bus, sent }
+  }
+
+  it('imports lightshare.js, the evidence clock and WARD_TAP by their real names; lightshare.js is in both offline shells; nothing of W7 is left to do', () => {
+    expect(game).toMatch(/import \{ LIT_RANGE, litFriendNear, inCone, wardOutcome, wardLine, litOffLine \} from '\.\/lightshare\.js'/)
+    expect(game).toMatch(/import \{ SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame, createEvidence, photoOutcome, EVIDENCE_FLOOR, EVIDENCE_LINE, COUNTED_LINE \} from '\.\/evidence\.js'/)
+    expect(game).toMatch(/import \{ createWardCharger, wardOpts, WARD_TAP \} from '\.\/ward\.js'/)
+    expect(sw).toContain("'/renderer/lightshare.js'"); expect(build).toContain("'lightshare.js'")
+    expect(game).not.toMatch(/TODO\(integrate:W7\)/)
+    for (const s of ['const LIT_OPTS = { cells: LIT_RANGE, los: frameLos, pos: peerPos }', 'const wardOut = { x: 0, y: 0, a: 0, lvl: 0 }', 'const wardProbe = { x: 0, y: 0, angle: 0 }',
+      'const evidence = createEvidence()', 'let litRec = null']) {
+      expect(at(s), s).toBeLessThan(loopAt)
+      expect(game.split(s).length - 1, s).toBe(1)
+    }
+    expect(count(/createEvidence\(/g)).toBe(1)
+    expect(LIT_RANGE).toBe(6)
+  })
+  it('litNear once a frame in the net block — after the remote fill and the bus tick, before the things and the sanity read it; replayed: solo never, a lit friend in reach is the record', () => {
+    expect(loop).toContain(LIT_LINE)
+    expect(count(/litFriendNear\(/g)).toBe(1)
+    const k = loop.indexOf(LIT_LINE)
+    expect(k).toBeGreaterThan(loop.indexOf('fillRemotes()'))
+    expect(k).toBeGreaterThan(loop.indexOf('if (bus) { bus.tick(performance.now());'))
+    expect(k).toBeLessThan(loop.indexOf('aiCtx.flashlight = flashlight'))
+    expect(k).toBeLessThan(loop.indexOf('perCtx.litNear = litNear'))
+    expect(k).toBeLessThan(loop.indexOf('sanCtx.litNear = litNear'))
+    const run = new Function('bus', 'litFriendNear', 'player', 'LIT_OPTS', 'st', `let { litRec, litNear } = st\n${LIT_LINE}\nObject.assign(st, { litRec, litNear })`)
+    const player = { x: 10, y: 10 }, rec = { id: 'f', name: 'maddie', lit: true, legacy: false }
+    const opts = { cells: LIT_RANGE, los: () => true, pos: (id) => (id === 'f' ? { x: 15, y: 10, angle: 0 } : null) }
+    let st = { litRec: 'stale', litNear: true }
+    run(null, litFriendNear, player, opts, st)
+    expect(st).toEqual({ litRec: null, litNear: false })                                         // solo: today's frame
+    st = { litRec: null, litNear: false }
+    run({ freshPeersOnFloor: () => [rec] }, litFriendNear, player, opts, st)
+    expect(st.litRec).toBe(rec); expect(st.litNear).toBe(true)
+    run({ freshPeersOnFloor: () => [{ ...rec, lit: false }] }, litFriendNear, player, opts, st)
+    expect(st).toEqual({ litRec: null, litNear: false })                                         // their light off: no shelter
+  })
+  it('L: going dark in a friend\'s light names them; in nobody\'s it is today\'s line; kneeling, the light stays on them', () => {
+    const L = lift(/if \(K\['KeyL'\]\) \{[\s\S]*?\r?\n {6}\}/)
+    const run = new Function('K', 'kneel', 'litOffLine', 'showMessage', 'LIGHT_STAYS_LINE', 'st', `let { flashlight, lightToggles, litRec } = st\n${L}\nObject.assign(st, { flashlight, lightToggles })`)
+    const said = [], press = (st, kneel = { st: null }) => run({ KeyL: true }, kneel, litOffLine, (m) => said.push(m), LIGHT_STAYS_LINE, st)
+    let st = { flashlight: true, lightToggles: 0, litRec: { name: 'maddie' } }
+    press(st)
+    expect([st.flashlight, st.lightToggles, said.at(-1)]).toEqual([false, 1, "flashlight off — you stand in maddie's light."])
+    press(st)
+    expect(said.at(-1)).toBe('flashlight on.')
+    st = { flashlight: true, lightToggles: 0, litRec: null }
+    press(st)
+    expect(said.at(-1)).toBe('flashlight off — the dark leans in.')
+    st = { flashlight: true, lightToggles: 0, litRec: { name: 'maddie' } }
+    press(st, { st: { id: 'f' } })
+    expect([st.flashlight, said.at(-1)]).toEqual([true, LIGHT_STAYS_LINE])
+  })
+  it('your ward on the wire: ONE reused payload in the fire branch, after the pinned noise of 12 and before the pulse; through the real bus it is believed, one per 600 ms', () => {
+    const fire = slice('let verbMul = 1', 'let moved = false')
+    expect(fire).toContain(EMIT)
+    expect(fire.indexOf('level.entitySys.noise(player.x, player.y, 12)')).toBeLessThan(fire.indexOf(EMIT))
+    expect(fire.indexOf(EMIT)).toBeLessThan(fire.indexOf('wardPulse(); shake = Math.max(shake, w.charged ? 0.7 : 0.45)'))
+    expect(count(/bus\.emit\('ward'/g)).toBe(1)
+    const clock = { t: 5000 }, { bus, sent } = mkBus({}, clock)
+    const wardOut = { x: 0, y: 0, a: 0, lvl: 0 }
+    const emit = new Function('bus', 'wardOut', 'player', 'level', EMIT)
+    emit(bus, wardOut, { x: 10.25, y: 4.5, angle: 1.23456 }, { index: 2 })
+    expect(sent).toEqual([['ward', { x: 10.25, y: 4.5, a: 1.23, lvl: 2, n: 0 }]])
+    clock.t += 590; emit(bus, wardOut, { x: 10.25, y: 4.5, angle: 0 }, { index: 2 })
+    expect(sent.length).toBe(1)                                                                  // the charger's 0.65 s is above the bus's 0.6
+    clock.t += 60; emit(bus, wardOut, { x: 10.25, y: 4.5, angle: -7 }, { index: 2 })
+    expect(sent[1][1].a).toBe(-7)
+    emit(null, wardOut, { x: 1, y: 1, angle: 0 }, { index: 2 })                                   // solo: nobody to tell
+    expect(sent.length).toBe(2)
+  })
+  it('a friend\'s ward, lifted and replayed through the real bus: their tap re-run on YOUR things from where they stand, a friend noise of 10; steadied only in its cone with something met', () => {
+    expect(wardOn).not.toMatch(/stillness\.noise|standHeld|wardRecoil|tryMove/)                // their noise is not your motion; the recoil is the warder's own
+    expect(count(/level\.entitySys\.noise\(p\.x, p\.y, 10, 'friend'\)/g)).toBe(1)
+    const clock = { t: 10000 }, pos = { f: { x: 11, y: 10 }, far: { x: 30, y: 10 } }, { bus } = mkBus(pos, clock)
+    const said = [], calls = [], noises = []
+    let res = { hit: 1, dispelled: 0, opening: 0 }, creatures = true
+    const level = { index: 1, entitySys: { ward: (probe, opts) => { calls.push([{ ...probe }, opts]); return res }, noise: (...a) => noises.push(a) } }
+    let pulses = 0
+    const read = new Function('bus', 'level', 'wardProbe', 'getPref', 'EMPTY_WARD', 'WARD_TAP', 'wardOutcome', 'inCone', 'player', 'wardPulse', 'wardLine', 'showMessage', 'PRIO', 'st',
+      `let { sanity, calmTimer, hurt, shake } = st\n${wardOn}\nreturn () => ({ sanity, calmTimer, hurt, shake })`)(
+      bus, level, { x: 0, y: 0, angle: 0 }, (k) => (k === 'creatures' ? creatures : null), { hit: 0, dispelled: 0, opening: 0 }, WARD_TAP, wardOutcome, inCone,
+      { x: 10, y: 10, angle: 0 }, () => pulses++, wardLine, (m, p) => said.push([m, p]), PRIO, { sanity: 50, calmTimer: 0, hurt: 1, shake: 0 })
+    let n = 0
+    const ward = (id, p, extra = {}) => bus.receive({ id, name: id === 'f' ? 'maddie' : id, kind: 'ward', payload: { lvl: 1, ...p, n: ++n }, t: 1, ...extra })
+    // facing you from a step away, and it met something: steadied
+    expect(ward('f', { x: 11, y: 10, a: 3.14 })).toBe(true)
+    expect(calls).toEqual([[{ x: 11, y: 10, angle: 3.14 }, WARD_TAP]])
+    expect(noises).toEqual([[11, 10, 10, 'friend']])
+    expect(read()).toEqual({ sanity: 58, calmTimer: 4, hurt: 0, shake: 0.2 })
+    expect([said, pulses]).toEqual([[['maddie pushes the dark off you.', PRIO.interaction]], 1])
+    // facing away: whatever it met, it met elsewhere — the line, not the gift
+    clock.t += 700; res = { hit: 2, dispelled: 0, opening: 0 }
+    expect(ward('f', { x: 11, y: 10, a: 0 })).toBe(true)
+    expect([read().sanity, said.at(-1)]).toEqual([58, ['they recoil from maddie.', PRIO.interaction]])
+    clock.t += 700; res = { hit: 0, dispelled: 1, opening: 0 }
+    ward('f', { x: 11, y: 10, a: 0 })
+    expect(said.at(-1)).toEqual(["it comes apart in maddie's light.", PRIO.interaction])
+    // toward you, nothing there; away from you, nothing there: a line, then silence
+    clock.t += 700; res = { hit: 0, dispelled: 0, opening: 0 }
+    ward('f', { x: 11, y: 10, a: 3.14 })
+    expect(said.at(-1)).toEqual(['maddie pushes at the dark near you. it gives nothing back.', PRIO.interaction])
+    clock.t += 700; const before = said.length
+    ward('f', { x: 11, y: 10, a: 0 })
+    expect(said.length).toBe(before)
+    // creatures off: no thing of yours to meet; another floor: nothing at all
+    clock.t += 700; creatures = false; const nCalls = calls.length
+    ward('f', { x: 11, y: 10, a: 3.14 })
+    expect([calls.length, said.at(-1)[0]]).toEqual([nCalls, 'maddie pushes at the dark near you. it gives nothing back.'])
+    clock.t += 700; creatures = true; const nNoise = noises.length
+    expect(ward('f', { lvl: 2, x: 11, y: 10, a: 3.14 })).toBe(true)
+    expect([calls.length, noises.length]).toEqual([nCalls, nNoise])
+    // the wire: inside 600 ms, a replay, or not where the list has them: refused
+    clock.t += 100
+    expect(ward('f', { x: 11, y: 10, a: 3.14 })).toBe(false)
+    clock.t += 700
+    expect(ward('f', { x: 11, y: 10, a: 3.14 }, { replay: true })).toBe(false)
+    expect(ward('far', { x: 26, y: 10, a: 0 })).toBe(false)
+    expect(ward('f', { x: 11, y: 10, a: NaN })).toBe(false)
+  })
+  it('a friend\'s photograph, lifted and replayed through the real bus: of you, evidence; lying down it counts you back through the ONE wake; of someone else, or from another floor, nothing', () => {
+    expect(photoOn).toContain("if (photoOutcome(down.st) === 'counted' && down.wakeNow() === 'woken') wakeUp(id, COUNTED_LINE)")
+    expect(photoOn).not.toMatch(/(?<!function )\bdie\(|thin|leashDebt/)
+    expect(slice('function hereFields() {', 'return hereObj')).toContain('hereObj.seen = evidence.active(playT)')
+    const clock = { t: 20000 }, pos = { f: { x: 14, y: 10 }, far: { x: 22, y: 10 } }, { bus, sent } = mkBus(pos, clock)
+    // the trap the photo's check could have been: emit() runs it on what I SEND, which is of a friend — it must go out
+    expect(bus.emit('photo', { of: 'f', x: 10, y: 10, lvl: 1 })).toBe(true)
+    expect(sent.map(([k, p]) => [k, p.of])).toEqual([['photo', 'f']])
+    let t = 0
+    const down = createDownState({ now: () => t }), evidence = createEvidence()
+    const said = [], wakes = [], heres = []
+    let pulses = 0
+    const read = new Function('bus', 'level', 'mpClient', 'evidence', 'playT', 'photoOutcome', 'down', 'wakeUp', 'wardPulse', 'showMessage', 'EVIDENCE_LINE', 'COUNTED_LINE', 'PRIO', 'hereFields', 'st',
+      `let { sanity } = st\n${photoOn}\nreturn () => sanity`)(bus, { index: 1 }, { id: 'me' }, evidence, 100, photoOutcome, down, (...a) => wakes.push(a), () => pulses++,
+      (m, p) => said.push([m, p]), EVIDENCE_LINE, COUNTED_LINE, PRIO, () => { heres.push(evidence.active(100)); return {} }, { sanity: 10 })
+    let n = 0
+    const photo = (id, p, extra = {}) => bus.receive({ id, name: id, kind: 'photo', payload: { of: 'me', x: pos[id]?.x ?? 0, y: 10, lvl: 1, ...p, n: ++n }, t: 1, ...extra })
+    expect(photo('f', {})).toBe(true)
+    expect([read(), pulses, said, wakes, heres]).toEqual([16, 1, [[EVIDENCE_LINE, PRIO.discovery]], [], [true]])
+    expect([evidence.active(189.9), evidence.active(190), evidence.by()]).toEqual([true, false, 'f'])
+    // lying down: counted back at once, no hold, through wakeUp — the +6 is not added on top
+    clock.t += 4000; down.goDown()
+    expect(photo('f', {})).toBe(true)
+    expect([wakes, down.st, read(), said.length]).toEqual([[['f', COUNTED_LINE]], 'ok', 16, 1])
+    // of someone else, another floor, inside 4 s, or from 11+ away: nothing
+    clock.t += 4000
+    expect(photo('f', { of: 'g' })).toBe(true)
+    clock.t += 4000
+    expect(photo('f', { lvl: 2 })).toBe(true)
+    expect([read(), said.length, wakes.length]).toEqual([16, 1, 1])
+    clock.t += 100
+    expect(photo('f', {})).toBe(false)
+    expect(photo('far', {})).toBe(false)
+    expect(photo('f', {}, { replay: true })).toBe(false)
+  })
+  it('the evidence floor: right after the clamp, before the bar; replayed, 90 s you do not go under 25 — then you can', () => {
+    const block = slice('sanCtx.rules = rules;', 'updateSanity()')
+    expect(block.indexOf(FLOOR)).toBeGreaterThan(block.indexOf('sanity = Math.max(0, Math.min(100, sanity + s.delta * dt))'))
+    expect(block.trimEnd().endsWith(FLOOR)).toBe(true)
+    expect(count(/EVIDENCE_FLOOR\)/g)).toBe(1)
+    const lit = game.match(/const sanCtx = (\{[^]*?\})\r?\n/)[1]
+    const sanCtx = new Function('rules', 'mods', 'co', 'flashlight', 'player', 'selfFile', 'remoteOnFloor', 'bus', `return ${lit}`)(LEGACY, statusMods('notice-mailed'), closingOverlay(null), false, { x: 0, y: 0 }, {}, [], null)
+    const run = new Function('sanCtx', 'company', 'sanityStep', 'showMessage', 'EXHAUSTED_LINE', 'DISAGREE_LINE', 'PRIO', 'driftD', 'st', 'evidence', 'EVIDENCE_FLOOR',
+      `let { rules, mods, co, flashlight, litNear, level, th, origin, leashCalm, disagreeSaid, dt, sanity, playT, down } = st\n${block}\nst.sanity = sanity`)
+    const ev = createEvidence(); ev.seen('f', 0)
+    const go = (sanity, playT) => {
+      const st = { rules: LEGACY, mods: statusMods('notice-mailed'), co: closingOverlay(null), flashlight: false, litNear: false, level: { index: 3, depth: 3 }, th: { hunted: true, gaze: true, gazeRate: 3 },
+        origin: null, leashCalm: 0, disagreeSaid: false, dt: 1 / 60, sanity, playT, down: { st: 'ok' } }
+      run(sanCtx, createCompany(), sanityStep, () => {}, EXHAUSTED_LINE, DISAGREE_LINE, PRIO, () => 0, st, ev, EVIDENCE_FLOOR)
+      return st.sanity
+    }
+    expect(go(5, 10)).toBe(EVIDENCE_FLOOR)                                                      // the dark, the hunt and a gaze: still 25
+    expect(go(60, 10)).toBeLessThan(60)                                                         // a floor, not a gift: above it the drain goes on
+    expect(go(5, 90)).toBeLessThan(5)                                                           // the window closed
+    expect(EVIDENCE_FLOOR).toBe(25)
+  })
+  it('the lines a friend\'s light, ward and photograph say are lowercase, in-fiction, with no exclamation', () => {
+    for (const s of [litOffLine('maddie'), litOffLine(null), wardLine('steadied', 'maddie', {}), wardLine('nothing', 'maddie', {}), wardLine('elsewhere', 'maddie', { dispelled: 2 }),
+      wardLine('elsewhere', 'maddie', { hit: 1 }), EVIDENCE_LINE, COUNTED_LINE, 'sets something down.', 'you set it down.', 'leave a word with the bandage, for whoever finds it.']) {
+      expect(s).toBe(s.toLowerCase()); expect(s).not.toContain('!')
+    }
+  })
+})
+
+describe('I11 / I12: the README and the field manual say what a cache, a friend\'s light, a friend\'s ward and a photograph do', () => {
+  const readme = read('../README.md'), manual = read('../docs/manual.html')
+  it('README: the x row carries the word and the arrow, an l row, the cache in the items, and the light, the push, evidence and lying down under multiplayer', () => {
+    expect(readme).toMatch(/^\| x · set down \| set the selected item down where you stand, with one of m\.'s phrases and an arrow for whoever finds it — a talking radio keeps talking where it lies \|$/m)
+    expect(readme).toMatch(/^\| l \| flashlight on \/ off/m)
+    for (const s of ['**leave a word.**', '*f · take the bandage · left by maddie*', '**a friend\'s light (l).**', '**push for each other (space).**', '**evidence (the polaroid).**', '**down, not dead.**']) expect(readme).toContain(s)
+    expect(readme).toContain(EVIDENCE_LINE.split('. ')[0])
+  })
+  it('the manual: X sets down with a word, L in a friend\'s light, the cache notice, the three co-op panels; the stale lines are gone', () => {
+    expect(manual).toContain('<span class="k"><kbd>X</kbd></span><span class="d"><b>set down</b> — and leave a word with it, if you like</span>')
+    for (const s of ['<h3>Leave a word</h3>', '<h3 style="font-size:15px">Share the light</h3>', '<h3 style="font-size:15px">Push for each other</h3>', '<h3 style="font-size:15px">Evidence</h3>']) expect(manual).toContain(s)
+    expect(manual).not.toContain('wake where you fell in')
+    expect(manual).not.toContain('The floor you left does not remember you.')
   })
 })
