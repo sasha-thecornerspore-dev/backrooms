@@ -83,8 +83,12 @@ describe('formText — the form on the stoop', () => {
       'intake.',
       'name: ada.',
       'address: 39.2994,-76.6410. the body is there.',
-      'status: extension. the pen ran out.',
+      'status: extension.',
     ])
+    // F7: the word as every voice says it; the pen runs out only on a blank
+    expect(formText({ name: 'ada' }, 'notice-mailed')).toContain('status: notice mailed.')
+    expect(formText({ name: 'ada' }, 'notice-mailed').join('\n')).not.toMatch(/notice-mailed|pen ran out/)
+    expect(formText({ name: 'ada' }, '')).toContain('status: ______. the pen ran out.')
     expect(t[2]).toBe(`address: ${formatAnchor(PIN)}. the body is there.`)
     for (const ctx of [{ name: 'ada', anchor: PIN }, { name: '', anchor: null }, { name: 'Ada', anchor: { lat: 91, lng: 0 } }])
       for (const line of formText(ctx, 'notice-mailed')) { expect(line).toBe(line.toLowerCase()); expect(line).not.toContain('!') }

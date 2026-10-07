@@ -50,7 +50,7 @@ import { sanityStep, EXHAUSTED_LINE, DISAGREE_LINE } from './compose-sanity.js'
 import { createCompany, createRollCall, evKinds, whistlePitch, bearingLabel, whistleGain, whistlePan, countLine, WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY, FAR_BONUS, ECHO, NO_ANSWER_LINE, ECHO_LINE, UNANSWERED_LINE } from './rollcall.js'
 import { createDownState, createKneel, downedInFront, DOWN_LINE, KNEEL_HINT, HANDS_LINE, LIGHT_STAYS_LINE, WOKEN_LINE, KNEELER_LINE, WAKE, KNEELER_SANITY, DOWN_BEAT } from './downed.js'
 import { depthOf, loadFile, saveFile, statusMods, npcLines, canFile, canRefile, wishPrompt, fileStatus, STRINGS as FILE } from './status.js'
-import { standConditions, standTick, closingOverlay, closingLines, isWishOpen, closingProgress, slipText, yourFileLines, CLOSED_OFFICE } from './closings.js'
+import { standConditions, standTick, closingOverlay, closingLines, isWishOpen, closingProgress, slipText, yourFileLines, CLOSED_OFFICE, STAND_STEADY_LINE } from './closings.js'
 import { standing, placementMods, applyPlacement, ambientMods, trayLean, rollCall } from './docket.js'
 import { polaroidCaption } from './compose-polaroid.js'
 import { radioLine, RADIO_GROUPS } from './compose-radio.js'
@@ -2161,7 +2161,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // players (the reused array fillRemotes refills; empty solo) and the bus's two questions — a peer it has no fresh 'here' for is the old
   // friend rule (+3), a fresh one draws on the company pool. leashDebt stays 0: driftD() carries the debt already
   const sanCtx = { rules, mods, closingOverlay: co, flashlight, litNear: false, index: 0, depth: 0, hunted: false, gaze: false, gazeRate: 0, origin: null,
-    drift: 0, leashDebt: 0, leashCalm: 0, down: false, company: 0, companyWas: 0, disagreeSaid: false, dt: 0,
+    drift: 0, leashDebt: 0, leashCalm: 0, down: false, company: 0, companyWas: 0, disagreeSaid: false, dt: 0, standing: false,
     player, self: selfFile, remotes: remoteOnFloor, fresh: bus ? bus.fresh : null, onFloor: bus ? bus.onFloor : null }
   // what the stand reads (closings.js standConditions): ONE object, refilled per frame where the stand ticks — the file's word and closing,
   // the floor's depth and the floor the room's files make deepest (level.amb.standFloor), your light, the ledger heard, a step, the nearest
@@ -2673,6 +2673,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // -3 hunted, -gazeRate under a gaze (a smiler 1.5, a watcher 3), +3 for one friend within 6 on this floor — and what the file adds:
     // the column's light, a status's or a closing's depth term, the pin's leash, the company pool a fresh friend draws on, -1 flat lying
     // down. The result is one reused record; the clamp is here, as before
+    sanCtx.standing = standHeld > 0             // a stand being held (last frame's clock): the dark does not eat you
     sanCtx.rules = rules; sanCtx.mods = mods; sanCtx.closingOverlay = co; sanCtx.flashlight = flashlight; sanCtx.litNear = litNear
     sanCtx.index = level.index; sanCtx.depth = level.depth; sanCtx.hunted = th.hunted; sanCtx.gaze = th.gaze; sanCtx.gazeRate = th.gazeRate
     sanCtx.origin = origin; sanCtx.drift = driftD(); sanCtx.leashCalm = leashCalm
@@ -2695,6 +2696,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const sd = standTick(standHeld, dt, standConditions(standCtx))
     standHeld = sd.held
     if (sd.done) closeExtension()
+    if (sd.steady) showMessage(STAND_STEADY_LINE, PRIO.discovery)   // once a stand, 15 s in: it is counting
     const insane = Math.max(0, Math.min(1, (42 - sanity) / 42))
     if (insaneEl) insaneEl.style.opacity = (insane * 0.6).toFixed(2)
     // the whispers come closer together the higher the tension runs (the window shrinks by up to half)

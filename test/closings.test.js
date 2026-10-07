@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   canFinale, standConditions, standTick, isCloseWish, closeFile, closingOverlay, closingLines, closingReply,
-  isWishOpen, CLOSED_OFFICE, closingProgress, slipText, NO_STANDING, yourFileLines, WORDS,
+  isWishOpen, CLOSED_OFFICE, closingProgress, slipText, NO_STANDING, yourFileLines, WORDS, STAND_STEADY_LINE,
 } from '../src/renderer/closings.js'
-import { STATUSES, STRINGS } from '../src/renderer/status.js'
+import { sanityStep } from '../src/renderer/compose-sanity.js'
+import { rulesFor } from '../src/renderer/origin-rules.js'
+import { STATUSES, STRINGS, statusMods } from '../src/renderer/status.js'
 import { SLIP_LINE as PROCESSED_SLIP_LINE } from '../src/renderer/origin-processed.js'
 
 const CLOSING_VALUES = ['extension', 'compliance', 'litigation']
@@ -89,6 +91,20 @@ describe('standTick', () => {
     const c = standTick(0, 1, true, 2)
     expect(b).toBe(a)
     expect(c).toBe(a)
+  })
+  it('steady: once a stand, on the frame held crosses 15 s; a reset stand says it again; never with needS at or under 15 (F2)', () => {
+    expect(STAND_STEADY_LINE).toBe('the lights steady. keep still.')
+    let held = 0
+    const at = []
+    for (let i = 0; i < 300; i++) { const r = standTick(held, 0.1, true); if (r.steady) at.push(i); held = r.held }
+    expect(at.length).toBe(1)
+    expect(at[0]).toBeGreaterThanOrEqual(148); expect(at[0]).toBeLessThanOrEqual(150)
+    held = standTick(held, 0.1, false).held
+    for (let i = 0; i < 160; i++) { const r = standTick(held, 0.1, true); if (r.steady) at.push(i); held = r.held }
+    expect(at.length).toBe(2)
+    held = 0
+    for (let i = 0; i < 20; i++) { const r = standTick(held, 1, true, 2); expect(r.steady).toBe(false); held = r.held }
+    expect(standTick(14, 2, false).steady).toBe(false)
   })
   it('needS 2, dt 1: done on the second frame', () => {
     const r1 = standTick(0, 1, true, 2)
@@ -267,11 +283,11 @@ describe('your file', () => {
     anchored: 'the file has your body at a pin.',
     unnamed: 'the file cannot spell you.',
     processed: 'the file opened a line on you.',
-    null: 'the file does not have you yet.',
+    null: 'the file has not written down how you came in.',
   }
   it('an unanswered notice', () => {
     const L = yourFileLines(file(0), null, closingProgress('notice-mailed', {}))
-    expect(L).toEqual(['notice mailed. unanswered.', 'the file does not have you yet.', 'request a new notice'])
+    expect(L).toEqual(['notice mailed. unanswered.', 'the file has not written down how you came in.', 'request a new notice'])
   })
   it('filed, with the date', () => {
     const f = file(0, { status: 'extension', at: Date.UTC(2026, 9, 6), ledgerHeard: true })
@@ -307,5 +323,36 @@ describe('the two refusals', () => {
   it('as written', () => {
     expect(NO_STANDING).toBe('you have no standing to file this.')
     expect(CLOSED_OFFICE).toBe('the file is closed. there is no one to ask.')
+  })
+})
+
+// F2: the stand is held in the dark; while it is held the dark does not eat you, so every column standing still and dark on the
+// stand floor (3, or 2 when the room leads extension) from a full mind is extended at 45 s. The depth-3 tenant (-3 light) and the
+// depth-2 non-thin columns used to sink under 30 and restart the hold silently
+describe('the stand, against the real sanity step (F2)', () => {
+  const play = (o, thin, depth, standing) => {
+    const rules = rulesFor(o, thin), dt = 1 / 60
+    let sanity = 100, held = 0, t = 0, done = false, steady = 0
+    while (t < 60 && !done) {
+      const s = sanityStep({ rules, mods: statusMods('extension'), closingOverlay: closingOverlay(null), flashlight: false, litNear: false, index: depth, depth,
+        hunted: false, gaze: false, gazeRate: 0, drift: 0, leashDebt: 0, leashCalm: 0, down: false, remotes: [], fresh: null, onFloor: null,
+        company: 60, companyWas: 60, disagreeSaid: false, dt, player: { x: 0, y: 0 }, self: null, standing: standing && held > 0 })
+      sanity = Math.max(0, Math.min(100, sanity + s.delta * dt))
+      const r = standTick(held, dt, standConditions({ status: 'extension', closing: null, depth, standFloor: depth, flashlight: false, ledgerHeard: true, moving: false, nearD: Infinity, sanity, transitioning: false }))
+      held = r.held; done = r.done; if (r.steady) steady++; t += dt
+    }
+    return { done, t, sanity, steady }
+  }
+  it('every column, thin or not, on a stand floor of 3 or 2: extended at 45 s, the mind never below 99, the steady line once', () => {
+    for (const depth of [3, 2]) for (const o of ['tenant', 'anchored', 'processed', 'unnamed']) for (const thin of [false, true]) {
+      const r = play(o, thin, depth, true)
+      expect(r.done, `${depth} ${o} ${thin}`).toBe(true)
+      expect(r.t).toBeLessThan(45.1)
+      expect(r.sanity).toBeGreaterThanOrEqual(99)
+      expect(r.steady).toBe(1)
+    }
+  })
+  it('the failure it fixes: without the standing flag the depth-3 tenant never closes', () => {
+    expect(play('tenant', false, 3, false).done).toBe(false)
   })
 })

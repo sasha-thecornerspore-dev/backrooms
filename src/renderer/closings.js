@@ -33,11 +33,17 @@ export function standConditions(ctx) {
     ctx.ledgerHeard === true && !ctx.moving && ctx.nearD >= 10 && ctx.sanity > 30 && !ctx.transitioning
 }
 
-const stand = { held: 0, done: false }
-// -> the ONE reused { held, done }: done fires once, on the frame held crosses needS
+// a third of the way in, once a stand: the player is told the stand is counting (while it is held the dark eats
+// nothing — compose-sanity's ctx.standing — so m.'s 'the lights hold' is true)
+export const STAND_STEADY_LINE = 'the lights steady. keep still.'
+const STEADY_S = 15
+
+const stand = { held: 0, done: false, steady: false }
+// -> the ONE reused { held, done, steady }: done fires once, on the frame held crosses needS; steady once, crossing 15 s
 export function standTick(held, dt, ok, needS = 45) {
   const next = ok ? held + dt : 0
   stand.done = !!ok && held < needS && next >= needS
+  stand.steady = !!ok && held < STEADY_S && next >= STEADY_S && STEADY_S < needS
   stand.held = next
   return stand
 }
@@ -135,7 +141,7 @@ const ORIGIN_LINES = {
   unnamed: 'the file cannot spell you.',
   processed: 'the file opened a line on you.',
 }
-const NO_ORIGIN_LINE = 'the file does not have you yet.'
+const NO_ORIGIN_LINE = 'the file has not written down how you came in.'   // the status is global, the origin per run: never 'not yet' under a filed word
 const NEW_NOTICE_CONTROL = 'request a new notice'
 
 // the settings row renders all but the last as text and the last as the button; /status joins all but the last

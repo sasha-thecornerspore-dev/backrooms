@@ -142,7 +142,7 @@ the lost souls know which word you are under, and so does the room — *entered 
 
 **three ways a file closes.** each status has its ending, and none of them is a door out.
 
-- **extension** — on the deepest floor, after the station has read you its last group: stand in the dark, light off, still, with nothing near. long enough, and the notice is extended over you. *twenty-two years.*
+- **extension** — on the deepest floor, after the station has read you its last group: stand in the dark, light off, still, with nothing near. while you hold it the dark does not eat you, and the lights steady to tell you it is counting. long enough, and the notice is extended over you. *twenty-two years.*
 - **compliance** — give thirteen pages up unread, then tell a presence to *close the file*. the shimmer leaves the walls, and the floors stop leaving pages out.
 - **litigation** — hold the seam. the station in the deep is counting toward something, and the extension slip names the one line the system never closed. claim it at a presence, then push it into the dark with your beacon (**b**). under litigation the held seam closes your file. under the notice nobody answered, nobody writes it down — and the seam can be held again, any run, by anyone who finds the way.
 

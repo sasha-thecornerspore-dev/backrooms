@@ -32,7 +32,7 @@ import { inViewCone } from '../src/renderer/raycaster.js'
 import { HF } from '../src/renderer/gfx-frame.js'
 import { loadFile, canFile, STRINGS } from '../src/renderer/status.js'
 import { closingLines, NO_STANDING } from '../src/renderer/closings.js'
-import { standConditions, standTick, closingProgress, yourFileLines, slipText } from '../src/renderer/closings.js'
+import { standConditions, standTick, closingProgress, yourFileLines, slipText, STAND_STEADY_LINE } from '../src/renderer/closings.js'
 import { npcLines, fileStatus, DAY_MS } from '../src/renderer/status.js'
 import { createCard } from '../src/renderer/papercard.js'
 import { SCRAPS } from '../src/renderer/scraps.js'
@@ -577,7 +577,7 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     expect(game).toMatch(/import \{ lineOfSight, inViewCone \} from '\.\/raycaster\.js'/)
     // (I13 adds the npc pool, the settings control's filing and the strings; the stand, the progress, the slip and the 'your file' lines)
     expect(game).toMatch(/import \{ depthOf, loadFile, saveFile, statusMods, npcLines, canFile, canRefile, wishPrompt, fileStatus, STRINGS as FILE \} from '\.\/status\.js'/)
-    expect(game).toMatch(/import \{ standConditions, standTick, closingOverlay, closingLines, isWishOpen, closingProgress, slipText, yourFileLines, CLOSED_OFFICE \} from '\.\/closings\.js'/)
+    expect(game).toMatch(/import \{ standConditions, standTick, closingOverlay, closingLines, isWishOpen, closingProgress, slipText, yourFileLines, CLOSED_OFFICE, STAND_STEADY_LINE \} from '\.\/closings\.js'/)
     expect(game).toMatch(/import \{ createCompany, createRollCall\b[^}]*\} from '\.\/rollcall\.js'/)   // (I9 / I10 add the kinds and the whistle's names after them)
     for (const re of [/const RADIO_GROUPS = /, /const isClaim = /, /const finalizing = /, /iwashere/, /extension30150a/]) expect(game).not.toMatch(re)
     // each seam is ONE call
@@ -1862,15 +1862,19 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
     expect(at('standCtx.status = file.status;', loopAt)).toBeLessThan(at('const insane = ', loopAt))
     const block = slice('standCtx.status = file.status;', 'const insane = ')
     expect(block).toContain('standCtx.standFloor = level.amb.standFloor')
-    expect(block).toMatch(/const sd = standTick\(standHeld, dt, standConditions\(standCtx\)\)\r?\n\s*standHeld = sd\.held\r?\n\s*if \(sd\.done\) closeExtension\(\)/)
+    expect(block).toMatch(/const sd = standTick\(standHeld, dt, standConditions\(standCtx\)\)\r?\n\s*standHeld = sd\.held\r?\n\s*if \(sd\.done\) closeExtension\(\)\r?\n\s*if \(sd\.steady\) showMessage\(STAND_STEADY_LINE, PRIO\.discovery\)/)
+    // F2: the sanity step hears last frame's stand (the dark does not eat you while it is held), set just above the sanity block's slice
+    expect(loop).toMatch(/sanCtx\.standing = standHeld > 0[^\n]*\r?\n\s*sanCtx\.rules = rules;/)
+    expect(game.match(/const sanCtx = (\{[^]*?\})\r?\n/)[1]).toContain('standing: false')
   })
   it('the stand, lifted and replayed against the real closings: 45 s dark, still and heard on the deepest floor closes the extension ONCE; a step, the light, a thing near, the wrong floor or word, never', () => {
     const block = slice('standCtx.status = file.status;', 'const insane = ')
     const standCtx = new Function(`return ${game.match(/const standCtx = (\{[^\n]*\})/)[1]}`)()
-    const fn = new Function('standCtx', 'standTick', 'standConditions', 'closeExtension', 'st',
+    const said = []
+    const fn = new Function('standCtx', 'standTick', 'standConditions', 'closeExtension', 'showMessage', 'STAND_STEADY_LINE', 'PRIO', 'st',
       `let { file, level, flashlight, moved, th, sanity, transitioning, standHeld, dt } = st\n${block}\nst.standHeld = standHeld`)
     const fresh = (o = {}) => ({ file: ext, level: { depth: 3, amb: { standFloor: 3 } }, flashlight: false, moved: false, th: { nearest: Infinity }, sanity: 60, transitioning: false, standHeld: 0, dt: 0.5, ...o })
-    const run = (st, frames) => { let closed = 0; for (let i = 0; i < frames; i++) fn(standCtx, standTick, standConditions, () => closed++, st); return closed }
+    const run = (st, frames) => { let closed = 0; for (let i = 0; i < frames; i++) fn(standCtx, standTick, standConditions, () => closed++, (m, p) => said.push([m, p]), STAND_STEADY_LINE, PRIO, st); return closed }
     let st = fresh()
     expect(run(st, 89)).toBe(0)                                               // 44.5 s
     expect(run(st, 1)).toBe(1)                                                // the crossing frame
@@ -1884,6 +1888,9 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
     expect(run(st, 90)).toBe(1)
     st = fresh(); run(st, 60); st.moved = true; run(st, 1); st.moved = false   // a step halfway: it starts again
     expect(run(st, 89)).toBe(0); expect(run(st, 1)).toBe(1)
+    said.length = 0; st = fresh(); run(st, 29); expect(said).toEqual([])      // 14.5 s: nothing yet
+    run(st, 1); expect(said).toEqual([[STAND_STEADY_LINE, PRIO.discovery]])   // 15 s: once
+    run(st, 60); expect(said.length).toBe(1)
   })
   it('the extension closes over you: on the file first, then the lights and your mind, the slip in your hands, and the three lines on the closing\'s timers', () => {
     const src = slice('function closeExtension() {', "document.getElementById('wish-cancel')")
@@ -1969,7 +1976,7 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
     const line = game.match(/const fileLines = \(\) => [^\n]*/)[0]
     const status = (file, origin, claimFiled = false, beaconFired = false) => new Function('yourFileLines', 'closingProgress', 'file', 'origin', 'claimFiled', 'beaconFired',
       `${line}\nreturn fileLines().slice(0, -1).join(' · ')`)(yourFileLines, closingProgress, file, origin, claimFiled, beaconFired)
-    expect(status(loadFile(null), null)).toBe('notice mailed. unanswered. · the file does not have you yet.')
+    expect(status(loadFile(null), null)).toBe('notice mailed. unanswered. · the file has not written down how you came in.')
     expect(status(ext, 'tenant')).toBe('filed under extension · since 2026-10-06 · the file has you at an address. · the station has read its last group to you · done · standing in the dark on the deepest floor')
     expect(status({ ...ext, status: 'compliance', redacted: [1, 2, 3] }, 'processed')).toContain('three of thirteen pages given up · the file, closed')
     expect(status({ ...ext, status: 'litigation' }, 'anchored', true, false)).toContain('the claim, typed · done · the beacon, pushed')

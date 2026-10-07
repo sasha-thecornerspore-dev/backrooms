@@ -30,6 +30,7 @@ export function sanityStep(ctx) {
 
   const rules = ctx.rules
   let d = rules.lightTerm(ctx.flashlight, ctx.litNear, ctx.depth)
+  if (ctx.standing && d < 0) d = 0             // a stand being held (closings.js): the dark does not eat you — the lights hold
   const co = ctx.closingOverlay
   d += (co && co.sanityDepthTerm) ? co.sanityDepthTerm(ctx.index, ctx.depth) : ctx.mods.sanityDepthTerm(ctx.index, ctx.depth)
   if (ctx.hunted) d -= 3                       // something is on you

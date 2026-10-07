@@ -23,6 +23,18 @@ function bus(freshIds, offFloor = []) {
 }
 const peer = (id, dx, over = {}) => ({ id, x: 10 + dx, y: 10, name: id, stillFor: 0, ...over })
 
+describe('the stand: while it is held the dark does not eat you (F2)', () => {
+  it('standing zeroes a negative light term only; a positive one, the depth term and the hunt still count', () => {
+    const T = rulesFor('tenant', false), EX = statusMods('extension')
+    expect(sanityStep(mkCtx({ rules: T, mods: EX, flashlight: false, index: 3, depth: 3 })).delta).toBe(-3 + 0.75)
+    expect(sanityStep(mkCtx({ rules: T, mods: EX, flashlight: false, index: 3, depth: 3, standing: true })).delta).toBe(0.75)
+    expect(sanityStep(mkCtx({ rules: T, mods: EX, flashlight: false, index: 3, depth: 3, standing: true, hunted: true })).delta).toBe(0.75 - 3)
+    expect(sanityStep(mkCtx({ rules: LEGACY, flashlight: false, index: 2, depth: 2, standing: true })).delta).toBe(-1)
+    expect(sanityStep(mkCtx({ rules: rulesFor('tenant', true), flashlight: false, index: 2, depth: 2, standing: true })).delta).toBe(2 - 1)
+    expect(sanityStep(mkCtx({ rules: LEGACY, flashlight: false, index: 2, depth: 2, standing: false })).delta).toBe(-2 - 1)
+  })
+})
+
 describe('the light term is the block’s', () => {
   it('flashlight / litNear / depth pass through verbatim and the result is added (a fake thin block)', () => {
     const calls = []
