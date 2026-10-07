@@ -7,12 +7,12 @@
 // closingOverlay() is a frozen singleton per closing, standTick() one reused record, so
 // the per-frame paths allocate nothing. Pure and import-safe.
 
-import { STRINGS } from './status.js'
+import { STRINGS, WORDS, PAGES_TO_CLOSE, pagesGiven } from './status.js'
 // the processed read their own slip (W2): the block keeps its strings as flat exports
 import { SLIP_LINE as PROCESSED_SLIP_LINE } from './origin-processed.js'
 
-export const WORDS = Object.freeze(['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen'])
-const PAGES_TO_CLOSE = 13
+// the count and its words live in status.js now (the dialog says them too); still read from here
+export { WORDS }
 
 export const NO_STANDING = 'you have no standing to file this.'
 export const CLOSED_OFFICE = 'the file is closed. there is no one to ask.'
@@ -52,8 +52,6 @@ export function standTick(held, dt, ok, needS = 45) {
 export function isCloseWish(text) {
   return /^\s*close the file\s*$/i.test(String(text))
 }
-
-const pagesGiven = (n) => (n >= PAGES_TO_CLOSE ? 'thirteen pages given up' : WORDS[n] + ' of thirteen pages given up')
 
 // -> { file, reply, closed }: files nothing else, submits nothing
 export function closeFile(file) {

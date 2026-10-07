@@ -133,14 +133,24 @@ export function parseTrailer(body) {
 // a typed line that reads as a trailer is the player's, not the file's: dropped before the real one goes on (R3SP-2)
 export const stripTrailers = (t) => String(t).split('\n').filter((l) => !TRAILER.test(l.trim())).join('\n').trim()
 
-// the dialog's placeholder and the faint lines under it
-export function wishPrompt({ origin, status, closing, canFile: cf, canRefile: cr } = {}) {
+// ── the pages compliance gives up ───────────────────────────────────────────────────────────
+// here, not in closings.js (which imports this file): the dialog's close line says the count too (F5)
+export const WORDS = Object.freeze(['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen'])
+export const PAGES_TO_CLOSE = 13
+export const pagesGiven = (n) => (n >= PAGES_TO_CLOSE ? 'thirteen pages given up' : WORDS[n] + ' of thirteen pages given up')
+// what a tap types is the phrase that closes the file (closings.js isCloseWish), not the word you are already under
+const CLOSE_PREFIX = 'close the file · '
+
+// the dialog's placeholder and the faint lines under it. redacted: how many pages the file has you giving up
+export function wishPrompt({ origin, status, closing, canFile: cf, canRefile: cr, redacted = 0 } = {}) {
   const placeholder = origin === 'processed' ? STRINGS.PLACEHOLDER_PROCESSED
     : origin === 'unnamed' ? STRINGS.PLACEHOLDER_UNNAMED
       : STRINGS.PLACEHOLDER
+  const n = Number.isInteger(redacted) && redacted > 0 ? redacted : 0
+  const closeLine = status === 'compliance' && closing == null ? CLOSE_PREFIX + pagesGiven(n) : null
   const sub = !cf ? [STRINGS.NOTICE_UNANSWERED]
-    : !cr ? ['filed under ' + status + '. the office is closed until tomorrow.']
-      : [...STRINGS.STAMP_LINES]
+    : !cr ? ['filed under ' + status + '. the office is closed until tomorrow.', ...(closeLine ? [closeLine] : [])]   // the office is closed to a new word, not to the close
+      : STRINGS.STAMP_LINES.map((l) => (closeLine && l.startsWith('compliance · ') ? closeLine : l))
   return { placeholder, sub }
 }
 

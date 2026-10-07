@@ -35,7 +35,7 @@ import { lineOfSight, inViewCone } from './raycaster.js'
 import { dressPass } from './dress.js'
 import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog } from './containers.js'
 import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
-import { createCard, CARD_KEYS, readText } from './papercard.js'
+import { createCard, CARD_KEYS, readText, REDACTED_FOOT } from './papercard.js'
 import { createEvBus } from '../net/evbus.js'
 import { intake, filingLine, formText, FORM_FOOT, parseIntakeCommand, normaliseIntakeCtx, identityOut, identityIn } from './origin-intake.js'
 import { rulesFor, LEGACY } from './origin-rules.js'
@@ -49,7 +49,7 @@ import { createStillness, HUNTS_MOVEMENT_LINE } from './stillness.js'
 import { sanityStep, EXHAUSTED_LINE, DISAGREE_LINE } from './compose-sanity.js'
 import { createCompany, createRollCall, evKinds, whistlePitch, bearingLabel, whistleGain, whistlePan, countLine, WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY, FAR_BONUS, ECHO, NO_ANSWER_LINE, ECHO_LINE, UNANSWERED_LINE } from './rollcall.js'
 import { createDownState, createKneel, downedInFront, DOWN_LINE, KNEEL_HINT, HANDS_LINE, LIGHT_STAYS_LINE, WOKEN_LINE, KNEELER_LINE, WAKE, KNEELER_SANITY, DOWN_BEAT } from './downed.js'
-import { depthOf, loadFile, saveFile, statusMods, npcLines, canFile, canRefile, wishPrompt, fileStatus, STRINGS as FILE } from './status.js'
+import { depthOf, loadFile, saveFile, statusMods, npcLines, canFile, canRefile, wishPrompt, fileStatus, pagesGiven, STRINGS as FILE } from './status.js'
 import { standConditions, standTick, closingOverlay, closingLines, isWishOpen, closingProgress, slipText, yourFileLines, CLOSED_OFFICE, STAND_STEADY_LINE } from './closings.js'
 import { standing, placementMods, applyPlacement, ambientMods, trayLean, rollCall } from './docket.js'
 import { polaroidCaption } from './compose-polaroid.js'
@@ -787,7 +787,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // what the file will hear from you today (status.js canFile): the station's last group heard, five pages read, or the deep floors
   const fileable = () => canFile({ ledgerHeard: file.ledgerHeard, pagesRead: readSet.size, depth: level.depth })
   // the faint lines under the request (status.js wishPrompt): the notice nobody answered, the three stamps you may file under — a tap types
-  // the word before ' · ' and submits it — or the office closed until tomorrow. The other lines are only read
+  // the word before ' · ' and submits it (under compliance the middle one is 'close the file', with the count) — or the office closed until
+  // tomorrow. The other lines are only read
   function renderWishSub(lines) {
     if (!wishSubEl) return
     wishSubEl.textContent = ''
@@ -814,7 +815,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     document.exitPointerLock()
     if (dialogEl) {
       dialogEl.style.display = 'flex'; wishText.value = ''; wishResp.textContent = ''
-      const wp = wishPrompt({ origin, status: file.status, closing: file.closing, canFile: fileable(), canRefile: canRefile(file.at, Date.now()) })
+      const wp = wishPrompt({ origin, status: file.status, closing: file.closing, canFile: fileable(), canRefile: canRefile(file.at, Date.now()), redacted: file.redacted.length })
       wishText.placeholder = wp.placeholder; renderWishSub(wp.sub)
       wishText.focus()
     }
@@ -998,6 +999,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (!scrap) return
     if (!file.redacted.includes(scrap.frag)) applyFile({ ...file, redacted: [...file.redacted, scrap.frag] })
     if (!level.cfg.map) fog.pinThing(level.index, 'n:' + scrap.key, 'note', scrap.x, scrap.y, true)
+    if (card.state) renderCard(card.setFoot(card.state, REDACTED_FOOT + ' ' + pagesGiven(file.redacted.length) + '.'))   // the count, as you give it up (F5)
   }
   // E at a scrap: m.'s page, revealed as it opens (today's card byte for byte: the text, '{n} of 26 pages found', +6 the first time, the pin)
   function openNoteCard(scrap) {

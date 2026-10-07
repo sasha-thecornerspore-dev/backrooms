@@ -90,7 +90,7 @@ describe('game.js: the event bus (I3)', () => {
 describe('game.js: the paper card (I4)', () => {
   const html = read('../src/renderer/index.html')
   it('imports createCard and CARD_KEYS from papercard.js and builds ONE card before the loop', () => {
-    expect(game).toMatch(/import \{ createCard, CARD_KEYS(, readText)? \} from '\.\/papercard\.js'/)   // (readText: the cache note, I11)
+    expect(game).toMatch(/import \{ createCard, CARD_KEYS(, readText)?(, REDACTED_FOOT)? \} from '\.\/papercard\.js'/)   // (readText: the cache note, I11)
     expect(count(/createCard\(\)/g)).toBe(1)
     expect(at('const card = createCard()')).toBeLessThan(loopAt)
     expect(at('let cardScrap = null')).toBeLessThan(loopAt)

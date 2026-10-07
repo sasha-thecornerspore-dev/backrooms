@@ -33,8 +33,8 @@ import { HF } from '../src/renderer/gfx-frame.js'
 import { loadFile, canFile, STRINGS } from '../src/renderer/status.js'
 import { closingLines, NO_STANDING } from '../src/renderer/closings.js'
 import { standConditions, standTick, closingProgress, yourFileLines, slipText, STAND_STEADY_LINE } from '../src/renderer/closings.js'
-import { npcLines, fileStatus, DAY_MS } from '../src/renderer/status.js'
-import { createCard } from '../src/renderer/papercard.js'
+import { npcLines, fileStatus, DAY_MS, pagesGiven, wishPrompt } from '../src/renderer/status.js'
+import { createCard, REDACTED_FOOT } from '../src/renderer/papercard.js'
 import { SCRAPS } from '../src/renderer/scraps.js'
 import { OPENED_LINE, RELEASE_LINE, RADIO_KEY_LINE } from '../src/renderer/origin-processed.js'
 import { LEGACY_LAST_LINE } from '../src/renderer/origin-rules.js'
@@ -576,7 +576,7 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     expect(game).toMatch(/import \{ SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame\b[^}]*\} from '\.\/evidence\.js'/)   // (I12 adds the evidence clock after them)
     expect(game).toMatch(/import \{ lineOfSight, inViewCone \} from '\.\/raycaster\.js'/)
     // (I13 adds the npc pool, the settings control's filing and the strings; the stand, the progress, the slip and the 'your file' lines)
-    expect(game).toMatch(/import \{ depthOf, loadFile, saveFile, statusMods, npcLines, canFile, canRefile, wishPrompt, fileStatus, STRINGS as FILE \} from '\.\/status\.js'/)
+    expect(game).toMatch(/import \{ depthOf, loadFile, saveFile, statusMods, npcLines, canFile, canRefile, wishPrompt, fileStatus, pagesGiven, STRINGS as FILE \} from '\.\/status\.js'/)
     expect(game).toMatch(/import \{ standConditions, standTick, closingOverlay, closingLines, isWishOpen, closingProgress, slipText, yourFileLines, CLOSED_OFFICE, STAND_STEADY_LINE \} from '\.\/closings\.js'/)
     expect(game).toMatch(/import \{ createCompany, createRollCall\b[^}]*\} from '\.\/rollcall\.js'/)   // (I9 / I10 add the kinds and the whistle's names after them)
     for (const re of [/const RADIO_GROUPS = /, /const isClaim = /, /const finalizing = /, /iwashere/, /extension30150a/]) expect(game).not.toMatch(re)
@@ -613,7 +613,7 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
   it('the presence: a closed file refuses the dialog before it opens; the placeholder and the faint lines are the file\'s', () => {
     const open = slice('function openDialog() {', 'function closeDialog()')
     expect(open).toMatch(/if \(dialogOpen\) return\r?\n\s*if \(!isWishOpen\(file\.closing\)\) \{ showMessage\(CLOSED_OFFICE\); return \}[^\n]*\r?\n\s*dialogOpen = true/)
-    expect(open).toContain('const wp = wishPrompt({ origin, status: file.status, closing: file.closing, canFile: fileable(), canRefile: canRefile(file.at, Date.now()) })')
+    expect(open).toContain('const wp = wishPrompt({ origin, status: file.status, closing: file.closing, canFile: fileable(), canRefile: canRefile(file.at, Date.now()), redacted: file.redacted.length })')
     expect(open).toContain('wishText.placeholder = wp.placeholder; renderWishSub(wp.sub)')
     expect(game).toContain('const fileable = () => canFile({ ledgerHeard: file.ledgerHeard, pagesRead: readSet.size, depth: level.depth })')
     expect(html).toMatch(/<textarea id="wish-text"[^>]*><\/textarea>\r?\n\s*<p id="wish-sub"><\/p>\r?\n\s*<div id="wish-actions">/)
@@ -645,6 +645,14 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     expect([wishText.value, submit.clicks]).toEqual(['compliance', 1])      // a status word, never 'close the file'
     submit.disabled = true; subEl.children[0].handlers.click({ preventDefault() {} })
     expect([wishText.value, submit.clicks]).toEqual(['compliance', 1])
+    // F5: under compliance the middle line is the close, and a tap types the phrase that closes the file
+    submit.disabled = false
+    render(wishPrompt({ origin: null, status: 'compliance', closing: null, canFile: true, canRefile: true, redacted: 13 }).sub)
+    expect(subEl.children[1].textContent).toBe('close the file · thirteen pages given up')
+    subEl.children[1].handlers.click({ preventDefault() {} })
+    expect([wishText.value, submit.clicks]).toEqual(['close the file', 2])
+    const closed = wishRoute({ text: wishText.value, origin: null, file: { ...loadFile(null), status: 'compliance', at: 1, redacted: [...Array(13).keys()] } })
+    expect([closed.kind, closed.closed, closed.file.closing]).toEqual(['close', true, 'compliance'])
   })
   it('the wish, lifted and replayed against the real router: today\'s claim and wish byte for byte; a name, a status, a close and a re-file stay in the room', async () => {
     const body = slice('const r = wishRoute(', 'setTimeout(() => {')
@@ -1326,7 +1334,7 @@ describe('I11 (W6): the caches — a thing set down with a word, read on the car
   it('imports caches.js, KEPT and readText by their real names; caches.js is in both offline shells; nothing of W6 is left to do', () => {
     expect(game).toMatch(/import \{ PHRASES, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT \} from '\.\/caches\.js'/)
     expect(game).toMatch(/import \{ createItemSystem, KEPT \} from '\.\/items\.js'/)
-    expect(game).toMatch(/import \{ createCard, CARD_KEYS, readText \} from '\.\/papercard\.js'/)
+    expect(game).toMatch(/import \{ createCard, CARD_KEYS, readText, REDACTED_FOOT \} from '\.\/papercard\.js'/)
     expect(sw).toContain("'/renderer/caches.js'"); expect(build).toContain("'caches.js'")
     expect(game).not.toMatch(/TODO\(integrate:W6\)/)
     for (const s of ['const ledger = createCacheLedger()', 'const evOutbox = []', 'const OUTBOX_MARGIN_MS = 250',
@@ -1918,15 +1926,25 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
     expect(statusMods('compliance').sealedCards).toBe(true)
     for (const s of ['notice-mailed', 'extension', 'litigation']) expect(statusMods(s).sealedCards).toBe(false)
     const src = slice('function redactScrap() {', '// E at a scrap:')
-    const out = { applied: [], pins: 0 }
-    const fn = new Function('applyFile', 'level', 'fog', 'st', `let { file, cardScrap } = st\nfunction applyFile2(f) { file = f; applyFile(f) }\n${src.replace('applyFile(', 'applyFile2(')}\nredactScrap(); st.file = file`)
+    const out = { applied: [], pins: 0, feet: [] }
+    const fn = new Function('applyFile', 'level', 'fog', 'st', 'card', 'renderCard', 'pagesGiven', 'REDACTED_FOOT',
+      `let { file, cardScrap } = st\nfunction applyFile2(f) { file = f; applyFile(f) }\n${src.replace('applyFile(', 'applyFile2(')}\nredactScrap(); st.file = file`)
     const scrap = { frag: 4, key: 'k', x: 1, y: 2 }
     const st = { file: { ...loadFile(null), status: 'compliance', at: 1, redacted: [2] }, cardScrap: scrap }
     const level = { cfg: { map: null }, index: 2 }, fog = { pinThing: () => out.pins++ }
-    fn((f) => out.applied.push(f), level, fog, st)
-    fn((f) => out.applied.push(f), level, fog, st)                            // the same page again: the file already has it
+    const fake = createCard(); fake.open('sealed', { text: SCRAPS[4], foot: '', redacted: false })
+    const render = (s) => out.feet.push(s.foot)
+    fn((f) => out.applied.push(f), level, fog, st, fake, render, pagesGiven, REDACTED_FOOT)
+    fn((f) => out.applied.push(f), level, fog, st, fake, render, pagesGiven, REDACTED_FOOT)   // the same page again: the file already has it
     expect(out.applied.map((f) => f.redacted)).toEqual([[2, 4]])
     expect([out.pins, st.file.redacted]).toEqual([2, [2, 4]])
+    // F5: giving a page up says the count there and then, not only in /status or the settings row
+    const said = 'you do not read it. the file notes that you did not. two of thirteen pages given up.'
+    expect(out.feet).toEqual([said, said])
+    expect(fake.state.foot).toBe(said)
+    const gone = { applied: [] }
+    fn((f) => gone.applied.push(f), level, fog, { ...st, file: { ...st.file, redacted: [] } }, { state: null, setFoot: () => { throw new Error('no card') } }, render, pagesGiven, REDACTED_FOOT)
+    expect(gone.applied.length).toBe(1)                                         // a card already gone: the file still has the page, no foot to write
     // the real card: the sealed page is blocks until read; X gives it up (the redact action), a given-up page reopens as blocks with no choice
     const card = createCard()
     let s = card.open('sealed', { text: SCRAPS[4], foot: '', redacted: false })

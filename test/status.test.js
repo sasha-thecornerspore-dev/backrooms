@@ -3,7 +3,9 @@ import { existsSync } from 'node:fs'
 import {
   STATUSES, DEFAULT_STATUS, CLOSINGS, STATUS_LABEL, DAY_MS, depthOf, loadFile, saveFile, canFile, canRefile,
   parseStatusWish, fileStatus, wishTrailer, parseTrailer, stripTrailers, wishPrompt, statusMods, npcLines, STRINGS,
+  pagesGiven, WORDS, PAGES_TO_CLOSE,
 } from '../src/renderer/status.js'
+import { isCloseWish, WORDS as CLOSING_WORDS } from '../src/renderer/closings.js'
 import { SCRAPS } from '../src/renderer/scraps.js'
 
 const EVBUS = new URL('../src/net/evbus.js', import.meta.url)
@@ -336,9 +338,39 @@ describe('wishPrompt', () => {
     expect(wishPrompt({ ...base, origin: 'unnamed' }).placeholder).toBe('the file cannot spell you.')
     for (const o of ['tenant', 'anchored', null]) expect(wishPrompt({ ...base, origin: o }).placeholder).toBe('speak.')
   })
+  // F5: under compliance the line that says 'close the file' types the phrase that closes it, with the count; never 'compliance' again
+  it('compliance, file open: the middle stamp is the close, with the pages given up; a tap types the phrase isCloseWish reads', () => {
+    const c = { ...base, status: 'compliance', canFile: true }
+    expect(wishPrompt({ ...c, redacted: 4 }).sub).toEqual(['extension · let it stay open', 'close the file · four of thirteen pages given up', 'litigation · contest it'])
+    expect(wishPrompt({ ...c, redacted: 13 }).sub[1]).toBe('close the file · thirteen pages given up')
+    expect(wishPrompt({ ...c, redacted: 20 }).sub[1]).toBe('close the file · thirteen pages given up')
+    for (const bad of [undefined, null, -1, 2.5, NaN, '3']) expect(wishPrompt({ ...c, redacted: bad }).sub[1]).toBe('close the file · zero of thirteen pages given up')
+    const line = wishPrompt({ ...c, redacted: 13 }).sub[1]
+    const typed = line.slice(0, line.indexOf(' · '))
+    expect(typed).toBe('close the file')
+    expect(isCloseWish(typed)).toBe(true)
+    expect(parseStatusWish(typed)).toBe(null)
+  })
+  it('compliance, the office closed for the day: the close is still offered under the closed office', () => {
+    expect(wishPrompt({ ...base, status: 'compliance', canFile: true, canRefile: false, redacted: 2 }).sub)
+      .toEqual(['filed under compliance. the office is closed until tomorrow.', 'close the file · two of thirteen pages given up'])
+  })
+  it('the stamps stay as they were for every other word, and for a file already closed', () => {
+    for (const s of ['notice-mailed', 'extension', 'litigation']) expect(wishPrompt({ ...base, status: s, canFile: true, redacted: 13 }).sub).toEqual([...STRINGS.STAMP_LINES])
+    for (const cl of ['compliance', 'extension', 'litigation']) expect(wishPrompt({ ...base, status: 'compliance', closing: cl, canFile: true, redacted: 13 }).sub).toEqual([...STRINGS.STAMP_LINES])
+    expect(wishPrompt({ ...base, status: 'compliance', canFile: false, redacted: 13 }).sub).toEqual([STRINGS.NOTICE_UNANSWERED])
+    expect(wishPrompt({ ...base, status: 'extension', canFile: true, canRefile: false, redacted: 13 }).sub).toEqual(['filed under extension. the office is closed until tomorrow.'])
+  })
+  it('pagesGiven: the words, capped at thirteen', () => {
+    expect(pagesGiven(0)).toBe('zero of thirteen pages given up')
+    expect(pagesGiven(12)).toBe('twelve of thirteen pages given up')
+    expect(pagesGiven(13)).toBe('thirteen pages given up')
+    expect(WORDS.length).toBe(PAGES_TO_CLOSE + 1)
+    expect(CLOSING_WORDS).toBe(WORDS)
+  })
   it('every line lowercase, no exclamation', () => {
     for (const o of [null, 'tenant', 'anchored', 'unnamed', 'processed']) for (const s of STATUSES) for (const cf of [true, false]) for (const cr of [true, false]) {
-      const p = wishPrompt({ origin: o, status: s, closing: null, canFile: cf, canRefile: cr })
+      const p = wishPrompt({ origin: o, status: s, closing: null, canFile: cf, canRefile: cr, redacted: 5 })
       for (const l of [p.placeholder, ...p.sub]) { expect(l).toBe(l.toLowerCase()); expect(l).not.toContain('!') }
     }
   })
