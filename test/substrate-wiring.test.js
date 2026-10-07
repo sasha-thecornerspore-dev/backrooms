@@ -13,7 +13,9 @@ const count = (re) => (game.match(re) || []).length
 
 describe('game.js: the event bus (I3)', () => {
   it('imports createEvBus from ../net/evbus.js and anchorSeed beside the anchor helpers', () => {
-    expect(game).toMatch(/import \{ createEvBus, depthOf \} from '\.\.\/net\/evbus\.js'/)   // depthOf: level.depth (I14a; W3's status.js takes it over in I13)
+    expect(game).toMatch(/import \{ createEvBus \} from '\.\.\/net\/evbus\.js'/)
+    // depthOf (level.depth): W3's status.js is the one depth helper (both domains; status.test.js pins it equal to evbus.depthOf on 0..4)
+    expect(game).toMatch(/import \{[^}]*\bdepthOf\b[^}]*\} from '\.\/status\.js'/)
     expect(game).toMatch(/import \{ formatAnchor, driftMeters, anchorSeed \} from '\.\/anchor\.js'/)
   })
   it('builds ONE bus, null solo, after the chat is registered and before the loop: the players list\'s sendEv / mergeRemote, a ms clock, the reused roster', () => {

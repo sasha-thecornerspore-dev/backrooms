@@ -31,25 +31,31 @@ import { createFogMap, revealRadius } from './fogmap.js'
 import { visibleWays, SIGHT_LINES, PROX_PIN } from './sightpins.js'
 import { createMapCard } from './mapcard.js'
 import { compassLines, compassText, arrivalSummary } from './compass.js'
+import { lineOfSight, inViewCone } from './raycaster.js'
 import { dressPass } from './dress.js'
 import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog } from './containers.js'
 import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
 import { createCard, CARD_KEYS } from './papercard.js'
-import { createEvBus, depthOf } from '../net/evbus.js'   // TODO(integrate:W3) I13: depthOf comes from status.js (both domains), the one depth helper
+import { createEvBus } from '../net/evbus.js'
 import { intake, filingLine, formText, FORM_FOOT, parseIntakeCommand, normaliseIntakeCtx, identityOut, identityIn } from './origin-intake.js'
 import { rulesFor, LEGACY } from './origin-rules.js'
 import { DOOR_SANITY, isSealedMaterial, doorLine, facingCell } from './origin-tenant.js'
 import { MERCY_LINE, leashDebtStep } from './origin-anchored.js'
 import { floorKey } from './origin-processed.js'
-import { parseNameWish, spellCard, refileWithName, spelledLine, ONLINE_LINE } from './origin-unnamed.js'
+import { spellCard, refileWithName, spelledLine, ONLINE_LINE } from './origin-unnamed.js'
 import { RECOIL_DIST, RECOIL_SHAKE, RECOIL_LINE, CURE_LINE } from './origin-thin.js'
 import { perceptionFor } from './compose-perception.js'
 import { createStillness, HUNTS_MOVEMENT_LINE } from './stillness.js'
 import { sanityStep, EXHAUSTED_LINE, DISAGREE_LINE } from './compose-sanity.js'
-import { createCompany } from './rollcall.js'
-import { statusMods } from './status.js'
-import { closingOverlay } from './closings.js'
-import { standing, placementMods, applyPlacement, ambientMods, trayLean } from './docket.js'
+import { createCompany, createRollCall } from './rollcall.js'
+import { depthOf, loadFile, saveFile, statusMods, canFile, canRefile, wishPrompt } from './status.js'
+import { closingOverlay, closingLines, isWishOpen, CLOSED_OFFICE } from './closings.js'
+import { standing, placementMods, applyPlacement, ambientMods, trayLean, rollCall } from './docket.js'
+import { polaroidCaption } from './compose-polaroid.js'
+import { radioLine, RADIO_GROUPS } from './compose-radio.js'
+import { wishRoute } from './compose-wish.js'
+import { finaleGate, beaconDecision } from './compose-gates.js'
+import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame } from './evidence.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -72,12 +78,9 @@ const ITEM_NAMES = {
   'extension-slip': 'extension slip',
 }
 
-// The numbers station in the deep stacks reads the ledger aloud — the count that
-// decodes (subtract the drift 3, then A=1..Z=26) to the counter-claim you type at
-// the presence. Delivered as readable groups so it can be transcribed, not blips.
-const RADIO_GROUPS = ['12 26 04 22 11 08', '21 08 19 24 23 12', '23 12 17 23 11 08', '09 12 15 08']
-// the counter-claim, typed at the presence: normalise and look for "i was here".
-const isClaim = (t) => /iwashere/.test(String(t).toLowerCase().replace(/[^a-z]/g, ''))
+// The numbers station in the deep stacks reads the ledger aloud — the count that decodes (subtract the drift 3, then A=1..Z=26) to the
+// counter-claim you type at the presence, as readable groups (compose-radio.js RADIO_GROUPS). The claim itself ('i was here', letters
+// only) is the wish router's to recognise (compose-wish.js).
 
 // Things a lost soul might tell you — lore, warnings, and the odd real hint.
 const NPC_LINES = [
@@ -288,6 +291,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let claimFiled  = false // the wish was typed as a claim ("i was here")
   let beaconFired = false // the beacon was fired carrying the EXTENSION-30150A claim
   let seamHeld    = false // the counter-claim resolved — fire the finale only once
+  let firstDeepHearing = true   // the processed hear the station's key once a run (rules.radio; radioLine's keyLineNow spends it)
+  let shotOnLevel = false       // a photo taken on this floor yet (the anchored pin develops on a floor's first; buildLevel clears it)
 
   // ── the file (origin-*.js): nobody chooses a column. The first way you take files you by how you arrived (travel()); until then — Level ∅,
   //    the lobby before the first way — rules is LEGACY and the game is what it always was. intakeCtx holds the title screen's facts (the
@@ -296,6 +301,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    a line the file could change is `rules.<key>`; rules is reassigned only through rulesFor (the filing, the cure, a re-file, a resume) ──
   let origin = null, thin = false, filed = false, filedFloors = new Set(), leashDebt = 0, leashCalm = 0
   let rules = LEGACY
+  // the thin layer's first photograph shows the wall through your hand (rules.polaroid): a shot taken while thin spends it; a layer minted
+  // again (a death, die(d)) sets it again
+  let thinFirstShot = true
   intakeCtx = normaliseIntakeCtx(intakeCtx, { route: 'solo', arrival: null, anchor, name: '' })
   const doorsSaid = new Set()   // the ∅ doors whose +3 was taken this session ('ix,iy')
   // ∅ is one-way, so a column that only exists there could never meet a filed player: the doors and the form read the column the filing
@@ -311,23 +319,33 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const stillness = createStillness({ now: () => playT })
   const stillNote = { moving: false, flashlight: true, radioOn: false, t: 0 }
   let wasHidden = false, huntsMovementSaid = false
-  let standHeld = 0   // TODO(integrate:W3) I13: the stand tick writes it (closings.js standTick); the whistle and buildLevel reset it too — the hunts line keeps quiet while it runs
+  let standHeld = 0   // TODO(integrate:W3) I13: the stand tick writes it (closings.js standTick); the whistle resets it too (buildLevel and the ward do already) — the hunts line keeps quiet while it runs
   // ── company (rollcall.js): the pool a fresh friend within 6 steadies you out of — it drains while you stand together and stops helping
   //    when it is empty, then refills while you are apart; sanityStep says how it moves each frame. The two files' disagreement is said once ──
   const company = createCompany()
   let disagreeSaid = false
+  // the roll call (rollcall.js): who has answered a whistle lately, on its own ms clock (performance.now(), never playT). The radio's last
+  // group counts them ('those were yours — three of you.'); alone it reads one, today's line
+  const rollcall = createRollCall({ now: () => performance.now() })   // TODO(integrate:W5) I9/I10: the whistle hears into it, the net block ticks it, a chat line touches it
 
   // ── Living Atmosphere — occasional ambient dread events. evConfig is the scheduler's ONE mutable config, read at every tick: the filing
   //    writes the file's weights into it (a tenant sees the far crosser twice as often), retension() is the one writer of its tension ──
   const evConfig = { events: EVENTS, tension: 0 }
   const eventSched = createEventScheduler({ config: evConfig })
-  // the file the presence keeps (status.js / closings.js): the status, the closing, the ledger heard, the pages left unread — in prefs, never in the save
-  let file = { status: 'notice-mailed', at: 0, ledgerHeard: false, closing: null, redacted: [] }   // TODO(integrate:W3) I13: loadFile(getPref('file'))
+  // the file the presence keeps (status.js / closings.js): the status, the closing, the ledger heard, the pages left unread — in prefs (one
+  // file for every run and every room), never in the save. A missing or garbled pref is the notice nobody answered
+  let file = loadFile(getPref('file'))
   // what the status and a closing do to the numbers the loop reads (status.js statusMods / closings.js closingOverlay): pure functions of
   // the file, so re-derived with every write of it — notice-mailed and no closing are today's (the sanity's depth drain, ∅ none)
-  let mods = statusMods(file.status), co = closingOverlay(file.closing)   // TODO(integrate:W3) I13: applyFile(f) re-derives both (the one write seam)
-  // the ONE writer of evConfig.tension: the room's standing on this floor (W8 ambientMods) and the closing's
-  function retension() { evConfig.tension = level?.amb?.tension ?? 0 }   // TODO(integrate:W3) I13: + (closingOverlay(file.closing).tension ?? 0)
+  let mods = statusMods(file.status), co = closingOverlay(file.closing)
+  // the closing's delayed lines (a compliance close, a re-filing): a new floor drops them with the old one (buildLevel)
+  const closingTimers = []
+  // THE one write of the file: always a fresh object (applyFile({ ...file, ledgerHeard: true }), never a change in place), so mods / co are
+  // re-derived from the new reference, saveFile hands prefs a fresh copy (a same-reference write would be dropped), the events' tension
+  // follows the closing and the room hears the status at once
+  function applyFile(f) { file = f; mods = statusMods(file.status); co = closingOverlay(file.closing); saveFile(file); retension(); bus?.here(hereFields()) }
+  // the ONE writer of evConfig.tension: the room's standing on this floor (W8 ambientMods) and the closing's (compliance's calm)
+  function retension() { evConfig.tension = (level?.amb?.tension ?? 0) + (closingOverlay(file.closing).tension ?? 0) }
   const ephemera   = []   // transient event-spawned apparitions (render-only, no collision; a haunt's figure carries vanishAt)
 
   // ── the drawers (containers.js) and the placed hauntings (haunts.js): the hold-to-search state, the keys opened on this floor
@@ -502,6 +520,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     searchLog.clear(); searchLog.seed(mem.searchedFor(index)); drawerCostSaid = false; searchT = 0; searchTarget = null; waterT = 0
     cancelCommit()                  // a wrap does not survive the fall (the bandage stays); the new floor's song starts calm
     tension.reset(); huntMood = false
+    // the closing's lines and a stand do not follow you down; a new floor's first photo is its first
+    for (const t of closingTimers) clearTimeout(t); closingTimers.length = 0; standHeld = 0; shotOnLevel = false
 
     // fixed maps spawn at their authored point; procedural at the arrival chunk's hall crossing (the origin's is today's HALF + 0.5
     // spawn, carved open) or the nearest open cell to it
@@ -710,11 +730,41 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const dialogEl = document.getElementById('wish-dialog')
   const wishText = document.getElementById('wish-text')
   const wishResp = document.getElementById('wish-response')
+  const wishSubEl = document.getElementById('wish-sub')
+  // what the file will hear from you today (status.js canFile): the station's last group heard, five pages read, or the deep floors
+  const fileable = () => canFile({ ledgerHeard: file.ledgerHeard, pagesRead: readSet.size, depth: level.depth })
+  // the faint lines under the request (status.js wishPrompt): the notice nobody answered, the three stamps you may file under — a tap types
+  // the word before ' · ' and submits it — or the office closed until tomorrow. The other lines are only read
+  function renderWishSub(lines) {
+    if (!wishSubEl) return
+    wishSubEl.textContent = ''
+    for (const line of lines) {
+      const s = document.createElement('span')
+      s.className = 'wish-line'; s.textContent = line
+      const cut = line.indexOf(' · ')
+      if (cut > 0) {
+        s.classList.add('stamp')
+        s.addEventListener('pointerdown', (e) => {
+          e.preventDefault()
+          const sub = document.getElementById('wish-submit')
+          if (!wishText || wishText.disabled || !sub || sub.disabled) return
+          wishText.value = line.slice(0, cut); sub.click()
+        })
+      }
+      wishSubEl.appendChild(s)
+    }
+  }
   function openDialog() {
     if (dialogOpen) return
+    if (!isWishOpen(file.closing)) { showMessage(CLOSED_OFFICE); return }   // a file closed in compliance: there is no one left to ask
     dialogOpen = true
     document.exitPointerLock()
-    if (dialogEl) { dialogEl.style.display = 'flex'; wishText.value = ''; wishResp.textContent = ''; wishText.focus() }
+    if (dialogEl) {
+      dialogEl.style.display = 'flex'; wishText.value = ''; wishResp.textContent = ''
+      const wp = wishPrompt({ origin, status: file.status, closing: file.closing, canFile: fileable(), canRefile: canRefile(file.at, Date.now()) })
+      wishText.placeholder = wp.placeholder; renderWishSub(wp.sub)
+      wishText.focus()
+    }
   }
   function closeDialog() { dialogOpen = false; if (dialogEl) dialogEl.style.display = 'none' }
   // the naming re-file (origin-unnamed.js): an unnamed player tells the presence 'call me ada'. The dialog closes at once and a card asks how
@@ -731,21 +781,52 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       bus?.here(hereFields())
     } })
   }
+  // compliance closes the file mid-floor: the floors stop leaving pages out from now on — this one is re-read without them at once (decor
+  // re-scans the resident chunks: the bodies, the stairs, the dressing and the haunts re-place identically, hashed; the pencil keeps its
+  // pins), and the closing's calm reaches the events
+  function applyCompliance() {
+    level.cfg.scraps = { ...level.cfg.scraps, denom: 0 }
+    level.decor.enterLevel(level.cfg)
+    const c = chunkUnder(); level.decor.update(c.cx, c.cy)
+    retension()
+  }
   document.getElementById('wish-cancel')?.addEventListener('click', closeDialog)
+  // what you typed is routed (compose-wish.js wishRoute), in this order: closing the file (compliance), a name (the unnamed), a status word,
+  // the claim, an ordinary wish. The first three are the file's own business and never leave the room; the claim and the wish are sent
+  // with the status's trailer and the column's meta (a notice nobody answered sends the text byte for byte, as it always did)
   document.getElementById('wish-submit')?.addEventListener('click', async () => {
     const text = wishText?.value.trim()
     if (!text) return
-    // TODO(integrate:W4) I8: wishRoute's case 'name' calls refileName(r.name) (after a compliance close); until then the naming wish is read here
-    const name = origin === 'unnamed' ? parseNameWish(text) : null
-    if (name) { refileName(name); return }
-    const claim = isClaim(text)
-    if (wishResp) wishResp.textContent = claim
-      ? 'you did not ask. you asserted. the file has no column to deny a claim made. received.'
-      : 'your request has been received. whether it is heard is another matter.'
+    const r = wishRoute({ text, origin, rules, file, canFile: fileable(), now: Date.now(), depth: level.depth })
+    if (r.kind === 'name') { refileName(r.name); return }       // the naming re-file: the dialog closes now and a card asks the spelling
+    if (wishResp) wishResp.textContent = r.reply ?? ''
     wishText.disabled = true
     document.getElementById('wish-submit').disabled = true
-    try { if (window.backrooms?.submitWish) await window.backrooms.submitWish(text) } catch (e) { /* silent */ }
-    if (claim) { claimFiled = true; tryFinale() }
+    if (r.kind === 'close') {
+      if (r.closed) {
+        applyFile(r.file); applyCompliance()
+        const L = closingLines('compliance')                    // [0] is the dialog's reply; the other two once it has closed
+        closingTimers.push(setTimeout(() => showMessage(L[1], PRIO.discovery), 3000 + 2600), setTimeout(() => showMessage(L[2], PRIO.discovery), 3000 + 5200))
+      }
+    } else if (r.kind === 'status') {
+      if (r.file !== file) {                                    // filed: the claim's letters, the station and the claim start over
+        applyFile(r.file)
+        if (r.resets.includes('photoIdx')) photoIdx = 0
+        if (r.resets.includes('stationIdx')) stationIdx = 0
+        if (r.resets.includes('claimFiled')) claimFiled = false
+      }
+      if (r.line) closingTimers.push(setTimeout(() => showMessage(r.line, PRIO.discovery), 3000))
+    } else {
+      // a claim re-files a filed claimant as processed (the anchored released first) before the seam is tried; an unfiled one — the block,
+      // the lobby before the first way — has no file to re-file, and claims as it always did
+      if (r.kind === 'claim' && r.refile && filed) {
+        origin = r.refile.origin; rules = rulesFor(origin, thin); evConfig.events = rules.eventWeights()
+        for (let i = 0; i < r.refile.lines.length; i++) { const l = r.refile.lines[i]; setTimeout(() => showMessage(l, PRIO.discovery), 3000 + 2600 * i) }
+        bus?.here(hereFields())
+      }
+      try { if (window.backrooms?.submitWish) await window.backrooms.submitWish(r.submit.text, r.submit.meta) } catch (e) { /* silent */ }
+      if (r.kind === 'claim') { claimFiled = true; tryFinale() }
+    }
     setTimeout(() => {
       wishText.disabled = false
       document.getElementById('wish-submit').disabled = false
@@ -1174,6 +1255,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const selfPos = { x: 0, y: 0, lvl: 0 }
   const peerIdSet = new Set(), peerRec = new Map()        // the players list's ids and their last records (x, y), this frame
   const peerPos = (id) => peerRec.get(id) ?? null
+  // the one frame (evidence.js): the sprite cull's view cone and the walls' line of sight (raycaster.js; bodies never block it) — a friend
+  // in it develops on the film, a lost soul in it shows the door behind them. Hoisted once: the photo allocates no options
+  const frameLos = (ax, ay, bx, by) => lineOfSight(ax, ay, bx, by, level.grid.floor)
+  const FRAME_OPTS = { pos: peerPos, cone: inViewCone, hf: HF, maxCells: SUBJECT_RANGE, los: frameLos }
   const bus = mpClient ? createEvBus({
     send: mpClient.sendEv, now: () => performance.now(),
     self: () => { selfPos.x = player.x; selfPos.y = player.y; selfPos.lvl = level ? level.index : 0; return selfPos },
@@ -1249,51 +1334,60 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     level.entitySys.noise(player.x, player.y, 9)
     const b = getPref('creatures') ? level.entitySys.flash(player, FLASH_OPTS) : NO_FLASH
     if (b.hit) showMessage('the flash catches it. it reels, blind.', PRIO.interaction)
-    // the caption develops from the LIVE frame, so it works in the browser too
-    // (no save bridge). A capture is a small counter-claim — it steadies you.
-    // TODO(integrate:W4) I8: polaroidCaption({ rules, ..., D: driftD(), thinFirstShot }) replaces the caption / sanity / glyph lines below (rules.polaroid, rules.canDevelopClaim)
+    // the caption develops from the LIVE frame, so it works in the browser too (no save bridge). What it develops (compose-polaroid.js): a
+    // friend in frame (the photo goes to them), the column's own film (thin's first shot, the anchored pin, the unnamed's letter that is not
+    // theirs), a lost soul and the door behind them, the thin figure, the hall, the claim's letter — under LEGACY with nobody in frame the
+    // three captions as they were. A capture is a small counter-claim: it steadies you (+8, after the caption read the sanity it was taken at)
     const thinNear = ephemera.some(a => a.variant === 'thin' && (a.x - player.x) ** 2 + (a.y - player.y) ** 2 < 16)
-    const finalizing = sanity < 40 || (level?.index ?? 0) >= 3
-    sanity = Math.min(100, sanity + 8); wardPulse()
-    let cap
-    if (thinNear) {
-      cap = 'the film shows someone who was not in the room. you can see the wall through them.'
-    } else if (finalizing) {
-      cap = 'the film shows the hall as it will finalize: darker, one door fewer.'
-    } else {
-      const g = 'iwashere'[photoIdx % 8]; photoIdx++
-      cap = `the film develops one letter that was not in the room: "${g}". transcribe it.`
-    }
+    const subject = bus ? subjectInFrame(player, bus.freshPeersOnFloor(), FRAME_OPTS) : null   // one reused record: read in the call, never kept
+    const np = level.decor.nearestNpc(player.x, player.y, SOUL_RANGE)
+    const soul = np && inFrame(player, np.x, np.y, FRAME_OPTS) ? np : null
+    const r = polaroidCaption({ rules, mods, subject, soul, doorArrow: soul ? knownWayArrow() : null, thinNear, status: file.status,
+      index: level.index, depth: level.depth, sanity, origin, thin, thinFirstShot, anchor, D: driftD(), firstShotOfLevel: !shotOnLevel,
+      photoIdx, player, lvl: level.index })
+    shotOnLevel = true
+    if (thin) thinFirstShot = false
+    if (r.emitPhoto && bus) bus.emit('photo', r.emitPhoto)    // the friend in frame is sent the photo (the bus refuses a kind not yet registered)
+    if (r.glyphAdvance) photoIdx++
+    sanity = Math.min(100, sanity + r.sanity); wardPulse()
+    if (r.leashCalm) leashCalm = r.leashCalm                   // a pin caption quiets the leash for a while
     // still save the real evidence file on desktop; the caption shows regardless
     if (dataUrl && window.backrooms?.savePhoto) window.backrooms.savePhoto(dataUrl).catch(() => {})
-    showMessage(cap)
+    showMessage(r.cap)
+  }
+  // the door a lost soul in the film stands before: the nearest way you have SEEN that leads on, as the compass would point it from here
+  // (compass.js compassLines over the pencil sheet, no faint fallback); null when none is known, or on the block (it keeps no sheet)
+  const doorOut = []
+  function knownWayArrow() {
+    if (level.cfg.map) return null
+    compassLines({ player, known: fog.ways(level.index) }, doorOut)
+    return doorOut.length ? doorOut[0].arrow : null
   }
 
-  // The radio: cosmetic hum near the surface; in the deep stacks (floors 2–3) it
-  // reads the ledger aloud, one number group at a time — not talking to you,
-  // reading a list, counting DOWN to your line.
+  // The radio: cosmetic hum near the surface; in the deep stacks (floors 2–3) it reads the ledger aloud, one number group at a time — not
+  // talking to you, reading a list, counting DOWN to your line. What it says (compose-radio.js): the status's mode on the near floors (the
+  // crackle for a notice nobody answered, the floor's roll call for a filed one), the ledger below; the column's heartbeat and last line
+  // (the roll call's count of who answered layers over today's 'that one was yours.'); the last group heard goes on the file
   function readRadio(on) {
-    // TODO(integrate:W4) I8: radioLine({ on, rules, ... }) replaces this body (rules.radio: the heartbeat and the follow-up line)
-    const dfloor = level?.index ?? 0
-    const deep = dfloor === 2 || dfloor === 3
-    if (on && deep) {
-      const last = stationIdx === RADIO_GROUPS.length - 1
-      showMessage(`the station counts, slow and patient: ${RADIO_GROUPS[stationIdx]}${last ? '' : ' …'}   [${stationIdx + 1}/${RADIO_GROUPS.length}]`)
-      blip()
-      if (last) { heartbeat(); setTimeout(() => showMessage('it reads the last group, then stops. that one was yours.'), 1900) }
-      stationIdx = (stationIdx + 1) % RADIO_GROUPS.length
-    } else {
-      showMessage(on ? 'the radio crackles to life.' : 'the radio falls silent.')
-    }
+    const r = radioLine({ on, rules, mode: mods.radioMode(level.depth), stationIdx, groups: RADIO_GROUPS, count: rollcall.count(performance.now()),
+      firstDeepHearing, rollLine: level.st ? rollCall(level.st) : null })
+    showMessage(r.message)
+    if (r.blip) blip()
+    if (r.heartbeat) heartbeat()
+    for (let i = 0; i < r.followUps.length; i++) { const f = r.followUps[i]; setTimeout(() => showMessage(f.text), f.ms) }
+    if (r.advance) stationIdx = (stationIdx + 1) % RADIO_GROUPS.length
+    if (r.ledgerHeardNow && !file.ledgerHeard) applyFile({ ...file, ledgerHeard: true })
+    if (r.keyLineNow) firstDeepHearing = false
   }
 
-  // The counter-claim: fires ONCE, when the player has both typed the claim at a
-  // presence AND fired the beacon registered to EXTENSION-30150A. Renderer-side,
-  // so it resolves in the browser build too (no Electron bridge required).
+  // The counter-claim: fires ONCE, when the player has both typed the claim at a presence AND fired the beacon registered to EXTENSION-30150A
+  // — and the file can hold a seam (compose-gates.js finaleGate: a column that can write a name where the dark can read it, a file still
+  // open, under litigation or the notice nobody answered). Renderer-side, so it resolves in the browser build too (no Electron bridge
+  // required). Held, it is the litigation's closing, on the file.
   function tryFinale() {
-    // TODO(integrate:W4) I8: finaleGate({ seamHeld, claimFiled, beaconFired, rules, status: file.status, closing: file.closing }) (rules.canHoldSeam)
-    if (seamHeld || !claimFiled || !beaconFired) return
+    if (!finaleGate({ seamHeld, claimFiled, beaconFired, rules, status: file.status, closing: file.closing })) return
     seamHeld = true
+    applyFile({ ...file, closing: 'litigation' })
     wardPulse(); calmTimer = 600; flickTgt = 1; flickTimer = 1.2; sanity = Math.min(100, sanity + 30)
     itemSys.grant('ballast'); renderHotbar()
     showMessage('the seam holds. the lights do not stutter. an extension that, for once, stays an extension.')
@@ -2030,25 +2124,25 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (K['KeyL']) { K['KeyL'] = false; flashlight = !flashlight; lightToggles++; showMessage(flashlight ? 'flashlight on.' : 'flashlight off — the dark leans in.') }   // the counter: a haunt only restores a light you did not touch
       if (K['KeyB']) {
         K['KeyB'] = false
-        // TODO(integrate:W4) I8: beaconDecision({ effect, target, rules, ... }) — rules.beacon: the pin in the payload (anchored), the floor filed (processed: filedFloors.add(floorKey(worldSeed, level.index))), the line
+        // what the push is (compose-gates.js beaconDecision): the webhook fires whenever a beacon is set; the counter-claim counts toward
+        // the seam only when the file can hold one (else 'you have no standing to file this.' follows it); the column's push line, the
+        // anchored's pin in the payload, the processed's floor filed (it never restocks)
         const effect = getPref('beaconEffect')
-        const target = (getPref('beaconWebhook') || '').toLowerCase().replace(/[^a-z0-9]/g, '')
-        const counterClaim = target.includes('extension30150a')
-        if (!effect || effect === 'off') {
-          showMessage('no beacon set. register one in settings.')
-        } else {
-          showMessage(counterClaim
-            ? 'you fire the beacon — not a cry for help. a claim. i was here. put it in the file.'
-            : 'you push the beacon into the dark...')
+        const webhook = getPref('beaconWebhook')
+        const target = (webhook || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+        const b = beaconDecision({ effect, target, rules, status: file.status, closing: file.closing, anchor, webhook })
+        for (let i = 0; i < b.lines.length; i++) showMessage(b.lines[i])
+        if (b.fire) {
           // fire the real webhook on desktop; the counter-claim resolves renderer-side either way
-          const p = window.backrooms?.fireBeacon?.({ effect, webhook: getPref('beaconWebhook') })
+          const p = window.backrooms?.fireBeacon?.(b.payload)
           if (p) p.then(r => showMessage(
                     r?.ok ? 'something answers.'
                   : r?.reason === 'cooldown' ? 'the beacon is still warm.'
                   : 'the beacon goes quiet.'))
                  .catch(() => showMessage('the beacon goes quiet.'))
-          else if (!counterClaim) showMessage('the beacon goes quiet.')
-          if (counterClaim) { beaconFired = true; tryFinale() }
+          else if (!b.counterClaim) showMessage('the beacon goes quiet.')
+          if (b.filesFloor) filedFloors.add(floorKey(worldSeed, level.index))
+          if (b.setBeaconFired) { beaconFired = true; tryFinale() }
         }
       }
       for (let i = 0; i < 6; i++) {
@@ -2114,7 +2208,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // 'here' about once a second (the bus sends only a change, or the 3 s beat)
     fillRemotes()
     if (bus) { bus.tick(performance.now()); hereTimer += dt; if (hereTimer >= 1) { hereTimer = 0; bus.here(hereFields()) } }
-    // TODO(integrate:W7) I12: litRec = bus ? litFriendNear(player, bus.freshPeersOnFloor(), LIT_OPTS) : null; litNear = litRec !== null — here, before the perception and the sanity read it
+    // TODO(integrate:W7) I12: litRec = bus ? litFriendNear(player, bus.freshPeersOnFloor(), LIT_OPTS) : null; litNear = litRec !== null — here, before the perception and the sanity read it (LIT_OPTS's los is frameLos, hoisted with FRAME_OPTS)
     // ── the things: what they know about you this frame, then one update; the threat record it returns drives contact damage, the
     //    heartbeat and sanity (no second pass over the list). Creatures can be switched off entirely (pure liminal exploration;
     //    creaturesOn was read at the top of the frame): the record is then reset, so everything below reads zero. ──

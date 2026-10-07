@@ -239,6 +239,12 @@
       letter-spacing: 1px; line-height: 1.7;
     }
     #wish-text:focus { outline: none; border-color: var(--wall); }
+    /* the file's faint lines under the request (game.js renderWishSub): read-only, except a stamp ('extension · let it stay open'),
+       which a tap types and submits */
+    #wish-sub { display: flex; flex-direction: column; gap: 4px; margin-top: -8px; color: var(--text-dim); font-size: 11px; letter-spacing: 1px; line-height: 1.5; opacity: 0.8; }
+    #wish-sub:empty { display: none; }
+    #wish-sub .wish-line.stamp { cursor: pointer; touch-action: manipulation; }
+    #wish-sub .wish-line.stamp:hover { color: var(--wall); }
     #wish-actions { display: flex; gap: 12px; }
     #wish-actions button {
       background: #2a1e00; color: var(--wall); border: 1px solid #6a5424;
@@ -581,6 +587,7 @@
     <div id="wish-inner">
       <p id="wish-prompt">state your request.</p>
       <textarea id="wish-text" maxlength="280" rows="3" placeholder="speak."></textarea>
+      <p id="wish-sub"></p>
       <div id="wish-actions">
         <button id="wish-submit">submit</button>
         <button id="wish-cancel">cancel</button>

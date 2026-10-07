@@ -7,10 +7,10 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { perceptionFor, AI_CTX_DEFAULTS } from '../src/renderer/compose-perception.js'
 import { sanityStep } from '../src/renderer/compose-sanity.js'
-import { polaroidCaption } from '../src/renderer/compose-polaroid.js'
+import { polaroidCaption, LINES } from '../src/renderer/compose-polaroid.js'
 import { radioLine, RADIO_GROUPS } from '../src/renderer/compose-radio.js'
-import { wishRoute, isClaim } from '../src/renderer/compose-wish.js'
-import { finaleGate, beaconDecision, deathDecision } from '../src/renderer/compose-gates.js'
+import { wishRoute, isClaim, LEGACY_CLAIM_REPLY, LEGACY_WISH_REPLY } from '../src/renderer/compose-wish.js'
+import { finaleGate, beaconDecision, deathDecision, NO_BEACON_LINE, CLAIM_LINE, LEGACY_PUSH_LINE } from '../src/renderer/compose-gates.js'
 import { LEGACY, LEGACY_LAST_LINE } from '../src/renderer/origin-rules.js'
 import { claimRefile } from '../src/renderer/origin-processed.js'
 import { statusMods, loadFile, depthOf, fileStatus } from '../src/renderer/status.js'
@@ -163,12 +163,19 @@ describe('(3) sanityStep(legacy) is the post-core sanity block', () => {
 //   finalizing -> 'the film shows the hall as it will finalize: darker, one door fewer.'
 //   else const g = 'iwashere'[photoIdx % 8]; photoIdx++ -> `the film develops one letter that was not in the room: "${g}". transcribe it.`
 describe('(4) polaroidCaption(legacy) is the three captions of firePolaroid', () => {
-  it('the source still carries the three captions and the finalizing gate', () => {
-    expect(game).toContain("cap = 'the film shows someone who was not in the room. you can see the wall through them.'")
-    expect(game).toContain("cap = 'the film shows the hall as it will finalize: darker, one door fewer.'")
-    expect(game).toContain('cap = `the film develops one letter that was not in the room: "${g}". transcribe it.`')
-    expect(game).toContain('const finalizing = sanity < 40 || (level?.index ?? 0) >= 3')
-    expect(game).toContain("const g = 'iwashere'[photoIdx % 8]; photoIdx++")
+  it('the caption block is the composer call now (I8): the same thin figure, the sanity it was taken at, the +8 after, the letter advanced only on a letter', () => {
+    // the three captions are the composer's LINES, word for word
+    expect(LINES.THIN_NEAR).toBe('the film shows someone who was not in the room. you can see the wall through them.')
+    expect(LINES.FINALIZING).toBe('the film shows the hall as it will finalize: darker, one door fewer.')
+    expect(LINES.GLYPH.replace('{g}', '${g}')).toBe('the film develops one letter that was not in the room: "${g}". transcribe it.')
+    const fire = game.slice(game.indexOf('function firePolaroid() {'), game.indexOf('function knownWayArrow() {'))
+    expect(fire).toContain('const thinNear = ephemera.some(a => a.variant === \'thin\' && (a.x - player.x) ** 2 + (a.y - player.y) ** 2 < 16)')
+    expect(fire).toMatch(/const r = polaroidCaption\(\{ rules, mods, subject, soul, doorArrow: soul \? knownWayArrow\(\) : null, thinNear, status: file\.status,\r?\n\s*index: level\.index, depth: level\.depth, sanity, origin, thin, thinFirstShot, anchor, D: driftD\(\), firstShotOfLevel: !shotOnLevel,\r?\n\s*photoIdx, player, lvl: level\.index \}\)/)
+    expect(fire.indexOf('polaroidCaption(')).toBeLessThan(fire.indexOf('sanity = Math.min(100, sanity + r.sanity); wardPulse()'))   // read before the +8, as finalizing was
+    expect(fire).toContain('if (r.glyphAdvance) photoIdx++')
+    expect(fire).toMatch(/showMessage\(r\.cap\)\r?\n\s*\}/)
+    expect(game).not.toMatch(/const finalizing = /)
+    expect(game).not.toMatch(/iwashere/)                                  // the letters are the composer's (glyph)
   })
   function legacy(thinNear, index, sanity, photoIdx) {
     const finalizing = sanity < 40 || index >= 3
@@ -264,9 +271,15 @@ describe('(6) wishRoute(legacy) is the wish submit', () => {
   const CLAIM = 'you did not ask. you asserted. the file has no column to deny a claim made. received.'
   const WISH = 'your request has been received. whether it is heard is another matter.'
   const base = () => ({ origin: null, rules: LEGACY, file: loadFile(null), canFile: false, now: 1_700_000_000_000, depth: 1 })
-  it('the source still carries the two replies', () => {
-    expect(game).toContain(`'${CLAIM}'`)
-    expect(game).toContain(`'${WISH}'`)
+  it('the two replies are the router\'s now (I8): game.js routes the text and shows the reply it is handed', () => {
+    expect(LEGACY_CLAIM_REPLY).toBe(CLAIM)
+    expect(LEGACY_WISH_REPLY).toBe(WISH)
+    expect(game).not.toContain(`'${CLAIM}'`)
+    expect(game).not.toContain(`'${WISH}'`)
+    expect(game).toContain('const r = wishRoute({ text, origin, rules, file, canFile: fileable(), now: Date.now(), depth: level.depth })')
+    expect(game).toContain("if (wishResp) wishResp.textContent = r.reply ?? ''")
+    expect(game).toContain('await window.backrooms.submitWish(r.submit.text, r.submit.meta)')
+    expect(game).not.toMatch(/submitWish\(text\)/)
   })
   it("'i was here' is a claim; its submit text is the text, byte for byte", () => {
     const r = wishRoute({ ...base(), text: 'i was here' })
@@ -302,7 +315,13 @@ describe('(6) wishRoute(legacy) is the wish submit', () => {
     const m = /const isClaim = \(t\) => (\/[^\n]*?\/)\.test\(String\(t\)\.toLowerCase\(\)\.replace\(\/\[\^a-z\]\/g, ''\)\)/.exec(game)
     let re
     if (m) re = new RegExp(m[1].slice(1, -1))
-    else { expect(game).toMatch(/import \{[^}]*\bisClaim\b[^}]*\} from '\.\/compose-wish\.js'/); re = /iwashere/ }
+    else if (/import \{[^}]*\bisClaim\b[^}]*\} from '\.\/compose-wish\.js'/.test(game)) re = /iwashere/
+    else {
+      // I8: game.js keeps no claim test of its own — the router decides (wishRoute -> kind 'claim'); the quoted post-core regex is the reference
+      expect(game).not.toMatch(/const isClaim = /)
+      expect(game).toMatch(/import \{[^}]*\bwishRoute\b[^}]*\} from '\.\/compose-wish\.js'/)
+      re = /iwashere/
+    }
     const ref = (t) => re.test(String(t).toLowerCase().replace(/[^a-z]/g, ''))
     for (const t of fixtures) expect(isClaim(t), t).toBe(ref(t))
     expect(isClaim('I was here')).toBe(true)
@@ -323,12 +342,15 @@ describe('(6) wishRoute(legacy) is the wish submit', () => {
 //   'you push the beacon into the dark...', fireBeacon({ effect, webhook: getPref('beaconWebhook') }), if (counterClaim) beaconFired
 // game.js die(): hp <= 0 -> die() at once
 describe('(7) the gates under legacy', () => {
-  it('the source still carries the gate and the beacon lines', () => {
-    expect(game).toContain('if (seamHeld || !claimFiled || !beaconFired) return')
-    expect(game).toContain("showMessage('no beacon set. register one in settings.')")
-    expect(game).toContain("? 'you fire the beacon — not a cry for help. a claim. i was here. put it in the file.'")
-    expect(game).toContain(": 'you push the beacon into the dark...')")
-    expect(game).toContain("const counterClaim = target.includes('extension30150a')")
+  it('the gate and the beacon are the composers\' now (I8): the same inputs, the same target, the lines word for word', () => {
+    expect(game).toContain('if (!finaleGate({ seamHeld, claimFiled, beaconFired, rules, status: file.status, closing: file.closing })) return')
+    expect(game).not.toContain('if (seamHeld || !claimFiled || !beaconFired) return')
+    expect(game).toContain("const target = (webhook || '').toLowerCase().replace(/[^a-z0-9]/g, '')")
+    expect(game).toContain('const b = beaconDecision({ effect, target, rules, status: file.status, closing: file.closing, anchor, webhook })')
+    expect(game).not.toContain("const counterClaim = target.includes('extension30150a')")
+    expect(NO_BEACON_LINE).toBe('no beacon set. register one in settings.')
+    expect(CLAIM_LINE).toBe('you fire the beacon — not a cry for help. a claim. i was here. put it in the file.')
+    expect(LEGACY_PUSH_LINE).toBe('you push the beacon into the dark...')
   })
   it('finaleGate === !seamHeld && claimFiled && beaconFired over the 8 booleans', () => {
     for (const seamHeld of [true, false]) for (const claimFiled of [true, false]) for (const beaconFired of [true, false]) {

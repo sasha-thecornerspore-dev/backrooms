@@ -18,9 +18,20 @@ import { sanityStep, EXHAUSTED_LINE, DISAGREE_LINE } from '../src/renderer/compo
 import { createCompany } from '../src/renderer/rollcall.js'
 import { statusMods, depthOf } from '../src/renderer/status.js'
 import { closingOverlay } from '../src/renderer/closings.js'
-import { standing, placementMods, applyPlacement, EMPTY_STANDING } from '../src/renderer/docket.js'
+import { standing, placementMods, applyPlacement, EMPTY_STANDING, rollCall } from '../src/renderer/docket.js'
 import { levelConfig } from '../src/renderer/levels.js'
 import { DEFAULT_CONFIG } from '../src/renderer/world.js'
+import { polaroidCaption } from '../src/renderer/compose-polaroid.js'
+import { radioLine, RADIO_GROUPS } from '../src/renderer/compose-radio.js'
+import { wishRoute } from '../src/renderer/compose-wish.js'
+import { beaconDecision, NO_BEACON_LINE, CLAIM_LINE, LEGACY_PUSH_LINE } from '../src/renderer/compose-gates.js'
+import { inFrame, subjectInFrame, SOUL_RANGE, SUBJECT_RANGE } from '../src/renderer/evidence.js'
+import { inViewCone } from '../src/renderer/raycaster.js'
+import { HF } from '../src/renderer/gfx-frame.js'
+import { loadFile, canFile, STRINGS } from '../src/renderer/status.js'
+import { closingLines, NO_STANDING } from '../src/renderer/closings.js'
+import { OPENED_LINE, RELEASE_LINE, RADIO_KEY_LINE } from '../src/renderer/origin-processed.js'
+import { LEGACY_LAST_LINE } from '../src/renderer/origin-rules.js'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const game = read('../src/renderer/game.js')
@@ -112,7 +123,9 @@ describe('I5: the file (origin-*.js) in game.js', () => {
     expect(game).toMatch(/import \{ DOOR_SANITY, isSealedMaterial, doorLine, facingCell \} from '\.\/origin-tenant\.js'/)
     expect(game).toMatch(/import \{ MERCY_LINE, leashDebtStep \} from '\.\/origin-anchored\.js'/)
     expect(game).toMatch(/import \{ floorKey \} from '\.\/origin-processed\.js'/)
-    expect(game).toMatch(/import \{ parseNameWish, spellCard, refileWithName, spelledLine, ONLINE_LINE \} from '\.\/origin-unnamed\.js'/)
+    // (the naming wish itself is read by the wish router since I8: compose-wish.js wishRoute -> kind 'name')
+    expect(game).toMatch(/import \{ spellCard, refileWithName, spelledLine, ONLINE_LINE \} from '\.\/origin-unnamed\.js'/)
+    expect(game).not.toMatch(/parseNameWish/)
     expect(game).toMatch(/import \{ RECOIL_DIST, RECOIL_SHAKE, RECOIL_LINE, CURE_LINE \} from '\.\/origin-thin\.js'/)
     expect(game).toMatch(/export async function initGame\(canvas, \{ worldSeed = null, mpClient = null, anchor = null, resume = null, intakeCtx = null \} = \{\}\) \{/)
     expect(game).not.toMatch(/TODO\(integrate:W2\)/)
@@ -124,9 +137,9 @@ describe('I5: the file (origin-*.js) in game.js', () => {
       expect(at(s)).toBeLessThan(loopAt)
       expect(game.split(s).length - 1, s).toBe(1)
     }
-    // every write of `rules`: the filing, the ballast cure, the naming re-file, the resume
+    // every write of `rules`: the filing, the ballast cure, the naming re-file, the claim's re-file (I8), the resume
     expect(count(/(?<![.\w])rules = (?!LEGACY)/g)).toBe(count(/(?<![.\w])rules = rulesFor\(/g))
-    expect(count(/(?<![.\w])rules = rulesFor\(/g)).toBe(4)
+    expect(count(/(?<![.\w])rules = rulesFor\(/g)).toBe(5)
   })
   it('driftD() is the ONE drift helper: declared once, the only driftMeters( call, read by the HUD and the leash row', () => {
     expect(count(/const driftD = /g)).toBe(1)
@@ -292,8 +305,9 @@ describe('I5: the form, the doors, the soul, the console, the naming', () => {
     expect(fn).toMatch(/closeDialog\(\); if \(wishText\) wishText\.disabled = false; const sub = document\.getElementById\('wish-submit'\); if \(sub\) sub\.disabled = false/)
     expect(fn).toMatch(/openCard\('confirm', \{ \.\.\.spellCard\(name\), onConfirm: \(\) => \{\r?\n\s*intakeCtx = refileWithName\(intakeCtx, name\); origin = intake\(intakeCtx\); rules = rulesFor\(origin, thin\)\r?\n\s*setPref\('playerName', name\)\r?\n\s*showMessage\(spelledLine\(name, origin\), PRIO\.discovery\)/)
     expect(fn).toContain('if (mpClient) setTimeout(() => showMessage(ONLINE_LINE, PRIO.discovery), 2600)')
-    const submit = slice("document.getElementById('wish-submit')?.addEventListener('click', async () => {", 'const claim = isClaim(text)')
-    expect(submit).toMatch(/const name = origin === 'unnamed' \? parseNameWish\(text\) : null\r?\n\s*if \(name\) \{ refileName\(name\); return \}/)
+    // the router reads the naming wish (I8: compose-wish.js wishRoute, the unnamed only); the handler re-files before anything is disabled or sent
+    const submit = slice("document.getElementById('wish-submit')?.addEventListener('click', async () => {", "if (wishResp) wishResp.textContent = r.reply ?? ''")
+    expect(submit).toMatch(/const r = wishRoute\(\{ text, origin, rules, file, canFile: fileable\(\), now: Date\.now\(\), depth: level\.depth \}\)\r?\n\s*if \(r\.kind === 'name'\) \{ refileName\(r\.name\); return \}/)
     // the confirm card's foot is its prompt: the put-it-back hint steps aside and the foot keeps its gap
     expect(game).toContain("if (noteHintEl) noteHintEl.style.display = lines.length || s.mode === 'confirm' ? 'none' : ''")
     expect(html).toMatch(/#note-foot \{[^}]*white-space: pre-wrap;/)
@@ -421,9 +435,10 @@ describe('I7: the one sanity step (compose-sanity.js)', () => {
   const block = slice('sanCtx.rules = rules;', 'updateSanity()')
   it('imports the step, the company pool, the status mods and the closing overlay by their real names', () => {
     expect(game).toMatch(/import \{ sanityStep, EXHAUSTED_LINE, DISAGREE_LINE \} from '\.\/compose-sanity\.js'/)
-    expect(game).toMatch(/import \{ createCompany \} from '\.\/rollcall\.js'/)
-    expect(game).toMatch(/import \{ statusMods \} from '\.\/status\.js'/)
-    expect(game).toMatch(/import \{ closingOverlay \} from '\.\/closings\.js'/)
+    // (each module's import line grows as later steps wire more of it: the name is pinned to its module)
+    expect(game).toMatch(/import \{[^}]*\bcreateCompany\b[^}]*\} from '\.\/rollcall\.js'/)
+    expect(game).toMatch(/import \{[^}]*\bstatusMods\b[^}]*\} from '\.\/status\.js'/)
+    expect(game).toMatch(/import \{[^}]*\bclosingOverlay\b[^}]*\} from '\.\/closings\.js'/)
   })
   it('the state before the loop: mods / co from the file, one company pool, the disagreement once, your own file beside here', () => {
     for (const s of ['let mods = statusMods(file.status), co = closingOverlay(file.closing)', 'const company = createCompany()', 'let disagreeSaid = false',
@@ -510,5 +525,277 @@ describe('I7: the one sanity step (compose-sanity.js)', () => {
     remotes.length = 0                                                      // apart: the pool comes back
     for (let i = 0; i < 10 * 60; i++) go()
     expect(company.value).toBeGreaterThan(7)
+  })
+})
+
+describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and the beacon read the file', () => {
+  const COMPOSERS = ['compose-polaroid.js', 'compose-radio.js', 'compose-wish.js', 'compose-gates.js']
+  const NM = statusMods('notice-mailed')
+  it('imports the composers, the file\'s write and the frame by their real names; game.js keeps no ledger, claim test or caption of its own', () => {
+    expect(game).toMatch(/import \{ polaroidCaption \} from '\.\/compose-polaroid\.js'/)
+    expect(game).toMatch(/import \{ radioLine, RADIO_GROUPS \} from '\.\/compose-radio\.js'/)
+    expect(game).toMatch(/import \{ wishRoute \} from '\.\/compose-wish\.js'/)
+    expect(game).toMatch(/import \{ finaleGate, beaconDecision \} from '\.\/compose-gates\.js'/)
+    expect(game).toMatch(/import \{ SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame \} from '\.\/evidence\.js'/)
+    expect(game).toMatch(/import \{ lineOfSight, inViewCone \} from '\.\/raycaster\.js'/)
+    expect(game).toMatch(/import \{ depthOf, loadFile, saveFile, statusMods, canFile, canRefile, wishPrompt \} from '\.\/status\.js'/)
+    expect(game).toMatch(/import \{ closingOverlay, closingLines, isWishOpen, CLOSED_OFFICE \} from '\.\/closings\.js'/)
+    expect(game).toMatch(/import \{ createCompany, createRollCall \} from '\.\/rollcall\.js'/)
+    for (const re of [/const RADIO_GROUPS = /, /const isClaim = /, /const finalizing = /, /iwashere/, /extension30150a/]) expect(game).not.toMatch(re)
+    // each seam is ONE call
+    for (const re of [/polaroidCaption\(/g, /radioLine\(/g, /wishRoute\(/g, /finaleGate\(/g, /beaconDecision\(/g, /rollCall\(level\.st\)/g]) expect(count(re), String(re)).toBe(1)
+    expect(slice('function readRadio(on) {', '// The counter-claim: fires ONCE')).toContain('rollLine: level.st ? rollCall(level.st) : null')
+    expect(game).not.toMatch(/TODO\(integrate:W4\) I8/)
+    for (const f of [...COMPOSERS, 'evidence.js']) { expect(sw).toContain(`'/renderer/${f}'`); expect(build).toContain(`'${f}'`) }
+  })
+  it('the file: loaded from prefs once; ONE write — applyFile (a fresh object every time, mods / co re-derived, saveFile once, the tension, the room)', () => {
+    expect(game).toContain("let file = loadFile(getPref('file'))")
+    expect(count(/saveFile\(/g)).toBe(1)
+    expect(game).toContain('function applyFile(f) { file = f; mods = statusMods(file.status); co = closingOverlay(file.closing); saveFile(file); retension(); bus?.here(hereFields()) }')
+    expect(count(/(?<![.\w])file = /g)).toBe(2)                              // the declaration and applyFile: never written anywhere else
+    const writes = [...game.matchAll(/applyFile\(([^)]*)\)/g)].map((m) => m[1]).filter((a) => a !== 'f')
+    expect(writes.length).toBeGreaterThanOrEqual(4)                          // the ledger heard, the seam held, a close, a status
+    for (const a of writes) expect(a).toMatch(/^(\{ \.\.\.file, [^}]*\}|r\.file)$/)
+    expect(game).toContain('function retension() { evConfig.tension = (level?.amb?.tension ?? 0) + (closingOverlay(file.closing).tension ?? 0) }')
+    expect(count(/const closingTimers = \[\]/g)).toBe(1)
+    expect(buildBody).toContain('for (const t of closingTimers) clearTimeout(t); closingTimers.length = 0; standHeld = 0; shotOnLevel = false')
+    // lifted and run: the write re-derives from the NEW reference and saves exactly what it was handed
+    const line = game.match(/function applyFile\(f\) \{[^\n]*\}/)[0]
+    const saved = [], heard = []
+    let tensioned = 0
+    const fn = new Function('statusMods', 'closingOverlay', 'saveFile', 'retension', 'bus', 'hereFields', 'st',
+      `let { file, mods, co } = st\n${line}\napplyFile(st.next)\nObject.assign(st, { file, mods, co })`)
+    const st = { file: loadFile(null), mods: NM, co: closingOverlay(null), next: { ...loadFile(null), status: 'compliance', closing: 'compliance' } }
+    fn(statusMods, closingOverlay, (f) => saved.push(f), () => tensioned++, { here: (h) => heard.push(h) }, () => 'here', st)
+    expect(st.file).toBe(st.next)
+    expect(st.mods).toBe(statusMods('compliance'))
+    expect(st.co).toBe(closingOverlay('compliance'))
+    expect(saved).toEqual([st.next]); expect(tensioned).toBe(1); expect(heard).toEqual(['here'])
+  })
+  it('the presence: a closed file refuses the dialog before it opens; the placeholder and the faint lines are the file\'s', () => {
+    const open = slice('function openDialog() {', 'function closeDialog()')
+    expect(open).toMatch(/if \(dialogOpen\) return\r?\n\s*if \(!isWishOpen\(file\.closing\)\) \{ showMessage\(CLOSED_OFFICE\); return \}[^\n]*\r?\n\s*dialogOpen = true/)
+    expect(open).toContain('const wp = wishPrompt({ origin, status: file.status, closing: file.closing, canFile: fileable(), canRefile: canRefile(file.at, Date.now()) })')
+    expect(open).toContain('wishText.placeholder = wp.placeholder; renderWishSub(wp.sub)')
+    expect(game).toContain('const fileable = () => canFile({ ledgerHeard: file.ledgerHeard, pagesRead: readSet.size, depth: level.depth })')
+    expect(html).toMatch(/<textarea id="wish-text"[^>]*><\/textarea>\r?\n\s*<p id="wish-sub"><\/p>\r?\n\s*<div id="wish-actions">/)
+    expect(html).toMatch(/#wish-sub \{[^}]*font-size: 11px;[^}]*\}/)
+  })
+  it('#wish-sub, lifted and run on a fake DOM: one faint line each; a stamp line types the word before \' · \' and submits, never while the dialog is busy', () => {
+    const src = slice('function renderWishSub(lines) {', 'function openDialog() {')
+    const mk = () => {
+      const el = { className: '', children: [], handlers: {}, classes: new Set(), value: '', disabled: false, clicks: 0 }
+      let text = ''
+      Object.defineProperty(el, 'textContent', { get: () => text, set: (v) => { text = v; if (v === '') el.children.length = 0 } })
+      el.classList = { add: (c) => el.classes.add(c) }
+      el.addEventListener = (k, f) => { el.handlers[k] = f }
+      el.appendChild = (c) => el.children.push(c)
+      el.click = () => el.clicks++
+      return el
+    }
+    const subEl = mk(), wishText = mk(), submit = mk()
+    const doc = { createElement: () => mk(), getElementById: (id) => (id === 'wish-submit' ? submit : null) }
+    const render = new Function('wishSubEl', 'document', 'wishText', `${src}\nreturn renderWishSub`)(subEl, doc, wishText)
+    render([STRINGS.NOTICE_UNANSWERED])                                     // the legacy dialog: one line, read only
+    expect(subEl.children.map((c) => c.textContent)).toEqual(['a notice was mailed to you. you have not answered.'])
+    expect(subEl.children[0].classes.has('stamp')).toBe(false)
+    render([...STRINGS.STAMP_LINES])
+    expect(subEl.children.length).toBe(3)
+    expect(subEl.children.every((c) => c.classes.has('stamp') && c.className === 'wish-line')).toBe(true)
+    subEl.children[1].handlers.pointerdown({ preventDefault() {} })
+    expect([wishText.value, submit.clicks]).toEqual(['compliance', 1])      // a status word, never 'close the file'
+    submit.disabled = true; subEl.children[0].handlers.pointerdown({ preventDefault() {} })
+    expect([wishText.value, submit.clicks]).toEqual(['compliance', 1])
+  })
+  it('the wish, lifted and replayed against the real router: today\'s claim and wish byte for byte; a name, a status, a close and a re-file stay in the room', async () => {
+    const body = slice('const r = wishRoute(', 'setTimeout(() => {')
+    const AsyncFunction = (async () => {}).constructor
+    const run = async (st0, text) => {
+      const st = { origin: null, rules: LEGACY, file: loadFile(null), filed: false, thin: false, photoIdx: 5, stationIdx: 2, claimFiled: false, depth: 1, pages: 0, ...st0 }
+      const out = { sent: [], said: [], timers: [], applied: [], compliance: 0, finale: 0, named: [], here: 0, resp: null, closingTimers: [] }
+      const fn = new AsyncFunction('text', 'wishRoute', 'canFile', 'readSet', 'level', 'refileName', 'wishResp', 'wishText', 'document', 'applyCompliance',
+        'closingLines', 'closingTimers', 'showMessage', 'PRIO', 'rulesFor', 'evConfig', 'bus', 'hereFields', 'window', 'tryFinale', 'setTimeout', 'st', 'out',
+        `let { origin, rules, file, filed, thin, photoIdx, stationIdx, claimFiled } = st
+        function applyFile(f) { file = f; out.applied.push(f) }
+        const fileable = () => canFile({ ledgerHeard: file.ledgerHeard, pagesRead: readSet.size, depth: level.depth })
+        try {\n${body}\n} finally { Object.assign(st, { origin, rules, file, photoIdx, stationIdx, claimFiled }) }`)
+      const resp = { set textContent(v) { out.resp = v } }
+      const btn = { disabled: false }
+      await fn(text, wishRoute, canFile, { size: st.pages }, { depth: st.depth }, (n) => out.named.push(n), resp, { disabled: false }, { getElementById: () => btn },
+        () => out.compliance++, closingLines, out.closingTimers, (m, p) => out.said.push([m, p]), PRIO, rulesFor, { events: EVENTS }, { here: () => out.here++ }, () => 'here',
+        { backrooms: { submitWish: async (t, m) => { out.sent.push([t, m]) } } }, () => out.finale++, (f, ms) => { out.timers.push(ms); return out.timers.length }, st, out)
+      return { st, out }
+    }
+    // today's claim: sent as typed, the legacy reply, the claim filed and the seam tried; no re-file for an unfiled claimant
+    let { st, out } = await run({}, 'i was here')
+    expect(out.sent).toEqual([['i was here', { origin: null }]])
+    expect(out.resp).toBe('you did not ask. you asserted. the file has no column to deny a claim made. received.')
+    expect([st.claimFiled, out.finale, st.origin, st.rules, out.applied.length]).toEqual([true, 1, null, LEGACY, 0])
+    ;({ st, out } = await run({}, 'let me out'))
+    expect(out.sent).toEqual([['let me out', { origin: null }]])
+    expect(out.resp).toBe('your request has been received. whether it is heard is another matter.')
+    expect([st.claimFiled, out.finale]).toEqual([false, 0])
+    // a filed claimant is re-filed as processed before the seam is tried (the anchored released first), with its lines after the dialog
+    ;({ st, out } = await run({ origin: 'anchored', rules: rulesFor('anchored', false), filed: true }, 'I was here.'))
+    expect([st.origin, st.rules, out.here, st.claimFiled, out.finale]).toEqual(['processed', rulesFor('processed', false), 1, true, 1])
+    expect(out.sent).toEqual([['I was here.', { origin: 'anchored' }]])                // the meta is the column that typed it
+    expect(out.timers).toEqual([3000, 5600])
+    expect([RELEASE_LINE, OPENED_LINE].every((l) => typeof l === 'string')).toBe(true)
+    expect(out.said).toEqual([])                                                  // (the lines wait on their timers)
+    // the unnamed's naming wish: re-filed through the card, nothing disabled, nothing sent
+    ;({ st, out } = await run({ origin: 'unnamed', rules: rulesFor('unnamed', false), filed: true }, 'call me ada'))
+    expect([out.named, out.sent, out.resp]).toEqual([['ada'], [], null])
+    // a status word: filed (the letters, the station and the claim start over) and nothing sent; refused while the file cannot read you
+    ;({ st, out } = await run({ claimFiled: true }, 'extension'))
+    expect(out.resp).toBe(STRINGS.NOTICE_UNANSWERED)
+    expect([out.applied.length, st.photoIdx, out.sent.length]).toEqual([0, 5, 0])
+    ;({ st, out } = await run({ claimFiled: true, depth: 2 }, 'file me under extension'))
+    expect(out.resp).toBe(STRINGS.FILED)
+    expect(out.applied.length).toBe(1); expect(out.applied[0].status).toBe('extension')
+    expect([st.photoIdx, st.stationIdx, st.claimFiled, out.sent.length, out.closingTimers.length]).toEqual([0, 0, false, 0, 0])
+    ;({ st, out } = await run({ depth: 2, file: { ...loadFile(null), status: 'litigation', at: 1 } }, 'compliance'))   // a re-filing says so, after the dialog
+    expect(out.resp).toBe(STRINGS.FILED)
+    expect([out.closingTimers.length, out.timers]).toEqual([1, [3000]])
+    // the compliance close: thirteen pages given up closes the file, the floor stops leaving pages, two lines follow the dialog
+    const thirteen = { ...loadFile(null), status: 'compliance', at: 1, redacted: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] }
+    ;({ st, out } = await run({ file: thirteen }, 'close the file'))
+    expect(out.applied.map((f) => f.closing)).toEqual(['compliance'])
+    expect([out.compliance, out.closingTimers.length, out.timers, out.sent.length]).toEqual([1, 2, [5600, 8200], 0])
+    expect(out.resp).toBe(closingLines('compliance')[0])
+    ;({ st, out } = await run({ file: { ...thirteen, redacted: [1, 2] } }, 'close the file'))
+    expect([out.applied.length, out.compliance, out.resp]).toEqual([0, 0, 'the file is not ready to close. two of thirteen pages given up.'])
+    // a filed status's wish carries the trailer; the meta is the column's
+    ;({ st, out } = await run({ origin: 'tenant', rules: rulesFor('tenant', false), filed: true, depth: 3, file: { ...loadFile(null), status: 'extension', at: 1 } }, 'warmer fog'))
+    expect(out.sent).toEqual([['warmer fog\nfiled under: EXTENSION · level 3', rulesFor('tenant', false).wishMeta()]])
+  })
+  it('the radio, lifted and replayed: today\'s station on the deep floors byte for byte; the ledger heard goes on the file once; the key, the count, the roll call', () => {
+    const body = slice('const r = radioLine(', '// The counter-claim: fires ONCE').replace(/\}\s*$/, '')
+    const fn = new Function('on', 'radioLine', 'rules', 'mods', 'level', 'RADIO_GROUPS', 'rollcall', 'rollCall', 'performance', 'showMessage', 'blip', 'heartbeat', 'setTimeout', 'st', 'out',
+      `let { stationIdx, firstDeepHearing, file } = st\nfunction applyFile(f) { file = f; out.applied.push(f) }\n${body}\nObject.assign(st, { stationIdx, firstDeepHearing, file })`)
+    const press = (st, on, out) => fn(on, radioLine, st.rules, st.mods, st.level, RADIO_GROUPS, { count: () => st.count }, rollCall, { now: () => 0 },
+      (m, p) => out.said.push(p === undefined ? m : [m, p]), () => out.blips++, () => out.beats++, (f, ms) => { out.later.push(ms); f() }, st, out)
+    const fresh = (o = {}) => ({ stationIdx: 0, firstDeepHearing: true, file: loadFile(null), rules: LEGACY, mods: NM, level: { depth: 2, st: EMPTY_STANDING }, count: 1, ...o })
+    const blank = () => ({ said: [], blips: 0, beats: 0, later: [], applied: [] })
+    const st = fresh(), out = blank()
+    for (let i = 0; i < 4; i++) press(st, true, out)
+    expect(out.said).toEqual([
+      'the station counts, slow and patient: 12 26 04 22 11 08 …   [1/4]', 'the station counts, slow and patient: 21 08 19 24 23 12 …   [2/4]',
+      'the station counts, slow and patient: 23 12 17 23 11 08 …   [3/4]', 'the station counts, slow and patient: 09 12 15 08   [4/4]',
+      'it reads the last group, then stops. that one was yours.'])
+    expect([out.blips, out.beats, out.later, st.stationIdx]).toEqual([4, 1, [1900], 0])
+    expect(out.applied.length).toBe(1)
+    expect(out.applied[0]).toEqual({ ...loadFile(null), ledgerHeard: true })
+    for (let i = 0; i < 4; i++) press(st, true, out)
+    expect(out.applied.length).toBe(1)                                        // heard once is heard
+    // the near floors: today's crackle and silence for a notice nobody answered; a filed status hears the floor's roll call
+    const near = fresh({ level: { depth: 0, st: EMPTY_STANDING } }), o2 = blank()
+    press(near, true, o2); press(near, false, o2)
+    expect(o2.said).toEqual(['the radio crackles to life.', 'the radio falls silent.'])
+    expect([o2.blips, near.stationIdx]).toEqual([0, 0])
+    const roll = fresh({ mods: statusMods('extension'), level: { depth: 1, st: EMPTY_STANDING } }), o3 = blank()
+    press(roll, true, o3)
+    expect(o3.said).toEqual(['the station reads the floor. nothing is filed here.'])
+    expect([o3.blips, roll.stationIdx]).toEqual([1, 0])
+    // the processed hear the key once a run, and a beat on every group; the roll call's count layers over the last line
+    const proc = fresh({ rules: rulesFor('processed', false) }), o4 = blank()
+    press(proc, true, o4)
+    expect([o4.said[1], proc.firstDeepHearing, o4.beats]).toEqual([RADIO_KEY_LINE, false, 1])
+    const many = fresh({ stationIdx: 3, count: 3 }), o5 = blank()
+    press(many, true, o5)
+    expect(o5.said[1]).toBe('it reads the last group, then stops. those were yours — three of you.')
+    expect(LEGACY_LAST_LINE).toBe('it reads the last group, then stops. that one was yours.')
+  })
+  it('the film, lifted and replayed: today\'s three captions, +8 after the caption read the sanity, the letter only on a letter; a friend in frame, the soul\'s door, the pin\'s calm, thin\'s first shot', () => {
+    const body = slice('const thinNear = ephemera.some(', '// the door a lost soul in the film stands before').replace(/\}\s*$/, '')
+    const fn = new Function('ephemera', 'player', 'bus', 'subjectInFrame', 'FRAME_OPTS', 'level', 'SOUL_RANGE', 'inFrame', 'polaroidCaption', 'knownWayArrow', 'rules', 'mods', 'file',
+      'origin', 'thin', 'anchor', 'driftD', 'wardPulse', 'window', 'dataUrl', 'showMessage', 'st', 'out',
+      `let { sanity, photoIdx, thinFirstShot, shotOnLevel, leashCalm } = st\n${body}\nObject.assign(st, { sanity, photoIdx, thinFirstShot, shotOnLevel, leashCalm })`)
+    const player = { x: 10.5, y: 10.5, angle: 0 }
+    const opts = { pos: (id) => (id === 'f' ? { x: 15.5, y: 10.5, angle: Math.PI } : null), cone: inViewCone, hf: HF, maxCells: SUBJECT_RANGE, los: () => true }
+    const shoot = (st, o = {}) => {
+      const out = { said: [], pulses: 0 }
+      fn(o.ephemera ?? [], player, o.bus ?? null, subjectInFrame, opts, { index: st.index, depth: depthOf(st.index), decor: { nearestNpc: () => o.npc ?? null } }, SOUL_RANGE, inFrame,
+        polaroidCaption, () => o.arrow ?? null, o.rules ?? LEGACY, o.mods ?? NM, { status: o.status ?? 'notice-mailed' }, o.origin ?? null, o.thin ?? false, o.anchor ?? null,
+        () => o.D ?? 0, () => out.pulses++, {}, null, (m, p) => out.said.push(p === undefined ? m : [m, p]), st, out)
+      return out
+    }
+    const legacy = (thinNear, index, sanity, photoIdx) => thinNear ? 'the film shows someone who was not in the room. you can see the wall through them.'
+      : sanity < 40 || index >= 3 ? 'the film shows the hall as it will finalize: darker, one door fewer.'
+        : `the film develops one letter that was not in the room: "${'iwashere'[photoIdx % 8]}". transcribe it.`
+    for (const thinNear of [false, true]) for (let index = 0; index <= 4; index++) for (const sanity of [0, 39, 40, 95]) {
+      const st = { sanity, photoIdx: 3, thinFirstShot: true, shotOnLevel: false, leashCalm: 0, index }
+      const eph = thinNear ? [{ variant: 'thin', x: 11.5, y: 11.5 }] : []
+      const out = shoot(st, { ephemera: eph })
+      expect(out.said).toEqual([legacy(thinNear, index, sanity, 3)])
+      expect([st.sanity, out.pulses, st.shotOnLevel, st.leashCalm]).toEqual([Math.min(100, sanity + 8), 1, true, 0])
+      expect(st.photoIdx).toBe(!thinNear && !(sanity < 40 || index >= 3) ? 4 : 3)
+    }
+    // a friend in frame: the photo is theirs (sent through the bus), the caption develops them
+    const busOut = []
+    const bus = { freshPeersOnFloor: () => [{ id: 'f', name: 'maddie', st: 'ok', thin: false, seen: false, o: 'tenant', status: 'extension', aseed: null }], emit: (k, p) => busOut.push([k, p]) }
+    let st = { sanity: 60, photoIdx: 0, thinFirstShot: true, shotOnLevel: true, leashCalm: 0, index: 1 }
+    let out = shoot(st, { bus })
+    expect(out.said[0]).toMatch(/^the film develops maddie\. there is an address under them\./)
+    expect(busOut).toEqual([['photo', { of: 'f', x: 10.5, y: 10.5, lvl: 1 }]])
+    // a lost soul in frame, and the door behind them when one is on your sheet
+    st = { sanity: 60, photoIdx: 0, thinFirstShot: true, shotOnLevel: true, leashCalm: 0, index: 1 }
+    out = shoot(st, { npc: { x: 14.5, y: 10.5 }, arrow: '↗' })
+    expect(out.said).toEqual(['the film shows them, and behind them, faintly, a door: ↗'])
+    st = { sanity: 60, photoIdx: 0, thinFirstShot: true, shotOnLevel: true, leashCalm: 0, index: 1 }
+    expect(shoot(st, { npc: { x: 10.5, y: 30.5 } }).said[0]).toMatch(/^the film develops one letter/)   // a soul out of frame is not in the film
+    // the anchored pin on a floor's first shot quiets the leash; thin's first shot spends itself
+    st = { sanity: 60, photoIdx: 0, thinFirstShot: true, shotOnLevel: false, leashCalm: 0, index: 1 }
+    shoot(st, { rules: rulesFor('anchored', false), origin: 'anchored', anchor: { lat: 1, lng: 2 }, D: 50 })
+    expect([st.leashCalm, st.shotOnLevel]).toEqual([60, true])
+    st = { sanity: 60, photoIdx: 0, thinFirstShot: true, shotOnLevel: false, leashCalm: 0, index: 1 }
+    out = shoot(st, { rules: rulesFor('tenant', true), origin: 'tenant', thin: true })
+    expect([out.said[0], st.thinFirstShot, st.photoIdx]).toEqual(['the film shows the hall. at the edge of the frame it shows the wall through your hand.', false, 0])
+  })
+  it('the noise 9 and the flash stay before the caption; the soul\'s door is the compass\'s seen way, never the faint pull, never on the block', () => {
+    const fire = slice('function firePolaroid() {', 'function knownWayArrow() {')
+    expect(fire.indexOf('level.entitySys.noise(player.x, player.y, 9)')).toBeLessThan(fire.indexOf('const b = getPref(\'creatures\') ? level.entitySys.flash(player, FLASH_OPTS) : NO_FLASH'))
+    expect(fire.indexOf('NO_FLASH')).toBeLessThan(fire.indexOf('polaroidCaption('))
+    expect(game).toContain('const frameLos = (ax, ay, bx, by) => lineOfSight(ax, ay, bx, by, level.grid.floor)')
+    expect(at('const FRAME_OPTS = { pos: peerPos, cone: inViewCone, hf: HF, maxCells: SUBJECT_RANGE, los: frameLos }')).toBeLessThan(loopAt)
+    const door = slice('function knownWayArrow() {', '// The radio: cosmetic hum')
+    expect(door).toContain('if (level.cfg.map) return null')
+    expect(door).toContain('compassLines({ player, known: fog.ways(level.index) }, doorOut)')
+    expect(door).not.toContain('fallback')
+    for (const s of ['const doorOut = []', 'let thinFirstShot = true', 'let shotOnLevel = false', 'let firstDeepHearing = true',
+      'const rollcall = createRollCall({ now: () => performance.now() })']) expect(at(s), s).toBeLessThan(loopAt)   // the roll call keeps its own ms clock, never playT
+  })
+  it('the seam: the core\'s gate and the file\'s, then the litigation\'s closing on the file before the lines', () => {
+    const fin = slice('function tryFinale() {', 'function applyItemEffect(eff) {')
+    expect(fin).toMatch(/if \(!finaleGate\(\{ seamHeld, claimFiled, beaconFired, rules, status: file\.status, closing: file\.closing \}\)\) return\r?\n\s*seamHeld = true\r?\n\s*applyFile\(\{ \.\.\.file, closing: 'litigation' \}\)\r?\n\s*wardPulse\(\); calmTimer = 600;/)
+  })
+  it('the beacon, lifted and replayed: today\'s three pushes byte for byte; the pin rides only an anchored push; a processed push files the floor; a closed file has no standing', () => {
+    const k = game.indexOf("const effect = getPref('beaconEffect')"), endS = 'if (b.setBeaconFired) { beaconFired = true; tryFinale() }'
+    const body = game.slice(k, game.indexOf(endS, k) + endS.length) + '\n}'
+    const fn = new Function('getPref', 'beaconDecision', 'rules', 'file', 'anchor', 'showMessage', 'window', 'filedFloors', 'floorKey', 'worldSeed', 'level', 'tryFinale', 'st',
+      `let { beaconFired } = st\n${body}\nst.beaconFired = beaconFired`)
+    const push = (o) => {
+      const out = { said: [], fired: [], finale: 0, floors: new Set() }
+      const st = { beaconFired: false }
+      const prefs = { beaconEffect: o.effect, beaconWebhook: o.webhook }
+      const win = o.bridge ? { backrooms: { fireBeacon: (p) => { out.fired.push(p); return { then: () => ({ catch() {} }) } } } } : {}
+      fn((key) => prefs[key], beaconDecision, o.rules ?? LEGACY, o.file ?? loadFile(null), o.anchor ?? null, (m, p) => out.said.push(p === undefined ? m : [m, p]), win, out.floors,
+        floorKey, 7, { index: 2 }, () => out.finale++, st)
+      return { ...out, beaconFired: st.beaconFired }
+    }
+    expect(push({ effect: 'off', webhook: '' }).said).toEqual([NO_BEACON_LINE])
+    expect(push({ effect: undefined, webhook: 'x' }).said).toEqual(['no beacon set. register one in settings.'])
+    let p = push({ effect: 'pulse', webhook: 'https://ntfy.sh/EXTENSION-30150A' })
+    expect([p.said, p.beaconFired, p.finale]).toEqual([[CLAIM_LINE], true, 1])
+    expect(CLAIM_LINE).toBe('you fire the beacon — not a cry for help. a claim. i was here. put it in the file.')
+    p = push({ effect: 'pulse', webhook: 'https://ntfy.sh/somewhere' })
+    expect([p.said, p.beaconFired, p.finale]).toEqual([[LEGACY_PUSH_LINE, 'the beacon goes quiet.'], false, 0])
+    p = push({ effect: 'pulse', webhook: 'https://ntfy.sh/somewhere', bridge: true, anchor: { lat: 1, lng: 2 } })
+    expect(p.fired).toEqual([{ effect: 'pulse', webhook: 'https://ntfy.sh/somewhere' }])            // LEGACY never carries the pin
+    p = push({ effect: 'pulse', webhook: 'https://ntfy.sh/somewhere', bridge: true, anchor: { lat: 1, lng: 2 }, rules: rulesFor('anchored', false) })
+    expect(p.fired).toEqual([{ effect: 'pulse', webhook: 'https://ntfy.sh/somewhere', anchor: { lat: 1, lng: 2 } }])
+    p = push({ effect: 'pulse', webhook: 'https://ntfy.sh/somewhere', rules: rulesFor('processed', false) })
+    expect([...p.floors]).toEqual([floorKey(7, 2)])
+    p = push({ effect: 'pulse', webhook: 'https://ntfy.sh/EXTENSION-30150A', file: { ...loadFile(null), status: 'litigation', closing: 'litigation' } })
+    expect([p.said, p.beaconFired, p.finale]).toEqual([[CLAIM_LINE, NO_STANDING], false, 0])
   })
 })
