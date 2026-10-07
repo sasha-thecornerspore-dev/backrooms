@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   MODES, CLOSE_KEYS, CARD_KEYS, createCard, chooseLines, readText, setFoot,
-  SEALED_TEXT, SEALED_FOOT, SEALED_LINES, REDACTED_FOOT, REFUSE_LINE, READ_FOOT, CHOOSE_NONE,
+  SEALED_TEXT, SEALED_FOOT, SEALED_LINES, REDACTED_FOOT, REFUSE_LINE, READ_FOOT, CHOOSE_NONE, CONFIRM_LINES,
 } from '../src/renderer/papercard.js'
 
 const MENU = ['take the left.', 'keep writing.', 'drink it.', 'whistle every minute.', 'i left the lantern.', 'walk in. do not drop in.']
@@ -86,10 +86,10 @@ describe('createCard / open', () => {
   it('rejects an unknown mode', () => {
     expect(() => createCard().open('menu', {})).toThrow()
   })
-  it('a plain card has no option lines; sealed and choose do', () => {
+  it('a plain card has no option lines; confirm, sealed and choose do', () => {
     const card = createCard()
     expect(card.open('form', { text: 'x' }).lines).toEqual([])
-    expect(card.open('confirm', { text: 'x' }).lines).toEqual([])
+    expect(card.open('confirm', { text: 'x' }).lines).toEqual(CONFIRM_LINES)
     expect(card.open('read', { text: 'x' }).lines).toEqual([])
     expect(card.open('sealed', { text: 'x' }).lines).toEqual(SEALED_LINES)
     expect(card.open('choose', { menu: MENU }).lines).toEqual(chooseLines(MENU))
@@ -198,6 +198,15 @@ describe('confirm', () => {
       const s = card.open('confirm', { text: 'x' })
       expect(card.step(s, key).action).toEqual({ type: 'close', confirmed: true })
     }
+  })
+  // F9: touch has no Esc — the spelling card must be declinable by a tap
+  it('shows its foot as two tappable lines: tapLine:0 says yes, tapLine:1 says no', () => {
+    const card = createCard()
+    const s = card.open('confirm', { text: 'adaa. is that how it is spelled?', foot: 'e · yes      esc · no' })
+    expect(s.lines).toEqual(['yes · e', 'no · esc'])
+    expect(card.step(s, 'tapLine:0')).toEqual({ state: null, action: { type: 'close', confirmed: true } })
+    expect(card.step(card.open('confirm', { text: 'x' }), 'tapLine:1')).toEqual({ state: null, action: { type: 'close', confirmed: false } })
+    expect(card.state).toBeNull()
   })
 })
 

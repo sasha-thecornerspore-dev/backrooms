@@ -5,7 +5,8 @@
 // sealed page compliance leaves unread, the cache menu and the cache note. Pure:
 // it only DECIDES what a key does to an open card; game.js owns the DOM, the
 // readSet, sanity and the file. Every two-way card is Esc vs anything, so the
-// touch SPEAK button (KeyE) confirms naturally. Taps arrive as keys too: 'tap'
+// touch SPEAK button (KeyE) confirms naturally — and since touch has no Esc, a
+// confirm's foot is two tappable lines, the second a no. Taps arrive as keys too: 'tap'
 // is a pointerdown on the card body, 'tapLine:<i>' a pointerdown on option line
 // i (the lines stopPropagation, so a sealed/choose card never closes by accident).
 
@@ -22,6 +23,7 @@ export const SEALED_FOOT = 'read it · e      leave it unread · x'
 export const SEALED_LINES = ['read it · e', 'leave it unread · x']   // the foot, as two tappable lines
 export const REDACTED_FOOT = 'you do not read it. the file notes that you did not.'
 export const REFUSE_LINE = 'the file already knows you read it.'
+export const CONFIRM_LINES = ['yes · e', 'no · esc']   // the confirm foot, tappable: touch has no Esc to say no with
 export const READ_FOOT = 'a cache, not a page'
 export const CHOOSE_NONE = '0 · nothing'
 
@@ -79,6 +81,8 @@ export function createCard() {
         s.redacted = !!opts.redacted
         s.foot = s.redacted ? REDACTED_FOOT : SEALED_FOOT
         s.lines = s.redacted ? NONE : SEALED_LINES
+      } else if (mode === 'confirm') {
+        s.lines = CONFIRM_LINES
       } else if (mode === 'choose') {
         if (opts.menu) { s.lines = chooseLines(opts.menu); s.count = opts.menu.length }
         else {
@@ -120,7 +124,8 @@ function stepState(s, key) {
       return same
 
     case 'confirm':
-      return { state: null, action: { type: 'close', confirmed: key !== 'Escape' } }
+      // the no line is the Esc a phone does not have; the body and the yes line are anything
+      return { state: null, action: { type: 'close', confirmed: key !== 'Escape' && key !== 'tapLine:1' } }
 
     case 'sealed': {
       const li = lineIndex(key)
