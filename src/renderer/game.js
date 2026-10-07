@@ -5,7 +5,7 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, drawerSlide, bump } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, drawerSlide, whistle, bump } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
 import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
@@ -47,7 +47,7 @@ import { RECOIL_DIST, RECOIL_SHAKE, RECOIL_LINE, CURE_LINE } from './origin-thin
 import { perceptionFor } from './compose-perception.js'
 import { createStillness, HUNTS_MOVEMENT_LINE } from './stillness.js'
 import { sanityStep, EXHAUSTED_LINE, DISAGREE_LINE } from './compose-sanity.js'
-import { createCompany, createRollCall, evKinds } from './rollcall.js'
+import { createCompany, createRollCall, evKinds, whistlePitch, bearingLabel, whistleGain, whistlePan, countLine, WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY, FAR_BONUS, ECHO, NO_ANSWER_LINE, ECHO_LINE } from './rollcall.js'
 import { createDownState, createKneel, downedInFront, DOWN_LINE, KNEEL_HINT, HANDS_LINE, LIGHT_STAYS_LINE, WOKEN_LINE, KNEELER_LINE, WAKE, KNEELER_SANITY, DOWN_BEAT } from './downed.js'
 import { depthOf, loadFile, saveFile, statusMods, canFile, canRefile, wishPrompt } from './status.js'
 import { closingOverlay, closingLines, isWishOpen, CLOSED_OFFICE } from './closings.js'
@@ -320,14 +320,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const stillness = createStillness({ now: () => playT })
   const stillNote = { moving: false, flashlight: true, radioOn: false, t: 0 }
   let wasHidden = false, huntsMovementSaid = false
-  let standHeld = 0   // TODO(integrate:W3) I13: the stand tick writes it (closings.js standTick); the whistle resets it too (buildLevel and the ward do already) — the hunts line keeps quiet while it runs
+  let standHeld = 0   // TODO(integrate:W3) I13: the stand tick writes it (closings.js standTick); buildLevel, the ward and the whistle reset it already — the hunts line keeps quiet while it runs
   // ── company (rollcall.js): the pool a fresh friend within 6 steadies you out of — it drains while you stand together and stops helping
   //    when it is empty, then refills while you are apart; sanityStep says how it moves each frame. The two files' disagreement is said once ──
   const company = createCompany()
   let disagreeSaid = false
   // the roll call (rollcall.js): who has answered a whistle lately, on its own ms clock (performance.now(), never playT). The radio's last
-  // group counts them ('those were yours — three of you.'); alone it reads one, today's line
-  const rollcall = createRollCall({ now: () => performance.now() })   // TODO(integrate:W5) I10: the whistle hears into it, the net block ticks it, a chat line touches it
+  // group counts them ('those were yours — three of you.'); alone it reads one, today's line. A friend's whistle hears into it, a chat line
+  // or a friend beside you touches it, and the loop asks it who has gone quiet
+  const rollcall = createRollCall({ now: () => performance.now() })
+  let lastWhistleAt = -Infinity   // your own last whistle (the same ms clock): one per WHISTLE_COOLDOWN_MS, a second inside it is swallowed
   // ── down, not dead (downed.js): with a friend fresh on your floor a fatal hit lays you down instead (compose-gates.js deathDecision) —
   //    25 s in the dark for one of them to kneel beside you, light on, and count you back; nobody comes and it is a death. The kneel is
   //    the other side of it: yours, beside a friend who is down. Both on performance.now() ms like the roll call (a kneel arrives from the
@@ -1287,6 +1289,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // check on what I send, which names someone else. So I send ONE reused payload each, let through by identity; every frame received
   // (never this object) is checked exactly as evKinds says
   const kneelOut = { to: '' }, wokeOut = { by: '' }
+  const callOut = { x: 0, y: 0, lvl: 0, c: true }   // your whistle on the wire: one reused payload (sendEv serialises it at once)
   const bus = mpClient ? createEvBus({
     send: mpClient.sendEv, now: () => performance.now(),
     self: () => { selfPos.x = player.x; selfPos.y = player.y; selfPos.lvl = level ? level.index : 0; return selfPos },
@@ -1300,9 +1303,19 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     bus.onRoomChange(() => { if (level) { level.amb = ambientMods(level.st, bus.roomStanding()); retension() } })
     // the kinds, registered in this one place (the bus believes nothing it was not told about); each item's handlers land in its own step
     const kinds = evKinds(() => mpClient.id)
-    // TODO(integrate:W5) I10: bus.register('whistle', kinds.whistle) — lvl int 0..4 && finite x/y && c <= 32, minGapMs 8000, posKeys ['x','y']
+    bus.register('whistle', kinds.whistle)   // lvl 0..4, a spot within 2 of where the list has them, one per 8 s each
     bus.register('kneel', { ...kinds.kneel, check: (p) => (p === kneelOut && typeof p.to === 'string') || kinds.kneel.check(p) })   // to me, within 2, one per 350 ms
     bus.register('woke', { ...kinds.woke, check: (p) => (p === wokeOut && typeof p.by === 'string') || kinds.woke.check(p) })       // names me, within 3
+    // a friend whistles on this floor: their pitch, from where they stand (panned, fainter with distance, half under your radio), a people
+    // line with the bearing — never #msg — and they are on the roll call. A whistle from far off steadies you once a minute per friend
+    bus.on('whistle', ({ id, name, payload: p }) => {
+      if (!level || p.lvl !== level.index) return
+      const dx = p.x - player.x, dy = p.y - player.y, dist = Math.hypot(dx, dy), now = performance.now()
+      whistle(whistlePitch(id, name), whistlePan(dx, dy, player.angle), whistleGain(dist, radioWasOn))
+      addChatLine(name || 'someone', `whistles · ${bearingLabel(dx, dy, player.angle)}`, true)
+      rollcall.hear(id, name, p.x, p.y, now)
+      if (dist > FAR_BONUS.cells && rollcall.farBonusOk(id, now)) { sanity = Math.min(100, sanity + FAR_BONUS.sanity); company.add(FAR_BONUS.company) }
+    })
     // a friend kneels by you while you are down: their eighth tick (not before 4 s) counts you back — where you fell, never through die()
     bus.on('kneel', ({ id }) => { if (down.st === 'down' && down.kneelTick(id) === 'woken') wakeUp(id) })
     // the one you knelt by came back (their 'woke' lands after their 'here' already said 'ok': the kneel remembers whom, 2 s)
