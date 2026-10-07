@@ -6,6 +6,10 @@
 // every frame, so nothing below the renderer allocates per frame. The 600 frames are walked twice back to back (the second run is the
 // warmed, steady state the game lives in); the better run carries the budget, both carry the identities — a machine busy with the rest of
 // the suite must not fail a frame that is fast.
+// The file's per-frame seams ride the same frame (the factions wave): the stillness clocks noted after the step, perceptionFor's four
+// numbers copied onto the ONE fifteen-key aiCtx before the things read it, the one sanity step after them and the stand's tick last —
+// for a filed player (anchored, thin over it, filed under extension), so the rule blocks run their real code, not LEGACY's constants.
+// Each composer hands back its one reused record every frame, and the aiCtx never gains a key.
 import { describe, it, expect } from 'vitest'
 import { DEFAULT_CONFIG, CHUNK_SIZE, createChunkCache, createGridReader } from '../src/renderer/world.js'
 import { levelConfig } from '../src/renderer/levels.js'
@@ -22,6 +26,13 @@ import { visibleWays, PROX_PIN } from '../src/renderer/sightpins.js'
 import { compassLines, compassText } from '../src/renderer/compass.js'
 import { quiet } from '../src/renderer/tactics.js'
 import { HF } from '../src/renderer/gfx-frame.js'
+import { perceptionFor, AI_CTX_KEYS } from '../src/renderer/compose-perception.js'
+import { createStillness } from '../src/renderer/stillness.js'
+import { sanityStep } from '../src/renderer/compose-sanity.js'
+import { createCompany } from '../src/renderer/rollcall.js'
+import { rulesFor } from '../src/renderer/origin-rules.js'
+import { statusMods, depthOf } from '../src/renderer/status.js'
+import { closingOverlay, standConditions, standTick } from '../src/renderer/closings.js'
 
 const FRAMES = 600, DT = 1 / 60, CREATURES = 20, BUDGET_MS = 150
 const SPEED = 0.05                      // game.js: const SPEED = 0.05; sp = SPEED * dt * 60 * mult
@@ -62,7 +73,21 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
   const nearestWayFn = (x, y) => decor.nearestWay(x, y, 2)
   const compassState = { player, known: null, fallback: null, arrived: null, stale: (p) => fog.isStale(1, p.chunkKey, epochOf) }
   const compassOut = [], seenWays = [], seenSights = [], entEvents = []
-  const aiCtx = { flashlight: true, sprinting: false, dark: !cfg.lights, fog: cfg.fogDistance, radioOn: false, lures: [], t: 0, hf: HF, playerAngle: 0, player, damage: cfg.entities?.damage ?? 16 }
+  // game.js's aiCtx: the eleven the things always read, then the file's four trailing at their defaults (perceptionFor writes them per frame)
+  const aiCtx = { flashlight: true, sprinting: false, dark: !cfg.lights, fog: cfg.fogDistance, radioOn: false, lures: [], t: 0, hf: HF, playerAngle: 0, player, damage: cfg.entities?.damage ?? 16, sightMul: 1, hidden: false, loseTrackMul: 1, noiseMul: 1 }
+  // the file, as game.js holds it: the rules (anchored, thin over it), the status's mods and the closing's overlay, the stillness clocks on
+  // the play clock, the company pool, and the three reused records the loop refills (perCtx / sanCtx / standCtx, solo: no remotes, no bus)
+  const rules = rulesFor('anchored', true), mods = statusMods('extension'), co = closingOverlay(null)
+  const stillness = createStillness({ now: () => clock.playT })
+  const stillNote = { moving: false, flashlight: true, radioOn: false, t: 0 }
+  const company = createCompany()
+  const perCtx = { rules, depth: depthOf(1), stillFor: 0, noiseFor: 0, flashlight: true, radioOn: false, litNear: false }
+  const selfFile = { status: 'extension', aseed: null, origin: 'anchored', thin: true }
+  const remoteOnFloor = []
+  const sanCtx = { rules, mods, closingOverlay: co, flashlight: true, litNear: false, index: 1, depth: depthOf(1), hunted: false, gaze: false, gazeRate: 0, origin: 'anchored',
+    drift: 0, leashDebt: 0, leashCalm: 0, down: false, company: 0, companyWas: 0, disagreeSaid: false, dt: 0,
+    player, self: selfFile, remotes: remoteOnFloor, fresh: null, onFloor: null }
+  const standCtx = { status: 'extension', closing: null, depth: depthOf(1), standFloor: 3, flashlight: true, ledgerHeard: true, moving: false, nearD: Infinity, sanity: 100, transitioning: false }
   // the hunters: a mix of the floor's own kinds, 5..10 u out, never inside a body or a wall; the first update() lets them in (the
   // pending twenty fill MAX_ENTITIES, so the floor spawns nothing of its own on top)
   const kinds = [...cfg.entities.stalkerVariants, ...cfg.entities.wandererVariants]
@@ -70,7 +95,8 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
   const placed = entitySys.inject(followers, player.x, player.y, 5, 10, 0, (x, y) => solid.forEntities.blocked(x, y, 0.2))
 
   // the walker's state across runs: the play clock, the cell / compass memos, the last hit, the identities seen so far
-  const S = { playT: 0, lureT: 0, stepT: 0, hits: -Infinity, frame: 0, lastCellIx: NaN, lastCellIy: NaN, lastCompassAngle: -Infinity, lastWayCount: -1, lastCompassText: '', pcx: NaN, pcy: NaN, threat: null, report: null, sameThreat: true, sameReport: true, maxEntities: 0, crossings: 0 }
+  const S = { playT: 0, lureT: 0, stepT: 0, hits: -Infinity, frame: 0, lastCellIx: NaN, lastCellIy: NaN, lastCompassAngle: -Infinity, lastWayCount: -1, lastCompassText: '', pcx: NaN, pcy: NaN, threat: null, report: null, sameThreat: true, sameReport: true, maxEntities: 0, crossings: 0,
+    sanity: 100, standHeld: 0, pf: null, san: null, stand: null, samePf: true, sameSan: true, sameStand: true, hiddenFrames: 0 }
 
   // ONE frame of game.js's loop below the renderer, in its order
   function frame(dt) {
@@ -94,6 +120,9 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
     if (movedD < sp * 0.25) player.angle += 1.9 + (f % 7) * 0.1
     else if (f % 150 === 149) player.angle += 0.7
     const moved = movedD > 1e-6
+    // the stillness clocks: one reused report, right after the step (game.js: stillness.note(stillNote))
+    stillNote.moving = moved; stillNote.flashlight = aiCtx.flashlight; stillNote.radioOn = false; stillNote.t = S.playT
+    stillness.note(stillNote)
     // ── stream world + subsystems around the player ──
     cache.preload(pcx, pcy)
     itemSys.update(pcx, pcy)
@@ -129,6 +158,13 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
     }
     // ── the things: what they know this frame, the footsteps they hear, one update, the event drain ──
     aiCtx.sprinting = false; aiCtx.t = S.playT; aiCtx.playerAngle = player.angle
+    // the file's reading of you: perceptionFor over the rules, the four numbers copied onto aiCtx (never the object), before the update
+    perCtx.depth = 1; perCtx.stillFor = stillness.stillFor(S.playT); perCtx.noiseFor = stillness.noiseFor(S.playT)
+    perCtx.flashlight = aiCtx.flashlight; perCtx.radioOn = aiCtx.radioOn; perCtx.litNear = false
+    const pf = perceptionFor(perCtx)
+    if (S.pf === null) S.pf = pf; else if (pf !== S.pf) S.samePf = false
+    aiCtx.sightMul = pf.sightMul; aiCtx.hidden = pf.hidden; aiCtx.loseTrackMul = pf.loseTrackMul; aiCtx.noiseMul = pf.noiseMul
+    if (pf.hidden) S.hiddenFrames++
     S.stepT += moved ? dt : 0
     if (S.stepT >= 0.45) { S.stepT = 0; entitySys.noise(player.x, player.y, 3 * quiet(0)) }
     const th = entitySys.update(dt, player, pcx, pcy, aiCtx)
@@ -142,6 +178,18 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
     if (h) haunts.fire(h.key)
     // ── HP: contact damage with the game's i-frames; the walker never dies (the floor stays level 1) ──
     if (th.dmg > 0) { S.hits = S.playT; player.hp = Math.max(1, player.hp - th.dmg) }
+    // ── the one sanity step (the reused sanCtx refilled where game.js refills it), the clamp, the pool; then the stand's tick ──
+    sanCtx.flashlight = aiCtx.flashlight; sanCtx.litNear = false; sanCtx.hunted = th.hunted; sanCtx.gaze = th.gaze; sanCtx.gazeRate = th.gazeRate
+    sanCtx.drift = 0; sanCtx.leashCalm = 0; sanCtx.down = false
+    sanCtx.company = sanCtx.companyWas = company.value; sanCtx.dt = dt
+    const s = sanityStep(sanCtx)
+    if (S.san === null) S.san = s; else if (s !== S.san) S.sameSan = false
+    S.sanity = Math.max(0, Math.min(100, S.sanity + s.delta * dt))
+    company.add(s.companyDelta)
+    standCtx.flashlight = aiCtx.flashlight; standCtx.moving = moved; standCtx.nearD = th.nearest; standCtx.sanity = S.sanity
+    const sd = standTick(S.standHeld, dt, standConditions(standCtx))
+    if (S.stand === null) S.stand = sd; else if (sd !== S.stand) S.sameStand = false
+    S.standHeld = sd.held
   }
 
   function run(frames) {
@@ -151,6 +199,9 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
   }
 
   it('is a real level: walls, settled bodies, a way, and twenty creatures placed beside the player', () => {
+    expect(Object.keys(aiCtx)).toEqual([...AI_CTX_KEYS])                 // game.js's one aiCtx: fifteen keys, the file's four trailing
+    expect(rules.id).toBe('anchored+thin')                                // a filed player (LEGACY's id is null): the blocks run their own code
+    expect(rules.leash).toBeTruthy()                                      // the pin's leash term is in the step
     expect(cfg.entities.enabled).toBe(true)
     expect(bodies.size).toBeGreaterThan(0)
     expect(decor.getProps().length).toBeGreaterThan(0)
@@ -159,7 +210,7 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
     expect(placed).toBe(CREATURES)
   })
 
-  it(`steps the whole frame ${FRAMES} times in under ${BUDGET_MS} ms, with the same threat and the same report every frame`, () => {
+  it(`steps the whole frame ${FRAMES} times in under ${BUDGET_MS} ms, with the same threat, report, perception, sanity and stand records every frame`, () => {
     const ms1 = run(FRAMES)
     const ms2 = run(FRAMES)
     const best = Math.min(ms1, ms2)
@@ -167,6 +218,13 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
     expect(S.frame).toBe(2 * FRAMES)
     expect(S.sameThreat, 'update() returns the one threat record every frame').toBe(true)
     expect(S.sameReport, 'movePlayer returns the one report every frame').toBe(true)
+    expect(S.samePf, 'perceptionFor returns the one record every frame').toBe(true)
+    expect(S.sameSan, 'sanityStep returns the one record every frame').toBe(true)
+    expect(S.sameStand, 'standTick returns the one record every frame').toBe(true)
+    expect(Object.keys(aiCtx), 'the hot path never adds a key to the aiCtx').toEqual([...AI_CTX_KEYS])
+    for (const k of ['sightMul', 'loseTrackMul', 'noiseMul']) expect(Number.isFinite(aiCtx[k]), k).toBe(true)
+    expect(typeof aiCtx.hidden).toBe('boolean')
+    expect(S.sanity).toBeGreaterThanOrEqual(0); expect(S.sanity).toBeLessThanOrEqual(100)
     expect(S.maxEntities).toBe(CREATURES)
     expect(entitySys.getEntities().length).toBeGreaterThan(0)
     expect(best, `${FRAMES} frames took ${ms1.toFixed(1)} / ${ms2.toFixed(1)} ms`).toBeLessThan(BUDGET_MS)

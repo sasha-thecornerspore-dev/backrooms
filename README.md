@@ -51,6 +51,20 @@ download the latest installer from [releases](../../releases/latest) and run it.
 
 ---
 
+## how it begins
+
+you open your eyes outside. it is a real place — an inner-block park in west baltimore, under a flat grey sky, ringed by the backs of rowhouses whose doors have been sealed with concrete block. on a counter lies a form. your name is already on it, or a blank is where your name should be. you never filled it in.
+
+there is one way out: a gap the paperwork left. take it and you fall into the lobby — yellow wallpaper, wet carpet, the hum. nothing hunts you there. below it, things do.
+
+the first time you take a way down, an office somewhere above the drop ceiling writes you into a column, by how you came in. it never asks. and the backrooms reads what it wrote: how far the things can see you, what the water does to you, what a photograph develops, which sealed doors will talk.
+
+after that it is the descent — four floors stacked in one building, a way down on each — and whatever you decide to be filed under. online, you and your friends start together in the lobby, and the file is written on all of you.
+
+what follows is what is known. the rest is in the pages m. left lying around.
+
+---
+
 ## anchors — no-clip from a real place
 
 on the start screen you can paste a **google maps link** (or bare `lat,lng`) into the anchor field. you will fall through *that* place. the same place always produces the same maze — for everyone. the hud tracks how far you've drifted from your body, and settings ⚙ has **locate your body**, which opens google maps at the spot where you fell through.
@@ -63,15 +77,23 @@ hosting with an anchor carries the whole room down with you — the first player
 
 ## items
 
-the backrooms restocks itself. things are left lying around; walk close and press **f**.
+the backrooms restocks itself. things are left lying around, and the vending machines give one thing each; walk close and press **f**. a cabinet, a crate or a drum can be searched too — press **f** beside it and hold still a moment, and the drawer gives up what it holds.
 
 | item | use (q) |
 |------|---------|
-| almond water | restores your legs, and the lights hold steady for a while |
-| glowstick | pushes the fog back. temporarily. |
-| bandage | patches you up — restores hit points. carry a few before you go deep. |
-| polaroid camera | captures evidence — saved to `Pictures/backrooms/`. point it at a friend and the film develops what the file wrote on them, and they will know |
-| radio | plays a tune that is almost right. presences can be found from much farther away. other things also hear it. |
+| almond water | restores your legs and your mind; the lights hold steady and your steps go soft for a while. below the habitable zone some of it is sour, and sour water takes instead of gives |
+| glowstick | pushes the fog back. temporarily — less the deeper you go. set one down and it is a breadcrumb until it gutters out |
+| bandage | patches you up — restores hit points. where things hunt, wrapping it takes a slow moment, and a hit makes it slip. carry a few before you go deep. |
+| polaroid camera | captures evidence — saved to `Pictures/backrooms/`. the flash makes the things reel, and the caption develops what the frame holds. point it at a friend and the film develops what the file wrote on them, and they will know |
+| radio | plays a tune that is almost right. presences can be found from much farther away. other things also hear it — set it down still talking and they go to it instead of you. in the deep stacks it reads a list aloud, one group of numbers at a time |
+
+on the deepest floors the machines sometimes give stranger things. these you keep — you cannot put them down, and they are not lost when something has you:
+
+| find | what it is |
+|------|---------|
+| survey plumb | a tool, never used up. it reads the grain of the floor — slack near the top, tight and old below |
+| ballast | set both feet and mean it: your legs and the lights come back. if not all of you arrived, the rest of you does |
+| extension slip | *30150A.* a line the system never closed. what it says depends on what the file has written on you |
 
 six slots. `1–6` selects, `q` uses, `x` sets it down. some things are worth carrying, some are worth using where you found them, some are worth leaving behind.
 
@@ -130,17 +152,26 @@ the lost souls know which word you are under, and so does the room — *entered 
 
 ---
 
+## your instruments
+
+top-left, under the level's name, two gauges. **hp** is your body: the things in the fog take it, and bandages and time bring it back. **san** is your mind: the dark eats at it, so does being hunted, so does a thing you cannot stop looking at — and light, sweet water, a page you have not read and a friend standing close give it back. let it run low and the edges of the screen stain, the whispers come closer together, and the floor finds more ways to frighten you. a thin bar at the bottom left is your legs; running and warding spend them.
+
+under the gauges sits the compass: an arrow to the nearest way on that you have *seen*, and how far — or, when you have seen none, *something pulls, faintly*. a second line points back the way you came. above the item dock, a prompt says what **f** or **e** will do where you stand. the lines that fade in mid-screen are the building talking; your people talk in the chat at the lower left.
+
+---
+
 ## controls
 
 | key | action |
 |-----|--------|
 | wasd | move / strafe |
 | shift | run (watch your legs) |
-| arrow keys | turn (when mouse unlocked) |
+| arrow keys | ↑ ↓ walk · ← → turn (when the mouse is unlocked) |
 | click | lock mouse for look |
 | space (hold to charge) | **ward** — tap to shove the things back; hold it and your steps slow while the air tightens, then a narrower, longer push throws them farther (costs your legs) |
-| f | take an item · take a way — no-clip through an exit, climb a stairwell, step into the lift |
+| f | take an item · draw from a machine · take a way — no-clip through an exit, climb a stairwell, step into the lift |
 | f · search a cabinet | by a cabinet, crate, box, drum or panel: hold still for a moment and the drawer gives up what it holds — a step away leaves it; not while something is close |
+| f · kneel | online, by a friend who is down: face them and press f to stay with them — your light on, holding still — and count them back. f again, a step, space or esc gets up |
 | tab | the map (hold your pace) |
 | q | use selected item |
 | x · set down | set the selected item down where you stand, with one of m.'s phrases and an arrow for whoever finds it — a talking radio keeps talking where it lies |
@@ -154,6 +185,8 @@ the lost souls know which word you are under, and so does the room — *entered 
 | n | next track — cycle the ambient beds, or back to the floor's own song |
 | esc | unlock mouse / close dialog |
 
+**on a phone or tablet** the left thumb has a stick (push it forward to the rim to run) and a drag anywhere else looks around. the buttons on the right are **ACT** (f), **USE** (q), **WARD** (space — hold it to charge), **SPEAK** (e), **LIGHT** (l) and **CALL** (c). tap a slot to select it, **✕** to set it down, and the paper corner marked *map* for the map. a few keys have no button yet: the beacon (**b**), the chat and the field console (**enter**) and the music (**m**, **n**) need a keyboard.
+
 your **hit points** sit under the level name, top-left. level 0 is safe; below it, the things in the fog will take them from you. bandages and time bring them back.
 
 you are not defenceless. face a thing that hunts you and press **space** — a **ward**, a shove of will and light that throws it back and leaves it reeling, unable to reach you while it recovers. keep at it and the presence comes apart entirely. warding spends your stamina, so you cannot lean on it forever — pick your moment.
@@ -162,20 +195,27 @@ you are not defenceless. face a thing that hunts you and press **space** — a *
 
 ## settings
 
-hit the gear ⚙ (top-right) for the control panel. everything added is optional and modular, and your choices persist between runs:
+hit the gear ⚙ (top-right) for the control panel — on the title screen or mid-run; esc, **CLOSE** or a click outside it puts it away. everything is optional, and your choices persist between runs:
 
 | toggle | what it does |
 |--------|--------------|
+| auto-update | desktop: new versions install themselves; off, you get a quiet "restart now" prompt instead |
+| software rendering | desktop: fixes freezing on some GPUs (restart to apply) |
 | music | the generative bed on/off, plus a volume slider |
-| ambience | the fluorescent hum, drone, and distant events |
-| film grain / crosshair / head-bob | visual feel |
-| mouse sensitivity | look speed |
+| ambience | the fluorescent hum, drone, and distant events, plus a volume slider |
+| film grain / particles / crosshair / head-bob | visual feel — the particles are the dust, the steam and the sparks |
+| mouse sensitivity | look speed (the touch drag follows it too) |
 | creatures | turn every entity off for pure liminal exploration |
 | solid furniture | walk around things — the chairs, crates, cabinets and machines have bodies, and so do the things in the fog; off, you pass through them as before |
 | can take damage | off for a peaceful, no-stakes wander |
+| graphics quality | **auto** adapts to your device; or pick low, medium or high — **classic shading** is the plainest, fastest light |
+| reduce flicker | softer light dips, a gentler camera flash and less screen shake |
+| frame-rate limit | none, 60 or 30 fps — saves battery and heat |
+| sharp on high-DPI screens | a crisper picture on a dense display; uses more power (not with classic shading) |
+| beacon effect / target | what **b** fires: off, an ntfy.sh topic, a discord webhook or your own https url |
 | your file | what the office has on you, once a run is under way — the word you are under, how the file has you, how far your closing has come — and **request a new notice** |
 
-auto-update and software rendering live in the same panel, and so does **locate your body** for an anchored run (with the leash, when the file has you at a pin).
+for an anchored run the panel also shows **locate your body**, which opens google maps at the spot where you fell through (with the leash, when the file has you at a pin).
 
 ---
 
@@ -186,6 +226,9 @@ type your **name**, hit **PLAY ONLINE**, pick a **room code**, and share it. any
 - **PLAY ONLINE** — the public relay + a room code (the easy way).
 - **JOIN LAN / HOST LAN** — the old direct-connection path (`ws://host:port` + room code) for same-network play; the standalone server ships as `backrooms-server.js` on each release (`node backrooms-server.js`, default port 8765).
 - the first person into a room fixes its world; everyone else inherits it.
+- online, everyone starts in the lobby together, and the file writes each of you in on your first way down. drop into a room someone already walks and *not all of you arrived* — see **thin**, above.
+
+down there you can do a few things for each other — call out, leave a word, light the way, push the dark back, photograph, count each other back. **update together:** these pass only between copies of this release; an older copy still walks beside you, drawn as a plain figure, but it hears none of them. on **PLAY ONLINE** they ride one new kind of message the public relay has to carry, so a room on a relay that has not been updated plays as it always did — walking, chat and nameplates, nothing more. **HOST LAN** from this release carries them from the start.
 
 **the whistle (c).** call out, and everyone on your floor hears two notes at a pitch that is only yours — panned to where you stand, fainter the farther you are, with a line in their chat that says *near* or *far* and which way. the hall counts who has answered lately and tells you, in words: *two of you, counting yourself.* a friend who goes a minute and a half without a whistle, a word, or standing near you has gone quiet, and you will feel it. alone, the hall keeps the sound. sometimes it does not, and the pitch that answers is wrong. the things hear every call — a whistle carries further than a ward. on a phone it is the **CALL** button.
 
@@ -199,7 +242,7 @@ type your **name**, hit **PLAY ONLINE**, pick a **room code**, and share it. any
 
 ## save & continue
 
-solo runs auto-save — your level, position, hit points and whole inventory, what every floor remembers of you, and the sheets of your map — every few seconds, on every descent, and when you quit. **CONTINUE** on the title screen drops you back exactly where you left off.
+solo runs auto-save — your level, position, hit points and whole inventory, what every floor remembers of you, the words you left with things, who the file has you as, and the sheets of your map — every few seconds, on every descent, and when you quit. **CONTINUE** on the title screen drops you back exactly where you left off. the status you are filed under is not in the save at all: it is the office's, and it follows you into every run and every room. online runs are not saved; the room keeps its world, and you fall back into it.
 
 ---
 
@@ -239,6 +282,12 @@ npm start        # run in dev
 npm test         # run unit tests
 npm run dist     # build installer (requires CSC_LINK, CSC_KEY_PASSWORD env vars)
 ```
+
+---
+
+## the relay (maintainer notes)
+
+every co-op verb (the whistle, a cache and its taking, the kneel, a friend's ward, a photograph, the `here` heartbeat) rides one relayed message type, `ev`. a release that adds or changes one needs the relay redeployed with it (`cd relay && npx wrangler deploy`), or PLAY ONLINE rooms will not carry it. decide the keep/drop log on purpose: the relay keeps the last caches a room set down for whoever joins later — in the room's memory, so a room that sleeps forgets them — unless its `EV_LOG` var is `'0'`; the standalone node server (`node backrooms-server.js`) keeps them only with `--evlog` or `EV_LOG=1`, and HOST LAN only when the app was started with `EV_LOG=1`.
 
 ---
 

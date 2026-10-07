@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# usage: PLAY_SW_VERSION=14 bash tools/build-play.sh src <gh-pages>/play   (bump the version on every rebuild so clients refetch)
+# usage: PLAY_SW_VERSION=21 bash tools/build-play.sh src <gh-pages>/play   (bump the version on every rebuild so clients refetch)
 # Build a self-contained, path-independent PWA bundle of the game into $DEST.
 # Flattens the ../net/ imports (client.js from index.html, evbus.js from game.js) so everything lives in one
 # directory, giving clean relative paths that work at any mount point (/, /play/, etc).
 set -euo pipefail
-PLAY_SW_VERSION="${PLAY_SW_VERSION:-19}"
+PLAY_SW_VERSION="${PLAY_SW_VERSION:-21}"
 SRC="${1:?src dir}"      # .../backrooms/src
 DEST="${2:?dest dir}"    # .../play
 

@@ -3,6 +3,8 @@
 // origins-*.test.js (W2), evbus / papercard (W1 / W9), and the later items' own tests. Each step adds its describe here; I15 closes it.
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { intake, filingLine, identityOut, identityIn, normaliseIntakeCtx } from '../src/renderer/origin-intake.js'
 import { rulesFor, LEGACY } from '../src/renderer/origin-rules.js'
 import { TENANT_EVENTS, SEALED_CELLS, facingCell, isSealedMaterial, doorLine } from '../src/renderer/origin-tenant.js'
@@ -1856,5 +1858,150 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
     for (const s of ['<h2>The file has you now</h2>', '<h3 style="font-size:15px">The stand</h3>', '<span class="mono">/status</span>', '<h3>Compliance</h3>']) expect(manual, s).toContain(s)
     expect(manual.indexOf('<section id="file">')).toBeLessThan(manual.indexOf('<section id="coop">'))
     for (const doc of [sec, manual.slice(manual.indexOf('<section id="file">'), manual.indexOf('<section id="coop">'))]) expect(doc).not.toContain('!')
+  })
+})
+
+// I15 closes the wave: every rule the steps above wired, pinned once more in one place against the final game.js (each step's own describe
+// keeps the detail and the replays); nothing left marked for a later step anywhere in src/; both offline shells carry every module and the
+// caches' names moved with them; the README tells a newcomer every control, every setting and what online play needs.
+describe('I15: the factions wave, closed', () => {
+  const srcDir = fileURLToPath(new URL('../src/', import.meta.url))
+  const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => d.isDirectory() ? walk(path.join(dir, d.name)) : [path.join(dir, d.name)])
+  const readme = read('../README.md'), manual = read('../docs/manual.html')
+  const verbs = slice("if (K['KeyF'] && (kneel.st || dnFront))", '// Space — the ward — is the charger block')
+
+  it('no TODO(integrate:…) is left anywhere under src/', () => {
+    const left = walk(srcDir).filter((f) => /\.(js|cjs|mjs|html)$/.test(f)).filter((f) => fs.readFileSync(f, 'utf8').includes('TODO(integrate:'))
+    expect(left).toEqual([])
+  })
+
+  it('one aiCtx with the fifteen keys, the file\'s four trailing; one scheduler on evConfig; one writer each of the file and the tension', () => {
+    const lit = /const aiCtx = \{([^\n]*)\}\r?\n/.exec(game)
+    expect(lit).not.toBe(null)
+    expect(lit[1].split(',').map((s) => s.split(':')[0].trim())).toEqual([...AI_CTX_KEYS])
+    expect(count(/const aiCtx = /g)).toBe(1)
+    expect(count(/createEventScheduler\(/g)).toBe(1)
+    expect(game).toContain('createEventScheduler({ config: evConfig })')
+    expect(count(/saveFile\(/g)).toBe(1)
+    expect(slice('function applyFile(f) {', '\n')).toContain('saveFile(file)')
+    expect(count(/evConfig\.tension = /g)).toBe(1)
+    expect(slice('function retension() {', '\n')).toContain('evConfig.tension = ')
+  })
+
+  it('each composer is called exactly once, the death decision twice with its one signature; the clocks stay their own', () => {
+    for (const re of [/perceptionFor\(/g, /sanityStep\(/g, /polaroidCaption\(/g, /radioLine\(/g, /wishRoute\(/g, /finaleGate\(/g, /beaconDecision\(/g]) expect(count(re), String(re)).toBe(1)
+    expect(count(/deathDecision\(/g)).toBe(2)
+    expect(count(/deathDecision\(\{ mp: !!mpClient, peers: [^,]+, downSt: down\.st, rules, filed, thin, D: driftD\(\), timeout: (true|false) \}\)/g)).toBe(2)
+    for (const re of [/down\.goDown\(playT/, /down\.tick\(playT/, /playT \* 1000/]) expect(game).not.toMatch(re)
+    expect(count(/const driftD = /g)).toBe(1)
+    expect(count(/driftMeters\(/g)).toBe(1)
+    expect(slice('const driftD = ', '\n')).toContain('driftMeters(')
+    expect(count(/rollCall\(level\.st\)/g)).toBe(1)
+    expect(slice('function readRadio(on) {', '// The counter-claim: fires ONCE')).toContain('rollCall(level.st)')
+  })
+
+  it('the order the steps fixed: the card before Enter; the filing in travel(); placement, the closing, then the ways; the caches after the items', () => {
+    const cardBranch = at('for (let i = 0; i < CARD_KEYS.length; i++)', loopAt)
+    expect(cardBranch).toBeLessThan(at('// Enter opens chat when connected to others', loopAt))
+    expect(travelBody.indexOf('buildLevel(way.target, fromC)')).toBeLessThan(travelBody.indexOf('if (!filed) {'))
+    expect(travelBody).toContain('later(7600, filingLine(origin, thin), PRIO.discovery)')
+    const p = buildBody.indexOf('applyPlacement(cfg, placementMods(st))'), c = buildBody.indexOf('closingOverlay(file.closing).scrapsDenom === 0'), w = buildBody.indexOf('cfg.ways    = waysFor(index)')
+    expect(p).toBeGreaterThan(0); expect(p).toBeLessThan(c); expect(c).toBeLessThan(w)
+    const e = buildBody.indexOf('itemSys.enterLevel('), q = buildBody.indexOf('for (const c of ledger.pendingFor(index))'), v = buildBody.indexOf('vendedSet = mem.vendedFor(')
+    expect(e).toBeGreaterThan(0); expect(e).toBeLessThan(q); expect(q).toBeLessThan(v)
+  })
+
+  it('the F chain (a friend down first, then the item, the machine, the drawer, the way) and the E chain (presence, page or form, door, soul)', () => {
+    const order = (body, list) => { let k = -1; for (const s of list) { const n = body.indexOf(s); expect(n, s).toBeGreaterThan(k); k = n } }
+    order(verbs, ['startKneel(dnFront)', 'if (nearItem) {', 'else if (nearMachine && !vendedSet.has(nearMachine.key)) {', 'else if (boxFirst) {', 'else if (nearExit) {', 'travel(nearExit)'])
+    order(verbs, ["if (K['KeyE']) {", 'if (nearPresence) openDialog()', 'else if (nearScrap) nearScrap.form ? openForm()', 'else if (door) knockDoor(door)', 'else if (nearNpc) {'])
+  })
+
+  it('the save: the identity and the caches after the fog; the resume reads both ABOVE the clock', () => {
+    const snap = slice('function snapshot(full = false) {', 'let saveTimer = 0')
+    expect(snap.indexOf('s.fog = fogExport')).toBeLessThan(snap.indexOf('Object.assign(s, identityOut({ origin, thin, filed, intakeCtx, filedFloors }))'))
+    expect(snap.indexOf('Object.assign(s, identityOut(')).toBeLessThan(snap.indexOf('s.caches = ledger.snapshot()'))
+    const clock = resumeBody.indexOf('playT = Number(resume.playT) || 0')
+    expect(resumeBody.indexOf('identityIn(resume, intakeCtx)')).toBeLessThan(clock)
+    expect(resumeBody.indexOf('ledger.restore(resume.caches)')).toBeLessThan(clock)
+  })
+
+  it('the wake: a kneel and a photograph count you back through wakeUp, never die(); a death never says you wake where you fell in', () => {
+    expect(count(/(?<!function )wakeUp\(/g)).toBe(2)
+    const kneelOn = slice("bus.on('kneel', ", '\n'), photoOn = slice("bus.on('photo', ", '// what \'here\' says of you')
+    for (const h of [kneelOn, photoOn]) { expect(h).toMatch(/wakeUp\(/); expect(h).not.toMatch(/\bdie\(/) }
+    for (const doc of [game, readme, manual]) expect(doc).not.toContain('you wake where you fell in.')
+    expect(game).toContain("level.entitySys.noise(lures[i].x, lures[i].y, 8, 'lure')")
+  })
+
+  it('the console and the card: the ONE fallback string, the placeholder\'s tail, the sealed page read from cardScrap', () => {
+    expect(count(/the file does not recognise that\./g)).toBe(1)
+    expect(game).toContain("showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake or /status.')")
+    expect(html).toContain(' · /intake · /status)"')
+    expect(slice('function revealScrap() {', 'function redactScrap() {')).toMatch(/const scrap = cardScrap\r?\n[\s\S]*if \(!level\.cfg\.map\) fog\.pinThing\(level\.index, 'n:' \+ scrap\.key, 'note', scrap\.x, scrap\.y, true\)/)
+  })
+
+  it('both offline shells carry every module the wave added (the net one flattened for /play/), and both caches were renamed for it', () => {
+    const flat = [...ORIGIN_FILES, 'compose-perception.js', 'compose-sanity.js', 'compose-polaroid.js', 'compose-radio.js', 'compose-wish.js', 'compose-gates.js',
+      'status.js', 'closings.js', 'rollcall.js', 'stillness.js', 'downed.js', 'caches.js', 'lightshare.js', 'evidence.js', 'docket.js', 'papercard.js']
+    for (const f of flat) {
+      expect(game, f).toContain(`from './${f}'`)
+      expect(sw, f).toContain(`'/renderer/${f}'`)
+      expect(build, f).toContain(`'${f}'`)
+    }
+    expect(game).toContain("from '../net/evbus.js'")
+    expect(sw).toContain("'/net/evbus.js'")
+    expect(build).toContain("'evbus.js'")
+    expect(Number(/backrooms-pwa-v(\d+)/.exec(sw)[1])).toBeGreaterThanOrEqual(10)
+    expect(Number(/PLAY_SW_VERSION:-(\d+)/.exec(build)[1])).toBeGreaterThanOrEqual(21)
+  })
+
+  it('touch: six buttons, the sixth is CALL; the README names every one, and the keys a phone cannot press', () => {
+    expect(ACTIONS.map((a) => a.label)).toEqual(['ACT', 'USE', 'WARD', 'SPEAK', 'LIGHT', 'CALL'])
+    const touch = readme.slice(readme.indexOf('**on a phone or tablet**'), readme.indexOf('your **hit points** sit under'))
+    for (const a of ACTIONS) expect(touch, a.label).toContain(`**${a.label}**`)
+    for (const k of ['(**b**)', '(**enter**)', '(**m**, **n**)']) expect(touch, k).toContain(k)
+  })
+
+  it('README controls: a row for every key the hint row names, the whistle, the set-down word, the kneel', () => {
+    const controls = readme.slice(readme.indexOf('## controls'), readme.indexOf('## settings'))
+    for (const k of ['wasd', 'shift', 'space (hold to charge)', 'f', 'f · search a cabinet', 'f · kneel', 'tab', 'q', 'x · set down', 'c · whistle', 'l', '1–6', 'e', 'enter', 'b', 'm', 'n', 'esc'])
+      expect(controls, k).toMatch(new RegExp(`^\\| ${k.replace(/[()]/g, '\\$&')} \\| `, 'm'))
+    expect(html).toContain('<span>c whistle</span>')
+    expect(html).toContain('<span>x set down</span>')
+    expect(html).toContain('<span>mouse look</span> · <span>space ward</span> · <span>f take / no-clip</span>')   // the hint row teaches the ward too
+  })
+
+  it('README settings: every control in the settings panel has its row, and the file\'s', () => {
+    const panel = html.slice(html.indexOf('<div id="settings-modal"'), html.indexOf('<canvas id="attract"'))
+    const labels = [...panel.matchAll(/<label class="toggle-row">\s*<span>([^<]+?)\s*(?=<)/g)].map((m) => m[1].toLowerCase())
+    expect(labels.length).toBeGreaterThanOrEqual(20)
+    const settings = readme.slice(readme.indexOf('## settings'), readme.indexOf('## multiplayer')).toLowerCase()
+    for (const l of labels) {
+      const said = settings.includes(l) || (l.endsWith(' volume') && settings.includes(`| ${l.replace(' volume', '')} |`) && settings.includes('volume slider')) ||
+        (l === 'beacon target' && settings.includes('beacon effect / target'))
+      expect(said, l).toBe(true)
+    }
+    expect(settings).toContain('| your file |')
+    expect(settings).toContain('locate your body')
+  })
+
+  it('README online: update together, the relay that must carry the verbs, and the maintainers\' redeploy and log', () => {
+    const mp = readme.slice(readme.indexOf('## multiplayer'), readme.indexOf('## save & continue'))
+    expect(mp).toContain('**update together:**')
+    expect(mp).toContain('a room on a relay that has not been updated plays as it always did')
+    const relay = readme.slice(readme.indexOf('## the relay (maintainer notes)'))
+    for (const s of ['`ev`', 'npx wrangler deploy', '`EV_LOG`', '--evlog']) expect(relay, s).toContain(s)
+    for (const doc of [mp, readme.slice(readme.indexOf('## how it begins'), readme.indexOf('## anchors'))]) expect(doc).not.toContain('!')
+  })
+
+  it('the field manual: the map, the next track, the search and the kneel, the touch buttons, the block, the compass that points at what you have seen', () => {
+    const controls = manual.slice(manual.indexOf('<section id="controls">'), manual.indexOf('<section id="hud">'))
+    for (const s of ['<kbd>Tab</kbd>', '<kbd>N</kbd>', '<b>search</b>', '<b>kneel</b>', '<b>CALL</b> (C)']) expect(controls, s).toContain(s)
+    expect(manual).toContain('LEVEL ∅ · THE BLOCK')
+    expect(manual).not.toContain('always points to the nearest exit')
+    expect(manual).not.toContain('Where everyone begins.')
+    expect(manual).not.toContain('✕ discard')
+    expect(manual).toContain('<b>Update together.</b>')
   })
 })
