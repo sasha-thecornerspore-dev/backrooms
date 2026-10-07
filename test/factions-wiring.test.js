@@ -14,6 +14,10 @@ import { createFixedMap } from '../src/renderer/fixedmap.js'
 import { writeSave, readSave } from '../src/renderer/save.js'
 import { perceptionFor, AI_CTX_KEYS, AI_CTX_DEFAULTS } from '../src/renderer/compose-perception.js'
 import { createStillness, HUNTS_MOVEMENT_LINE } from '../src/renderer/stillness.js'
+import { sanityStep, EXHAUSTED_LINE, DISAGREE_LINE } from '../src/renderer/compose-sanity.js'
+import { createCompany } from '../src/renderer/rollcall.js'
+import { statusMods, depthOf } from '../src/renderer/status.js'
+import { closingOverlay } from '../src/renderer/closings.js'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const game = read('../src/renderer/game.js')
@@ -357,5 +361,102 @@ describe('I6: the file\'s reading of you, as the things perceive it (compose-per
       said.length = 0; clock.note({ moving: true, t: 30 }); step(33)
       expect(aiCtx.hidden).toBe(true); expect(said).toEqual([])
     }
+  })
+})
+
+describe('I7: the one sanity step (compose-sanity.js)', () => {
+  const loop = game.slice(loopAt)
+  const block = slice('sanCtx.rules = rules;', 'updateSanity()')
+  it('imports the step, the company pool, the status mods and the closing overlay by their real names', () => {
+    expect(game).toMatch(/import \{ sanityStep, EXHAUSTED_LINE, DISAGREE_LINE \} from '\.\/compose-sanity\.js'/)
+    expect(game).toMatch(/import \{ createCompany \} from '\.\/rollcall\.js'/)
+    expect(game).toMatch(/import \{ statusMods \} from '\.\/status\.js'/)
+    expect(game).toMatch(/import \{ closingOverlay \} from '\.\/closings\.js'/)
+  })
+  it('the state before the loop: mods / co from the file, one company pool, the disagreement once, your own file beside here', () => {
+    for (const s of ['let mods = statusMods(file.status), co = closingOverlay(file.closing)', 'const company = createCompany()', 'let disagreeSaid = false',
+      "const selfFile = { status: 'notice-mailed', aseed: myAseed, origin: null, thin: false }"]) {
+      expect(at(s)).toBeLessThan(loopAt)
+      expect(game.split(s).length - 1, s).toBe(1)
+    }
+    expect(at('let file = ')).toBeLessThan(at('let mods = statusMods(file.status)'))
+    const here = slice('function hereFields() {', 'return hereObj')
+    expect(here).toContain('selfFile.status = file.status; selfFile.aseed = myAseed; selfFile.origin = origin; selfFile.thin = thin')
+  })
+  it('ONE sanCtx before the loop (you, your file, this floor\'s remote players, the bus\'s two questions set once); sanityStep once a frame', () => {
+    expect(count(/const sanCtx = /g)).toBe(1)
+    expect(at('const sanCtx = {')).toBeLessThan(loopAt)
+    expect(at('const sanCtx = {')).toBeGreaterThan(at('const remoteOnFloor = []'))
+    expect(game).toContain('player, self: selfFile, remotes: remoteOnFloor, fresh: bus ? bus.fresh : null, onFloor: bus ? bus.onFloor : null }')
+    expect(count(/sanityStep\(/g)).toBe(1)
+    expect(count(/mpClient\.getRemotePlayers\(\)/g)).toBe(1)              // fillRemotes' one read: the step reads its array
+    expect(block).not.toMatch(/sanCtx\.(player|self|remotes|fresh|onFloor) = /)
+  })
+  it('the block: after the tension, where the six lines were; the refill, the step, the clamp, the pool, the two lines at discovery; nothing of the old block left', () => {
+    expect(at('const s = sanityStep(sanCtx)')).toBeGreaterThan(at('const tn = tension.tick('))
+    expect(at('const s = sanityStep(sanCtx)')).toBeGreaterThan(at('// ── sanity —'))
+    expect(at('const s = sanityStep(sanCtx)')).toBeLessThan(at('updateSanity()', loopAt))
+    expect(block).toContain('sanCtx.rules = rules; sanCtx.mods = mods; sanCtx.closingOverlay = co; sanCtx.flashlight = flashlight; sanCtx.litNear = litNear')
+    expect(block).toContain('sanCtx.index = level.index; sanCtx.depth = level.depth; sanCtx.hunted = th.hunted; sanCtx.gaze = th.gaze; sanCtx.gazeRate = th.gazeRate')
+    expect(block).toContain('sanCtx.origin = origin; sanCtx.drift = driftD(); sanCtx.leashCalm = leashCalm')   // the ONE drift helper (it carries the debt)
+    expect(block).toContain('sanCtx.company = sanCtx.companyWas = company.value; sanCtx.disagreeSaid = disagreeSaid; sanCtx.dt = dt')
+    expect(block).toMatch(/const s = sanityStep\(sanCtx\)\r?\n\s*sanity = Math\.max\(0, Math\.min\(100, sanity \+ s\.delta \* dt\)\)\r?\n\s*company\.add\(s\.companyDelta\)\r?\n\s*if \(s\.exhaustedNow\) showMessage\(EXHAUSTED_LINE, PRIO\.discovery\)\r?\n\s*if \(s\.disagreeNow\) \{ disagreeSaid = true; showMessage\(DISAGREE_LINE, PRIO\.discovery\) \}/)
+    expect(game).not.toMatch(/sdelta/)
+    expect(loop).not.toMatch(/sanCtx = \{/)                                // refilled in place, never rebuilt
+  })
+  // the block lifted from game.js (and the literal it fills), run against the real step and a real pool
+  const lit = game.match(/const sanCtx = (\{[^]*?\})\r?\n/)[1]
+  const mkCtx = new Function('rules', 'mods', 'co', 'flashlight', 'player', 'selfFile', 'remoteOnFloor', 'bus', `return ${lit}`)
+  const run = new Function('sanCtx', 'company', 'sanityStep', 'showMessage', 'EXHAUSTED_LINE', 'DISAGREE_LINE', 'PRIO', 'driftD', 'st',
+    `let { rules, mods, co, flashlight, litNear, level, th, origin, leashCalm, disagreeSaid, dt, sanity, playT } = st\n${block}\nst.sanity = sanity; st.disagreeSaid = disagreeSaid`)
+  const NM = statusMods('notice-mailed'), CO = closingOverlay(null), DT = 1 / 60
+  const legacy = (f, index, hunted, gaze, rate, friend) => {
+    let sdelta = f ? 2 : -2
+    sdelta -= (index >= 0 && index <= 3 ? index : 0) * 0.5
+    if (hunted) sdelta -= 3
+    if (gaze) sdelta -= rate
+    if (friend) sdelta += 3
+    return sdelta
+  }
+  it('replayed under LEGACY it is the post-core block: flashlight x index 0..4 (∅ drains nothing) x hunted x gaze x one old friend, solo and online', () => {
+    const player = { x: 10, y: 10 }, remotes = [], said = []
+    for (const bus of [null, { fresh: () => false, onFloor: () => true }]) {
+      const sanCtx = mkCtx(LEGACY, NM, CO, true, player, { status: 'notice-mailed', aseed: null, origin: null, thin: false }, remotes, bus)
+      const company = createCompany()
+      for (const f of [true, false]) for (let index = 0; index <= 4; index++) for (const h of [true, false]) for (const [g, rate] of [[false, 0], [true, 1.5], [true, 3]]) {
+        for (const friend of bus ? [null, { id: 'a', x: 10 + Math.sqrt(35.9), y: 10 }, { id: 'b', x: 10, y: 10 + Math.sqrt(36.1) }] : [null]) {
+          remotes.length = 0; if (friend) remotes.push(friend)
+          const st = { rules: LEGACY, mods: NM, co: CO, flashlight: f, litNear: false, level: { index, depth: depthOf(index) }, th: { hunted: h, gaze: g, gazeRate: rate },
+            origin: null, leashCalm: 0, disagreeSaid: false, dt: DT, sanity: 50, playT: 0 }
+          run(sanCtx, company, sanityStep, (m, p) => said.push([m, p]), EXHAUSTED_LINE, DISAGREE_LINE, PRIO, () => 0, st)
+          const near = !!friend && (friend.x - 10) ** 2 + (friend.y - 10) ** 2 < 36
+          expect(st.sanity, `f${f} i${index} h${h} g${g} r${rate} ${friend?.id}`).toBe(Math.max(0, Math.min(100, 50 + legacy(f, index, h, g, rate, near) * DT)))
+        }
+      }
+      expect(company.value).toBe(60)                                        // no fresh friend: the pool only refills (and is full)
+    }
+    expect(said).toEqual([])
+  })
+  it('a fresh friend draws on the pool: it steadies you, runs dry in 20 s with ONE exhausted line, and the files\' disagreement is said once', () => {
+    const player = { x: 10, y: 10 }, remotes = [{ id: 'f', x: 12, y: 10, status: 'compliance', thin: false }], said = []
+    const bus = { fresh: (id) => id === 'f', onFloor: () => true }
+    const self = { status: 'extension', aseed: null, origin: 'tenant', thin: false }
+    const rules = rulesFor('tenant', false), mods = statusMods('extension')
+    const sanCtx = mkCtx(rules, mods, CO, true, player, self, remotes, bus)
+    const company = createCompany()
+    const st = { rules, mods, co: CO, flashlight: true, litNear: false, level: { index: 1, depth: 1 }, th: { hunted: false, gaze: false, gazeRate: 0 },
+      origin: 'tenant', leashCalm: 0, disagreeSaid: false, dt: DT, sanity: 50, playT: 0 }
+    const go = () => run(sanCtx, company, sanityStep, (m, p) => said.push([m, p]), EXHAUSTED_LINE, DISAGREE_LINE, PRIO, () => 0, st)
+    go()
+    expect(st.sanity).toBeGreaterThan(50)
+    expect(said).toEqual([[DISAGREE_LINE, PRIO.discovery]])
+    expect(st.disagreeSaid).toBe(true)
+    for (let i = 0; i < 25 * 60; i++) go()
+    expect(company.value).toBe(0)
+    expect(said.filter(([m]) => m === EXHAUSTED_LINE)).toEqual([[EXHAUSTED_LINE, PRIO.discovery]])
+    expect(said.filter(([m]) => m === DISAGREE_LINE).length).toBe(1)
+    remotes.length = 0                                                      // apart: the pool comes back
+    for (let i = 0; i < 10 * 60; i++) go()
+    expect(company.value).toBeGreaterThan(7)
   })
 })

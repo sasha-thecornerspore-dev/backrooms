@@ -19,7 +19,8 @@ const SHELL = [
   '/renderer/dress.js', '/renderer/containers.js', '/renderer/haunts.js', '/renderer/papercard.js',
   '/renderer/origin-intake.js', '/renderer/origin-rules.js', '/renderer/origin-tenant.js', '/renderer/origin-anchored.js',
   '/renderer/origin-processed.js', '/renderer/origin-unnamed.js', '/renderer/origin-thin.js',
-  '/renderer/compose-perception.js', '/renderer/stillness.js',
+  '/renderer/compose-perception.js', '/renderer/stillness.js', '/renderer/compose-sanity.js', '/renderer/rollcall.js',
+  '/renderer/status.js', '/renderer/closings.js',
   '/net/client.js', '/net/evbus.js', '/settings.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png',
 ]

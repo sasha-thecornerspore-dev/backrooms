@@ -66,8 +66,10 @@ describe('game.js: one aiCtx object, mutated per frame, handed to one update', (
     expect(game).not.toMatch(/const prox = 1 - th\.nearest \/ 12/)
     expect(game).toMatch(/const tn = tension\.tick\(dt, creaturesLive && !transitioning \? th : null, player\.hp\)/)
     expect(game).not.toMatch(/if \(nearD < 10\) sdelta -= 4/)
-    expect(game).toMatch(/if \(th\.hunted\) sdelta -= 3/)
-    expect(game).toMatch(/if \(th\.gaze\) sdelta -= th\.gazeRate/)
+    // the threat record's hunt and gaze reach the one sanity step (compose-sanity.js: -3 hunted, -gazeRate under a gaze — I7)
+    expect(game).toMatch(/sanCtx\.hunted = th\.hunted; sanCtx\.gaze = th\.gaze; sanCtx\.gazeRate = th\.gazeRate/)
+    expect(game).toMatch(/const s = sanityStep\(sanCtx\)\r?\n\s*sanity = Math\.max\(0, Math\.min\(100, sanity \+ s\.delta \* dt\)\)/)
+    expect(game).not.toMatch(/sdelta/)
     expect(game).toMatch(/const creaturesLive = creaturesOn && !!cfg\.entities\?\.enabled/)
   })
   it("the tesla's charge drops the lights once per charge, right after stepFlicker", () => {

@@ -56,7 +56,10 @@ describe('game.js: the event bus (I3)', () => {
     expect(count(/mpClient\.getRemotePlayers\(\)/g)).toBe(1)                // one read of the players list per frame
   })
   it('the friend rule (sanity) and the sprite list read this floor\'s remote players', () => {
-    expect(game).toMatch(/if \(mpClient\) \{ for \(const rp of remoteOnFloor\) \{ if \(\(rp\.x - player\.x\) \*\* 2 \+ \(rp\.y - player\.y\) \*\* 2 < 36\) \{ sdelta \+= 3; break \} \} \}/)
+    // the friend rule lives in the one sanity step now (I7, compose-sanity.js): handed this floor's remote players — the array fillRemotes
+    // refills, empty solo — and the bus's floor / fresh questions (null solo)
+    expect(game).toContain('player, self: selfFile, remotes: remoteOnFloor, fresh: bus ? bus.fresh : null, onFloor: bus ? bus.onFloor : null }')
+    expect(game).not.toMatch(/sdelta \+= 3/)
     expect(game).toContain("if (mpClient) entityAsm.add('player', remoteOnFloor, EF.player)")
   })
   it('addChatLine takes the client\'s id; a join is said 2 s later with the friend\'s filed status, else today\'s line', () => {

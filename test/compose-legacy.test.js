@@ -103,10 +103,12 @@ describe('(2) perceptionFor over LEGACY is { 1, false, 1, 1 } for every input', 
 //   if (mpClient) { for (const rp of remoteOnFloor) { if ((rp.x - player.x) ** 2 + (rp.y - player.y) ** 2 < 36) { sdelta += 3; break } } }
 //   sanity = Math.max(0, Math.min(100, sanity + sdelta * dt))
 describe('(3) sanityStep(legacy) is the post-core sanity block', () => {
-  it('the source block is still the one quoted', () => {
-    expect(game).toMatch(/let sdelta = flashlight \? 2 : -2\r?\n\s*sdelta -= \(level\.index >= 0 && level\.index <= 3 \? level\.index : 0\) \* 0\.5/)
-    expect(game).toMatch(/if \(th\.hunted\) sdelta -= 3/)
-    expect(game).toMatch(/if \(th\.gaze\) sdelta -= th\.gazeRate/)
+  it('the quoted block is the composer call now (I7): the same inputs, the same clamp', () => {
+    expect(game).not.toMatch(/sdelta/)
+    expect(game).toMatch(/sanCtx\.rules = rules; sanCtx\.mods = mods; sanCtx\.closingOverlay = co; sanCtx\.flashlight = flashlight;/)
+    expect(game).toMatch(/sanCtx\.index = level\.index; sanCtx\.depth = level\.depth; sanCtx\.hunted = th\.hunted; sanCtx\.gaze = th\.gaze; sanCtx\.gazeRate = th\.gazeRate/)
+    expect(game).toMatch(/const s = sanityStep\(sanCtx\)\r?\n\s*sanity = Math\.max\(0, Math\.min\(100, sanity \+ s\.delta \* dt\)\)/)
+    expect(game).toContain('remotes: remoteOnFloor')
   })
   function legacyDelta(flashlight, index, hunted, gaze, gazeRate, remotes, player) {
     let sdelta = flashlight ? 2 : -2

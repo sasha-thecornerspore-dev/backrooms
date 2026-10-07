@@ -45,6 +45,10 @@ import { parseNameWish, spellCard, refileWithName, spelledLine, ONLINE_LINE } fr
 import { RECOIL_DIST, RECOIL_SHAKE, RECOIL_LINE, CURE_LINE } from './origin-thin.js'
 import { perceptionFor } from './compose-perception.js'
 import { createStillness, HUNTS_MOVEMENT_LINE } from './stillness.js'
+import { sanityStep, EXHAUSTED_LINE, DISAGREE_LINE } from './compose-sanity.js'
+import { createCompany } from './rollcall.js'
+import { statusMods } from './status.js'
+import { closingOverlay } from './closings.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -307,13 +311,20 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const stillNote = { moving: false, flashlight: true, radioOn: false, t: 0 }
   let wasHidden = false, huntsMovementSaid = false
   let standHeld = 0   // TODO(integrate:W3) I13: the stand tick writes it (closings.js standTick); the whistle and buildLevel reset it too — the hunts line keeps quiet while it runs
+  // ── company (rollcall.js): the pool a fresh friend within 6 steadies you out of — it drains while you stand together and stops helping
+  //    when it is empty, then refills while you are apart; sanityStep says how it moves each frame. The two files' disagreement is said once ──
+  const company = createCompany()
+  let disagreeSaid = false
 
   // ── Living Atmosphere — occasional ambient dread events. evConfig is the scheduler's ONE mutable config, read at every tick: the filing
   //    writes the file's weights into it (a tenant sees the far crosser twice as often), retension() is the one writer of its tension ──
   const evConfig = { events: EVENTS, tension: 0 }
   const eventSched = createEventScheduler({ config: evConfig })   // TODO(integrate:W8) I14a: events.js reads `config` at every tick once W8's events.js edit is merged (until then it rolls EVENTS)
   // the file the presence keeps (status.js / closings.js): the status, the closing, the ledger heard, the pages left unread — in prefs, never in the save
-  let file = { status: 'notice-mailed', at: 0, ledgerHeard: false, closing: null, redacted: [] }   // TODO(integrate:W3) I13: loadFile(getPref('file')); let co = closingOverlay(file.closing)
+  let file = { status: 'notice-mailed', at: 0, ledgerHeard: false, closing: null, redacted: [] }   // TODO(integrate:W3) I13: loadFile(getPref('file'))
+  // what the status and a closing do to the numbers the loop reads (status.js statusMods / closings.js closingOverlay): pure functions of
+  // the file, so re-derived with every write of it — notice-mailed and no closing are today's (the sanity's depth drain, ∅ none)
+  let mods = statusMods(file.status), co = closingOverlay(file.closing)   // TODO(integrate:W3) I13: applyFile(f) re-derives both (the one write seam)
   // the ONE writer of evConfig.tension: the room's standing on this floor (W8 ambientMods) and the closing's
   function retension() { evConfig.tension = level?.amb?.tension ?? 0 }   // TODO(integrate:W3) I13: + (closingOverlay(file.closing).tension ?? 0)
   const ephemera   = []   // transient event-spawned apparitions (render-only, no collision; a haunt's figure carries vanishAt)
@@ -1175,6 +1186,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // copies it). Sent about once a second from the loop, and at once after a travel or a death
   const myAseed = anchor ? anchorSeed(anchor.lat, anchor.lng) : null
   const hereObj = { lvl: 0, lit: true, st: 'ok', seen: false, o: null, thin: false, status: 'notice-mailed', aseed: myAseed }
+  // what the sanity step reads of your own file beside a friend's (the status's affinity, the same pin): ONE object, refilled with 'here'
+  const selfFile = { status: 'notice-mailed', aseed: myAseed, origin: null, thin: false }
   let hereTimer = 1                                        // the first frame says it
   function hereFields() {
     hereObj.lvl = level ? level.index : 0
@@ -1185,6 +1198,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     hereObj.thin = thin
     hereObj.status = file.status
     hereObj.aseed = myAseed
+    selfFile.status = file.status; selfFile.aseed = myAseed; selfFile.origin = origin; selfFile.thin = thin
     return hereObj
   }
 
@@ -1712,6 +1726,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // what perceptionFor reads (ONE object, refilled per frame): the column, the depth, the stillness clocks, your light and radio, a friend's light
   const perCtx = { rules, depth: 0, stillFor: 0, noiseFor: 0, flashlight, radioOn: false, litNear: false }
   let litNear = false   // a friend's light reaches you this frame (lightshare.js litFriendNear, written in the net block; never solo)
+  // what sanityStep reads (ONE object, refilled per frame where the sanity block is). Set once: you, your own file, this floor's remote
+  // players (the reused array fillRemotes refills; empty solo) and the bus's two questions — a peer it has no fresh 'here' for is the old
+  // friend rule (+3), a fresh one draws on the company pool. leashDebt stays 0: driftD() carries the debt already
+  const sanCtx = { rules, mods, closingOverlay: co, flashlight, litNear: false, index: 0, depth: 0, hunted: false, gaze: false, gazeRate: 0, origin: null,
+    drift: 0, leashDebt: 0, leashCalm: 0, down: false, company: 0, companyWas: 0, disagreeSaid: false, dt: 0,
+    player, self: selfFile, remotes: remoteOnFloor, fresh: bus ? bus.fresh : null, onFloor: bus ? bus.onFloor : null }
   let last = 0
   let frameCount = 0
   let loopErrs = 0
@@ -2149,13 +2169,21 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (tn.close && playT - lastSeenLine > 1.6) showMessage('it is close.', PRIO.combat)
 
     // ── sanity — dark, the hunt and a thing's gaze drain it; light, almond water, a friend restore it ──
-    // TODO(integrate:W4) I7: sanityStep(sanCtx) replaces this block (rules.lightTerm, rules.friendBase, rules.leash + leashDrain over drift + leashDebt)
-    let sdelta = flashlight ? 2 : -2
-    sdelta -= (level.index >= 0 && level.index <= 3 ? level.index : 0) * 0.5   // Level ∅ (index 4) does not drain like a fourth floor
-    if (th.hunted) sdelta -= 3                 // something is on you
-    if (th.gaze) sdelta -= th.gazeRate         // a smiler held on screen (1.5), a watcher watched back (3)
-    if (mpClient) { for (const rp of remoteOnFloor) { if ((rp.x - player.x) ** 2 + (rp.y - player.y) ** 2 < 36) { sdelta += 3; break } } }   // a friend on this floor
-    sanity = Math.max(0, Math.min(100, sanity + sdelta * dt))
+    // ONE step (compose-sanity.js), per second: under LEGACY the post-core block term for term — light ±2, the depth drain (Level ∅ none),
+    // -3 hunted, -gazeRate under a gaze (a smiler 1.5, a watcher 3), +3 for one friend within 6 on this floor — and what the file adds:
+    // the column's light, a status's or a closing's depth term, the pin's leash, the company pool a fresh friend draws on, -1 flat lying
+    // down. The result is one reused record; the clamp is here, as before
+    sanCtx.rules = rules; sanCtx.mods = mods; sanCtx.closingOverlay = co; sanCtx.flashlight = flashlight; sanCtx.litNear = litNear
+    sanCtx.index = level.index; sanCtx.depth = level.depth; sanCtx.hunted = th.hunted; sanCtx.gaze = th.gaze; sanCtx.gazeRate = th.gazeRate
+    sanCtx.origin = origin; sanCtx.drift = driftD(); sanCtx.leashCalm = leashCalm
+    sanCtx.down = false                        // TODO(integrate:W5) I9: down.st === 'down' (lying down: -1 flat, nothing else counts)
+    sanCtx.company = sanCtx.companyWas = company.value; sanCtx.disagreeSaid = disagreeSaid; sanCtx.dt = dt
+    const s = sanityStep(sanCtx)
+    sanity = Math.max(0, Math.min(100, sanity + s.delta * dt))
+    company.add(s.companyDelta)
+    if (s.exhaustedNow) showMessage(EXHAUSTED_LINE, PRIO.discovery)
+    if (s.disagreeNow) { disagreeSaid = true; showMessage(DISAGREE_LINE, PRIO.discovery) }
+    // TODO(integrate:W7) I12: if (evidence.active(playT)) sanity = Math.max(sanity, EVIDENCE_FLOOR) — the evidence floor, after the clamp
     updateSanity()
     const insane = Math.max(0, Math.min(1, (42 - sanity) / 42))
     if (insaneEl) insaneEl.style.opacity = (insane * 0.6).toFixed(2)

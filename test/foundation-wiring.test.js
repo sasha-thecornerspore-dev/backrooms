@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import { createMessageQueue, PRIO } from '../src/renderer/messages.js'
+import { statusMods } from '../src/renderer/status.js'
 
 const game = fs.readFileSync(new URL('../src/renderer/game.js', import.meta.url), 'utf8')
 const sw = fs.readFileSync(new URL('../src/sw.js', import.meta.url), 'utf8')
@@ -96,8 +97,14 @@ describe('game.js: the grid reader and the sanity clamp', () => {
   })
   it('Level ∅ (index 4) does not drain sanity like a fourth floor', () => {
     expect(game).not.toMatch(/sdelta -= level\.index \* 0\.5/)
-    expect(game).toMatch(/sdelta -= \(level\.index >= 0 && level\.index <= 3 \? level\.index : 0\) \* 0\.5/)
+    // the depth drain is the status's term now (I7: compose-sanity.js reads mods.sanityDepthTerm(index, depth)); notice-mailed's is the old
+    // `(index in 0..3 ? index : 0) * 0.5`, so ∅ (index 4, depth 0) drains nothing and the third floor 1.5
+    expect(game).toMatch(/const s = sanityStep\(sanCtx\)/)
+    expect(game).toMatch(/sanCtx\.index = level\.index; sanCtx\.depth = level\.depth;/)
+    expect(statusMods('notice-mailed').sanityDepthTerm(4, 0)).toBe(0)
+    expect(statusMods('notice-mailed').sanityDepthTerm(3, 3)).toBe(-1.5)
     const drain = (index) => (index >= 0 && index <= 3 ? index : 0) * 0.5
+    for (let i = 0; i <= 4; i++) expect(statusMods('notice-mailed').sanityDepthTerm(i, i === 4 ? 0 : i)).toBe(0 - drain(i))
     expect(drain(0)).toBe(0); expect(drain(3)).toBe(1.5); expect(drain(4)).toBe(0)
   })
 })
