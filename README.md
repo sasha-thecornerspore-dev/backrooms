@@ -103,6 +103,7 @@ the spirits decide. or rather, i do.
 | tab | the map (hold your pace) |
 | q | use selected item |
 | x · set down | set the selected item down where you stand — a talking radio keeps talking where it lies |
+| c · whistle | call out — a two-note whistle the floor and your friends hear; the things hear it too |
 | 1–6 | select inventory slot |
 | e | speak to a presence |
 | enter | chat (in online play) |
@@ -141,6 +142,8 @@ type your **name**, hit **PLAY ONLINE**, pick a **room code**, and share it. any
 - **PLAY ONLINE** — the public relay + a room code (the easy way).
 - **JOIN LAN / HOST LAN** — the old direct-connection path (`ws://host:port` + room code) for same-network play; the standalone server ships as `backrooms-server.js` on each release (`node backrooms-server.js`, default port 8765).
 - the first person into a room fixes its world; everyone else inherits it.
+
+**the whistle (c).** call out, and everyone on your floor hears two notes at a pitch that is only yours — panned to where you stand, fainter the farther you are, with a line in their chat that says *near* or *far* and which way. the hall counts who has answered lately and tells you, in words: *two of you, counting yourself.* a friend who goes a minute and a half without a whistle, a word, or standing near you has gone quiet, and you will feel it. alone, the hall keeps the sound. sometimes it does not, and the pitch that answers is wrong. the things hear every call — a whistle carries further than a ward. on a phone it is the **CALL** button.
 
 ## save & continue
 

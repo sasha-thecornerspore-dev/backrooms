@@ -254,7 +254,8 @@ describe('FEEL-5: you wake facing the hole the line names', () => {
 describe('FEEL-8: the block offers no map', () => {
   it('on Level ∅ the paper corner and the hint row\'s tab entry are hidden (its separator goes with it)', () => {
     expect(html).toContain('body[data-level="∅"] #map-tab, body[data-level="∅"] #hint .k-map { display: none; }')
-    expect(html).toContain('<span>x set down</span><span class="k-map"> · tab map</span> · <span>1-6 slots</span>')
+    // (I10: the whistle sits after set down; the map's span still carries its own separator, so hiding it leaves no stray dot)
+    expect(html).toContain('<span>x set down</span> · <span>c whistle</span><span class="k-map"> · tab map</span> · <span>1-6 slots</span>')
   })
 })
 

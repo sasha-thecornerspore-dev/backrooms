@@ -36,6 +36,10 @@ import { createDownState, createKneel, DOWN_LINE, WOKEN_LINE, KNEELER_LINE, HAND
 import { deathDecision, NOBODY_CAME } from '../src/renderer/compose-gates.js'
 import { evKinds } from '../src/renderer/rollcall.js'
 import { createEvBus } from '../src/net/evbus.js'
+import { createRollCall, whistlePitch, bearingLabel, whistleGain, whistlePan, countLine, WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY, FAR_BONUS, ECHO,
+  NO_ANSWER_LINE, ECHO_LINE } from '../src/renderer/rollcall.js'
+import { ACTIONS } from '../src/renderer/touch.js'
+import { takeKey } from '../src/renderer/input.js'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const game = read('../src/renderer/game.js')
@@ -1022,5 +1026,192 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     expect(html).toContain('body.down #msg { z-index: 46; }')
     expect([DOWN_LINE, WOKEN_LINE, KNEELER_LINE]).toEqual(['everything goes dark. you are still here. somewhere, someone may notice.', 'you are counted. you come back.', 'you stayed. you counted them back.'])
     expect(KNEELER_SANITY).toBe(8)
+  })
+})
+
+describe('I10 (W5): the whistle — the C edge, your call, a friend\'s, the roll call and who has gone quiet', () => {
+  const loop = game.slice(loopAt)
+  const code = game.split(/\r?\n/).map((l) => l.replace(/^\s*\/\/.*$|\s\/\/ .*$/, '')).join('\n')
+  const C_LINE = "if (K['KeyC']) { K['KeyC'] = false; whistleOut(creaturesLive) }"
+  const QUIET = "if (bus) { const qs = rollcall.tick(performance.now(), bus.freshPeersOnFloor()); for (let i = 0; i < qs.length; i++) { sanity = Math.max(0, sanity - QUIET_SANITY); showMessage(qs[i].line, PRIO.ambient) } }"
+  const lift = (re) => { const m = game.match(re); expect(m, String(re)).not.toBeNull(); return m[0] }
+  const whistleSrc = lift(/function whistleOut\(live\) \{[\s\S]*?\r?\n {2}\}/)
+
+  it('imports the whistle by its real names (the audio call before the bump); the state before the loop; nothing of W5 is left to do', () => {
+    expect(game).toMatch(/import \{ createCompany, createRollCall, evKinds, whistlePitch, bearingLabel, whistleGain, whistlePan, countLine, WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY, FAR_BONUS, ECHO, NO_ANSWER_LINE, ECHO_LINE \} from '\.\/rollcall\.js'/)
+    expect(game).toMatch(/, drawerSlide, whistle, bump \} from '\.\/audio\.js'/)
+    expect(sw).toContain("'/renderer/rollcall.js'"); expect(build).toContain("'rollcall.js'")
+    expect(game).not.toMatch(/TODO\(integrate:W5\)/)
+    for (const s of ['const rollcall = createRollCall({ now: () => performance.now() })', 'let lastWhistleAt = -Infinity', 'const callOut = { x: 0, y: 0, lvl: 0, c: true }']) {
+      expect(at(s), s).toBeLessThan(loopAt)
+      expect(game.split(s).length - 1, s).toBe(1)
+    }
+    expect(count(/createRollCall\(/g)).toBe(1)
+    expect([WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY]).toEqual([10000, 14, 4, 2])
+  })
+  it('C is an edge in the verbs block right after X (lying down too: the sweep spares it); the touch CALL button is a plain key into the same edge', () => {
+    expect(loop).toMatch(/if \(K\['KeyX'\]\) \{ K\['KeyX'\] = false; throwSelected\(\) \}\r?\n\s*if \(K\['KeyC'\]\) \{ K\['KeyC'\] = false; whistleOut\(creaturesLive\) \}/)
+    const c = loop.indexOf(C_LINE)
+    expect(c).toBeGreaterThan(loop.indexOf('if (!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen) {'))
+    expect(c).toBeLessThan(loop.indexOf("if (K['Escape'] && dialogOpen)"))
+    expect(count(/function whistleOut\(/g)).toBe(1)
+    expect((code.match(/(?<!function )\bwhistleOut\(/g) || []).length).toBe(1)          // the one edge calls it
+    // held: the key repeats are dropped at the gate and the edge is consumed, so a held key (or a held CALL) calls once
+    expect(takeKey({ code: 'KeyC', repeat: true }, {})).toBe('ignore')
+    expect(takeKey({ code: 'KeyC', repeat: false }, {})).toBe('take')
+    const K = { KeyC: true }, calls = []
+    const edge = new Function('K', 'whistleOut', 'creaturesLive', C_LINE)
+    edge(K, (live) => calls.push(live), true); edge(K, (live) => calls.push(live), true)
+    expect([calls, K.KeyC]).toEqual([[true], false])
+    // CALL: the dock's sixth button sets K['KeyC'] like the key; never an edge counter (only the ward's Space is)
+    expect(ACTIONS[ACTIONS.length - 1]).toEqual({ code: 'KeyC', label: 'CALL', hint: 'whistle' })
+    expect(game).toContain('initTouchControls({ canvas, K, player, getPref, edges: { Space: wardInput } })')
+  })
+
+  // whistleOut lifted out of game.js, its world faked: the roll call is the real one on an injected ms clock
+  const mkWhistle = (deps, st) => new Function(...Object.keys(deps), 'st',
+    `let { lastWhistleAt, standHeld, sanity, playT, arrivalGen } = st\n${whistleSrc}\nreturn { whistleOut, read: () => ({ lastWhistleAt, standHeld, sanity }), nextArrival: () => { arrivalGen++ } }`)(...Object.values(deps), st)
+  function rig({ mp = null, bus = null, echo = false, heard = [] } = {}) {
+    let t = 1000
+    const said = [], sounds = [], noises = [], timers = [], stillNoises = [], steps = []
+    const rollcall = createRollCall({ now: () => t, rng: () => (echo ? 0 : 0.99) })
+    for (const id of heard) rollcall.hear(id, id, 0, 0, t)
+    const callOut = { x: 0, y: 0, lvl: 0, c: true }
+    const h = mkWhistle({
+      performance: { now: () => t }, whistle: (...a) => sounds.push(a), whistlePitch, mpClient: mp,
+      level: { index: 2, entitySys: { noise: (...a) => noises.push(a) } }, player: { x: 4.5, y: 7.25 },
+      stillness: { noise: (p) => stillNoises.push(p) }, rollcall, bus, callOut,
+      showMessage: (m, p) => said.push([m, p]), PRIO, countLine, NO_ANSWER_LINE, SOLO_SANITY, ECHO, ECHO_LINE,
+      footfall: (n) => steps.push(n), setTimeout: (f, ms) => timers.push([f, ms]), WHISTLE_COOLDOWN_MS, WHISTLE_NOISE,
+    }, { lastWhistleAt: -Infinity, standHeld: 3, sanity: 50, playT: 42, arrivalGen: 0 })
+    return { h, said, sounds, noises, timers, stillNoises, steps, callOut, at: (ms) => { t = ms } }
+  }
+  it('your call, lifted and replayed: your pitch, a noise of 14 at your feet that is yours, a stand ended, ONE line; a second inside 10 s is swallowed', () => {
+    const r = rig()
+    r.h.whistleOut(false)                                                          // the lobby (or the block), alone
+    expect(r.sounds).toEqual([[whistlePitch('solo', 'wanderer'), 0, 1]])
+    expect(r.noises).toEqual([[4.5, 7.25, WHISTLE_NOISE]])                         // three arguments: yours, so the file's noiseMul applies
+    expect(r.stillNoises).toEqual([42])                                            // the play clock
+    expect(r.h.read()).toEqual({ lastWhistleAt: 1000, standHeld: 0, sanity: 50 })
+    expect(r.said).toEqual([[NO_ANSWER_LINE, PRIO.interaction]])
+    expect(r.timers).toEqual([])
+    r.at(1000 + WHISTLE_COOLDOWN_MS - 1); r.h.whistleOut(false)
+    expect([r.sounds.length, r.noises.length, r.stillNoises.length, r.said.length]).toEqual([1, 1, 1, 1])   // swallowed: no sound, no noise, no line
+    r.at(1000 + WHISTLE_COOLDOWN_MS); r.h.whistleOut(false)
+    expect([r.sounds.length, r.noises.length, r.said.length, r.h.read().lastWhistleAt]).toEqual([2, 2, 2, 1000 + WHISTLE_COOLDOWN_MS])
+  })
+  it('alone where something hunts: \'one. just you.\', +2, and one call in six an answer at the wrong pitch 1.2 s later — dropped by a travel or a death first', () => {
+    let r = rig({ echo: true })
+    r.h.whistleOut(true)
+    expect(r.said).toEqual([['one. just you.', PRIO.interaction]])
+    expect(r.h.read().sanity).toBe(50 + SOLO_SANITY)
+    expect(r.timers.map(([, ms]) => ms)).toEqual([ECHO.delayMs])
+    r.timers[0][0]()
+    expect(r.steps).toEqual([ECHO.footfalls])
+    expect(r.h.read().sanity).toBe(50 + SOLO_SANITY - ECHO.sanity)
+    expect(r.said[1]).toEqual([ECHO_LINE, PRIO.interaction])
+    r = rig({ echo: true }); r.h.whistleOut(true); r.h.nextArrival(); r.timers[0][0]()
+    expect([r.steps, r.said.length, r.h.read().sanity]).toEqual([[], 1, 50 + SOLO_SANITY])
+    r = rig({ echo: false }); r.h.whistleOut(true)
+    expect([r.timers, r.h.read().sanity]).toEqual([[], 50 + SOLO_SANITY])
+  })
+  it('online: the ONE reused frame through the real bus (evKinds lets it through), your pitch by id and name; answered, the count in words and nothing else', () => {
+    const sent = []
+    const bus = createEvBus({ send: (k, p) => sent.push([k, JSON.parse(JSON.stringify(p))]), now: () => 5000, self: () => ({ x: 4.5, y: 7.25, lvl: 2 }),
+      peerPos: () => null, peerIds: () => new Set(), selfId: () => 'me' })
+    expect(game).toContain("bus.register('whistle', kinds.whistle)")
+    bus.register('whistle', evKinds(() => 'me').whistle)
+    const emitted = []
+    const r = rig({ mp: { id: 'me', getName: () => 'maddie' }, bus: { emit: (k, p) => { emitted.push(p); return bus.emit(k, p) } }, heard: ['a', 'b'] })
+    r.h.whistleOut(true)
+    expect(r.sounds).toEqual([[whistlePitch('me', 'maddie'), 0, 1]])
+    expect(emitted.length).toBe(1); expect(emitted[0]).toBe(r.callOut)              // the one payload, written in place
+    expect(sent.map(([k, p]) => [k, p.x, p.y, p.lvl, p.c])).toEqual([['whistle', 4.5, 7.25, 2, true]])
+    expect(r.said).toEqual([['three of you.', PRIO.interaction]])
+    expect([r.h.read().sanity, r.timers.length]).toEqual([50, 0])                  // answered: no solo term, no echo
+    expect(whistleSrc).not.toMatch(/\{ x: player\.x/)                              // no literal per call
+  })
+  it('a friend\'s call (the receive half), lifted and replayed through the real bus: their pitch from where they stand, a people line with the bearing, the roll call, the far bonus once a minute', () => {
+    const recv = lift(/bus\.on\('whistle', \(\{ id, name, payload: p \}\) => \{[\s\S]*?\r?\n {4}\}\)/)
+    const pos = { near: { x: 3, y: 0 }, far: { x: 20, y: 0 }, other: { x: 1, y: 1 }, liar: { x: 1, y: 1 } }
+    let t = 10000
+    const bus = createEvBus({ send: () => {}, now: () => t, self: () => ({ x: 0, y: 0, lvl: 1 }), peerPos: (id) => pos[id] ?? null,
+      peerIds: () => new Set(Object.keys(pos)), selfId: () => 'me' })
+    bus.register('whistle', evKinds(() => 'me').whistle)
+    const sounds = [], lines = [], rollcall = createRollCall({ now: () => t }), company = createCompany(), st = {}
+    company.add(-40)
+    new Function('bus', 'level', 'player', 'performance', 'whistle', 'whistlePitch', 'whistlePan', 'whistleGain', 'radioWasOn', 'addChatLine', 'bearingLabel',
+      'rollcall', 'FAR_BONUS', 'company', 'st', `let sanity = 50\n${recv}\nst.sanity = () => sanity`)(bus, { index: 1 }, { x: 0, y: 0, angle: 0 }, { now: () => t },
+      (...a) => sounds.push(a), whistlePitch, whistlePan, whistleGain, true, (...a) => lines.push(a), bearingLabel, rollcall, FAR_BONUS, company, st)
+    const frame = (id, payload, n) => ({ id, name: id, kind: 'whistle', payload: { c: true, ...payload, n }, t: 1 })
+    expect(bus.receive(frame('near', { x: 3, y: 0, lvl: 1 }, 1))).toBe(true)
+    expect(sounds).toEqual([[whistlePitch('near', 'near'), whistlePan(3, 0, 0), whistleGain(3, true)]])
+    expect(whistleGain(3, true)).toBeCloseTo((1 - 3 / 40) / 2)                    // half under your radio
+    expect(lines).toEqual([['near', `whistles · ${bearingLabel(3, 0, 0)}`, true]])  // the people channel, never #msg
+    expect(lines[0][1].startsWith('whistles · near ')).toBe(true)
+    expect([rollcall.count(t), st.sanity(), company.value]).toEqual([2, 50, 20])  // on the roll call; near: no far bonus
+    expect(bus.receive(frame('far', { x: 20, y: 0, lvl: 1 }, 2))).toBe(true)
+    expect(lines[1][1].startsWith('whistles · far ')).toBe(true)
+    expect([rollcall.count(t), st.sanity(), company.value]).toEqual([3, 50 + FAR_BONUS.sanity, 20 + FAR_BONUS.company])
+    t += 9000                                                                       // past the wire's 8 s, inside the bonus's minute
+    expect(bus.receive(frame('far', { x: 20, y: 0, lvl: 1 }, 3))).toBe(true)
+    expect([sounds.length, st.sanity()]).toEqual([3, 50 + FAR_BONUS.sanity])
+    expect(bus.receive(frame('far', { x: 20, y: 0, lvl: 1 }, 4))).toBe(false)       // the same friend inside 8 s
+    expect(bus.receive(frame('other', { x: 1, y: 1, lvl: 3 }, 5))).toBe(true)       // another floor's call: believed, not heard
+    expect(bus.receive(frame('liar', { x: 4.5, y: 1, lvl: 1 }, 6))).toBe(false)     // not where the list has them
+    expect([sounds.length, lines.length, rollcall.count(t)]).toEqual([3, 3, 3])
+  })
+  it('the roll call ticks once a frame on the list the bus just recounted; a friend unheard, unspoken and apart for 90 s has gone quiet: a murmur, -4, again 90 s on', () => {
+    expect(loop).toContain(QUIET)
+    expect(count(/rollcall\.tick\(/g)).toBe(1)
+    const q = loop.indexOf(QUIET)
+    expect(q).toBeGreaterThan(loop.indexOf('if (bus) { bus.tick(performance.now());'))
+    expect(q).toBeGreaterThan(loop.indexOf('const kr = kneel.tick(performance.now(), tgt, player)'))
+    expect(q).toBeLessThan(loop.indexOf('const th = creaturesOn ? level.entitySys.update('))
+    const run = new Function('bus', 'rollcall', 'performance', 'showMessage', 'PRIO', 'QUIET_SANITY', 'st', `let { sanity } = st\n${QUIET}\nst.sanity = sanity`)
+    let t = 0
+    const rc = createRollCall({ now: () => t }), said = [], st = { sanity: 50 }, peers = [{ id: 'a', name: 'maddie' }]
+    const tick = (ms, bus = { freshPeersOnFloor: () => peers }) => { t = ms; run(bus, rc, { now: () => t }, (m, p) => said.push([m, p]), PRIO, QUIET_SANITY, st) }
+    tick(0); tick(90000)
+    expect(said).toEqual([])                                                        // seated, then not yet
+    tick(90001)
+    expect(said).toEqual([['it has been a while since maddie. the hall is quiet.', PRIO.ambient]])
+    expect(st.sanity).toBe(50 - QUIET_SANITY)
+    tick(90002); expect(said.length).toBe(1)
+    rc.touch('a', 150000); tick(180002); expect(said.length).toBe(1)               // a touch keeps them counted
+    tick(240002); expect(said.length).toBe(2)
+    tick(999999, null); expect(said.length).toBe(2)                                  // solo: no bus, no roll call
+  })
+  it('the touches: a friend\'s chat line (not a system line, not your own) and a fresh friend within six, in the one remote fill', () => {
+    const chatSrc = lift(/function addChatLine\(from, text, isSystem, id\) \{[\s\S]*?\r?\n {2}\}/)
+    expect(chatSrc).toMatch(/JOIN_SAY_MS\); return \}\r?\n\s*if \(id && !isSystem && mpClient && id !== mpClient\.id\) rollcall\.touch\(id, performance\.now\(\)\)/)
+    const chatWith = (rc, clock) => new Function('JOINED_LINE', 'JOIN_SAY_MS', 'bus', 'setTimeout', 'joinedLine', 'chatLines', 'renderChat', 'mpClient', 'blip', 'rollcall', 'performance',
+      `${chatSrc}\nreturn addChatLine`)('entered the level.', 2000, {}, () => {}, () => '', [], () => {}, { id: 'me', getName: () => 'jo' }, () => {}, rc, clock)
+    let t = 0
+    const seat = [{ id: 'a', name: 'maddie' }]
+    let rc = createRollCall({ now: () => t }); rc.tick(0, seat)
+    t = 80000; chatWith(rc, { now: () => t })('maddie', 'over here', false, 'a')
+    expect(rc.tick(90001, seat)).toEqual([])                                         // she spoke: not quiet
+    rc = createRollCall({ now: () => t }); rc.tick(0, seat)
+    const add = chatWith(rc, { now: () => t })
+    add('maddie', 'whistles · near ↑', true); add('jo', 'hello?', false, 'me'); add('maddie', 'a line with no id', false)
+    expect(rc.tick(90001, seat).map((e) => e.id)).toEqual(['a'])                     // none of those is her speaking
+    const fillSrc = lift(/function fillRemotes\(\) \{[\s\S]*?\r?\n {2}\}/)
+    expect(fillSrc).toMatch(/if \(!bus\.fresh\(rp\.id\)\) \{[^\n]*\}\r?\n\s*else if \(\(rp\.x - player\.x\) \*\* 2 \+ \(rp\.y - player\.y\) \*\* 2 < 36\) rollcall\.touch\(rp\.id, now\)/)
+    const list = [{ id: 'near', x: 5, y: 0 }, { id: 'far', x: 7, y: 0 }, { id: 'stale', x: 1, y: 0 }], fresh = new Set(['near', 'far'])
+    rc = createRollCall({ now: () => t }); rc.tick(0, list)
+    const fill = new Function('remoteOnFloor', 'peerIdSet', 'peerRec', 'mpClient', 'bus', 'player', 'rollcall', 'performance', `${fillSrc}\nreturn fillRemotes`)(
+      [], new Set(), new Map(), { getRemotePlayers: () => list.map((r) => ({ ...r })) }, { onFloor: () => true, fresh: (id) => fresh.has(id) }, { x: 0, y: 0 }, rc, { now: () => t })
+    t = 80000; fill()
+    expect(rc.tick(90001, list).map((e) => e.id)).toEqual(['far', 'stale'])         // within six and fresh: touched; seven off, or a stale record: not
+  })
+  it('the hint row, the README and the field manual say it; every whistle line is lowercase, in-fiction, no exclamation', () => {
+    expect(html).toContain('<span>x set down</span> · <span>c whistle</span><span class="k-map"> · tab map</span>')
+    const readme = read('../README.md'), manual = read('../docs/manual.html')
+    expect(readme).toMatch(/^\| x · set down \| [^\n]*\r?\n\| c · whistle \| call out — a two-note whistle the floor and your friends hear; the things hear it too \|$/m)
+    expect(readme).toContain('**the whistle (c).**')
+    expect(manual).toContain('<span class="k"><kbd>C</kbd></span><span class="d"><b>whistle</b>')
+    expect(manual).toContain('<h3 style="font-size:15px">Call out</h3>')
+    for (const s of [NO_ANSWER_LINE, ECHO_LINE, countLine(1), countLine(2), countLine(7), countLine(40)]) { expect(s).toBe(s.toLowerCase()); expect(s).not.toContain('!') }
   })
 })

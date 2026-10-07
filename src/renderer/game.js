@@ -724,7 +724,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const K = Object.create(null)
   let locked = false
   // input.js takeKey decides what the key map takes: text fields are ignored (typing a webhook into settings must not play the game),
-  // the edge-triggered verbs (F/E/Space/Tab/Q/X) fire once per press however long they are held, Space never scrolls the page and Tab
+  // the edge-triggered verbs (F/E/Space/Tab/Q/X/C) fire once per press however long they are held, Space never scrolls the page and Tab
   // stays with the game while it owns focus and the settings panel is hidden (the panel's own tab order wins while it is open)
   const settingsHidden = () => { const sm = document.getElementById('settings-modal'); return !sm || sm.style.display === 'none' }
   window.addEventListener('keydown', e => {
@@ -746,7 +746,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   document.addEventListener('mousemove', e => { if (locked) player.angle += e.movementX * 0.002 * (getPref('mouseSensitivity') / 100) })
 
   // ── touch controls (phones / ChromeOS tablets) — feeds K + player.angle, and the WARD button feeds the ward's edge counters;
-  //    a no-op on desktop, so keyboard play is unchanged ──
+  //    a no-op on desktop, so keyboard play is unchanged. CALL is a plain key button: it sets K['KeyC'] and the loop edge-consumes the
+  //    whistle exactly as it does the key (never an edge counter here) ──
   initTouchControls({ canvas, K, player, getPref, edges: { Space: wardInput } })
 
   // ── wish dialog ──
@@ -1121,9 +1122,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
   // (from, text, isSystem, id): the client hands the speaker's id as a 4th argument (a chat, a join, a leave). A friend walking in is said
   // once their heartbeat has had JOIN_SAY_MS to name the file they are under — 'entered the level, filed under extension.'; no heartbeat by
-  // then (an old client) or an unanswered notice, today's 'entered the level.'
+  // then (an old client) or an unanswered notice, today's 'entered the level.'. A friend who speaks is not a quiet one (the roll call's touch)
   function addChatLine(from, text, isSystem, id) {
     if (isSystem && id && bus && text === JOINED_LINE) { setTimeout(() => addChatLine(from, joinedLine(id), true), JOIN_SAY_MS); return }
+    if (id && !isSystem && mpClient && id !== mpClient.id) rollcall.touch(id, performance.now())
     chatLines.push({ from, text, sys: isSystem })
     if (chatLines.length > 8) chatLines.shift()
     renderChat()
@@ -1376,6 +1378,30 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     kneel.stop(); flashlight = savedLight
     if (line) showMessage(line, PRIO.interaction)
     bus?.here(hereFields())
+  }
+
+  // ── the whistle (rollcall.js): C calls out — two notes at your own pitch, a noise of 14 at your feet the things two corners off hear (it
+  //    is yours: the stillness clocks start again and a stand ends), and the room hears it as the ONE reused frame. One line a call, never
+  //    two: who has answered lately, counted in words — or, alone where nothing hunts, the hall keeping it. Alone where something does, it
+  //    steadies you a little, and one call in six something answers in the wrong pitch (on this floor only: a travel or a death drops it).
+  //    One a WHISTLE_COOLDOWN_MS on the roll call's ms clock: a second inside it is swallowed, no line. `whistle` is audio.js's: hence the name ──
+  function whistleOut(live) {
+    const now = performance.now()
+    if (now - lastWhistleAt < WHISTLE_COOLDOWN_MS) return
+    lastWhistleAt = now
+    whistle(whistlePitch(mpClient?.id ?? 'solo', mpClient?.getName() ?? 'wanderer'), 0, 1)
+    level.entitySys.noise(player.x, player.y, WHISTLE_NOISE)
+    stillness.noise(playT); standHeld = 0
+    const n = rollcall.count(now)
+    if (bus) { callOut.x = player.x; callOut.y = player.y; callOut.lvl = level.index; callOut.c = n <= 32; bus.emit('whistle', callOut) }
+    showMessage(n === 1 && !live ? NO_ANSWER_LINE : countLine(n), PRIO.interaction)
+    if (n === 1 && live) {
+      sanity = Math.min(100, sanity + SOLO_SANITY)
+      if (rollcall.echoRoll()) {
+        const g = arrivalGen
+        setTimeout(() => { if (g !== arrivalGen) return; footfall(ECHO.footfalls); sanity = Math.max(0, sanity - ECHO.sanity); showMessage(ECHO_LINE, PRIO.interaction) }, ECHO.delayMs)
+      }
+    }
   }
 
   // ── messages (black text, fades via opacity — see CSS): one voice. Every line goes through the priority queue (messages.js) so a
@@ -1894,13 +1920,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function fillRemotes() {
     remoteOnFloor.length = 0; peerIdSet.clear(); peerRec.clear()
     if (!mpClient) return
-    const list = mpClient.getRemotePlayers()
+    const list = mpClient.getRemotePlayers(), now = performance.now()
     for (let i = 0; i < list.length; i++) {
       const rp = list[i]
       peerIdSet.add(rp.id); peerRec.set(rp.id, rp)
       if (bus) {
         if (!bus.onFloor(rp.id)) continue
         if (!bus.fresh(rp.id)) { rp.st = rp.lit = rp.origin = rp.status = undefined; rp.thin = rp.seen = false }
+        else if ((rp.x - player.x) ** 2 + (rp.y - player.y) ** 2 < 36) rollcall.touch(rp.id, now)   // a friend within six is no quiet one
       }
       remoteOnFloor.push(rp)
     }
@@ -2220,6 +2247,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         else applyItemEffect(itemSys.useSelected())
       }
       if (K['KeyX']) { K['KeyX'] = false; throwSelected() }
+      if (K['KeyC']) { K['KeyC'] = false; whistleOut(creaturesLive) }   // C — call out (the touch CALL button sets the same key; lying down too)
       if (K['KeyM']) { K['KeyM'] = false; const on = !getPref('music'); setPref('music', on); showMessage(on ? 'the music seeps back in.' : 'the music stops.') }
       if (K['KeyN']) { K['KeyN'] = false; cycleTrack() }
       if (K['KeyL']) {
@@ -2322,6 +2350,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (kr === 'emit') { kneelOut.to = kneel.st.id; bus?.emit('kneel', kneelOut) }
       else if (kr === 'ended') { flashlight = savedLight; bus?.here(hereFields()) }
     }
+    // the roll call (rollcall.js), on the list the bus just recounted: a friend on this floor who has not whistled, spoken or stood within six
+    // for 90 s has gone quiet — said at a murmur's priority, and it costs you, again every 90 s it stays true. Its one reused list, read now
+    if (bus) { const qs = rollcall.tick(performance.now(), bus.freshPeersOnFloor()); for (let i = 0; i < qs.length; i++) { sanity = Math.max(0, sanity - QUIET_SANITY); showMessage(qs[i].line, PRIO.ambient) } }
     // TODO(integrate:W7) I12: litRec = bus ? litFriendNear(player, bus.freshPeersOnFloor(), LIT_OPTS) : null; litNear = litRec !== null — here, before the perception and the sanity read it (LIT_OPTS's los is frameLos, hoisted with FRAME_OPTS)
     // ── the things: what they know about you this frame, then one update; the threat record it returns drives contact damage, the
     //    heartbeat and sanity (no second pass over the list). Creatures can be switched off entirely (pure liminal exploration;
