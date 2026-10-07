@@ -114,7 +114,7 @@ describe('game.js: travel(way) replaces descend', () => {
 })
 
 describe('game.js: die() through death.js', () => {
-  const body = slice('function die() {', '// ── input ──')
+  const body = slice('function die(d = null) {', '// ── input ──')
   it('says the dark, remembers where you fell, resolves the death with the item names, wakes a floor above beside the exit (or the crossing)', () => {
     expect(body).toContain("showMessage('everything goes dark.', PRIO.combat)")
     expect(body).toMatch(/mem\.leave\(level\.index, player, C, playT\)\r?\n\s*mem\.setDropped\(level\.index, itemSys\.getDropped\(\)\)\r?\n\s*fadeThen\(/)

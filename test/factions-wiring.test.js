@@ -32,6 +32,10 @@ import { loadFile, canFile, STRINGS } from '../src/renderer/status.js'
 import { closingLines, NO_STANDING } from '../src/renderer/closings.js'
 import { OPENED_LINE, RELEASE_LINE, RADIO_KEY_LINE } from '../src/renderer/origin-processed.js'
 import { LEGACY_LAST_LINE } from '../src/renderer/origin-rules.js'
+import { createDownState, createKneel, DOWN_LINE, WOKEN_LINE, KNEELER_LINE, HANDS_LINE, LIGHT_STAYS_LINE, KNEEL_HINT, WAKE, KNEELER_SANITY, DOWN_BEAT } from '../src/renderer/downed.js'
+import { deathDecision, NOBODY_CAME } from '../src/renderer/compose-gates.js'
+import { evKinds } from '../src/renderer/rollcall.js'
+import { createEvBus } from '../src/net/evbus.js'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const game = read('../src/renderer/game.js')
@@ -44,7 +48,7 @@ const count = (re) => (game.match(re) || []).length
 const loopAt = game.indexOf('function loop(ts) {')
 const buildBody = slice('function buildLevel(index, at = null) {', 'const fader = createFader(')
 const travelBody = slice('function travel(way) {', '// die(): death.js resolves it')
-const dieBody = slice('function die() {', '// ── input ──')
+const dieBody = slice('function die(d = null) {', '// ── input ──')
 const resumeBody = slice('if (resume) {', 'buildLevel(mpClient ? 0 : 4)')
 const ORIGIN_FILES = ['origin-intake.js', 'origin-rules.js', 'origin-tenant.js', 'origin-anchored.js', 'origin-processed.js', 'origin-unnamed.js', 'origin-thin.js']
 
@@ -137,9 +141,9 @@ describe('I5: the file (origin-*.js) in game.js', () => {
       expect(at(s)).toBeLessThan(loopAt)
       expect(game.split(s).length - 1, s).toBe(1)
     }
-    // every write of `rules`: the filing, the ballast cure, the naming re-file, the claim's re-file (I8), the resume
+    // every write of `rules`: the filing, the ballast cure, the naming re-file, the claim's re-file (I8), the resume, a death's minted layer (I9)
     expect(count(/(?<![.\w])rules = (?!LEGACY)/g)).toBe(count(/(?<![.\w])rules = rulesFor\(/g))
-    expect(count(/(?<![.\w])rules = rulesFor\(/g)).toBe(5)
+    expect(count(/(?<![.\w])rules = rulesFor\(/g)).toBe(6)
   })
   it('driftD() is the ONE drift helper: declared once, the only driftMeters( call, read by the HUD and the leash row', () => {
     expect(count(/const driftD = /g)).toBe(1)
@@ -475,7 +479,7 @@ describe('I7: the one sanity step (compose-sanity.js)', () => {
   const lit = game.match(/const sanCtx = (\{[^]*?\})\r?\n/)[1]
   const mkCtx = new Function('rules', 'mods', 'co', 'flashlight', 'player', 'selfFile', 'remoteOnFloor', 'bus', `return ${lit}`)
   const run = new Function('sanCtx', 'company', 'sanityStep', 'showMessage', 'EXHAUSTED_LINE', 'DISAGREE_LINE', 'PRIO', 'driftD', 'st',
-    `let { rules, mods, co, flashlight, litNear, level, th, origin, leashCalm, disagreeSaid, dt, sanity, playT } = st\n${block}\nst.sanity = sanity; st.disagreeSaid = disagreeSaid`)
+    `let { rules, mods, co, flashlight, litNear, level, th, origin, leashCalm, disagreeSaid, dt, sanity, playT, down = { st: 'ok' } } = st\n${block}\nst.sanity = sanity; st.disagreeSaid = disagreeSaid`)   // (down: I9)
   const NM = statusMods('notice-mailed'), CO = closingOverlay(null), DT = 1 / 60
   const legacy = (f, index, hunted, gaze, rate, friend) => {
     let sdelta = f ? 2 : -2
@@ -535,12 +539,12 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     expect(game).toMatch(/import \{ polaroidCaption \} from '\.\/compose-polaroid\.js'/)
     expect(game).toMatch(/import \{ radioLine, RADIO_GROUPS \} from '\.\/compose-radio\.js'/)
     expect(game).toMatch(/import \{ wishRoute \} from '\.\/compose-wish\.js'/)
-    expect(game).toMatch(/import \{ finaleGate, beaconDecision \} from '\.\/compose-gates\.js'/)
+    expect(game).toMatch(/import \{ finaleGate, beaconDecision, deathDecision \} from '\.\/compose-gates\.js'/)   // (deathDecision: I9)
     expect(game).toMatch(/import \{ SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame \} from '\.\/evidence\.js'/)
     expect(game).toMatch(/import \{ lineOfSight, inViewCone \} from '\.\/raycaster\.js'/)
     expect(game).toMatch(/import \{ depthOf, loadFile, saveFile, statusMods, canFile, canRefile, wishPrompt \} from '\.\/status\.js'/)
     expect(game).toMatch(/import \{ closingOverlay, closingLines, isWishOpen, CLOSED_OFFICE \} from '\.\/closings\.js'/)
-    expect(game).toMatch(/import \{ createCompany, createRollCall \} from '\.\/rollcall\.js'/)
+    expect(game).toMatch(/import \{ createCompany, createRollCall\b[^}]*\} from '\.\/rollcall\.js'/)   // (I9 / I10 add the kinds and the whistle's names after them)
     for (const re of [/const RADIO_GROUPS = /, /const isClaim = /, /const finalizing = /, /iwashere/, /extension30150a/]) expect(game).not.toMatch(re)
     // each seam is ONE call
     for (const re of [/polaroidCaption\(/g, /radioLine\(/g, /wishRoute\(/g, /finaleGate\(/g, /beaconDecision\(/g, /rollCall\(level\.st\)/g]) expect(count(re), String(re)).toBe(1)
@@ -797,5 +801,226 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     expect([...p.floors]).toEqual([floorKey(7, 2)])
     p = push({ effect: 'pulse', webhook: 'https://ntfy.sh/EXTENSION-30150A', file: { ...loadFile(null), status: 'litigation', closing: 'litigation' } })
     expect([p.said, p.beaconFired, p.finale]).toEqual([[CLAIM_LINE, NO_STANDING], false, 0])
+  })
+})
+
+describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the kneel, being counted back', () => {
+  const loop = game.slice(loopAt)
+  const HP_LINE = "if (player.hp <= 0) { player.hp = 0; const d = deathDecision({ mp: !!mpClient, peers: bus ? bus.freshPeersOnFloor().length : 0, downSt: down.st, rules, filed, thin, D: driftD(), timeout: false }); if (d === 'down') goDown(); else if (d !== 'wait') die(d) }"
+  const TIMEOUT_LINE = "if (down.tick() === 'timeout') die(deathDecision({ mp: !!mpClient, peers: 0, downSt: down.st, rules, filed, thin, D: driftD(), timeout: true }))"
+  const SWEEP = "if (down.st === 'down') { K['KeyF'] = K['KeyQ'] = K['KeyX'] = K['KeyE'] = K['KeyB'] = K['KeyL'] = false; for (let i = 1; i <= 6; i++) K['Digit' + i] = false }"
+  const helpers = slice('function goDown() {', '// ── messages (black text')
+  const fn = (name) => helpers.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\r?\\n  \\}`))[0]
+  // the source without its comments (a call named in a comment is not a call)
+  const code = game.split(/\r?\n/).map((l) => l.replace(/^\s*\/\/.*$|\s\/\/ .*$/, '')).join('\n')
+
+  it('imports downed.js and deathDecision by their real names; downed.js is in both offline shells; nothing of I9 is left to do', () => {
+    expect(game).toMatch(/import \{ createDownState, createKneel, downedInFront, DOWN_LINE, KNEEL_HINT, HANDS_LINE, LIGHT_STAYS_LINE, WOKEN_LINE, KNEELER_LINE, WAKE, KNEELER_SANITY, DOWN_BEAT \} from '\.\/downed\.js'/)
+    expect(sw).toContain("'/renderer/downed.js'")
+    expect(build).toContain("'downed.js'")
+    expect(game).not.toMatch(/TODO\(integrate:W4\)/)
+    expect(game).not.toMatch(/TODO\(integrate:W5\) I9/)
+  })
+  it('one down state and one kneel, before the loop, on performance.now() ms — never playT, and never handed a clock', () => {
+    for (const s of ['const down = createDownState({ now: () => performance.now() })', 'const kneel = createKneel({ now: () => performance.now() })', 'let savedLight = true',
+      "const downEl = document.getElementById('down')", "let downVeil = '0'", 'const DN_OPTS = { los: frameLos }', "const kneelOut = { to: '' }, wokeOut = { by: '' }"]) {
+      expect(at(s), s).toBeLessThan(loopAt)
+      expect(game.split(s).length - 1, s).toBe(1)
+    }
+    expect(count(/createDownState\(/g)).toBe(1); expect(count(/createKneel\(/g)).toBe(1)
+    for (const re of [/down\.goDown\(playT/, /down\.tick\(playT/, /down\.kneelTick\([^)]*playT/, /kneel\.tick\(playT/, /playT \* 1000/]) expect(game).not.toMatch(re)
+    expect(count(/down\.goDown\(\)/g)).toBe(1)                               // goDown(), bare
+    expect(count(/down\.tick\(\)/g)).toBe(1)                                 // the loop's timeout check, bare
+  })
+  it('deathDecision is called exactly twice, both with the ONE signature; the hp block goes down, waits or dies; the timeout dies with nobody', () => {
+    const calls = [...game.matchAll(/deathDecision\((\{[^}]*\})\)/g)].map((m) => m[1])
+    expect(calls.length).toBe(2)
+    for (const c of calls) expect(c).toMatch(/^\{ mp: !!mpClient, peers: (bus \? bus\.freshPeersOnFloor\(\)\.length : 0|0), downSt: down\.st, rules, filed, thin, D: driftD\(\), timeout: (true|false) \}$/)
+    expect(loop).toContain(HP_LINE)
+    expect(loop).toContain(TIMEOUT_LINE)
+    expect(loop.indexOf(TIMEOUT_LINE)).toBeLessThan(loop.indexOf(HP_LINE))
+    expect(loop.indexOf("if (hurtEl) hurtEl.style.opacity = (hurt * 0.55).toFixed(2)")).toBeLessThan(loop.indexOf(TIMEOUT_LINE))
+    expect((code.match(/(?<!function )\bdie\(/g) || []).length).toBe(2)       // the timeout and the hp block: nothing else dies
+  })
+  it('the hp block, lifted and replayed against the real decision: solo and an empty floor die today\'s death; a fresh friend lays you down; down, you wait', () => {
+    const run = new Function('deathDecision', 'mpClient', 'bus', 'down', 'rules', 'filed', 'thin', 'driftD', 'goDown', 'die', 'player', HP_LINE)
+    const go = (mp, peers, downSt) => {
+      const out = { down: 0, died: [] }, player = { hp: -4 }
+      run(deathDecision, mp ? {} : null, mp ? { freshPeersOnFloor: () => new Array(peers) } : null, { st: downSt }, LEGACY, false, false, () => 0,
+        () => out.down++, (d) => out.died.push(d), player)
+      return { ...out, hp: player.hp }
+    }
+    const legacyDeath = { die: true, mintThin: false, leashDebt: 0, sanity: 0, regenDelay: 0, line: null }
+    expect(go(false, 0, 'ok')).toEqual({ down: 0, died: [legacyDeath], hp: 0 })     // solo: today's death, nothing added
+    expect(go(true, 0, 'ok')).toEqual({ down: 0, died: [legacyDeath], hp: 0 })      // friends only on other floors
+    expect(go(true, 1, 'ok')).toEqual({ down: 1, died: [], hp: 0 })                 // a fresh friend here: down
+    expect(go(true, 1, 'down')).toEqual({ down: 0, died: [], hp: 0 })               // already down: wait
+  })
+  it('die(d): the reset right after the core\'s invuln line, then the decision (its regenDelay wins), the veil cleared; its line third, at 7800 ms', () => {
+    expect(dieBody).toMatch(/invuln = 1\.6; regenDelay = 0; hurt = 0\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(down\.st === 'down'\) flashlight = savedLight\r?\n\s*down\.reset\(\); if \(kneel\.st\) \{ kneel\.stop\(\); flashlight = savedLight \}\r?\n\s*if \(d\) \{ if \(d\.mintThin && filed\) \{ thin = true; rules = rulesFor\(origin, thin\); thinFirstShot = true \} if \(d\.leashDebt > 0\) leashDebt = d\.leashDebt; if \(d\.sanity\) sanity = Math\.max\(0, Math\.min\(100, sanity \+ d\.sanity\)\); if \(d\.regenDelay\) regenDelay = d\.regenDelay \}\r?\n\s*if \(downEl\) downEl\.style\.opacity = '0'\r?\n\s*document\.body\.classList\.remove\('down'\)/)
+    expect(dieBody).toMatch(/if \(r\.dropped\) later\(5200, r\.droppedLine, PRIO\.discovery\)\r?\n\s*if \(d\?\.line\) later\(7800, d\.line, PRIO\.discovery\)/)
+    expect(game).not.toContain('you wake where you fell in.')
+  })
+  it('die(d)\'s block, lifted and replayed: LEGACY\'s d changes nothing; a filed timeout mints the layer, costs 20 and 12 s, gives the light back; the pin\'s debt', () => {
+    const block = dieBody.slice(dieBody.indexOf("if (down.st === 'down') flashlight = savedLight"), dieBody.indexOf('level.grid.setPlayerChunk(spawnChunk.cx', dieBody.indexOf('invuln = 1.6')))
+    const fnD = new Function('d', 'down', 'kneel', 'downEl', 'document', 'rulesFor', 'st',
+      `let { flashlight, savedLight, thin, rules, thinFirstShot, leashDebt, sanity, regenDelay, filed, origin } = st\n${block}\nObject.assign(st, { flashlight, savedLight, thin, rules, thinFirstShot, leashDebt, sanity, regenDelay })`)
+    const run = (d, o = {}) => {
+      let t = 0
+      const down = createDownState({ now: () => t }), kneel = createKneel({ now: () => t })
+      if (o.down) down.goDown(0)
+      const cls = new Set(['down']), veil = { style: { opacity: '0.62' } }
+      const st = { flashlight: !o.down, savedLight: true, thin: false, rules: o.rules ?? LEGACY, thinFirstShot: false, leashDebt: 0, sanity: 50, regenDelay: 0, filed: o.filed ?? false, origin: o.origin ?? null }
+      fnD(d, down, kneel, veil, { body: { classList: { remove: (c) => cls.delete(c) } } }, rulesFor, st)
+      return { st, downSt: down.st, veil: veil.style.opacity, cls: [...cls] }
+    }
+    const legacy = deathDecision({ mp: false, peers: 0, downSt: 'ok', rules: LEGACY, filed: false, thin: false, D: 0, timeout: false })
+    let r = run(legacy)
+    expect([r.st.flashlight, r.st.thin, r.st.rules, r.st.sanity, r.st.regenDelay, r.st.leashDebt, r.st.thinFirstShot]).toEqual([true, false, LEGACY, 50, 0, 0, false])
+    expect([r.downSt, r.veil, r.cls]).toEqual(['ok', '0', []])
+    const tenant = rulesFor('tenant', false)
+    const timeout = deathDecision({ mp: true, peers: 0, downSt: 'down', rules: tenant, filed: true, thin: false, D: 0, timeout: true })
+    expect(timeout.line.startsWith(NOBODY_CAME + ' ')).toBe(true)
+    r = run(timeout, { down: true, rules: tenant, filed: true, origin: 'tenant' })
+    expect([r.st.flashlight, r.st.thin, r.st.rules, r.st.thinFirstShot, r.st.sanity, r.st.regenDelay, r.downSt]).toEqual([true, true, rulesFor('tenant', true), true, 30, 12, 'ok'])
+    const unfiled = deathDecision({ mp: true, peers: 0, downSt: 'down', rules: LEGACY, filed: false, thin: false, D: 0, timeout: true })
+    expect(unfiled.line).toBe(NOBODY_CAME)
+    r = run(unfiled, { down: true })
+    expect([r.st.thin, r.st.rules, r.st.sanity, r.st.regenDelay]).toEqual([false, LEGACY, 30, 12])                   // no file, no layer
+    const pinned = deathDecision({ mp: false, peers: 0, downSt: 'ok', rules: rulesFor('anchored', false), filed: true, thin: false, D: 40, timeout: false })
+    r = run(pinned, { rules: rulesFor('anchored', false), filed: true, origin: 'anchored' })
+    expect([r.st.leashDebt, r.st.thin, r.st.sanity, r.st.regenDelay]).toEqual([40, true, 50, 0])
+  })
+  it('goDown / wakeUp / startKneel / stopKneel, lifted and replayed: the light forced and given back, the room told; wakeUp is the ONE wake and flips nothing', () => {
+    for (const n of ['goDown', 'wakeUp', 'startKneel', 'stopKneel']) expect(count(new RegExp(`function ${n}\\(`, 'g')), n).toBe(1)
+    const wake = fn('wakeUp')
+    expect(wake).not.toMatch(/(?<!function )die\(/)
+    expect(wake).not.toMatch(/\bdown\.(st|reset|wakeNow|kneelTick|goDown)\b/)                    // the caller flipped down.st
+    expect(wake).not.toMatch(/\bthin\b|leashDebt/)                                               // never a layer, never the pin's debt
+    expect(fn('goDown')).not.toMatch(/(?<!function )die\(/)
+    // wakeUp is called from the kneel handler only (the photo path joins it in I12) — never from die()
+    expect((code.match(/(?<!function )\bwakeUp\(/g) || []).length).toBe(1)
+    expect(game).toContain("bus.on('kneel', ({ id }) => { if (down.st === 'down' && down.kneelTick(id) === 'woken') wakeUp(id) })")
+    const mk = new Function('kneel', 'down', 'player', 'showMessage', 'PRIO', 'bus', 'hereFields', 'document', 'downEl', 'wardInput', 'performance',
+      'WAKE', 'WOKEN_LINE', 'DOWN_LINE', 'wokeOut', 'st',
+      `let { flashlight, savedLight, sanity, invuln, regenDelay, hurt } = st\n${helpers}\nreturn { goDown, wakeUp, startKneel, stopKneel, read: () => ({ flashlight, savedLight, sanity, invuln, regenDelay, hurt }) }`)
+    let t = 0
+    const down = createDownState({ now: () => t }), kneel = createKneel({ now: () => t })
+    const said = [], sent = [], cls = new Set(), veil = { style: { opacity: '0.9' } }
+    let here = 0
+    const bus = { emit: (k, p) => { sent.push([k, { ...p }]); return true }, here: () => here++ }
+    const player = { hp: 0, maxHp: 100 }
+    const h = mk(kneel, down, player, (m, p) => said.push([m, p]), PRIO, bus, () => 'here', { body: { classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c) } } },
+      veil, { press: 3 }, { now: () => t }, WAKE, WOKEN_LINE, DOWN_LINE, { by: '' }, { flashlight: true, savedLight: true, sanity: 40, invuln: 0, regenDelay: 6, hurt: 1 })
+    h.goDown()
+    expect([down.st, h.read().flashlight, h.read().savedLight, [...cls], here]).toEqual(['down', false, true, ['down'], 1])
+    expect(said).toEqual([[DOWN_LINE, PRIO.combat]])
+    h.wakeUp('f')
+    expect(down.st).toBe('down')                                                                  // wakeUp does not flip it: the caller did
+    expect([player.hp, h.read().sanity, h.read().invuln, h.read().regenDelay, h.read().hurt, h.read().flashlight]).toEqual([60, 50, 2, 0, 0, true])
+    expect([veil.style.opacity, [...cls], here]).toEqual(['0', [], 2])
+    expect(said[1]).toEqual([WOKEN_LINE, PRIO.interaction])
+    expect(sent).toEqual([['woke', { by: 'f' }]])
+    // kneeling lights you; a fall while kneeling gets up first and keeps the light you had before the kneel
+    t = 100; down.reset()
+    const k = mk(kneel, down, player, (m, p) => said.push([m, p]), PRIO, bus, () => 'here', { body: { classList: { add() {}, remove() {} } } }, null, { press: 7 }, { now: () => t },
+      WAKE, WOKEN_LINE, DOWN_LINE, { by: '' }, { flashlight: false, savedLight: true, sanity: 40, invuln: 0, regenDelay: 0, hurt: 0 })
+    k.startKneel({ id: 'f', name: 'maddie' })
+    expect([kneel.st.id, kneel.st.press0, k.read().flashlight, k.read().savedLight]).toEqual(['f', 7, true, false])
+    k.goDown()
+    expect([kneel.st, down.st, k.read().flashlight, k.read().savedLight]).toEqual([null, 'down', false, false])
+    k.startKneel({ id: 'g', name: 'jo' }); k.stopKneel(HANDS_LINE)
+    expect([kneel.st, k.read().flashlight, said[said.length - 1]]).toEqual([null, false, [HANDS_LINE, PRIO.interaction]])
+  })
+  it('the bus: kneel and woke from evKinds, my ONE outgoing payload let through by identity; through the real bus a received one is checked as evKinds says', () => {
+    expect(game).toContain('const kinds = evKinds(() => mpClient.id)')
+    const lines = game.match(/bus\.register\('kneel'[^\n]*\r?\n\s*bus\.register\('woke'[^\n]*/)[0].replace(/\/\/[^\n]*/g, '')
+    expect(game).toContain("bus.on('woke', ({ id }) => { if (kneel.wasKneelingOn(id)) { sanity = Math.min(100, sanity + KNEELER_SANITY); showMessage(KNEELER_LINE, PRIO.interaction) } })")
+    const sent = [], pos = { near: { x: 1.5, y: 0 }, far: { x: 3, y: 0 } }
+    const bus = createEvBus({ send: (kind, payload) => sent.push([kind, JSON.parse(JSON.stringify(payload))]), now: () => 1000, self: () => ({ x: 0, y: 0, lvl: 1 }),
+      peerPos: (id) => pos[id] ?? null, peerIds: () => new Set(Object.keys(pos)), selfId: () => 'me' })
+    const kneelOut = { to: '' }, wokeOut = { by: '' }
+    new Function('bus', 'kinds', 'kneelOut', 'wokeOut', lines)(bus, evKinds(() => 'me'), kneelOut, wokeOut)
+    kneelOut.to = 'near'
+    expect(bus.emit('kneel', kneelOut)).toBe(true)                                // mine, to the friend I kneel by
+    expect(bus.emit('kneel', { to: 'near' })).toBe(false)                         // any other object is checked as received: not to me
+    wokeOut.by = 'near'
+    expect(bus.emit('woke', wokeOut)).toBe(true)
+    expect(sent.map(([k, p]) => [k, p.to ?? p.by])).toEqual([['kneel', 'near'], ['woke', 'near']])
+    const frame = (id, kind, payload, n) => ({ id, name: id, kind, payload: { ...payload, n }, t: 1 })
+    expect(bus.receive(frame('near', 'kneel', { to: 'me' }, 1))).toBe(true)
+    expect(bus.receive(frame('near', 'kneel', { to: 'you' }, 2))).toBe(false)
+    expect(bus.receive(frame('far', 'kneel', { to: 'me' }, 3))).toBe(false)       // 3 cells: beyond maxDist 2
+    expect(bus.receive(frame('far', 'woke', { by: 'me' }, 4))).toBe(true)         // within 3
+    expect(bus.receive(frame('near', 'woke', { by: 'you' }, 5))).toBe(false)
+  })
+  it('the gates: modal, a step ends a kneel before the movement gate, the hit block, the regen, travel, the slow beat; tension.tick untouched', () => {
+    expect(loop).toContain("const modal = transitioning || dialogOpen || chatOpen || noteOpen || mapOpen || down.st === 'down' || kneel.st !== null")
+    expect(loop).toMatch(/if \(kneel\.st && \(K\['KeyW'\] \|\| K\['KeyS'\] \|\| K\['KeyA'\] \|\| K\['KeyD'\] \|\| K\['ArrowUp'\] \|\| K\['ArrowDown'\]\)\) stopKneel\(null\)\r?\n\s*if \(!transitioning && !chatOpen && !noteOpen && down\.st !== 'down' && !kneel\.st\) \{/)
+    expect(loop).toContain("if (!transitioning && creaturesLive && getPref('damage') && invuln <= 0 && th.dmg > 0 && down.st !== 'down') {")
+    expect(loop).toContain("else if (player.hp < player.maxHp && down.st !== 'down') player.hp = Math.min(player.maxHp, player.hp + 3.5 * dt)")
+    expect(travelBody).toMatch(/^function travel\(way\) \{\r?\n\s*if \(transitioning \|\| down\.st === 'down'\) return/)
+    expect(travelBody).toMatch(/if \(closing && closing\.key === way\.key && playT < closing\.until\) return/)
+    expect(loop).toContain('const tn = tension.tick(dt, creaturesLive && !transitioning ? th : null, player.hp)')
+    expect(loop).toMatch(/if \(down\.st === 'down'\) \{ if \(heartT <= 0\) \{ heartbeat\(DOWN_BEAT\.intensity\); heartT = DOWN_BEAT\.everyS \} \}/)
+    expect(DOWN_BEAT).toEqual({ intensity: 0.3, everyS: 2 })
+    // Space while kneeling is your hands on them (the latch was dropped by modal), after the charger and its recoil
+    const ward = game.slice(at('let verbMul = 1'), at('let moved = false'))
+    expect(ward).toMatch(/shake = Math\.max\(shake, RECOIL_SHAKE\)\r?\n\s*\}\r?\n\s*\}\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(kneel\.st && wardInput\.press !== kneel\.st\.press0\) stopKneel\(HANDS_LINE\)/)
+  })
+  it('the verbs: lying down every verb key but C is swept just before the gate; the kneel\'s F heads the F chain; Esc and L while kneeling', () => {
+    expect(loop).toContain(SWEEP)
+    const sweepAt = loop.indexOf(SWEEP), gateAt = loop.indexOf('if (!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen) {')
+    expect(sweepAt).toBeGreaterThan(loop.indexOf("else if (K['Tab']) {"))
+    expect(sweepAt).toBeLessThan(gateAt)
+    expect(SWEEP).not.toContain("K['KeyC']")
+    const K = Object.fromEntries(['KeyF', 'KeyQ', 'KeyX', 'KeyE', 'KeyB', 'KeyL', 'KeyC', 'KeyM', 'Enter', 'Tab', 'KeyW', 'Digit1', 'Digit6'].map((k) => [k, true]))
+    new Function('down', 'K', SWEEP)({ st: 'down' }, K)
+    expect(Object.keys(K).filter((k) => K[k])).toEqual(['KeyC', 'KeyM', 'Enter', 'Tab', 'KeyW'])    // C still calls; the music, chat, map, the gaze stay
+    const K2 = { KeyF: true }; new Function('down', 'K', SWEEP)({ st: 'ok' }, K2); expect(K2.KeyF).toBe(true)
+    expect(loop).toMatch(/if \(!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen\) \{\r?\n(\s*\/\/[^\n]*\r?\n)+\s*if \(K\['KeyF'\] && \(kneel\.st \|\| dnFront\)\) \{ K\['KeyF'\] = false; if \(kneel\.st\) stopKneel\(null\); else startKneel\(dnFront\) \}\r?\n\s*if \(K\['KeyF'\]\) \{/)
+    expect(loop).toMatch(/if \(kneel\.st && K\['Escape'\]\) \{ K\['Escape'\] = false; stopKneel\(null\) \}[^\n]*\r?\n(\s*\r?\n)?(\s*\/\/[^\n]*\r?\n)*\s*if \(mapOpen && \(K\['Escape'\] \|\| K\['Tab'\]\)\)/)
+    expect(loop).toMatch(/if \(K\['KeyL'\]\) \{\r?\n\s*K\['KeyL'\] = false\r?\n\s*if \(kneel\.st\) showMessage\(LIGHT_STAYS_LINE\)[^\n]*\r?\n\s*else \{ flashlight = !flashlight; lightToggles\+\+; showMessage\(flashlight \? 'flashlight on\.' : 'flashlight off — the dark leans in\.'\) \}/)
+    expect(LIGHT_STAYS_LINE).toBe('your light stays on them.')
+  })
+  it('the prompt: who is down in front (the hoisted options, last frame\'s fill) heads the ladder, dimming as you count; the kneel ticks after the remote fill', () => {
+    expect(loop).toContain('const dnFront = (bus && !kneel.st) ? downedInFront(player, remoteOnFloor, DN_OPTS) : null')
+    expect(loop.indexOf('const dnFront = ')).toBeLessThan(loop.indexOf("const itemHintEl = document.getElementById('item-hint')"))
+    expect(loop).toMatch(/if \(itemHintEl\) \{\r?\n\s*if \(kneel\.st \|\| dnFront\) \{\r?\n\s*itemHintEl\.textContent = KNEEL_HINT\r?\n\s*itemHintEl\.style\.opacity = kneel\.st \? kneel\.dim\(\)\.toFixed\(2\) : '1'[^\n]*\r?\n\s*\} else if \(nearItem\) \{/)
+    expect(KNEEL_HINT).toBe('f · stay with them')
+    const tick = loop.indexOf('const kr = kneel.tick(performance.now(), tgt, player)')
+    expect(tick).toBeGreaterThan(loop.indexOf('fillRemotes()'))
+    expect(tick).toBeGreaterThan(loop.indexOf('if (bus) { bus.tick(performance.now());'))
+    expect(tick).toBeLessThan(loop.indexOf('const th = creaturesOn ? level.entitySys.update('))
+    expect(loop).toContain("if (kr === 'emit') { kneelOut.to = kneel.st.id; bus?.emit('kneel', kneelOut) }")
+    expect(loop).toContain("else if (kr === 'ended') { flashlight = savedLight; bus?.here(hereFields()) }")
+    expect(buildBody).toMatch(/for \(const t of closingTimers\) clearTimeout\(t\);[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(kneel\.st\) \{ kneel\.stop\(\); flashlight = savedLight \}/)
+    expect(buildBody).not.toMatch(/down\.(reset|goDown)/)                       // lying down is not touched by a build (travel refuses; die resets)
+  })
+  it('here says kneel / down; the sanity step lies down (-1 flat); the veil is written on a change only', () => {
+    expect(slice('function hereFields() {', 'return hereObj')).toContain("hereObj.st = kneel.st ? 'kneel' : down.st")
+    expect(loop).toContain("sanCtx.down = down.st === 'down'")
+    expect(loop).toMatch(/const veil = down\.st === 'down' \? down\.lift\(\)\.toFixed\(2\) : '0'\r?\n\s*if \(downEl && veil !== downVeil\) \{ downVeil = veil; downEl\.style\.opacity = veil \}/)
+    expect(count(/classList\.add\('down'\)/g)).toBe(1)                           // goDown
+    expect(count(/classList\.remove\('down'\)/g)).toBe(2)                        // wakeUp, die
+    // the sanity block, lifted: lying down it is -1 a second whatever else is true, and the pool neither drains nor refills
+    const block = slice('sanCtx.rules = rules;', 'updateSanity()')
+    const lit = game.match(/const sanCtx = (\{[^]*?\})\r?\n/)[1]
+    const sanCtx = new Function('rules', 'mods', 'co', 'flashlight', 'player', 'selfFile', 'remoteOnFloor', 'bus', `return ${lit}`)(LEGACY, statusMods('notice-mailed'), closingOverlay(null), true, { x: 0, y: 0 }, {}, [], null)
+    const company = createCompany(); company.add(-30)
+    const st = { rules: LEGACY, mods: statusMods('notice-mailed'), co: closingOverlay(null), flashlight: true, litNear: false, level: { index: 2, depth: 2 }, th: { hunted: true, gaze: true, gazeRate: 3 },
+      origin: null, leashCalm: 0, disagreeSaid: false, dt: 1 / 60, sanity: 50, playT: 0, down: { st: 'down' } }
+    new Function('sanCtx', 'company', 'sanityStep', 'showMessage', 'EXHAUSTED_LINE', 'DISAGREE_LINE', 'PRIO', 'driftD', 'st',
+      `let { rules, mods, co, flashlight, litNear, level, th, origin, leashCalm, disagreeSaid, dt, sanity, playT, down } = st\n${block}\nst.sanity = sanity`)(sanCtx, company, sanityStep, () => {}, EXHAUSTED_LINE, DISAGREE_LINE, PRIO, () => 0, st)
+    expect(st.sanity).toBe(50 - 1 / 60)
+    expect(company.value).toBe(30)
+  })
+  it('index.html: #down is its own veil between #hurt and #fade, z 45, and the line you are told reads over it', () => {
+    expect(html).toMatch(/<div id="hurt"><\/div>\r?\n\s*<div id="down"><\/div>\r?\n\s*<div id="fade"><\/div>/)
+    const css = html.match(/#down \{[^}]*\}/)[0]
+    for (const s of ['position: fixed', 'inset: 0', 'background: #000', 'opacity: 0', 'pointer-events: none', 'z-index: 45', 'transition: opacity 0.4s']) expect(css).toContain(s)
+    expect(html).toContain('body.down #msg { z-index: 46; }')
+    expect([DOWN_LINE, WOKEN_LINE, KNEELER_LINE]).toEqual(['everything goes dark. you are still here. somewhere, someone may notice.', 'you are counted. you come back.', 'you stayed. you counted them back.'])
+    expect(KNEELER_SANITY).toBe(8)
   })
 })

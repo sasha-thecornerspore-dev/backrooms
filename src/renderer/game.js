@@ -47,14 +47,15 @@ import { RECOIL_DIST, RECOIL_SHAKE, RECOIL_LINE, CURE_LINE } from './origin-thin
 import { perceptionFor } from './compose-perception.js'
 import { createStillness, HUNTS_MOVEMENT_LINE } from './stillness.js'
 import { sanityStep, EXHAUSTED_LINE, DISAGREE_LINE } from './compose-sanity.js'
-import { createCompany, createRollCall } from './rollcall.js'
+import { createCompany, createRollCall, evKinds } from './rollcall.js'
+import { createDownState, createKneel, downedInFront, DOWN_LINE, KNEEL_HINT, HANDS_LINE, LIGHT_STAYS_LINE, WOKEN_LINE, KNEELER_LINE, WAKE, KNEELER_SANITY, DOWN_BEAT } from './downed.js'
 import { depthOf, loadFile, saveFile, statusMods, canFile, canRefile, wishPrompt } from './status.js'
 import { closingOverlay, closingLines, isWishOpen, CLOSED_OFFICE } from './closings.js'
 import { standing, placementMods, applyPlacement, ambientMods, trayLean, rollCall } from './docket.js'
 import { polaroidCaption } from './compose-polaroid.js'
 import { radioLine, RADIO_GROUPS } from './compose-radio.js'
 import { wishRoute } from './compose-wish.js'
-import { finaleGate, beaconDecision } from './compose-gates.js'
+import { finaleGate, beaconDecision, deathDecision } from './compose-gates.js'
 import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame } from './evidence.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
@@ -326,7 +327,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let disagreeSaid = false
   // the roll call (rollcall.js): who has answered a whistle lately, on its own ms clock (performance.now(), never playT). The radio's last
   // group counts them ('those were yours — three of you.'); alone it reads one, today's line
-  const rollcall = createRollCall({ now: () => performance.now() })   // TODO(integrate:W5) I9/I10: the whistle hears into it, the net block ticks it, a chat line touches it
+  const rollcall = createRollCall({ now: () => performance.now() })   // TODO(integrate:W5) I10: the whistle hears into it, the net block ticks it, a chat line touches it
+  // ── down, not dead (downed.js): with a friend fresh on your floor a fatal hit lays you down instead (compose-gates.js deathDecision) —
+  //    25 s in the dark for one of them to kneel beside you, light on, and count you back; nobody comes and it is a death. The kneel is
+  //    the other side of it: yours, beside a friend who is down. Both on performance.now() ms like the roll call (a kneel arrives from the
+  //    socket outside the loop; a hidden tab must not stop the 25 s) — never playT, and game.js never hands them a clock. savedLight is
+  //    your own light while one of them forces it (off lying down, on kneeling), put back when that ends ──
+  const down = createDownState({ now: () => performance.now() })
+  const kneel = createKneel({ now: () => performance.now() })
+  let savedLight = true
 
   // ── Living Atmosphere — occasional ambient dread events. evConfig is the scheduler's ONE mutable config, read at every tick: the filing
   //    writes the file's weights into it (a tenant sees the far crosser twice as often), retension() is the one writer of its tension ──
@@ -434,6 +443,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // what the last level start cost (buildLevel, the renderer inside it, the first frame): the ?gfxstats=1 panel shows it
   let levelStart = null
   const fadeEl = document.getElementById('fade')
+  const downEl = document.getElementById('down')   // lying down: its own veil (the fader owns #fade's inline opacity), lifting as you are counted
+  let downVeil = '0'                               // the veil's opacity as last written (the loop writes it on a change only)
 
   // ── track selection (N) ──
   // -1 means "this floor's own mood"; 0..n-1 index TRACKS. The choice persists
@@ -522,6 +533,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     tension.reset(); huntMood = false
     // the closing's lines and a stand do not follow you down; a new floor's first photo is its first
     for (const t of closingTimers) clearTimeout(t); closingTimers.length = 0; standHeld = 0; shotOnLevel = false
+    // a kneel does not survive a floor (your light comes back to you); lying down is not touched here — travel refuses while down, die resets it
+    if (kneel.st) { kneel.stop(); flashlight = savedLight }
 
     // fixed maps spawn at their authored point; procedural at the arrival chunk's hall crossing (the origin's is today's HALF + 0.5
     // spawn, carved open) or the nearest open cell to it
@@ -585,7 +598,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // so you land beside the partner of the way you took (the stair under the hole, the hole over the stair), where you last stood on a ring
   // floor, or at the from-chunk's hall crossing. The floor you leave remembers you (levelmem); the way you arrive by is still closing for 5 s.
   function travel(way) {
-    if (transitioning) return
+    if (transitioning || down.st === 'down') return   // lying down, you go nowhere
     if (closing && closing.key === way.key && playT < closing.until) return
     transitioning = true
     arrivalGen++
@@ -652,8 +665,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
   // die(): death.js resolves it — you wake a floor above (the lobby and the block where they are) beside the hole you fell through, facing
   // it: whatever was in your hand is gone (a tool, the ballast and the slip stay), the ceiling five lower (never below 60), the trays
-  // empty until the next travel. The floor you died on remembers where you fell.
-  function die() {
+  // empty until the next travel. The floor you died on remembers where you fell. d is the file's reading of the death (compose-gates.js
+  // deathDecision: a layer minted, the pin's debt, the timeout's cost, a third line) — null, or LEGACY's, and it is today's death exactly
+  function die(d = null) {
     if (transitioning) return
     transitioning = true
     arrivalGen++
@@ -682,6 +696,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       deaths = r.deaths
       vendLocked = r.vendLocked
       invuln = 1.6; regenDelay = 0; hurt = 0
+      // lying down ends here either way (a timeout is a death; your light comes back with you), and so does a kneel; then what the file
+      // makes of the death — after the reset above, so the timeout's regenDelay wins
+      if (down.st === 'down') flashlight = savedLight
+      down.reset(); if (kneel.st) { kneel.stop(); flashlight = savedLight }
+      if (d) { if (d.mintThin && filed) { thin = true; rules = rulesFor(origin, thin); thinFirstShot = true } if (d.leashDebt > 0) leashDebt = d.leashDebt; if (d.sanity) sanity = Math.max(0, Math.min(100, sanity + d.sanity)); if (d.regenDelay) regenDelay = d.regenDelay }
+      if (downEl) downEl.style.opacity = '0'
+      document.body.classList.remove('down')
       level.grid.setPlayerChunk(spawnChunk.cx, spawnChunk.cy); level.cache.preload(spawnChunk.cx, spawnChunk.cy)
       level.decor.update(spawnChunk.cx, spawnChunk.cy); itemSys.update(spawnChunk.cx, spawnChunk.cy)
       level.solid.settlePlayer(player)
@@ -692,6 +713,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       showMessage(level.cfg.levelName, PRIO.combat)
       later(2600, r.message, PRIO.discovery)
       if (r.dropped) later(5200, r.droppedLine, PRIO.discovery)
+      if (d?.line) later(7800, d.line, PRIO.discovery)   // the column's word on it ('nobody came.' first when nobody did); LEGACY has none
       bus?.here(hereFields())           // woken a floor above: the room learns it at once
     })
   }
@@ -1259,6 +1281,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // in it develops on the film, a lost soul in it shows the door behind them. Hoisted once: the photo allocates no options
   const frameLos = (ax, ay, bx, by) => lineOfSight(ax, ay, bx, by, level.grid.floor)
   const FRAME_OPTS = { pos: peerPos, cone: inViewCone, hf: HF, maxCells: SUBJECT_RANGE, los: frameLos }
+  // who you could kneel by (downed.js downedInFront): the same walls-only line of sight, hoisted so the per-frame ask allocates nothing
+  const DN_OPTS = { los: frameLos }
+  // the two kinds that name the RECEIVER (rollcall.js evKinds: a kneel's `to`, a woke's `by` must be my id) — and emit() runs that same
+  // check on what I send, which names someone else. So I send ONE reused payload each, let through by identity; every frame received
+  // (never this object) is checked exactly as evKinds says
+  const kneelOut = { to: '' }, wokeOut = { by: '' }
   const bus = mpClient ? createEvBus({
     send: mpClient.sendEv, now: () => performance.now(),
     self: () => { selfPos.x = player.x; selfPos.y = player.y; selfPos.lvl = level ? level.index : 0; return selfPos },
@@ -1271,7 +1299,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // the room's files on this floor moved (a friend arrived, left or re-filed): the floor's lean is read again — the docket's standing never is
     bus.onRoomChange(() => { if (level) { level.amb = ambientMods(level.st, bus.roomStanding()); retension() } })
     // the kinds, registered in this one place (the bus believes nothing it was not told about); each item's handlers land in its own step
-    // TODO(integrate:W5) I9/I10: register whistle / kneel / woke from W5's evKinds(() => mpClient.id) — whistle: lvl int 0..4 && finite x/y && c <= 32, minGapMs 8000, posKeys ['x','y']; kneel: to === my id, maxDist 2.0, minGapMs 350; woke: by === my id, maxDist 3.0
+    const kinds = evKinds(() => mpClient.id)
+    // TODO(integrate:W5) I10: bus.register('whistle', kinds.whistle) — lvl int 0..4 && finite x/y && c <= 32, minGapMs 8000, posKeys ['x','y']
+    bus.register('kneel', { ...kinds.kneel, check: (p) => (p === kneelOut && typeof p.to === 'string') || kinds.kneel.check(p) })   // to me, within 2, one per 350 ms
+    bus.register('woke', { ...kinds.woke, check: (p) => (p === wokeOut && typeof p.by === 'string') || kinds.woke.check(p) })       // names me, within 3
+    // a friend kneels by you while you are down: their eighth tick (not before 4 s) counts you back — where you fell, never through die()
+    bus.on('kneel', ({ id }) => { if (down.st === 'down' && down.kneelTick(id) === 'woken') wakeUp(id) })
+    // the one you knelt by came back (their 'woke' lands after their 'here' already said 'ok': the kneel remembers whom, 2 s)
+    bus.on('woke', ({ id }) => { if (kneel.wasKneelingOn(id)) { sanity = Math.min(100, sanity + KNEELER_SANITY); showMessage(KNEELER_LINE, PRIO.interaction) } })
     // TODO(integrate:W6) I11: bus.register('cache', { check: (p) => isCachePayload(p, ITEM_NAMES), replayable: true, posKeys: ['x', 'y'], minGapMs: 3000 }); bus.register('take', { check: isTakePayload, replayable: true, minGapMs: 500 })
     // TODO(integrate:W7) I12: bus.register('ward', { check: lvl int && finite x/y/a, posKeys: ['x', 'y'], minGapMs: 600 }) and 'photo' { maxDist: 11, minGapMs: 4000 } — NB emit() runs check() on the OUTGOING payload too, so a photo check of `p.of === mpClient.id` refuses every photo you send: check the receiver side in the handler, not in check()
   }
@@ -1285,7 +1320,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function hereFields() {
     hereObj.lvl = level ? level.index : 0
     hereObj.lit = flashlight
-    hereObj.st = 'ok'                    // TODO(integrate:W5) I9: kneel.st ? 'kneel' : down.st
+    hereObj.st = kneel.st ? 'kneel' : down.st
     hereObj.seen = false                 // TODO(integrate:W7) I12: evidence.active(playT)
     hereObj.o = origin
     hereObj.thin = thin
@@ -1293,6 +1328,41 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     hereObj.aseed = myAseed
     selfFile.status = file.status; selfFile.aseed = myAseed; selfFile.origin = origin; selfFile.thin = thin
     return hereObj
+  }
+
+  // ── down, and counted back (downed.js). goDown: the fatal hit laid you down — your light goes out (the stillness rule hides a still,
+  //    dark body like any other), the veil comes over, the room hears 'down'. wakeUp is the ONE wake: a friend's eighth kneel tick, or
+  //    (I12) a friend's photograph — where you fell, 60 hp, never through die(), never a layer minted, never the pin's debt. It does not
+  //    flip down.st: the caller did (kneelTick / wakeNow returned 'woken'). The kneel: F by a downed friend in front lights you and holds
+  //    you still beside them; F again, a step, Space, Esc, or their leaving 'down' or six cells ends it ──
+  function goDown() {
+    if (kneel.st) stopKneel(null)
+    down.goDown()                                  // bare: the down state's own ms clock
+    savedLight = flashlight; flashlight = false
+    document.body.classList.add('down')            // the line reads over the veil (index.html: body.down #msg)
+    showMessage(DOWN_LINE, PRIO.combat)
+    bus?.here(hereFields())
+  }
+  // TODO(integrate:W7) I12: the photo is the second caller — if (photoOutcome(down.st) === 'counted' && down.wakeNow() === 'woken') wakeUp(id, COUNTED_LINE)
+  function wakeUp(byId, line = WOKEN_LINE) {
+    player.hp = Math.min(WAKE.hp, player.maxHp); sanity = Math.min(100, sanity + WAKE.sanity)
+    invuln = WAKE.invuln; regenDelay = WAKE.regenDelay; hurt = 0
+    flashlight = savedLight
+    if (downEl) downEl.style.opacity = '0'
+    document.body.classList.remove('down')
+    showMessage(line, PRIO.interaction)
+    if (bus) { wokeOut.by = byId; bus.emit('woke', wokeOut) }
+    bus?.here(hereFields())
+  }
+  function startKneel(rp) {
+    kneel.start(rp.id, rp.name, performance.now(), wardInput.press)   // the ward's press count now: a later Space is a change the frame sees
+    savedLight = flashlight; flashlight = true                         // you cannot count what you cannot see: lit, still — the hunted one
+    bus?.here(hereFields())
+  }
+  function stopKneel(line) {
+    kneel.stop(); flashlight = savedLight
+    if (line) showMessage(line, PRIO.interaction)
+    bus?.here(hereFields())
   }
 
   // ── messages (black text, fades via opacity — see CSS): one voice. Every line goes through the priority queue (messages.js) so a
@@ -1883,7 +1953,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     creaturesOn = getPref('creatures')
     const creaturesLive = creaturesOn && !!cfg.entities?.enabled
     // a card, the chat, the wish dialog or a fade is up: the verbs below do not fire (a Space that closed the note card never wards)
-    const modal = transitioning || dialogOpen || chatOpen || noteOpen || mapOpen   // (the map too: Space is off while you read it)
+    const modal = transitioning || dialogOpen || chatOpen || noteOpen || mapOpen || down.st === 'down' || kneel.st !== null   // (the map too: Space is off while you read it; lying down or kneeling, no ward)
 
     // ── the ward (ward.js): the charger is ticked EVERY frame — it owns the hold, the cost and the cooldown — on the press / release
     //    edge counts. Charging slows this frame's step and drains the legs; a release (or the 1.0 s cap) fires: tap or charged, the
@@ -1911,6 +1981,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         shake = Math.max(shake, RECOIL_SHAKE)
       }
     }
+    // kneeling, Space is your hands on them, not a ward (`modal` dropped the latch above): it ends the kneel
+    if (kneel.st && wardInput.press !== kneel.st.press0) stopKneel(HANDS_LINE)
     // ── the bandage commit (tactics.js): 1.2 s of holding still at 0.4 speed; the heal and the consume land at the end (a hit
     //    cancels it in the HP block below, and the bandage stays in your hand) ──
     const c = commit.tick(dt)
@@ -1923,7 +1995,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     let moved = false, stepped = false   // moved: a movement key is held; stepped: the player actually went somewhere
     wantSprint = false
-    if (!transitioning && !chatOpen && !noteOpen) {
+    // a step leaves the friend you knelt by (the step itself is taken this frame); lying down, you do not move at all
+    if (kneel.st && (K['KeyW'] || K['KeyS'] || K['KeyA'] || K['KeyD'] || K['ArrowUp'] || K['ArrowDown'])) stopKneel(null)
+    if (!transitioning && !chatOpen && !noteOpen && down.st !== 'down' && !kneel.st) {
       wantSprint = (K['ShiftLeft'] || K['ShiftRight']) && stamina > 0
       if (mapOpen) wantSprint = false                       // reading the map: half pace, no sprint (held, not modal)
       const mult = mapOpen ? 0.5 : (wantSprint ? 1.8 : 1)
@@ -2043,10 +2117,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // 1.0 u (the block has no containers). Ladder: item > machine > container-or-way > scrap > soul
     const nearBox = cfg.map ? null : level.decor.nearestProp(player.x, player.y, 1.5, unsearchedBox)
     const boxFirst = nearBox !== null && (!nearExit || (nearExit.x - player.x) ** 2 + (nearExit.y - player.y) ** 2 > 1)
+    // a friend down in front of you, within 1.3 and ±0.6 rad, in sight (downed.js; this floor's remote players as the net block last filled
+    // them — one frame old, the record itself): F kneels by them, and the prompt says so above everything else
+    const dnFront = (bus && !kneel.st) ? downedInFront(player, remoteOnFloor, DN_OPTS) : null
 
     const itemHintEl = document.getElementById('item-hint')
     if (itemHintEl) {
-      if (nearItem) {
+      if (kneel.st || dnFront) {
+        itemHintEl.textContent = KNEEL_HINT
+        itemHintEl.style.opacity = kneel.st ? kneel.dim().toFixed(2) : '1'   // fainter as you count (no numbers on screen)
+      } else if (nearItem) {
         itemHintEl.textContent = `f · take the ${ITEM_NAMES[nearItem.type] ?? nearItem.type}`
         itemHintEl.style.opacity = '1'
       } else if (nearMachine && !vendedSet.has(nearMachine.key)) {
@@ -2082,6 +2162,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       K['Enter'] = false; K['NumpadEnter'] = false; openChat()
     }
 
+    // Esc gets up from beside the friend you knelt by (before the map can read it)
+    if (kneel.st && K['Escape']) { K['Escape'] = false; stopKneel(null) }
+
     // ── the map (held, not modal): Tab or Esc folds it; Tab opens it when nothing else is up and the floor has a map (the block has none).
     //    The edge is consumed either way, so a Tab pressed on the block or under a card does not open the sheet on the next floor. ──
     if (mapOpen && (K['Escape'] || K['Tab'])) { K['Escape'] = K['Tab'] = false; closeMap() }
@@ -2093,9 +2176,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       }
     }
 
+    // lying down, your hands do nothing: the verbs' keys are swept before they can be read — all but C (calling out is how someone may
+    // notice). Enter (the chat) and Tab (the map) are above, and stay
+    if (down.st === 'down') { K['KeyF'] = K['KeyQ'] = K['KeyX'] = K['KeyE'] = K['KeyB'] = K['KeyL'] = false; for (let i = 1; i <= 6; i++) K['Digit' + i] = false }
     // the verbs: off while a card (the note, the map), the chat, the wish dialog or a fade is up
     if (!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen) {
-      // F — item first, else the machine, else the drawer (when it is nearer than the way), else the way
+      // F — a downed friend in front first (kneel by them; F again gets up), else the item, else the machine, else the drawer (when it is
+      // nearer than the way), else the way
+      if (K['KeyF'] && (kneel.st || dnFront)) { K['KeyF'] = false; if (kneel.st) stopKneel(null); else startKneel(dnFront) }
       if (K['KeyF']) {
         K['KeyF'] = false
         if (nearItem) {
@@ -2121,7 +2209,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (K['KeyX']) { K['KeyX'] = false; throwSelected() }
       if (K['KeyM']) { K['KeyM'] = false; const on = !getPref('music'); setPref('music', on); showMessage(on ? 'the music seeps back in.' : 'the music stops.') }
       if (K['KeyN']) { K['KeyN'] = false; cycleTrack() }
-      if (K['KeyL']) { K['KeyL'] = false; flashlight = !flashlight; lightToggles++; showMessage(flashlight ? 'flashlight on.' : 'flashlight off — the dark leans in.') }   // the counter: a haunt only restores a light you did not touch
+      if (K['KeyL']) {
+        K['KeyL'] = false
+        if (kneel.st) showMessage(LIGHT_STAYS_LINE)        // kneeling, the light is theirs
+        else { flashlight = !flashlight; lightToggles++; showMessage(flashlight ? 'flashlight on.' : 'flashlight off — the dark leans in.') }   // the counter: a haunt only restores a light you did not touch
+      }
       if (K['KeyB']) {
         K['KeyB'] = false
         // what the push is (compose-gates.js beaconDecision): the webhook fires whenever a beacon is set; the counter-claim counts toward
@@ -2208,6 +2300,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // 'here' about once a second (the bus sends only a change, or the 3 s beat)
     fillRemotes()
     if (bus) { bus.tick(performance.now()); hereTimer += dt; if (hereTimer >= 1) { hereTimer = 0; bus.here(hereFields()) } }
+    // kneeling: a tick to the friend every 500 ms while they stay down, on this floor and within six; else the kneel ends and your light
+    // comes back (they woke, walked off, dropped off the floor)
+    if (kneel.st) {
+      let tgt = null
+      for (let i = 0; i < remoteOnFloor.length; i++) if (remoteOnFloor[i].id === kneel.st.id) { tgt = remoteOnFloor[i]; break }
+      const kr = kneel.tick(performance.now(), tgt, player)
+      if (kr === 'emit') { kneelOut.to = kneel.st.id; bus?.emit('kneel', kneelOut) }
+      else if (kr === 'ended') { flashlight = savedLight; bus?.here(hereFields()) }
+    }
     // TODO(integrate:W7) I12: litRec = bus ? litFriendNear(player, bus.freshPeersOnFloor(), LIT_OPTS) : null; litNear = litRec !== null — here, before the perception and the sanity read it (LIT_OPTS's los is frameLos, hoisted with FRAME_OPTS)
     // ── the things: what they know about you this frame, then one update; the threat record it returns drives contact damage, the
     //    heartbeat and sanity (no second pass over the list). Creatures can be switched off entirely (pure liminal exploration;
@@ -2244,7 +2345,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
     // ── HP: contact damage, i-frames, delayed regen, death ──
     if (invuln > 0) invuln -= dt
-    if (!transitioning && creaturesLive && getPref('damage') && invuln <= 0 && th.dmg > 0) {
+    if (!transitioning && creaturesLive && getPref('damage') && invuln <= 0 && th.dmg > 0 && down.st !== 'down') {
       player.hp -= th.dmg * rules.damageMul; invuln = 0.7; hurt = 1; regenDelay = 6; shake = 1   // (thin: there is less of you to hit)
       showMessage(th.dmgKind === 'arc' ? 'the current finds you.' : 'it has you.', PRIO.urgent)   // the hit's line lands with the hit
       lastHitT = playT
@@ -2253,18 +2354,25 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       fog.pinThing(level.index, 'hurt:' + frameCount, 'hurt', player.x, player.y)   // where it hurt you, on the map (the last 12 kept)
     }
     if (regenDelay > 0) regenDelay -= dt
-    else if (player.hp < player.maxHp) player.hp = Math.min(player.maxHp, player.hp + 3.5 * dt)
+    else if (player.hp < player.maxHp && down.st !== 'down') player.hp = Math.min(player.maxHp, player.hp + 3.5 * dt)
     if (hurt > 0) hurt = Math.max(0, hurt - dt * 2)
     const hurtEl = document.getElementById('hurt')
     if (hurtEl) hurtEl.style.opacity = (hurt * 0.55).toFixed(2)
-    if (player.hp <= 0) { player.hp = 0; die() }   // TODO(integrate:W4) I9: deathDecision({ mp, peers, downSt, rules, filed, thin, D: driftD(), timeout: false }) -> die(d) (rules.deathEffects: d.mintThin && filed mints thin, d.leashDebt, d.line)
+    // lying down: the veil lifts as you are counted; 25 s with nobody kneeling is a death — nobody came (the decision's cost, die(d))
+    const veil = down.st === 'down' ? down.lift().toFixed(2) : '0'
+    if (downEl && veil !== downVeil) { downVeil = veil; downEl.style.opacity = veil }   // written on a change only: nothing at rest
+    if (down.tick() === 'timeout') die(deathDecision({ mp: !!mpClient, peers: 0, downSt: down.st, rules, filed, thin, D: driftD(), timeout: true }))
+    // hp gone: a friend fresh on this floor and you go down instead (compose-gates.js); already down, you wait; else a death — under LEGACY
+    // (or solo) today's die() exactly, with the column's consequences when filed
+    if (player.hp <= 0) { player.hp = 0; const d = deathDecision({ mp: !!mpClient, peers: bus ? bus.freshPeersOnFloor().length : 0, downSt: down.st, rules, filed, thin, D: driftD(), timeout: false }); if (d === 'down') goDown(); else if (d !== 'wait') die(d) }
 
     // ── tension (tension.js): the hunted state as heartbeat and music. The hunt's report drives it (Level 0 / ∅, a fade and creatures
     //    off read as calm — null); the heart comes into your ears as the level rises, the floor's own song thickens on 'enter' and takes
     //    its long breath back on 'exit' (setMood patches the live mood in place: no restart, no seam), one 'it is close.' per crossing ──
     const tn = tension.tick(dt, creaturesLive && !transitioning ? th : null, player.hp)
     heartT -= dt
-    if (tn.beat < Infinity && heartT <= 0) { heartbeat(0.5 + tn.level); heartT = tn.beat }
+    if (down.st === 'down') { if (heartT <= 0) { heartbeat(DOWN_BEAT.intensity); heartT = DOWN_BEAT.everyS } }   // lying down: slow and faint (the music may still thicken: they ARE on you)
+    else if (tn.beat < Infinity && heartT <= 0) { heartbeat(0.5 + tn.level); heartT = tn.beat }
     // (songBase: a loop-wide binding named base would shadow initGame's config for the whole frame, and the murmur reads its messageInterval)
     const songBase = trackIdx < 0 ? cfg.music : TRACKS[trackIdx].mood
     if (tn.just === 'enter') setMood(huntDelta(songBase))
@@ -2281,7 +2389,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     sanCtx.rules = rules; sanCtx.mods = mods; sanCtx.closingOverlay = co; sanCtx.flashlight = flashlight; sanCtx.litNear = litNear
     sanCtx.index = level.index; sanCtx.depth = level.depth; sanCtx.hunted = th.hunted; sanCtx.gaze = th.gaze; sanCtx.gazeRate = th.gazeRate
     sanCtx.origin = origin; sanCtx.drift = driftD(); sanCtx.leashCalm = leashCalm
-    sanCtx.down = false                        // TODO(integrate:W5) I9: down.st === 'down' (lying down: -1 flat, nothing else counts)
+    sanCtx.down = down.st === 'down'           // lying down: -1 flat, nothing else counts
     sanCtx.company = sanCtx.companyWas = company.value; sanCtx.disagreeSaid = disagreeSaid; sanCtx.dt = dt
     const s = sanityStep(sanCtx)
     sanity = Math.max(0, Math.min(100, sanity + s.delta * dt))

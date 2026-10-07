@@ -363,6 +363,14 @@
       background: radial-gradient(ellipse at center, rgba(140,0,0,0) 45%, rgba(150,0,0,0.75) 100%);
       transition: opacity 0.25s;
     }
+    /* lying down (downed.js): its own veil, never #fade (the fader owns that inline opacity) — above the hurt / insanity / flash washes,
+       below the touch controls (46), the touch HUD (47) and #fade (49); game.js lifts it as a friend counts you back. The line you are
+       told reads over it (body.down, set while you are down: the base #msg keeps no z-index) */
+    #down {
+      position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 45;
+      transition: opacity 0.4s;
+    }
+    body.down #msg { z-index: 46; }
     #fade {
       position: fixed; inset: 0; background: #000; opacity: 0;
       pointer-events: none; z-index: 49; transition: opacity 0.55s;
@@ -581,6 +589,7 @@
   <div id="stamina-wrap"><div id="stamina-fill"></div></div>
   <div id="insanity"></div>
   <div id="hurt"></div>
+  <div id="down"></div>
   <div id="fade"></div>
   <div id="flash"></div>
   <div id="wish-dialog" style="display:none">

@@ -18,7 +18,7 @@ const at = (s, from = 0) => { const k = game.indexOf(s, from); expect(k, s).toBe
 const slice = (from, to) => { const a = at(from), b = game.indexOf(to, a); expect(b, to).toBeGreaterThan(a); return game.slice(a, b) }
 const buildBody = slice('function buildLevel(index, at = null) {', 'const fader = createFader(')
 const travelBody = slice('function travel(way) {', '// die(): death.js resolves it')
-const dieBody = slice('function die() {', '// ── input ──')
+const dieBody = slice('function die(d = null) {', '// ── input ──')
 const loopBody = slice('function loop(ts) {', 'requestAnimationFrame(loop)   // ALWAYS reschedule')
 const resumeBody = slice('if (resume) {', 'buildLevel(mpClient ? 0 : 4)')
 
@@ -212,7 +212,7 @@ describe('FEEL-1 / FEEL-4: an arrival\'s delayed lines belong to that arrival', 
     expect(dieBody).toMatch(/transitioning = true\r?\n\s*arrivalGen\+\+/)
     for (const b of [travelBody, dieBody]) expect(b).not.toMatch(/setTimeout\(\(\) => showMessage/)
     expect((travelBody.match(/later\(/g) || []).length).toBe(7)                    // + the filing line and the anchored mercy line (origins, I5)
-    expect((dieBody.match(/later\(/g) || []).length).toBe(2)
+    expect((dieBody.match(/later\(/g) || []).length).toBe(3)                       // + the death decision's own line at 7800 ms (I9)
   })
   it('later() drops a line when a newer arrival has begun (replayed from game.js\'s own source)', () => {
     const src = game.match(/function later\(ms, text, prio\) \{[^\n]*\}/)[0]

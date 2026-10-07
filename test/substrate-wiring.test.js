@@ -45,7 +45,7 @@ describe('game.js: the event bus (I3)', () => {
   it('a travel and a death say the new floor at once (after buildLevel, under the fade)', () => {
     const travel = game.slice(at('function travel(way) {'), at('// die(): death.js resolves it'))
     expect(travel.indexOf('bus?.here(hereFields())')).toBeGreaterThan(travel.indexOf('buildLevel(way.target, fromC)'))
-    const die = game.slice(at('function die() {'), at('// ── input ──'))
+    const die = game.slice(at('function die(d = null) {'), at('// ── input ──'))
     expect(die.indexOf('bus?.here(hereFields())')).toBeGreaterThan(die.indexOf('if (r.wakeLevel !== level.index) buildLevel(r.wakeLevel, C)'))
   })
   it('the roster and this floor\'s remote players are refilled once per frame in place: bus.onFloor filters, a stale friend\'s fields are blanked', () => {

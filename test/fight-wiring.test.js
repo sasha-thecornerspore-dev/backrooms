@@ -144,7 +144,7 @@ describe('game.js: the bandage commit, the quiet water, the sour noise', () => {
     const build = game.slice(game.indexOf('function buildLevel(index, at = null)'), game.indexOf('const fader = createFader('))
     expect(build).toMatch(/cancelCommit\(\)\s/)
     expect(build).toContain('tension.reset(); huntMood = false')
-    const die = game.slice(game.indexOf('function die()'), game.indexOf('// ── input ──'))
+    const die = game.slice(game.indexOf('function die(d = null)'), game.indexOf('// ── input ──'))
     expect(die).toContain("cancelCommit('the bandage slips.')")
     expect(game).toMatch(/if \(K\[code\]\) \{ K\[code\] = false; cancelCommit\(\); itemSys\.select\(i\); renderHotbar\(\) \}/)
     expect(game).toMatch(/el\.addEventListener\('click', \(\) => \{ cancelCommit\(\); itemSys\.select\(\+el\.dataset\.slot\); renderHotbar\(\) \}\)/)
@@ -162,7 +162,8 @@ describe('game.js: tension replaces the heartbeat block', () => {
   const block = game.slice(game.indexOf('const tn = tension.tick('), game.indexOf('// ── sanity —'))
   it('the hunt\'s report (null for a fade / creatures off / a floor without creatures) and hp feed it; the heartbeat follows its beat and level', () => {
     expect(block).toContain('const tn = tension.tick(dt, creaturesLive && !transitioning ? th : null, player.hp)')
-    expect(block).toMatch(/heartT -= dt\r?\n\s*if \(tn\.beat < Infinity && heartT <= 0\) \{ heartbeat\(0\.5 \+ tn\.level\); heartT = tn\.beat \}/)
+    // (I9: lying down the beat is the slow, faint one — DOWN_BEAT — and tension's otherwise, its line as it was)
+    expect(block).toMatch(/heartT -= dt\r?\n\s*if \(down\.st === 'down'\) \{ if \(heartT <= 0\) \{ heartbeat\(DOWN_BEAT\.intensity\); heartT = DOWN_BEAT\.everyS \} \}[^\n]*\r?\n\s*else if \(tn\.beat < Infinity && heartT <= 0\) \{ heartbeat\(0\.5 \+ tn\.level\); heartT = tn\.beat \}/)
     expect(game).not.toMatch(/heartT = 1\.15 - prox \* 0\.8/)
   })
   it('enter / exit patch the live mood from the pristine base (never a setMusic), close says its line as combat, the mood is remembered for N', () => {
