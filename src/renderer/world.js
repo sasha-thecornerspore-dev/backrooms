@@ -34,6 +34,15 @@ export const DEFAULT_CONFIG = {
   // landmark set-pieces — the rarest; a memorable sight to orient by
   sights: { denom: 28 },
   particles: { count: 45, color: [235, 228, 190], size: 1.4, sway: 0.35, speed: 0.25 },
+  // the docket: open files per status per floor (0..3), recounted from the wish trailers by
+  // tools/docket.mjs and shipped in world.json. a literal (this module imports nothing); zeros
+  // lean nothing, so a drifted world.json without the key is today (docket.js EMPTY_DOCKET)
+  docket: {
+    '0': { extension: 0, compliance: 0, litigation: 0 },
+    '1': { extension: 0, compliance: 0, litigation: 0 },
+    '2': { extension: 0, compliance: 0, litigation: 0 },
+    '3': { extension: 0, compliance: 0, litigation: 0 },
+  },
 }
 
 export async function loadConfig() {

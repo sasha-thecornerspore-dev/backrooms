@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { generateChunk, CHUNK_SIZE, createChunkCache, createGridReader, MAX_RESIDENT } from '../src/renderer/world.js'
+import { readFileSync } from 'fs'
+import { generateChunk, CHUNK_SIZE, createChunkCache, createGridReader, MAX_RESIDENT, DEFAULT_CONFIG } from '../src/renderer/world.js'
 
 describe('generateChunk', () => {
   it('returns a Uint8Array of the correct size', () => {
@@ -304,5 +305,36 @@ describe('createGridReader', () => {
     grid.setPlayerChunk(1, 1)                                        // accepted, a no-op
     const fixed = createGridReader({ isWall, preload() {} }, isWall) // a fixed map has no getChunk
     expect(fixed.floor(2, 3)).toBe(false)
+  })
+})
+
+// W8: the docket rides in world.json; DEFAULT_CONFIG carries its zeros so a drifted file
+// without the key merges to an empty docket (loadConfig's `{ ...DEFAULT_CONFIG, ...json }`).
+describe('DEFAULT_CONFIG.docket', () => {
+  const ZEROS = {
+    '0': { extension: 0, compliance: 0, litigation: 0 },
+    '1': { extension: 0, compliance: 0, litigation: 0 },
+    '2': { extension: 0, compliance: 0, litigation: 0 },
+    '3': { extension: 0, compliance: 0, litigation: 0 },
+  }
+  const text = readFileSync(new URL('../src/renderer/world.json', import.meta.url), 'utf8')
+
+  it('is four level rows of three zero columns', () => {
+    expect(DEFAULT_CONFIG.docket).toEqual(ZEROS)
+  })
+
+  it('the merge takes the file\'s docket', () => {
+    const file = JSON.parse(text)
+    expect({ ...DEFAULT_CONFIG, ...file }.docket).toEqual(file.docket)
+  })
+
+  it('a drifted file without the key merges to the zeros', () => {
+    const file = JSON.parse(text)
+    delete file.docket
+    expect({ ...DEFAULT_CONFIG, ...file }.docket).toEqual(ZEROS)
+  })
+
+  it('the shipped world.json carries a zero docket', () => {
+    expect(JSON.parse(text).docket).toEqual(ZEROS)
   })
 })

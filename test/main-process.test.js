@@ -103,3 +103,27 @@ describe('fire-beacon (an anchored beacon carries the pin)', () => {
     expect(src).toMatch(/fireBeacon\(effect, webhook, \{ appVersion: app\.getVersion\(\), now, anchor \}\)/)
   })
 })
+
+describe('submit-wish (W8: the title from the first line, the labels from the trailer)', () => {
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
+  const preload = readFileSync(new URL('../src/preload.cjs', import.meta.url), 'utf8')
+
+  it('src/main.js hands text and meta to the pure label builder', () => {
+    expect(main).toContain("ipcMain.handle('submit-wish', async (_event, text, meta) =>")
+    expect(main).toContain('title: wishTitle(text)')
+    expect(main).toContain('labels: wishLabels(text, meta)')
+    expect(main).toContain("from './wish-labels.js'")
+    expect(main).toContain(String.raw`body:  ` + '`${text}' + String.raw`\n\n---\nsubmitted from backrooms v` + '${appVersion}`')
+    expect(main).not.toContain("labels: ['wish', 'pending']")
+  })
+
+  it('preload.cjs bridges two arguments', () => {
+    expect(preload).toContain("submitWish: (text, meta) => ipcRenderer.invoke('submit-wish', text, meta)")
+  })
+
+  it('the handler is registered and stays a silent no-op without a token', async () => {
+    const submit = h.handlers.get('submit-wish')
+    expect(typeof submit).toBe('function')
+    await expect(submit(null, 'make the fog warmer\nfiled under: EXTENSION · level 2', { origin: 'processed' })).resolves.toBeUndefined()
+  })
+})
