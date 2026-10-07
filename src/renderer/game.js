@@ -49,6 +49,7 @@ import { sanityStep, EXHAUSTED_LINE, DISAGREE_LINE } from './compose-sanity.js'
 import { createCompany } from './rollcall.js'
 import { statusMods } from './status.js'
 import { closingOverlay } from './closings.js'
+import { standing, placementMods, applyPlacement, ambientMods, trayLean } from './docket.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -319,7 +320,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── Living Atmosphere — occasional ambient dread events. evConfig is the scheduler's ONE mutable config, read at every tick: the filing
   //    writes the file's weights into it (a tenant sees the far crosser twice as often), retension() is the one writer of its tension ──
   const evConfig = { events: EVENTS, tension: 0 }
-  const eventSched = createEventScheduler({ config: evConfig })   // TODO(integrate:W8) I14a: events.js reads `config` at every tick once W8's events.js edit is merged (until then it rolls EVENTS)
+  const eventSched = createEventScheduler({ config: evConfig })
   // the file the presence keeps (status.js / closings.js): the status, the closing, the ledger heard, the pages left unread — in prefs, never in the save
   let file = { status: 'notice-mailed', at: 0, ledgerHeard: false, closing: null, redacted: [] }   // TODO(integrate:W3) I13: loadFile(getPref('file'))
   // what the status and a closing do to the numbers the loop reads (status.js statusMods / closings.js closingOverlay): pure functions of
@@ -457,7 +458,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function buildLevel(index, at = null) {
     const tb    = performance.now()
     const cfg   = levelConfig(base, index)
-    // TODO(integrate:W8) I14a: the placement overlay, once from base.docket: const st = standing(base.docket, cfg.map ? null : depthOf(index)); applyPlacement(cfg, placementMods(st)) — then W3's closing overlay LAST (I13)
+    // the floor's file (docket.js): the release's tally of open files on this floor leans what it leaves out — pages, machines, souls, the
+    // things in the halls — once, from base.docket, never from who is in the room (a zero docket and the block: cfg as it was). Then the
+    // closing LAST, so a compliance file's 'no more pages' wins over any lean
+    const st = standing(base.docket, cfg.map ? null : depthOf(index))
+    applyPlacement(cfg, placementMods(st))
+    if (closingOverlay(file.closing).scrapsDenom === 0) cfg.scraps = { ...cfg.scraps, denom: 0 }
     cfg.ways    = waysFor(index)
     spawnChunk  = at ?? { cx: 0, cy: 0 }
     // HUD theme hook: index.html restyles body[data-level] ('0'..'3' | '∅') — light ink on dark plates below the lobby
@@ -524,8 +530,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     msgQ.clear()                    // the old floor's lines do not follow you down (one fade if one was up)
     ephemera.length = 0             // nor its apparitions: a haunt's standing figure would otherwise stand on the new floor at its old x,y
     lastCellIx = NaN                // the compass recomputes on the floor's first frame
-    // the floor's depth (∅ reads as 0) and the room's standing on it; the literal above gains nothing
-    level.depth = depthOf(index); level.st = null; level.amb = null; retension()   // TODO(integrate:W8) I14a: level.st = st; level.amb = ambientMods(st, bus ? bus.roomStanding() : null)
+    // the floor's depth (∅ reads as 0), its file's standing (the tray, the radio's roll call) and what the room's files make of it now (the
+    // tension, the far crosser's thinness, the stand's floor: re-read when the room changes); the literal above gains nothing
+    level.depth = depthOf(index); level.st = st; level.amb = ambientMods(st, bus ? bus.roomStanding() : null); retension()
     // Morph the bed into this level's mood — unless the player has chosen an
     // alternate track with N, in which case their choice follows them down.
     playSong(trackIdx < 0 ? cfg.music : TRACKS[trackIdx].mood)
@@ -1176,7 +1183,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     mpClient.onEv(bus.receive)
     // a friend's floor change is a people line: 'no-clipped deeper.' / 'climbed back.' / 'fell in.' (none when the depth held)
     bus.onFloorChange((id, name, from, to, line) => { if (line) addChatLine(name || 'someone', line, true) })
-    // TODO(integrate:W8) I14a: bus.onRoomChange(() => { if (level) { level.amb = ambientMods(level.st, bus.roomStanding()); retension() } })
+    // the room's files on this floor moved (a friend arrived, left or re-filed): the floor's lean is read again — the docket's standing never is
+    bus.onRoomChange(() => { if (level) { level.amb = ambientMods(level.st, bus.roomStanding()); retension() } })
     // the kinds, registered in this one place (the bus believes nothing it was not told about); each item's handlers land in its own step
     // TODO(integrate:W5) I9/I10: register whistle / kneel / woke from W5's evKinds(() => mpClient.id) — whistle: lvl int 0..4 && finite x/y && c <= 32, minGapMs 8000, posKeys ['x','y']; kneel: to === my id, maxDist 2.0, minGapMs 350; woke: by === my id, maxDist 3.0
     // TODO(integrate:W6) I11: bus.register('cache', { check: (p) => isCachePayload(p, ITEM_NAMES), replayable: true, posKeys: ['x', 'y'], minGapMs: 3000 }); bus.register('take', { check: isTakePayload, replayable: true, minGapMs: 500 })
@@ -1367,7 +1375,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const dfloor = level?.index ?? 0
     // on the deep stacks, sometimes it is not a thing but a faint drop-in — a
     // person minted thin from far away, drifting slow enough to photograph.
-    const faint = (dfloor === 2 || dfloor === 3) && Math.random() < 0.3   // TODO(integrate:W8) I14a: Math.random() < level.amb.thinChance behind this deep-floor gate
+    // (0.3; more often where the floor's files lean to litigation — docket.js ambientMods)
+    const faint = (dfloor === 2 || dfloor === 3) && Math.random() < level.amb.thinChance
     const ahead = 7 + Math.random() * 4                        // out in the fog ahead
     const bx = player.x + Math.cos(player.angle) * ahead
     const by = player.y + Math.sin(player.angle) * ahead
@@ -1500,7 +1509,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const pool = ['almond-water', 'almond-water', 'glowstick', 'bandage']
     // Field Recovery caches surface in the deep stacks — a strain gauge, ballast, an exhibit
     if (dfloor === 2 || dfloor === 3) pool.push('plumb', 'ballast', 'extension-slip')
-    // TODO(integrate:W8) I14a: const lean = trayLean(level.st); if (lean.item) pool.push(lean.item, lean.item) — and the clunk gains ` the tray is stamped ${lean.stamp}.`
+    // a floor whose files lean one way stocks for it, and the tray says which (docket.js trayLean: nothing on a floor that does not lean)
+    const lean = trayLean(level.st)
+    if (lean.item) pool.push(lean.item, lean.item)
     const type = pool[Math.floor(Math.random() * pool.length)]
     const sour = type === 'almond-water' && dfloor >= 2 && Math.random() < 0.4
     const extra = type === 'plumb' ? { tool: true } : (sour ? { sour: true } : {})
@@ -1509,7 +1520,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     mem.noteVended(level.index, m.key, playT); vendedSet.add(m.key)
     if (!level.cfg.map) fog.pinThing(level.index, 'm:' + m.key, 'machine', m.x, m.y, true)   // struck through on the map
     renderHotbar(); blip()
-    const clunk = `the machine clunks, and a ${ITEM_NAMES[type] ?? type} drops into the tray.`
+    const clunk = `the machine clunks, and a ${ITEM_NAMES[type] ?? type} drops into the tray.${lean.stamp ? ` the tray is stamped ${lean.stamp}.` : ''}`
     if (refilled) { showMessage('the machine has been refilled. by whom.', PRIO.discovery); setTimeout(() => showMessage(clunk), 1600) }
     else showMessage(clunk)
   }

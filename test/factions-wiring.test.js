@@ -18,6 +18,9 @@ import { sanityStep, EXHAUSTED_LINE, DISAGREE_LINE } from '../src/renderer/compo
 import { createCompany } from '../src/renderer/rollcall.js'
 import { statusMods, depthOf } from '../src/renderer/status.js'
 import { closingOverlay } from '../src/renderer/closings.js'
+import { standing, placementMods, applyPlacement, EMPTY_STANDING } from '../src/renderer/docket.js'
+import { levelConfig } from '../src/renderer/levels.js'
+import { DEFAULT_CONFIG } from '../src/renderer/world.js'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const game = read('../src/renderer/game.js')
@@ -49,7 +52,56 @@ describe('I14a: the scheduler\'s one mutable config, the file, the floor\'s dept
     expect(at('let file = ')).toBeLessThan(loopAt)
     expect(game).toContain('hereObj.status = file.status')
     expect(game).toMatch(/level = \{ index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages \}/)
-    expect(buildBody).toMatch(/lastCellIx = NaN[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*level\.depth = depthOf\(index\); level\.st = null; level\.amb = null; retension\(\)/)
+    expect(buildBody).toMatch(/lastCellIx = NaN[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*level\.depth = depthOf\(index\); level\.st = st; level\.amb = ambientMods\(st, bus \? bus\.roomStanding\(\) : null\); retension\(\)/)
+  })
+})
+
+describe('I14a (W8): the floor\'s file — the placement overlay, the room\'s lean, the tray, the far crosser', () => {
+  it('imports the docket by its real names; docket.js is in both offline shells', () => {
+    expect(game).toMatch(/import \{ standing, placementMods, applyPlacement, ambientMods, trayLean(, rollCall)? \} from '\.\/docket\.js'/)
+    expect(sw).toContain("'/renderer/docket.js'")
+    expect(build).toContain("'docket.js'")
+    expect(game).not.toMatch(/TODO\(integrate:W8\)/)
+  })
+  it('the cfg stage: the standing once from base.docket (none on the block), placement, then the closing LAST, between levelConfig and cfg.ways', () => {
+    const a = buildBody.indexOf('const cfg   = levelConfig(base, index)'), w = buildBody.indexOf('cfg.ways    = waysFor(index)')
+    const s = buildBody.indexOf('const st = standing(base.docket, cfg.map ? null : depthOf(index))')
+    const p = buildBody.indexOf('applyPlacement(cfg, placementMods(st))')
+    const c = buildBody.indexOf('if (closingOverlay(file.closing).scrapsDenom === 0) cfg.scraps = { ...cfg.scraps, denom: 0 }')
+    for (const k of [a, s, p, c, w]) expect(k).toBeGreaterThan(0)
+    expect(a).toBeLessThan(s); expect(s).toBeLessThan(p); expect(p).toBeLessThan(c); expect(c).toBeLessThan(w)
+    expect(count(/applyPlacement\(/g)).toBe(1)
+    expect(count(/standing\(base\.docket/g)).toBe(1)
+  })
+  it('the cfg stage, lifted and replayed: a zero docket and an open file leave every floor\'s cfg as it was; a lean moves the denoms; compliance takes the pages', () => {
+    const lines = buildBody.slice(buildBody.indexOf('const st = standing('), buildBody.indexOf('cfg.ways    = waysFor(index)'))
+    const stage = new Function('base', 'index', 'file', 'levelConfig', 'standing', 'placementMods', 'applyPlacement', 'closingOverlay', 'depthOf',
+      `const cfg = levelConfig(base, index)\n${lines}\nreturn { cfg, st }`)
+    const run = (base, index, file) => stage(base, index, file, levelConfig, standing, placementMods, applyPlacement, closingOverlay, depthOf)
+    const open = { status: 'notice-mailed', closing: null }
+    for (let i = 0; i <= 4; i++) {
+      const { cfg, st } = run(DEFAULT_CONFIG, i, open)
+      expect(cfg, String(i)).toEqual(levelConfig(DEFAULT_CONFIG, i))
+      expect(st.lead).toBe(null)
+      if (i === 4) expect(st).toBe(EMPTY_STANDING)                                    // the block has no file of its own
+    }
+    const leaning = { ...DEFAULT_CONFIG, docket: { ...DEFAULT_CONFIG.docket, '2': { extension: 0, compliance: 9, litigation: 1 } } }
+    const two = run(leaning, 2, open)
+    expect(two.st.lead).toBe('compliance')
+    expect(two.cfg.scraps.denom).toBeGreaterThan(levelConfig(leaning, 2).scraps.denom)
+    expect(run(leaning, 1, open).cfg).toEqual(levelConfig(leaning, 1))                  // the lean is that floor's only
+    expect(run(leaning, 2, { status: 'compliance', closing: 'compliance' }).cfg.scraps.denom).toBe(0)
+  })
+  it('the room\'s lean is re-read on its change (once registered), the crosser\'s thinness and the tray read the floor', () => {
+    expect(count(/bus\.onRoomChange\(/g)).toBe(1)
+    expect(game).toContain('bus.onRoomChange(() => { if (level) { level.amb = ambientMods(level.st, bus.roomStanding()); retension() } })')
+    const cross = slice('function spawnCrosser() {', 'function fireEvent(')
+    expect(cross).toContain('const faint = (dfloor === 2 || dfloor === 3) && Math.random() < level.amb.thinChance')
+    expect(cross).not.toContain('Math.random() < 0.3')
+    const vend = slice('function dispenseFromMachine(m) {', '// ── snapshot + persistence')
+    expect(vend).toMatch(/const lean = trayLean\(level\.st\)\r?\n\s*if \(lean\.item\) pool\.push\(lean\.item, lean\.item\)\r?\n\s*const type = pool\[/)
+    expect(vend).toContain("drops into the tray.${lean.stamp ? ` the tray is stamped ${lean.stamp}.` : ''}`")
+    expect(count(/trayLean\(/g)).toBe(1)
   })
 })
 
