@@ -2189,7 +2189,7 @@ describe('I15: the factions wave, closed', () => {
 
   it('README settings: every control in the settings panel has its row, and the file\'s', () => {
     const panel = html.slice(html.indexOf('<div id="settings-modal"'), html.indexOf('<canvas id="attract"'))
-    const labels = [...panel.matchAll(/<label class="toggle-row">\s*<span>([^<]+?)\s*(?=<)/g)].map((m) => m[1].toLowerCase())
+    const labels = [...panel.matchAll(/<label class="toggle-row(?: [^"]*)?">\s*<span>([^<]+?)\s*(?=<)/g)].map((m) => m[1].toLowerCase())
     expect(labels.length).toBeGreaterThanOrEqual(20)
     const settings = readme.slice(readme.indexOf('## settings'), readme.indexOf('## multiplayer')).toLowerCase()
     for (const l of labels) {
