@@ -12,6 +12,8 @@ import { PRIO } from '../src/renderer/messages.js'
 import { NULL_MAP } from '../src/renderer/level-null-map.js'
 import { createFixedMap } from '../src/renderer/fixedmap.js'
 import { writeSave, readSave } from '../src/renderer/save.js'
+import { perceptionFor, AI_CTX_KEYS, AI_CTX_DEFAULTS } from '../src/renderer/compose-perception.js'
+import { createStillness, HUNTS_MOVEMENT_LINE } from '../src/renderer/stillness.js'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const game = read('../src/renderer/game.js')
@@ -274,4 +276,86 @@ describe('I5: the offline shell lists carry the seven origin modules', () => {
       expect(build).toContain(`'${f}'`)
     })
   }
+})
+
+describe('I6: the file\'s reading of you, as the things perceive it (compose-perception.js, stillness.js)', () => {
+  const loop = game.slice(loopAt)
+  it('imports perceptionFor and the stillness clock by their real names', () => {
+    expect(game).toMatch(/import \{ perceptionFor \} from '\.\/compose-perception\.js'/)
+    expect(game).toMatch(/import \{ createStillness, HUNTS_MOVEMENT_LINE \} from '\.\/stillness\.js'/)
+  })
+  it('ONE aiCtx with the fifteen keys, the file\'s four trailing at their defaults', () => {
+    const fields = game.match(/const aiCtx = \{ ([^}]*) \}/)[1].split(',').map((f) => f.trim())
+    expect(fields.map((f) => f.split(':')[0].trim())).toEqual([...AI_CTX_KEYS])
+    expect(fields.slice(11)).toEqual(Object.entries(AI_CTX_DEFAULTS).map(([k, v]) => `${k}: ${v}`))
+  })
+  it('one perCtx before the loop; perceptionFor once a frame, after the aiCtx writes and before the footsteps and the update; four numbers copied, never the object', () => {
+    expect(count(/const perCtx = /g)).toBe(1)
+    expect(at('const perCtx = { rules, depth: 0, stillFor: 0, noiseFor: 0, flashlight, radioOn: false, litNear: false }')).toBeLessThan(loopAt)
+    expect(count(/perceptionFor\(/g)).toBe(1)
+    const call = at('const pf = perceptionFor(perCtx)')
+    expect(call).toBeGreaterThan(at('aiCtx.radioOn = itemSys.isRadioOn(); aiCtx.t = playT;'))
+    expect(call).toBeLessThan(at('if (footstep && creaturesLive) level.entitySys.noise('))
+    expect(call).toBeLessThan(at('const th = creaturesOn ? level.entitySys.update('))
+    expect(loop).toContain('perCtx.rules = rules; perCtx.depth = level.depth; perCtx.stillFor = stillness.stillFor(playT); perCtx.noiseFor = stillness.noiseFor(playT)')
+    expect(loop).toContain('perCtx.flashlight = flashlight; perCtx.radioOn = aiCtx.radioOn; perCtx.litNear = litNear')   // the carried radio, as the things read it
+    expect(loop).toContain('aiCtx.sightMul = pf.sightMul; aiCtx.hidden = pf.hidden; aiCtx.loseTrackMul = pf.loseTrackMul; aiCtx.noiseMul = pf.noiseMul')
+    expect(game).not.toMatch(/= pf(?![.\w])/)                            // the reused result is read, never kept
+    expect(count(/let litNear = /g)).toBe(1)
+    expect(at('let litNear = false')).toBeLessThan(loopAt)
+  })
+  it('the stillness clock: one, on the play clock, noted right after the step through one reused report; your ward and a sprint are sounds', () => {
+    expect(count(/createStillness\(/g)).toBe(1)
+    expect(at('const stillness = createStillness({ now: () => playT })')).toBeLessThan(loopAt)
+    expect(at('const stillNote = { moving: false, flashlight: true, radioOn: false, t: 0 }')).toBeLessThan(loopAt)
+    expect(loop).toMatch(/player\.moving = moved\r?\n(\s*\/\/[^\n]*\r?\n)*\s*stillNote\.moving = moved; stillNote\.flashlight = flashlight; stillNote\.radioOn = radioWasOn; stillNote\.t = playT\r?\n\s*stillness\.note\(stillNote\)\r?\n\s*if \(moved && wantSprint\) stillness\.noise\(playT\)/)
+    expect(game).not.toMatch(/stillness\.note\(\{/)                     // no literal per frame
+    const ward = game.slice(at('let verbMul = 1'), at('let moved = false'))
+    expect(ward).toMatch(/level\.entitySys\.noise\(player\.x, player\.y, 12\)[^\n]*\r?\n\s*stillness\.noise\(playT\); standHeld = 0/)
+    for (const m of game.matchAll(/stillness\.noise\(([^)]*)\)/g)) expect(m[1]).toBe('playT')   // the play clock, never performance.now()
+    const lure = slice('lureNoiseT += dt', '// ── presence proximity')
+    expect(lure).not.toContain('stillness.')
+  })
+  it('the lure is the one tagged noise (\'lure\'); every other noise call keeps three arguments and is yours', () => {
+    expect(game).toContain("level.entitySys.noise(lures[i].x, lures[i].y, 8, 'lure')")
+    expect([...game.matchAll(/entitySys\.noise\([^\n]*?, '(\w+)'\)/g)].map((m) => m[1])).toEqual(['lure'])
+  })
+  it('\'it hunts movement.\' once a run: the first frame it hides you with a thing within 12 (last frame\'s record), never during a stand', () => {
+    expect(at('let wasHidden = false, huntsMovementSaid = false')).toBeLessThan(loopAt)
+    expect(loop).toMatch(/if \(pf\.hidden && !wasHidden && !huntsMovementSaid && thA\.nearest < 12 && standHeld <= 0\) \{ huntsMovementSaid = true; showMessage\(HUNTS_MOVEMENT_LINE, PRIO\.discovery\) \}\r?\n\s*wasHidden = pf\.hidden/)
+    expect(HUNTS_MOVEMENT_LINE).toBe('it hunts movement. you remember that now.')
+  })
+  it('the perception block, lifted from game.js and replayed: LEGACY never moves the four; a filed player still, silent and unlit is hidden; thin hides in 0.6 s, light on', () => {
+    const block = slice('perCtx.rules = rules;', '// footsteps: walk 3 / sprint 7')
+    const fn = new Function('perCtx', 'aiCtx', 'st', 'perceptionFor', 'stillness', 'level', 'HUNTS_MOVEMENT_LINE', 'PRIO', 'showMessage',
+      `let { rules, playT, flashlight, litNear, thA, standHeld, wasHidden, huntsMovementSaid } = st\n${block}\nst.wasHidden = wasHidden; st.huntsMovementSaid = huntsMovementSaid`)
+    let t = 0
+    const clock = createStillness({ now: () => t })
+    const aiCtx = { radioOn: false, ...AI_CTX_DEFAULTS }
+    const perCtx = { rules: LEGACY, depth: 0, stillFor: 0, noiseFor: 0, flashlight: true, radioOn: false, litNear: false }
+    const said = []
+    const st = { rules: LEGACY, playT: 0, flashlight: false, litNear: false, thA: { nearest: 5 }, standHeld: 0, wasHidden: false, huntsMovementSaid: false }
+    const four = () => ({ sightMul: aiCtx.sightMul, hidden: aiCtx.hidden, loseTrackMul: aiCtx.loseTrackMul, noiseMul: aiCtx.noiseMul })
+    const step = (s) => { t = s; st.playT = s; fn(perCtx, aiCtx, st, perceptionFor, clock, { depth: 1 }, HUNTS_MOVEMENT_LINE, PRIO, (m, p) => said.push([m, p])) }
+    clock.note({ moving: true, t: 0 })
+    for (let s = 0; s <= 10; s += 0.5) { step(s); expect(four()).toEqual(AI_CTX_DEFAULTS) }   // unfiled: today's things, however still
+    expect(said).toEqual([])
+    st.rules = rulesFor('tenant', false); clock.note({ moving: true, t: 10 })
+    step(11); expect(aiCtx.hidden).toBe(false)
+    step(12); expect(aiCtx.hidden).toBe(true)                            // two still, silent seconds, the light and the radio off
+    expect(said).toEqual([[HUNTS_MOVEMENT_LINE, PRIO.discovery]])
+    st.flashlight = true; step(12.5); expect(aiCtx.hidden).toBe(false)
+    st.flashlight = false; step(13); expect(aiCtx.hidden).toBe(true)
+    clock.noise(13); step(13.5); expect(aiCtx.hidden).toBe(false)        // a sound you made: seen again
+    expect(said.length).toBe(1)                                          // once a run
+    st.rules = rulesFor('tenant', true); st.flashlight = true; clock.note({ moving: true, t: 20 })
+    step(20.5); expect(aiCtx.hidden).toBe(false)
+    step(20.7); expect(aiCtx.hidden).toBe(true); expect(aiCtx.noiseMul).toBe(0.5)   // thin: 0.6 s, whatever the light
+    // a fresh run: nothing within 12, or a stand running, says nothing
+    for (const [nearest, standHeld] of [[20, 0], [5, 3]]) {
+      Object.assign(st, { rules: rulesFor('tenant', false), flashlight: false, thA: { nearest }, standHeld, wasHidden: false, huntsMovementSaid: false })
+      said.length = 0; clock.note({ moving: true, t: 30 }); step(33)
+      expect(aiCtx.hidden).toBe(true); expect(said).toEqual([])
+    }
+  })
 })

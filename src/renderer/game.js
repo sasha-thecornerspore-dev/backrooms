@@ -43,6 +43,8 @@ import { MERCY_LINE, leashDebtStep } from './origin-anchored.js'
 import { floorKey } from './origin-processed.js'
 import { parseNameWish, spellCard, refileWithName, spelledLine, ONLINE_LINE } from './origin-unnamed.js'
 import { RECOIL_DIST, RECOIL_SHAKE, RECOIL_LINE, CURE_LINE } from './origin-thin.js'
+import { perceptionFor } from './compose-perception.js'
+import { createStillness, HUNTS_MOVEMENT_LINE } from './stillness.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -297,6 +299,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // the ONE drift helper: whole metres from where this floor set you down, plus the leash debt a death leaves an anchored player (0 without
   // a pin) — the HUD, the leash row, the film's pin caption and the death read it
   const driftD = () => anchor ? Math.round(driftMeters(player.x, player.y, spawnX, spawnY) + leashDebt) : 0
+  // ── stillness (stillness.js): how long you have stood still and how long since you made a sound, on the play clock. The file's perception
+  //    reads it ('it hunts movement.': two still, silent seconds with the light and the radio off and the things cannot see you; thin's 0.6 s;
+  //    LEGACY never). The loop notes every step through one reused report; your own ward and a sprint are sounds, a friend's ward and the
+  //    lures are not. The line that teaches it is said once a run, the first time it hides you with something close ──
+  const stillness = createStillness({ now: () => playT })
+  const stillNote = { moving: false, flashlight: true, radioOn: false, t: 0 }
+  let wasHidden = false, huntsMovementSaid = false
+  let standHeld = 0   // TODO(integrate:W3) I13: the stand tick writes it (closings.js standTick); the whistle and buildLevel reset it too — the hunts line keeps quiet while it runs
 
   // ── Living Atmosphere — occasional ambient dread events. evConfig is the scheduler's ONE mutable config, read at every tick: the filing
   //    writes the file's weights into it (a tenant sees the far crosser twice as often), retension() is the one writer of its tension ──
@@ -1695,8 +1705,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
   // what the things know about you this frame (hunt.js / variants.js ctx): ONE object, mutated per frame, never rebuilt. `player` is the
   // live object (where they look for you), hf the half field of view (watched() == drawn on screen), damage the floor's contact damage,
-  // lures the dropped talking radios (tactics.computeLures hands back one reused array; recomputed when the items changed or every 0.5 s)
-  const aiCtx = { flashlight, sprinting: false, dark: false, fog: 16, radioOn: false, lures: [], t: 0, hf: HF, playerAngle: 0, player, damage: 16 }
+  // lures the dropped talking radios (tactics.computeLures hands back one reused array; recomputed when the items changed or every 0.5 s).
+  // The four trailing fields are the file's reading of you (compose-perception.js): sight x, hidden, memory x, your noises x — at
+  // { 1, false, 1, 1 } (LEGACY: an unfiled player) the things are today's
+  const aiCtx = { flashlight, sprinting: false, dark: false, fog: 16, radioOn: false, lures: [], t: 0, hf: HF, playerAngle: 0, player, damage: 16, sightMul: 1, hidden: false, loseTrackMul: 1, noiseMul: 1 }
+  // what perceptionFor reads (ONE object, refilled per frame): the column, the depth, the stillness clocks, your light and radio, a friend's light
+  const perCtx = { rules, depth: 0, stillFor: 0, noiseFor: 0, flashlight, radioOn: false, litNear: false }
+  let litNear = false   // a friend's light reaches you this frame (lightshare.js litFriendNear, written in the net block; never solo)
   let last = 0
   let frameCount = 0
   let loopErrs = 0
@@ -1757,6 +1772,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       stamina -= w.cost
       const res = getPref('creatures') ? level.entitySys.ward(player, wardOpts(w.charged)) : EMPTY_WARD
       level.entitySys.noise(player.x, player.y, 12)   // a ward is loud: the things round the corner hear it
+      stillness.noise(playT); standHeld = 0          // and it is yours: the stillness clocks start again (and the stand with them)
       wardPulse(); shake = Math.max(shake, w.charged ? 0.7 : 0.45)
       if      (res.dispelled > 0) showMessage(res.dispelled > 1 ? 'they come apart in the light.' : 'it comes apart in the light.')
       else if (res.opening > 0)   showMessage('you catch it turning. it reels.')
@@ -1806,6 +1822,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       else if (!charger.isCharging())   stamina = Math.min(100, stamina + 9 * dt)   // a held ward drains the legs: no regen under it
     }
     player.moving = moved
+    // the stillness clocks (stillness.js): a step restarts the still one; a sprint is a sound as well (one reused report, the play clock)
+    stillNote.moving = moved; stillNote.flashlight = flashlight; stillNote.radioOn = radioWasOn; stillNote.t = playT
+    stillness.note(stillNote)
+    if (moved && wantSprint) stillness.noise(playT)
     // the hold at a drawer (containers.js): any step leaves it (a real step: W held into the cabinet is not one); otherwise it lands after SEARCH_HOLD_S
     if (searchT > 0 && stepped) { searchT = 0; searchTarget = null; showMessage('you leave the drawer.', PRIO.interaction) }
     if (searchT > 0) { searchT -= dt; if (searchT <= 0 && searchTarget) { resolveSearch(searchTarget); searchTarget = null } }
@@ -1869,7 +1889,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     lureNoiseT += dt
     if (lureNoiseT >= 0.5) {
       lureNoiseT = 0
-      if (creaturesLive) for (let i = 0; i < lures.length; i++) level.entitySys.noise(lures[i].x, lures[i].y, 8)
+      if (creaturesLive) for (let i = 0; i < lures.length; i++) level.entitySys.noise(lures[i].x, lures[i].y, 8, 'lure')   // not yours: never scaled by the file's noiseMul
     }
 
     // ── presence proximity (radio finds them from farther) ──
@@ -2063,13 +2083,22 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // 'here' about once a second (the bus sends only a change, or the 3 s beat)
     fillRemotes()
     if (bus) { bus.tick(performance.now()); hereTimer += dt; if (hereTimer >= 1) { hereTimer = 0; bus.here(hereFields()) } }
+    // TODO(integrate:W7) I12: litRec = bus ? litFriendNear(player, bus.freshPeersOnFloor(), LIT_OPTS) : null; litNear = litRec !== null — here, before the perception and the sanity read it
     // ── the things: what they know about you this frame, then one update; the threat record it returns drives contact damage, the
     //    heartbeat and sanity (no second pass over the list). Creatures can be switched off entirely (pure liminal exploration;
     //    creaturesOn was read at the top of the frame): the record is then reset, so everything below reads zero. ──
     aiCtx.flashlight = flashlight; aiCtx.sprinting = moved && wantSprint; aiCtx.dark = !cfg.lights; aiCtx.fog = cfg.fogDistance
     aiCtx.radioOn = itemSys.isRadioOn(); aiCtx.t = playT; aiCtx.playerAngle = player.angle; aiCtx.damage = cfg.entities?.damage ?? 16
     // (aiCtx.lures was refreshed above, with the dropped things' clocks)
-    // TODO(integrate:W4) I6: the four trailing perception fields from perceptionFor({ rules, depth: level.depth, ... }) (rules.perception)
+    // the file's reading of you (compose-perception.js over rules.perception): the four numbers copied onto aiCtx, never the object — LEGACY's
+    // are { 1, false, 1, 1 }; a filed player still and silent, unlit, the radio off is hidden (thin: still 0.6 s, whatever the light)
+    perCtx.rules = rules; perCtx.depth = level.depth; perCtx.stillFor = stillness.stillFor(playT); perCtx.noiseFor = stillness.noiseFor(playT)
+    perCtx.flashlight = flashlight; perCtx.radioOn = aiCtx.radioOn; perCtx.litNear = litNear
+    const pf = perceptionFor(perCtx)
+    aiCtx.sightMul = pf.sightMul; aiCtx.hidden = pf.hidden; aiCtx.loseTrackMul = pf.loseTrackMul; aiCtx.noiseMul = pf.noiseMul
+    // the first frame it hides you with a thing within 12 (last frame's record: this frame's lands below), once a run, not during a stand
+    if (pf.hidden && !wasHidden && !huntsMovementSaid && thA.nearest < 12 && standHeld <= 0) { huntsMovementSaid = true; showMessage(HUNTS_MOVEMENT_LINE, PRIO.discovery) }
+    wasHidden = pf.hidden
     // footsteps: walk 3 / sprint 7, halved by sweet water (tactics.quiet); the flood reads the grid at this frame's chunk
     if (footstep && creaturesLive) level.entitySys.noise(player.x, player.y, (aiCtx.sprinting ? 7 : 3) * quiet(quietTimer))
     const th = creaturesOn ? level.entitySys.update(dt, player, pcx, pcy, aiCtx) : (level.entitySys.getThreat().reset(), level.entitySys.getThreat())

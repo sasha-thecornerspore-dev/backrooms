@@ -9,6 +9,7 @@ import fs from 'node:fs'
 import { createEntitySystem } from '../src/renderer/entities.js'
 import { createThreat } from '../src/renderer/hunt.js'
 import { HF } from '../src/renderer/gfx-frame.js'
+import { AI_CTX_KEYS } from '../src/renderer/compose-perception.js'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const game = read('../src/renderer/game.js')
@@ -36,7 +37,9 @@ describe('game.js: one aiCtx object, mutated per frame, handed to one update', (
   it('is declared once, outside the loop, with exactly the fields the hunt path and the variants read', () => {
     expect(lit).not.toBeNull()
     const keys = lit[1].split(',').map((f) => f.trim().split(':')[0].trim()).filter(Boolean)
-    expect(keys).toEqual(['flashlight', 'sprinting', 'dark', 'fog', 'radioOn', 'lures', 't', 'hf', 'playerAngle', 'player', 'damage'])
+    // the eleven the hunt path always read, then the file's four (compose-perception.js AI_CTX_KEYS: sightMul, hidden, loseTrackMul, noiseMul)
+    expect(keys).toEqual([...AI_CTX_KEYS])
+    expect(keys.slice(0, 11)).toEqual(['flashlight', 'sprinting', 'dark', 'fog', 'radioOn', 'lures', 't', 'hf', 'playerAngle', 'player', 'damage'])
     expect((game.match(/const aiCtx = /g) || []).length).toBe(1)
     expect(game.indexOf('const aiCtx = ')).toBeLessThan(game.indexOf('function loop(ts) {'))
   })

@@ -120,7 +120,7 @@ describe('game.js: set down (X and the dock ✕), the dropped things\' clocks, t
     expect(game).not.toMatch(/for \(const ev of itemSys\.expireDropped/)      // indexed over the reused array: nothing allocated per frame
   })
   it('the dropped radios are a noise of 8 every 0.5 s, flooded after the grid follows this frame\'s chunk, only while the things are live', () => {
-    expect(game).toMatch(/lureNoiseT \+= dt\r?\n\s*if \(lureNoiseT >= 0\.5\) \{\r?\n\s*lureNoiseT = 0\r?\n\s*if \(creaturesLive\) for \(let i = 0; i < lures\.length; i\+\+\) level\.entitySys\.noise\(lures\[i\]\.x, lures\[i\]\.y, 8\)/)
+    expect(game).toMatch(/lureNoiseT \+= dt\r?\n\s*if \(lureNoiseT >= 0\.5\) \{\r?\n\s*lureNoiseT = 0\r?\n\s*if \(creaturesLive\) for \(let i = 0; i < lures\.length; i\+\+\) level\.entitySys\.noise\(lures\[i\]\.x, lures\[i\]\.y, 8, 'lure'\)/)   // tagged 'lure' (I6): a lure is never scaled by the file's noiseMul
     expect(at('level.grid.setPlayerChunk(pcx, pcy)')).toBeLessThan(at('lureNoiseT += dt'))
     expect(at('const creaturesLive = creaturesOn && !!cfg.entities?.enabled')).toBeLessThan(at('lureNoiseT += dt'))
   })
