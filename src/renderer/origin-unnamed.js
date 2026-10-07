@@ -47,7 +47,7 @@ const radio = { heartbeat: 'none', followUp: null }
 
 export const UNNAMED = Object.freeze({
   id: 'unnamed',
-  lightTerm: (flashlight) => (flashlight ? 2 : -2),
+  lightTerm: (flashlight, litNear) => (flashlight ? 2 : litNear ? 1 : -2),   // unlit in a friend's light, the dark eats slower
   perception: (ctx) => {
     percept.sightMul = 1
     percept.loseTrackMul = MEMORY_S / LOSE_TRACK_REF   // the file cannot keep a lookup on you

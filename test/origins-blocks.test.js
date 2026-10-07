@@ -318,6 +318,19 @@ describe('thin (the layer alone)', () => {
     for (let d = 0; d <= 3; d++) { expect(THIN.lightTerm(false, false, d)).toBe(2); expect(THIN.lightTerm(false, true, d)).toBe(0) }
   })
 
+  // F1: unlit in a friend's light is +1 on every column (W4 sanityStep light term); thin keeps 0 — the light goes through you
+  it("a friend's light steadies every column unlit, and only the layer", () => {
+    for (const B of [TENANT, ANCHORED, PROCESSED, UNNAMED]) {
+      for (let d = 0; d <= 3; d++) { expect(B.lightTerm(false, true, d)).toBe(1); expect(B.lightTerm(true, true, d)).toBe(2) }
+    }
+    for (const B of [ANCHORED, PROCESSED, UNNAMED]) for (let d = 0; d <= 3; d++) expect(B.lightTerm(false, false, d)).toBe(-2)
+    for (const o of ['tenant', 'anchored', 'processed', 'unnamed']) {
+      expect(rulesFor(o, false).lightTerm(false, true, 2)).toBe(1)
+      expect(rulesFor(o, true).lightTerm(false, true, 2)).toBe(0)
+    }
+    for (const ln of [false, true]) expect(LEGACY.lightTerm(false, ln, 2)).toBe(-2)
+  })
+
   it('damage, the recoil, the glowstick, the first shot, the crosser, the giver, the lines', () => {
     expect(THIN.damageMul).toBe(0.7)
     expect(THIN.wardRecoil).toBe(true)

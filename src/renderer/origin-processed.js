@@ -34,7 +34,7 @@ const radio = { heartbeat: 'every', followUp: null }
 
 export const PROCESSED = Object.freeze({
   id: 'processed',
-  lightTerm: (flashlight) => (flashlight ? 2 : -2),
+  lightTerm: (flashlight, litNear) => (flashlight ? 2 : litNear ? 1 : -2),   // unlit in a friend's light, the dark eats slower
   perception: (ctx) => {
     percept.sightMul = (ctx?.depth ?? 0) >= 2 ? 1.25 : 1   // the ledger has your location
     percept.loseTrackMul = 1

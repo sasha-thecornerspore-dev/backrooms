@@ -57,7 +57,7 @@ const percept = { sightMul: 1, hidden: false, loseTrackMul: 1, noiseMul: 1 }
 
 export const TENANT = Object.freeze({
   id: 'tenant',
-  lightTerm: (flashlight, litNear, depth) => (flashlight ? 2 : (depth <= 1 ? 0 : -3)),
+  lightTerm: (flashlight, litNear, depth) => (flashlight ? 2 : litNear ? 1 : (depth <= 1 ? 0 : -3)),
   perception: (ctx) => {
     const deep = (ctx?.depth ?? 0) >= 2   // the file forwarded your address
     percept.sightMul = deep ? 1.3 : 1

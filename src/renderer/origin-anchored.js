@@ -44,7 +44,7 @@ const percept = { sightMul: 1, hidden: false, loseTrackMul: 1, noiseMul: 1 }
 
 export const ANCHORED = Object.freeze({
   id: 'anchored',
-  lightTerm: (flashlight) => (flashlight ? 2 : -2),
+  lightTerm: (flashlight, litNear) => (flashlight ? 2 : litNear ? 1 : -2),   // unlit in a friend's light, the dark eats slower
   perception: (ctx) => {
     percept.sightMul = 1
     percept.loseTrackMul = 1
