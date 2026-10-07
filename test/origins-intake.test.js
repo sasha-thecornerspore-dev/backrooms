@@ -54,8 +54,8 @@ describe('intake — the table', () => {
 
 describe('filingLine', () => {
   it('says the file has you, the drop, and the line it opened, in that order', () => {
-    expect(filingLine('tenant', false)).toBe('the file has you now.')
-    expect(filingLine('tenant', true)).toBe('the file has you now. you dropped in. not all of you arrived.')
+    expect(filingLine('tenant', false)).toBe('the file has you now. it has you at an address.')
+    expect(filingLine('tenant', true)).toBe('the file has you now. it has you at an address. you dropped in. not all of you arrived.')
     expect(filingLine('processed', false)).toBe('the file has you now. it opened a line on you.')
     expect(filingLine('processed', true)).toBe('the file has you now. you dropped in. not all of you arrived. it opened a line on you.')
     for (const o of ORIGINS) for (const t of [false, true]) {
@@ -63,6 +63,13 @@ describe('filingLine', () => {
       expect(s).toBe(s.toLowerCase())
       expect(s).not.toContain('!')
     }
+  })
+  it('names the column it wrote a solo player into: no two columns read the same line (F6)', () => {
+    expect(filingLine('anchored', false)).toBe('the file has you now. it has your body at a pin.')
+    expect(filingLine('unnamed', false)).toBe('the file has you now. it cannot spell you.')
+    expect(filingLine('unnamed', true)).toBe('the file has you now. it cannot spell you. you dropped in. not all of you arrived.')
+    expect(new Set(ORIGINS.map((o) => filingLine(o, false))).size).toBe(ORIGINS.length)
+    expect(filingLine(null, false)).toBe('the file has you now.')
   })
 })
 

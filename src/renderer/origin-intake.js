@@ -38,8 +38,10 @@ export function intake(ctx) {
   return 'tenant'
 }
 
+// The line names the column it wrote you into (the settings row's own voice), so a solo player learns which one it was.
 export function filingLine(origin, thin) {
   return 'the file has you now.' +
+    (origin === 'tenant' ? ' it has you at an address.' : origin === 'anchored' ? ' it has your body at a pin.' : origin === 'unnamed' ? ' it cannot spell you.' : '') +
     (thin ? ' you dropped in. not all of you arrived.' : '') +
     (origin === 'processed' ? ' it opened a line on you.' : '')
 }
