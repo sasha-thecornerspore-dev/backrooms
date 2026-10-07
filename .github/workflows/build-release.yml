@@ -52,8 +52,16 @@ jobs:
             echo "publish=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # release notes: docs/release-notes/<tag>.md when it exists (written with the version bump), else empty
+          NOTES="docs/release-notes/$TAG.md"
           if [ "$IS_DRAFT" = "missing" ]; then
-            gh release create "$TAG" --draft --title "$VER" --notes "" --target "${{ github.sha }}" --repo "${{ github.repository }}"
+            if [ -f "$NOTES" ]; then
+              gh release create "$TAG" --draft --title "$VER" --notes-file "$NOTES" --target "${{ github.sha }}" --repo "${{ github.repository }}"
+            else
+              gh release create "$TAG" --draft --title "$VER" --notes "" --target "${{ github.sha }}" --repo "${{ github.repository }}"
+            fi
+          elif [ -f "$NOTES" ]; then
+            gh release edit "$TAG" --notes-file "$NOTES" --repo "${{ github.repository }}"   # a leftover draft picks up edited notes
           fi
           echo "Draft $TAG ready — building."
           echo "build=true"   >> "$GITHUB_OUTPUT"
