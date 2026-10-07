@@ -227,10 +227,10 @@ describe.skipIf(!HAS_BUS)('the bus gates for photo (evbus.js as built)', () => {
     expect(got.map((e) => e.id)).toEqual(['near'])
   })
 
-  it('one photo of me per sender per 4 s, measured from the last accepted frame', () => {
+  it('one photo of me per sender per 4 s (believed from 3 s: the inbound slack, evbus IN_GAP), measured from the last accepted frame', () => {
     const { got, send, setT } = mk()
     setT(0); expect(send('a', { of: 'me', lvl: 1 })).toBe(true)
-    setT(3000); expect(send('a', { of: 'me', lvl: 1 })).toBe(false)
+    setT(2900); expect(send('a', { of: 'me', lvl: 1 })).toBe(false)
     setT(4100); expect(send('a', { of: 'me', lvl: 1 })).toBe(true)
     expect(got.length).toBe(2)
   })

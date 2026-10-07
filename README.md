@@ -71,7 +71,7 @@ on the start screen you can paste a **google maps link** (or bare `lat,lng`) int
 
 anchored worlds hold their shape. unanchored worlds forget you were ever there.
 
-hosting with an anchor carries the whole room down with you — the first player into a room decides its world.
+hosting with an anchor carries the whole room down with you — the first player into a room decides its world. join someone else's room and the pin you pasted stays yours: the others are told only a mark, enough to know whether you fell through the same place they did.
 
 ---
 
@@ -97,7 +97,7 @@ on the deepest floors the machines sometimes give stranger things. these you kee
 
 six slots. `1–6` selects, `q` uses, `x` sets it down. some things are worth carrying, some are worth using where you found them, some are worth leaving behind.
 
-**leave a word.** when you set something down, a card asks whether to leave a word with it — six of m.'s phrases, the same six for that floor and that kind of thing, whoever is holding it. *take the left.* *the water here is sour.* *i am close behind.* pick one (or **0** for nothing) and the thing becomes a **cache**: it lies where it fell, with an arrow for the way you were facing. whoever picks it up reads it on the card — the phrase, the arrow turned to where *they* stand, and who left it. the prompt tells you before you take it: *f · take the bandage · left by maddie*. the floor remembers your caches between visits and across a quit; online, the room sees them as you set them down, and the relay keeps the last of them for whoever comes through after you. a stranger's word steadies you, a little. no free text, ever — only what m. wrote.
+**leave a word.** when you set something down, a card asks whether to leave a word with it — six of m.'s phrases, the same six for that floor and that kind of thing, whoever is holding it. *take the left.* *the water here is sour.* *i am close behind.* pick one (or **0** for nothing) and the thing becomes a **cache**: it lies where it fell, with an arrow for the way you were facing. whoever picks it up reads it on the card — the phrase, the arrow turned to where *they* stand, and who left it. the prompt tells you before you take it: *f · take the bandage · left by maddie*. the floor remembers your caches between visits and across a quit; online, the room sees them as you set them down, and the relay keeps the last of them for whoever comes through after you — come back to a room and your own words are still yours. a hand needs a moment between two words: set a second one down in the same breath and it stays in your hands (*your hands are not ready.*). a stranger's word steadies you, a little. no free text, ever — only what m. wrote.
 
 ---
 
@@ -130,7 +130,7 @@ somewhere above the drop ceiling there is an office, and it keeps a file on ever
 
 and over any of them, a layer: **thin**. drop into a room someone already walks, or come back up from the dark, and *not all of you arrived*. the things lose you faster and hear you less — but the light goes through you, and a ward pushes you back as well as them. ballast cures it. until the first way down nothing is written: on the block, the form lies on the counter (**e** to read it; `/intake` reads it anywhere).
 
-**filed under.** the file also keeps a **status**, and this one is yours to choose. it begins as a notice nobody answered. once the file can hear you — the numbers station has read you its last group, or you have found five of m.'s pages, or you are deep enough — a presence offers three stamps under the request. tap one, or type it:
+**filed under.** the file also keeps a **status**, and this one is yours to choose. it begins as a notice nobody answered. once the file can hear you — the numbers station has read you its last group, or you have found five of m.'s pages, or you are deep enough — a presence offers three stamps under the request. tap one, or type it. a file that already holds something — a closing reached, pages given up — is asked on the card first, because a new word lets go of all of it:
 
 | status | what it turns inside out |
 |------|---------|
@@ -144,9 +144,9 @@ the lost souls know which word you are under, and so does the room — *entered 
 
 - **extension** — on the deepest floor, after the station has read you its last group: stand in the dark, light off, still, with nothing near. long enough, and the notice is extended over you. *twenty-two years.*
 - **compliance** — give thirteen pages up unread, then tell a presence to *close the file*. the shimmer leaves the walls, and the floors stop leaving pages out.
-- **litigation** — hold the seam. the station in the deep is counting toward something, and the extension slip names the one line the system never closed. claim it at a presence, then push it into the dark with your beacon (**b**).
+- **litigation** — hold the seam. the station in the deep is counting toward something, and the extension slip names the one line the system never closed. claim it at a presence, then push it into the dark with your beacon (**b**). under litigation the held seam closes your file. under the notice nobody answered, nobody writes it down — and the seam can be held again, any run, by anyone who finds the way.
 
-**your file** (settings ⚙) shows what the office has on you — the word you are under and since when, how the file has you, and how far your closing has come — with a **request a new notice** button that puts you back under the notice nobody answered (once a day: the old file stays closed). solo or online, press **enter** and type `/status` for the same lines.
+**your file** (settings ⚙) shows what the office has on you — the word you are under and since when, how the file has you, and how far your closing has come — with a **request a new notice** button that puts you back under the notice nobody answered (once a day: the old file stays closed). if the old file holds a closing or pages given up, the button asks once before it lets them go. solo or online, press **enter** and type `/status` for the same lines.
 
 **the floors keep count.** a wish sent from a filed run carries its word with it — `filed under: EXTENSION · level 2` — and every release recounts them. a floor whose files lean one way leans with them: its machines stock for it and stamp the tray (*the tray is stamped COMPLIANCE.*), its pages and souls come more or less often, and the radio on the near floors reads the floor's roll call. who is standing on the floor with you moves it too.
 
@@ -230,7 +230,7 @@ type your **name**, hit **PLAY ONLINE**, pick a **room code**, and share it. any
 
 down there you can do a few things for each other — call out, leave a word, light the way, push the dark back, photograph, count each other back. **update together:** these pass only between copies of this release; an older copy still walks beside you, drawn as a plain figure, but it hears none of them. on **PLAY ONLINE** they ride one new kind of message the public relay has to carry, so a room on a relay that has not been updated plays as it always did — walking, chat and nameplates, nothing more. **HOST LAN** from this release carries them from the start.
 
-**the whistle (c).** call out, and everyone on your floor hears two notes at a pitch that is only yours — panned to where you stand, fainter the farther you are, with a line in their chat that says *near* or *far* and which way. the hall counts who has answered lately and tells you, in words: *two of you, counting yourself.* a friend who goes a minute and a half without a whistle, a word, or standing near you has gone quiet, and you will feel it. alone, the hall keeps the sound. sometimes it does not, and the pitch that answers is wrong. the things hear every call — a whistle carries further than a ward. on a phone it is the **CALL** button.
+**the whistle (c).** call out, and everyone on your floor hears two notes at a pitch that is only yours — panned to where you stand, fainter the farther you are, with a line in their chat that says *near* or *far* and which way. the hall counts who has answered lately and tells you, in words: *two of you, counting yourself.* a friend standing beside you who has not whistled back yet is not counted — *nobody has answered yet.* a friend who goes a minute and a half without a whistle, a word, or standing near you has gone quiet, and you will feel it. alone, the hall keeps the sound. sometimes it does not, and the pitch that answers is wrong. the things hear every call — a whistle carries further than a ward. on a phone it is the **CALL** button.
 
 **a friend's light (l).** the things see by light. once you have taken your first way down, stand dark in a friend's flashlight — a few steps from them, nothing between you — and the things in the fog have a harder time finding you, and the dark eats at you slower. the game names whose light it is when you go dark in it. their light helps the people standing in it, never the one carrying it.
 
@@ -238,7 +238,7 @@ down there you can do a few things for each other — call out, leave a word, li
 
 **evidence (the polaroid).** photograph a friend and the film develops what the file wrote on them — and the photograph reaches them. *someone has evidence of you. you are harder to erase.* for a minute and a half their mind will not sink below a quarter, and the others see them solid, however thin they have become. photograph a friend who is down and they are counted back at once.
 
-**down, not dead.** with a friend on your floor, a hit that would kill you lays you **down** instead: your light goes out and you have twenty-five seconds in the dark. you can still whistle. a friend who finds you, faces you and presses **f** stays with you — light on, holding still — and counts you back. a photograph does it faster. if nobody comes, it is a death.
+**down, not dead.** with a friend on your floor, a hit that would kill you lays you **down** instead: your light goes out and you have twenty-five seconds in the dark. you can still whistle. a friend who finds you, faces you and presses **f** stays with you — light on, holding still — and counts you back. a photograph does it faster. if nobody comes, it is a death — and a friend who is down too cannot come: when everyone on the floor is lying down, the hit kills you as it always did.
 
 ## save & continue
 

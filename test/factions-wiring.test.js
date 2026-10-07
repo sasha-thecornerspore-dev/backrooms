@@ -39,15 +39,15 @@ import { SCRAPS } from '../src/renderer/scraps.js'
 import { OPENED_LINE, RELEASE_LINE, RADIO_KEY_LINE } from '../src/renderer/origin-processed.js'
 import { LEGACY_LAST_LINE } from '../src/renderer/origin-rules.js'
 import { createDownState, createKneel, DOWN_LINE, WOKEN_LINE, KNEELER_LINE, HANDS_LINE, LIGHT_STAYS_LINE, KNEEL_HINT, WAKE, KNEELER_SANITY, DOWN_BEAT } from '../src/renderer/downed.js'
-import { deathDecision, NOBODY_CAME } from '../src/renderer/compose-gates.js'
+import { deathDecision, NOBODY_CAME, finaleGate } from '../src/renderer/compose-gates.js'
 import { evKinds } from '../src/renderer/rollcall.js'
 import { createEvBus } from '../src/net/evbus.js'
 import { createRollCall, whistlePitch, bearingLabel, whistleGain, whistlePan, countLine, WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY, FAR_BONUS, ECHO,
-  NO_ANSWER_LINE, ECHO_LINE } from '../src/renderer/rollcall.js'
+  NO_ANSWER_LINE, ECHO_LINE, UNANSWERED_LINE } from '../src/renderer/rollcall.js'
 import { ACTIONS } from '../src/renderer/touch.js'
 import { takeKey } from '../src/renderer/input.js'
 import { createItemSystem, KEPT } from '../src/renderer/items.js'
-import { PHRASES, NOTE_NONE, menuFor, cacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger } from '../src/renderer/caches.js'
+import { PHRASES, NOTE_NONE, menuFor, cacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from '../src/renderer/caches.js'
 import { readText, READ_FOOT, chooseLines } from '../src/renderer/papercard.js'
 import { createLevelMemory } from '../src/renderer/levelmem.js'
 import { findOpenNear } from '../src/renderer/topology.js'
@@ -327,15 +327,25 @@ describe('I5: the form, the doors, the soul, the console, the naming', () => {
   it('the naming re-file: an unnamed player\'s naming wish closes the dialog and asks how it is spelled; only a confirm files the name', () => {
     const fn = slice('function refileName(name) {', "document.getElementById('wish-cancel')")
     expect(fn).toMatch(/closeDialog\(\); if \(wishText\) wishText\.disabled = false; const sub = document\.getElementById\('wish-submit'\); if \(sub\) sub\.disabled = false/)
-    expect(fn).toMatch(/openCard\('confirm', \{ \.\.\.spellCard\(name\), onConfirm: \(\) => \{\r?\n\s*intakeCtx = refileWithName\(intakeCtx, name\); origin = intake\(intakeCtx\); rules = rulesFor\(origin, thin\)\r?\n\s*setPref\('playerName', name\)\r?\n\s*showMessage\(spelledLine\(name, origin\), PRIO\.discovery\)/)
+    expect(fn).toMatch(/openCard\('confirm', \{ \.\.\.spellCard\(name\), onConfirm: \(\) => \{\r?\n\s*intakeCtx = refileWithName\(intakeCtx, name\); origin = intake\(intakeCtx\); rules = rulesFor\(origin, thin\)\r?\n\s*evConfig\.events = rules\.eventWeights\(\)[^\n]*\r?\n\s*setPref\('playerName', name\)\r?\n\s*showMessage\(spelledLine\(name, origin\), PRIO\.discovery\)/)
     expect(fn).toContain('if (mpClient) setTimeout(() => showMessage(ONLINE_LINE, PRIO.discovery), 2600)')
     // the router reads the naming wish (I8: compose-wish.js wishRoute, the unnamed only); the handler re-files before anything is disabled or sent
     const submit = slice("document.getElementById('wish-submit')?.addEventListener('click', async () => {", "if (wishResp) wishResp.textContent = r.reply ?? ''")
     expect(submit).toMatch(/const r = wishRoute\(\{ text, origin, rules, file, canFile: fileable\(\), now: Date\.now\(\), depth: level\.depth \}\)\r?\n\s*if \(r\.kind === 'name'\) \{ refileName\(r\.name\); return \}/)
     // the confirm card's foot is its prompt: the put-it-back hint steps aside and the foot keeps its gap
-    expect(game).toContain("if (noteHintEl) noteHintEl.style.display = lines.length || s.mode === 'confirm' ? 'none' : ''")
+    expect(game).toContain("noteHintEl.style.display = lines.length || s.mode === 'confirm' ? 'none' : ''")
+    // a cache's word is read with the thing already in your hands: the hint folds the card away, it does not put anything back
+    expect(game).toContain("noteHintEl.textContent = s.mode === 'read' ? 'tap · e · esc — fold it away' : 'tap · e · esc — put it back'")
     expect(html).toMatch(/#note-foot \{[^}]*white-space: pre-wrap;/)
     expect(fn).toContain('document.activeElement?.blur?.()')
+  })
+  it('every write of origin (outside the resume\'s identityIn) re-points the scheduler at the new column\'s weights, on that line or the next', () => {
+    const lines = game.split(/\r?\n/)
+    const writes = []
+    for (let i = 0; i < lines.length; i++) if (/(^\s*|[;{]\s*)origin = (?!null\b)/.test(lines[i].replace(/\/\/.*$/, ''))) writes.push(i)
+    expect(writes.length).toBe(3)                                             // the filing, the naming re-file, the claim's re-file
+    for (const i of writes) expect(lines[i] + '\n' + lines[i + 1], lines[i]).toContain('evConfig.events = rules.eventWeights()')
+    expect(game).toMatch(/\(\{ origin, thin, filed, intakeCtx, filedFloors \} = identityIn\(resume, intakeCtx\)\)\r?\n\s*rules = rulesFor\(origin, thin\); evConfig\.events = rules\.eventWeights\(\)/)
   })
 })
 
@@ -467,13 +477,14 @@ describe('I7: the one sanity step (compose-sanity.js)', () => {
   })
   it('the state before the loop: mods / co from the file, one company pool, the disagreement once, your own file beside here', () => {
     for (const s of ['let mods = statusMods(file.status), co = closingOverlay(file.closing)', 'const company = createCompany()', 'let disagreeSaid = false',
-      "const selfFile = { status: 'notice-mailed', aseed: myAseed, origin: null, thin: false }"]) {
+      "const selfFile = { status: 'notice-mailed', aseed: myPinTag, origin: null, thin: false }"]) {
       expect(at(s)).toBeLessThan(loopAt)
       expect(game.split(s).length - 1, s).toBe(1)
     }
     expect(at('let file = ')).toBeLessThan(at('let mods = statusMods(file.status)'))
     const here = slice('function hereFields() {', 'return hereObj')
-    expect(here).toContain('selfFile.status = file.status; selfFile.aseed = myAseed; selfFile.origin = origin; selfFile.thin = thin')
+    expect(here).toContain('selfFile.status = file.status; selfFile.aseed = myPinTag; selfFile.origin = origin; selfFile.thin = thin')
+    expect(here).toContain('hereObj.aseed = myPinTag')                       // the tag, never anchorSeed itself (it inverts to the place)
   })
   it('ONE sanCtx before the loop (you, your file, this floor\'s remote players, the bus\'s two questions set once); sanityStep once a frame', () => {
     expect(count(/const sanCtx = /g)).toBe(1)
@@ -629,28 +640,32 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     render([...STRINGS.STAMP_LINES])
     expect(subEl.children.length).toBe(3)
     expect(subEl.children.every((c) => c.classes.has('stamp') && c.className === 'wish-line')).toBe(true)
-    subEl.children[1].handlers.pointerdown({ preventDefault() {} })
+    expect(subEl.children[1].handlers.pointerdown).toBeUndefined()          // a click, never a press: a scroll or a stray touch files nothing
+    subEl.children[1].handlers.click({ preventDefault() {} })
     expect([wishText.value, submit.clicks]).toEqual(['compliance', 1])      // a status word, never 'close the file'
-    submit.disabled = true; subEl.children[0].handlers.pointerdown({ preventDefault() {} })
+    submit.disabled = true; subEl.children[0].handlers.click({ preventDefault() {} })
     expect([wishText.value, submit.clicks]).toEqual(['compliance', 1])
   })
   it('the wish, lifted and replayed against the real router: today\'s claim and wish byte for byte; a name, a status, a close and a re-file stay in the room', async () => {
     const body = slice('const r = wishRoute(', 'setTimeout(() => {')
+    const filing = slice('// a status filing (status.js fileStatus)', '// what you typed is routed')
     const AsyncFunction = (async () => {}).constructor
     const run = async (st0, text) => {
       const st = { origin: null, rules: LEGACY, file: loadFile(null), filed: false, thin: false, photoIdx: 5, stationIdx: 2, claimFiled: false, depth: 1, pages: 0, ...st0 }
-      const out = { sent: [], said: [], timers: [], applied: [], compliance: 0, finale: 0, named: [], here: 0, resp: null, closingTimers: [] }
+      const out = { sent: [], said: [], timers: [], applied: [], compliance: 0, finale: 0, named: [], here: 0, resp: null, closingTimers: [], cards: [], closed: 0 }
       const fn = new AsyncFunction('text', 'wishRoute', 'canFile', 'readSet', 'level', 'refileName', 'wishResp', 'wishText', 'document', 'applyCompliance',
-        'closingLines', 'closingTimers', 'showMessage', 'PRIO', 'rulesFor', 'evConfig', 'bus', 'hereFields', 'window', 'tryFinale', 'setTimeout', 'st', 'out',
+        'closingLines', 'closingTimers', 'showMessage', 'PRIO', 'rulesFor', 'evConfig', 'bus', 'hereFields', 'window', 'tryFinale', 'setTimeout', 'openCard', 'closeDialog', 'st', 'out',
         `let { origin, rules, file, filed, thin, photoIdx, stationIdx, claimFiled } = st
         function applyFile(f) { file = f; out.applied.push(f) }
         const fileable = () => canFile({ ledgerHeard: file.ledgerHeard, pagesRead: readSet.size, depth: level.depth })
-        try {\n${body}\n} finally { Object.assign(st, { origin, rules, file, photoIdx, stationIdx, claimFiled }) }`)
+        ${filing}
+        try {\n${body}\n} finally { st.confirm = () => { out.cards.at(-1)[1].onConfirm(); Object.assign(st, { file, photoIdx, stationIdx, claimFiled }) }; Object.assign(st, { origin, rules, file, photoIdx, stationIdx, claimFiled }) }`)
       const resp = { set textContent(v) { out.resp = v } }
       const btn = { disabled: false }
       await fn(text, wishRoute, canFile, { size: st.pages }, { depth: st.depth }, (n) => out.named.push(n), resp, { disabled: false }, { getElementById: () => btn },
         () => out.compliance++, closingLines, out.closingTimers, (m, p) => out.said.push([m, p]), PRIO, rulesFor, { events: EVENTS }, { here: () => out.here++ }, () => 'here',
-        { backrooms: { submitWish: async (t, m) => { out.sent.push([t, m]) } } }, () => out.finale++, (f, ms) => { out.timers.push(ms); return out.timers.length }, st, out)
+        { backrooms: { submitWish: async (t, m) => { out.sent.push([t, m]) } } }, () => out.finale++, (f, ms) => { out.timers.push(ms); return out.timers.length },
+        (mode, o) => { out.cards.push([mode, o]); return {} }, () => out.closed++, st, out)
       return { st, out }
     }
     // today's claim: sent as typed, the legacy reply, the claim filed and the seam tried; no re-file for an unfiled claimant
@@ -683,6 +698,20 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     ;({ st, out } = await run({ depth: 2, file: { ...loadFile(null), status: 'litigation', at: 1 } }, 'compliance'))   // a re-filing says so, after the dialog
     expect(out.resp).toBe(STRINGS.FILED)
     expect([out.closingTimers.length, out.timers]).toEqual([1, [3000]])
+    // a file that holds work (a closing reached, pages given up) is never re-filed by one tap: the dialog closes and the card asks first
+    for (const held of [{ closing: 'extension' }, { redacted: [3, 4] }]) {
+      const before = { ...loadFile(null), status: 'extension', at: 1, ledgerHeard: true, ...held }
+      ;({ st, out } = await run({ depth: 2, claimFiled: true, file: before }, 'litigation'))
+      expect([out.applied, out.resp, out.closed, st.file, st.claimFiled]).toEqual([[], null, 1, before, true])
+      expect(out.cards.map(([m, o]) => [m, o.text, o.foot])).toEqual([['confirm', 'file under litigation? the old file closes with what it holds.', 'e · yes      esc · no']])
+      st.confirm()                                                              // e: filed, as the stamp would have
+      expect([out.applied.map((f) => [f.status, f.closing, f.redacted]), st.claimFiled, st.photoIdx]).toEqual([[['litigation', null, []]], false, 0])
+      expect(out.said).toEqual([[STRINGS.FILED, PRIO.discovery]])
+      expect(out.timers.at(-1)).toBe(2600)                                       // the re-filing's line after it
+    }
+    // nothing to lose: filed at once, as before (and a refusal never asks)
+    ;({ st, out } = await run({ depth: 2, file: { ...loadFile(null), status: 'extension', at: 1, closing: 'extension' } }, 'extension'))
+    expect([out.cards.length, out.resp]).toEqual([0, STRINGS.SAME_STATUS])
     // the compliance close: thirteen pages given up closes the file, the floor stops leaving pages, two lines follow the dialog
     const thirteen = { ...loadFile(null), status: 'compliance', at: 1, redacted: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] }
     ;({ st, out } = await run({ file: thirteen }, 'close the file'))
@@ -735,7 +764,7 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
   it('the film, lifted and replayed: today\'s three captions, +8 after the caption read the sanity, the letter only on a letter; a friend in frame, the soul\'s door, the pin\'s calm, thin\'s first shot', () => {
     const body = slice('const thinNear = ephemera.some(', '// the door a lost soul in the film stands before').replace(/\}\s*$/, '')
     const fn = new Function('ephemera', 'player', 'bus', 'subjectInFrame', 'FRAME_OPTS', 'level', 'SOUL_RANGE', 'inFrame', 'polaroidCaption', 'knownWayArrow', 'rules', 'mods', 'file',
-      'origin', 'thin', 'anchor', 'driftD', 'wardPulse', 'window', 'dataUrl', 'showMessage', 'st', 'out',
+      'origin', 'thin', 'anchor', 'myPinTag', 'driftD', 'wardPulse', 'window', 'dataUrl', 'showMessage', 'st', 'out',
       `let { sanity, photoIdx, thinFirstShot, shotOnLevel, leashCalm } = st\n${body}\nObject.assign(st, { sanity, photoIdx, thinFirstShot, shotOnLevel, leashCalm })`)
     const player = { x: 10.5, y: 10.5, angle: 0 }
     const opts = { pos: (id) => (id === 'f' ? { x: 15.5, y: 10.5, angle: Math.PI } : null), cone: inViewCone, hf: HF, maxCells: SUBJECT_RANGE, los: () => true }
@@ -743,7 +772,7 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
       const out = { said: [], pulses: 0 }
       fn(o.ephemera ?? [], player, o.bus ?? null, subjectInFrame, opts, { index: st.index, depth: depthOf(st.index), decor: { nearestNpc: () => o.npc ?? null } }, SOUL_RANGE, inFrame,
         polaroidCaption, () => o.arrow ?? null, o.rules ?? LEGACY, o.mods ?? NM, { status: o.status ?? 'notice-mailed' }, o.origin ?? null, o.thin ?? false, o.anchor ?? null,
-        () => o.D ?? 0, () => out.pulses++, {}, null, (m, p) => out.said.push(p === undefined ? m : [m, p]), st, out)
+        o.tag ?? null, () => o.D ?? 0, () => out.pulses++, {}, null, (m, p) => out.said.push(p === undefined ? m : [m, p]), st, out)
       return out
     }
     const legacy = (thinNear, index, sanity, photoIdx) => thinNear ? 'the film shows someone who was not in the room. you can see the wall through them.'
@@ -764,6 +793,12 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     let out = shoot(st, { bus })
     expect(out.said[0]).toMatch(/^the film develops maddie\. there is an address under them\./)
     expect(busOut).toEqual([['photo', { of: 'f', x: 10.5, y: 10.5, lvl: 1 }]])
+    // the same pin: their 'here' carries its tag, held against yours (never the seed)
+    const pinned = { freshPeersOnFloor: () => [{ id: 'f', name: 'maddie', st: 'ok', thin: false, seen: false, o: 'tenant', status: 'extension', aseed: 4242 }], emit: () => {} }
+    st = { sanity: 60, photoIdx: 0, thinFirstShot: true, shotOnLevel: true, leashCalm: 0, index: 1 }
+    expect(shoot(st, { bus: pinned, anchor: { lat: 1, lng: 2 }, tag: 4242 }).said[0]).toMatch(/^the film develops maddie\. the film shows your pin\./)
+    st = { sanity: 60, photoIdx: 0, thinFirstShot: true, shotOnLevel: true, leashCalm: 0, index: 1 }
+    expect(shoot(st, { bus: pinned, anchor: { lat: 1, lng: 2 }, tag: 4243 }).said[0]).toMatch(/^the film develops maddie\. there is an address under them\./)
     // a lost soul in frame, and the door behind them when one is on your sheet
     st = { sanity: 60, photoIdx: 0, thinFirstShot: true, shotOnLevel: true, leashCalm: 0, index: 1 }
     out = shoot(st, { npc: { x: 14.5, y: 10.5 }, arrow: '↗' })
@@ -791,9 +826,21 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     for (const s of ['const doorOut = []', 'let thinFirstShot = true', 'let shotOnLevel = false', 'let firstDeepHearing = true',
       'const rollcall = createRollCall({ now: () => performance.now() })']) expect(at(s), s).toBeLessThan(loopAt)   // the roll call keeps its own ms clock, never playT
   })
-  it('the seam: the core\'s gate and the file\'s, then the litigation\'s closing on the file before the lines', () => {
+  it('the seam: the core\'s gate and the file\'s, then the litigation\'s closing on a litigation file before the lines; the notice nobody answered can hold it every run', () => {
     const fin = slice('function tryFinale() {', 'function applyItemEffect(eff) {')
-    expect(fin).toMatch(/if \(!finaleGate\(\{ seamHeld, claimFiled, beaconFired, rules, status: file\.status, closing: file\.closing \}\)\) return\r?\n\s*seamHeld = true\r?\n\s*applyFile\(\{ \.\.\.file, closing: 'litigation' \}\)\r?\n\s*wardPulse\(\); calmTimer = 600;/)
+    expect(fin).toMatch(/if \(!finaleGate\(\{ seamHeld, claimFiled, beaconFired, rules, status: file\.status, closing: file\.closing \}\)\) return\r?\n\s*seamHeld = true\r?\n\s*if \(file\.status === 'litigation'\) applyFile\(\{ \.\.\.file, closing: 'litigation' \}\)[^\n]*\r?\n\s*wardPulse\(\); calmTimer = 600;/)
+    // lifted and replayed against the real gate: a notice-mailed file holds the seam and stays open, so the next run (seamHeld false again) holds it too
+    const run = new Function('finaleGate', 'rules', 'wardPulse', 'itemSys', 'renderHotbar', 'showMessage', 'setTimeout', 'st',
+      `let { seamHeld, claimFiled, beaconFired, file, calmTimer, flickTgt, flickTimer, sanity } = st\nfunction applyFile(f) { file = f }\n${fin}\ntryFinale()\nObject.assign(st, { seamHeld, file })`)
+    const hold = (file) => { const st = { seamHeld: false, claimFiled: true, beaconFired: true, file, calmTimer: 0, flickTgt: 0, flickTimer: 0, sanity: 50 }
+      run(finaleGate, LEGACY, () => {}, { grant: () => {} }, () => {}, () => {}, () => {}, st); return st }
+    let st = hold(loadFile(null))
+    expect([st.seamHeld, st.file.status, st.file.closing]).toEqual([true, 'notice-mailed', null])
+    st = hold(st.file)                                                          // the next run, the same profile
+    expect([st.seamHeld, st.file.closing]).toEqual([true, null])
+    st = hold({ ...loadFile(null), status: 'litigation', at: 1 })
+    expect([st.seamHeld, st.file.closing]).toEqual([true, 'litigation'])
+    expect(hold(st.file).seamHeld).toBe(false)                                 // litigation's closing is the file's: held once, until a new filing
   })
   it('the beacon, lifted and replayed: today\'s three pushes byte for byte; the pin rides only an anchored push; a processed push files the floor; a closed file has no standing', () => {
     const k = game.indexOf("const effect = getPref('beaconEffect')"), endS = 'if (b.setBeaconFired) { beaconFired = true; tryFinale() }'
@@ -829,7 +876,7 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
 
 describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the kneel, being counted back', () => {
   const loop = game.slice(loopAt)
-  const HP_LINE = "if (player.hp <= 0) { player.hp = 0; const d = deathDecision({ mp: !!mpClient, peers: bus ? bus.freshPeersOnFloor().length : 0, downSt: down.st, rules, filed, thin, D: driftD(), timeout: false }); if (d === 'down') goDown(); else if (d !== 'wait') die(d) }"
+  const HP_LINE = "if (player.hp <= 0) { player.hp = 0; const d = deathDecision({ mp: !!mpClient, peers: friendsUp(), downSt: down.st, rules, filed, thin, D: driftD(), timeout: false }); if (d === 'down') goDown(); else if (d !== 'wait') die(d) }"
   const TIMEOUT_LINE = "if (down.tick() === 'timeout') die(deathDecision({ mp: !!mpClient, peers: 0, downSt: down.st, rules, filed, thin, D: driftD(), timeout: true }))"
   const SWEEP = "if (down.st === 'down') { K['KeyF'] = K['KeyQ'] = K['KeyX'] = K['KeyE'] = K['KeyB'] = K['KeyL'] = false; for (let i = 1; i <= 6; i++) K['Digit' + i] = false }"
   const helpers = slice('function goDown() {', '// ── messages (black text')
@@ -858,7 +905,7 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
   it('deathDecision is called exactly twice, both with the ONE signature; the hp block goes down, waits or dies; the timeout dies with nobody', () => {
     const calls = [...game.matchAll(/deathDecision\((\{[^}]*\})\)/g)].map((m) => m[1])
     expect(calls.length).toBe(2)
-    for (const c of calls) expect(c).toMatch(/^\{ mp: !!mpClient, peers: (bus \? bus\.freshPeersOnFloor\(\)\.length : 0|0), downSt: down\.st, rules, filed, thin, D: driftD\(\), timeout: (true|false) \}$/)
+    for (const c of calls) expect(c).toMatch(/^\{ mp: !!mpClient, peers: (friendsUp\(\)|0), downSt: down\.st, rules, filed, thin, D: driftD\(\), timeout: (true|false) \}$/)
     expect(loop).toContain(HP_LINE)
     expect(loop).toContain(TIMEOUT_LINE)
     expect(loop.indexOf(TIMEOUT_LINE)).toBeLessThan(loop.indexOf(HP_LINE))
@@ -866,10 +913,11 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     expect((code.match(/(?<!function )\bdie\(/g) || []).length).toBe(2)       // the timeout and the hp block: nothing else dies
   })
   it('the hp block, lifted and replayed against the real decision: solo and an empty floor die today\'s death; a fresh friend lays you down; down, you wait', () => {
-    const run = new Function('deathDecision', 'mpClient', 'bus', 'down', 'rules', 'filed', 'thin', 'driftD', 'goDown', 'die', 'player', HP_LINE)
-    const go = (mp, peers, downSt) => {
+    const up = game.match(/function friendsUp\(\) \{[\s\S]*?\r?\n  \}/)[0]
+    const run = new Function('deathDecision', 'mpClient', 'bus', 'down', 'rules', 'filed', 'thin', 'driftD', 'goDown', 'die', 'player', `${up}\n${HP_LINE}`)
+    const go = (mp, peers, downSt, theirs = 'ok') => {
       const out = { down: 0, died: [] }, player = { hp: -4 }
-      run(deathDecision, mp ? {} : null, mp ? { freshPeersOnFloor: () => new Array(peers) } : null, { st: downSt }, LEGACY, false, false, () => 0,
+      run(deathDecision, mp ? {} : null, mp ? { freshPeersOnFloor: () => Array.from({ length: peers }, () => ({ st: theirs })) } : null, { st: downSt }, LEGACY, false, false, () => 0,
         () => out.down++, (d) => out.died.push(d), player)
       return { ...out, hp: player.hp }
     }
@@ -878,6 +926,8 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     expect(go(true, 0, 'ok')).toEqual({ down: 0, died: [legacyDeath], hp: 0 })      // friends only on other floors
     expect(go(true, 1, 'ok')).toEqual({ down: 1, died: [], hp: 0 })                 // a fresh friend here: down
     expect(go(true, 1, 'down')).toEqual({ down: 0, died: [], hp: 0 })               // already down: wait
+    expect(go(true, 1, 'ok', 'down')).toEqual({ down: 0, died: [legacyDeath], hp: 0 })   // the only friend here is down too: nobody can come
+    expect(go(true, 2, 'ok', 'kneel')).toEqual({ down: 1, died: [], hp: 0 })        // kneeling by someone is still on their feet
   })
   it('die(d): the reset right after the core\'s invuln line, then the decision (its regenDelay wins), the veil cleared; its line third, at 7800 ms', () => {
     expect(dieBody).toMatch(/invuln = 1\.6; regenDelay = 0; hurt = 0\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(down\.st === 'down'\) flashlight = savedLight\r?\n\s*down\.reset\(\); if \(kneel\.st\) \{ kneel\.stop\(\); flashlight = savedLight \}\r?\n\s*if \(d\) \{ if \(d\.mintThin && filed\) \{ thin = true; rules = rulesFor\(origin, thin\); thinFirstShot = true \} if \(d\.leashDebt > 0\) leashDebt = d\.leashDebt; if \(d\.sanity\) sanity = Math\.max\(0, Math\.min\(100, sanity \+ d\.sanity\)\); if \(d\.regenDelay\) regenDelay = d\.regenDelay \}\r?\n\s*if \(downEl\) downEl\.style\.opacity = '0'\r?\n\s*document\.body\.classList\.remove\('down'\)/)
@@ -1059,7 +1109,7 @@ describe('I10 (W5): the whistle — the C edge, your call, a friend\'s, the roll
   const whistleSrc = lift(/function whistleOut\(live\) \{[\s\S]*?\r?\n {2}\}/)
 
   it('imports the whistle by its real names (the audio call before the bump); the state before the loop; nothing of W5 is left to do', () => {
-    expect(game).toMatch(/import \{ createCompany, createRollCall, evKinds, whistlePitch, bearingLabel, whistleGain, whistlePan, countLine, WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY, FAR_BONUS, ECHO, NO_ANSWER_LINE, ECHO_LINE \} from '\.\/rollcall\.js'/)
+    expect(game).toMatch(/import \{ createCompany, createRollCall, evKinds, whistlePitch, bearingLabel, whistleGain, whistlePan, countLine, WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY, FAR_BONUS, ECHO, NO_ANSWER_LINE, ECHO_LINE, UNANSWERED_LINE \} from '\.\/rollcall\.js'/)
     expect(game).toMatch(/, drawerSlide, whistle, bump \} from '\.\/audio\.js'/)
     expect(sw).toContain("'/renderer/rollcall.js'"); expect(build).toContain("'rollcall.js'")
     expect(game).not.toMatch(/TODO\(integrate:W5\)/)
@@ -1102,7 +1152,7 @@ describe('I10 (W5): the whistle — the C edge, your call, a friend\'s, the roll
       performance: { now: () => t }, whistle: (...a) => sounds.push(a), whistlePitch, mpClient: mp,
       level: { index: 2, entitySys: { noise: (...a) => noises.push(a) } }, player: { x: 4.5, y: 7.25 },
       stillness: { noise: (p) => stillNoises.push(p) }, rollcall, bus, callOut,
-      showMessage: (m, p) => said.push([m, p]), PRIO, countLine, NO_ANSWER_LINE, SOLO_SANITY, ECHO, ECHO_LINE,
+      showMessage: (m, p) => said.push([m, p]), PRIO, countLine, NO_ANSWER_LINE, UNANSWERED_LINE, SOLO_SANITY, ECHO, ECHO_LINE,
       footfall: (n) => steps.push(n), setTimeout: (f, ms) => timers.push([f, ms]), WHISTLE_COOLDOWN_MS, WHISTLE_NOISE,
     }, { lastWhistleAt: -Infinity, standHeld: 3, sanity: 50, playT: 42, arrivalGen: 0 })
     return { h, said, sounds, noises, timers, stillNoises, steps, callOut, at: (ms) => { t = ms } }
@@ -1151,6 +1201,16 @@ describe('I10 (W5): the whistle — the C edge, your call, a friend\'s, the roll
     expect(r.said).toEqual([['three of you.', PRIO.interaction]])
     expect([r.h.read().sanity, r.timers.length]).toEqual([50, 0])                  // answered: no solo term, no echo
     expect(whistleSrc).not.toMatch(/\{ x: player\.x/)                              // no literal per call
+  })
+  it('a friend standing on the floor who has not whistled yet: \'nobody has answered yet.\' — never \'just you\', no solo steadying, nothing answers in their place', () => {
+    for (const live of [false, true]) {
+      const r = rig({ echo: true, mp: { id: 'me', getName: () => 'jo' }, bus: { emit: () => true, freshPeersOnFloor: () => [{ id: 'f', st: 'ok' }] } })
+      r.h.whistleOut(live)
+      expect([r.said, r.h.read().sanity, r.timers]).toEqual([[[UNANSWERED_LINE, PRIO.interaction]], 50, []])
+    }
+    const r = rig({ echo: true, mp: { id: 'me', getName: () => 'jo' }, bus: { emit: () => true, freshPeersOnFloor: () => [] } })   // the floor empty of friends: as alone
+    r.h.whistleOut(true)
+    expect([r.said, r.h.read().sanity, r.timers.length]).toEqual([[['one. just you.', PRIO.interaction]], 50 + SOLO_SANITY, 1])
   })
   it('a friend\'s call (the receive half), lifted and replayed through the real bus: their pitch from where they stand, a people line with the bearing, the roll call, the far bonus once a minute', () => {
     const recv = lift(/bus\.on\('whistle', \(\{ id, name, payload: p \}\) => \{[\s\S]*?\r?\n {4}\}\)/)
@@ -1248,7 +1308,8 @@ describe('I11 (W6): the caches — a thing set down with a word, read on the car
   const regs = ['cache', 'take'].map((k) => lift(new RegExp(`bus\\.register\\('${k}'[^\\n]*`)))
   const replace = slice('for (const c of ledger.pendingFor(index)) {', '// the keys still spent at this visit')
   // setDown / throwSelected / removeCache / relayLater lifted out of game.js, their world faked around the REAL items, ledger and floors' memory
-  const mkSetDown = (deps) => new Function(...Object.keys(deps), `${setDownSrc}\nreturn { setDown, throwSelected, removeCache, relayLater }`)(...Object.values(deps))
+  const readySrc = lift(/const cacheReady = [^\n]*/)
+  const mkSetDown = (deps) => new Function(...Object.keys(deps), `${readySrc}\n${setDownSrc}\nreturn { setDown, throwSelected, removeCache, relayLater }`)(...Object.values(deps))
   function rig({ inv = ['bandage'], cardEl = {}, bus = null, id = null, name = 'wanderer', level = { index: 1 } } = {}) {
     const items = createItemSystem({ ...DEFAULT_CONFIG }, () => false, 0)
     for (const t of inv) items.grant(t, t === 'plumb' ? { tool: true } : {})
@@ -1262,12 +1323,14 @@ describe('I11 (W6): the caches — a thing set down with a word, read on the car
   }
 
   it('imports caches.js, KEPT and readText by their real names; caches.js is in both offline shells; nothing of W6 is left to do', () => {
-    expect(game).toMatch(/import \{ PHRASES, NOTE_NONE, menuFor, cacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger \} from '\.\/caches\.js'/)
+    expect(game).toMatch(/import \{ PHRASES, NOTE_NONE, menuFor, cacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT \} from '\.\/caches\.js'/)
     expect(game).toMatch(/import \{ createItemSystem, KEPT \} from '\.\/items\.js'/)
     expect(game).toMatch(/import \{ createCard, CARD_KEYS, readText \} from '\.\/papercard\.js'/)
     expect(sw).toContain("'/renderer/caches.js'"); expect(build).toContain("'caches.js'")
     expect(game).not.toMatch(/TODO\(integrate:W6\)/)
-    for (const s of ['const ledger = createCacheLedger()', 'const evOutbox = []', 'const isMine = (rec) => (rec.byId ?? null) === myId()']) {
+    for (const s of ['const ledger = createCacheLedger()', 'const evOutbox = []', 'const OUTBOX_MARGIN_MS = 250',
+      'const isMine = (rec) => (rec.byId ?? null) === myId() || (rec.by != null && rec.by === myName() && !NAME_CAP_EXEMPT.includes(rec.by))',
+      "const cacheReady = () => !bus || (!evOutbox.length && bus.ready('cache'))"]) {
       expect(at(s), s).toBeLessThan(loopAt)
       expect(game.split(s).length - 1, s).toBe(1)
     }
@@ -1313,10 +1376,10 @@ describe('I11 (W6): the caches — a thing set down with a word, read on the car
     expect(r.out.said).toEqual(['you set the radio down, still talking. let it talk.'])
     expect(r.items.getDropped()[0]).toMatchObject({ on: true, ph: menuFor(1, 'radio')[0], cacheKey: 'c:1:11,10' })
   })
-  it('online: the room is told through the outbox — at once, or (inside the kind\'s gap) in order behind what waits; a take never overtakes its cache', () => {
+  it('online: a cache leaves at once or not at all (your hands are not ready); a take waits in the outbox, in order, and leaves past its gap with a margin', () => {
     let ok = true
     const sent = []
-    const bus = { emit: (k, p, o) => { if (!ok) return false; sent.push([k, JSON.parse(JSON.stringify(p)), o]); return true } }
+    const bus = { emit: (k, p, o) => { if (!ok) return false; sent.push([k, JSON.parse(JSON.stringify(p)), o]); return true }, ready: () => ok }
     const r = rig({ inv: ['almond-water', 'bandage', 'glowstick'], bus, id: 'me', name: 'maddie' })
     r.items.inventory[0].sour = true
     r.h.setDown(); r.out.cards[0][1].onPick(1)
@@ -1325,17 +1388,59 @@ describe('I11 (W6): the caches — a thing set down with a word, read on the car
     expect(r.items.getDropped()[0]).toMatchObject({ sour: true, by: 'maddie', byId: 'me' })
     expect(isCachePayload(sent[0][1], ITEM_NAMES)).toBe(true)
     ok = false
-    r.player.x = 20.5; r.h.setDown(); r.out.cards[1][1].onPick(0)                    // refused by the gap: it waits
+    r.player.x = 20.5; r.h.setDown(); r.out.cards[1][1].onPick(0)                    // inside the gap: it stays in your hands, nothing queued
+    expect([r.out.said.at(-1), r.items.inventory.map((i) => i.type), r.items.getDropped().length, r.ledger.size, r.evOutbox]).toEqual(
+      ['your hands are not ready.', ['bandage', 'glowstick'], 1, 1, []])
+    r.h.relayLater('take', { key: 'c:1:5,5' }, { drop: 'c:1:5,5' })                 // a take inside its gap waits
     ok = true
-    r.player.x = 30.5; r.h.setDown(); r.out.cards[2][1].onPick(0)                    // the gap is open again, but it queues behind
-    r.h.relayLater('take', { key: 'c:1:21,10' }, { drop: 'c:1:21,10' })
-    expect([sent.length, r.evOutbox.map(([k, p]) => [k, p.cx ?? p.key])]).toEqual([1, [['cache', 21], ['cache', 31], ['take', 'c:1:21,10']]])
-    // the loop's flush, lifted
-    const flush = lift(/if \(bus\) while \(evOutbox\.length && bus\.emit\(evOutbox\[0\]\[0\], evOutbox\[0\]\[1\], evOutbox\[0\]\[2\]\)\) evOutbox\.shift\(\)/)
-    new Function('bus', 'evOutbox', flush)(bus, r.evOutbox)
-    expect(sent.map(([k, p]) => [k, p.cx ?? p.key])).toEqual([['cache', 11], ['cache', 21], ['cache', 31], ['take', 'c:1:21,10']])
-    expect(r.evOutbox).toEqual([])
+    r.player.x = 30.5; r.h.setDown(); r.out.cards[2][1].onPick(0)                    // the gap is open, but a take still waits: never ahead of it
+    expect([r.out.said.at(-1), r.items.getDropped().length, r.evOutbox.map(([k, p]) => [k, p.key])]).toEqual(['your hands are not ready.', 1, [['take', 'c:1:5,5']]])
+    // the loop's flush, lifted: it asks ready(kind, margin) and lets each out once
+    const flush = lift(/if \(bus\) while \(evOutbox\.length && bus\.ready\(evOutbox\[0\]\[0\], OUTBOX_MARGIN_MS\)\) \{ const o = evOutbox\.shift\(\); bus\.emit\(o\[0\], o\[1\], o\[2\]\) \}/)
+    const asked = []
+    new Function('bus', 'evOutbox', 'OUTBOX_MARGIN_MS', flush)({ ready: (k, m) => { asked.push([k, m]); return ok }, emit: bus.emit }, r.evOutbox, 250)
+    expect([asked, sent.map(([k, p]) => [k, p.cx ?? p.key]), r.evOutbox]).toEqual([[['take', 250]], [['cache', 11], ['take', 'c:1:5,5']], []])
+    r.h.setDown(); r.out.cards[3][1].onPick(0)                                       // now it lands, and leaves the frame it lands in
+    expect(sent.map(([k, p]) => [k, p.cx ?? p.key])).toEqual([['cache', 11], ['take', 'c:1:5,5'], ['cache', 31]])
     expect(loop.indexOf(flush)).toBeGreaterThan(loop.indexOf('if (bus) { bus.tick(performance.now());'))
+  })
+  it('yours across a reconnect: the id is new each join, so your own name is yours too — never \'wanderer\', the name everybody has', () => {
+    const src = lift(/const isMine = [^\n]*/)
+    const mine = (id, name) => new Function('myId', 'myName', 'NAME_CAP_EXEMPT', `${src}\nreturn isMine`)(() => id, () => name, NAME_CAP_EXEMPT)
+    const now = mine('p2', 'sasha')
+    expect(now({ byId: 'p2', by: 'sasha' })).toBe(true)                           // this connection
+    expect(now({ byId: 'p1', by: 'sasha' })).toBe(true)                           // an earlier one, replayed by the relay: 'you left this.', no +4
+    expect(now({ byId: 'p9', by: 'maddie' })).toBe(false)
+    const anon = mine('p2', 'wanderer')
+    expect(anon({ byId: 'p1', by: 'wanderer' })).toBe(false)                      // a stranger with the default name stays a stranger
+    expect(mine(null, 'wanderer')({ by: 'wanderer' })).toBe(true)                 // solo: no id, every cache yours (as before)
+  })
+  it('two real buses, wired as game.js wires them: a walking friend\'s second cache is believed (it leaves where she stands, never late), and two takes in a breath survive the jitter', () => {
+    let tA = 0, tB = 0
+    const wire = []
+    const pos = { a: { x: 10.5, y: 10.5 } }                                            // where B's players list has her
+    const A = createEvBus({ send: (k, p, o) => wire.push({ kind: k, payload: JSON.parse(JSON.stringify(p)) }), now: () => tA, self: () => ({ x: 0, y: 0, lvl: 1 }),
+      peerPos: () => null, peerIds: () => new Set(), selfId: () => 'a' })
+    const B = createEvBus({ send: () => {}, now: () => tB, self: () => ({ x: 0, y: 0, lvl: 1 }), peerPos: (id) => pos[id] ?? null, peerIds: () => new Set(['a']), selfId: () => 'b' })
+    for (const bus of [A, B]) new Function('bus', 'isCachePayload', 'isTakePayload', 'ITEM_NAMES', regs.join('\n'))(bus, isCachePayload, isTakePayload, ITEM_NAMES)
+    const r = rig({ inv: ['almond-water', 'bandage'], bus: A, id: 'a', name: 'ada' })
+    const deliver = (i, at) => { tB = at; return B.receive({ id: 'a', name: 'ada', kind: wire[i].kind, payload: wire[i].payload, t: 1 }) }
+    const walk = (to) => { r.player.x = to; pos.a.x = to }
+    const flush = new Function('bus', 'evOutbox', 'OUTBOX_MARGIN_MS', lift(/if \(bus\) while \(evOutbox\.length && bus\.ready\([^\n]*/))
+    // three cells a second: one set down at 0; the next tried at 1 s stays in her hands; set down at 3.1 s, from where she stands then
+    r.h.setDown(); r.out.cards[0][1].onPick(0)
+    const got = [deliver(0, 80)]
+    tA = 1000; walk(13.5); r.h.setDown(); r.out.cards[1][1].onPick(0)
+    expect([r.out.said.at(-1), wire.length]).toEqual(['your hands are not ready.', 1])
+    tA = 3100; walk(19.8); r.h.setDown(); r.out.cards[2][1].onPick(0)
+    got.push(deliver(1, 3130))                                                         // quicker on the wire than the first
+    expect(got).toEqual([true, true])
+    // two takes in a breath: the second waits in the outbox and leaves past the gap with the margin; 80 ms then 30 ms on the wire
+    tA = 4000; r.h.relayLater('take', { key: 'c:1:11,10' }, { drop: 'c:1:11,10' })
+    tA = 4100; r.h.relayLater('take', { key: 'c:1:21,10' }, { drop: 'c:1:21,10' })
+    for (let t = 4100; t <= 5000; t += 16) { tA = t; flush(A, r.evOutbox, 250) }
+    expect([wire.length, r.evOutbox.length]).toEqual([4, 0])
+    expect([deliver(2, 4080), deliver(3, 4750 + 30)]).toEqual([true, true])
   })
   it('one live cache a cell (the newest wins), six an owner (the oldest goes): the record leaves the world; another floor\'s is taken out of that floor\'s memory', () => {
     const r = rig({ inv: ['bandage', 'bandage'], id: 'me', name: 'maddie' })
@@ -1817,7 +1922,7 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
     const open = html.slice(html.indexOf("document.getElementById('btn-settings').onclick"), html.indexOf("document.getElementById('btn-locate').onclick"))
     expect(open).toMatch(/settingsMod\.style\.display = 'flex'\r?\n(\s*\/\/[^\n]*\r?\n)*\s*document\.dispatchEvent\(new CustomEvent\('backrooms:settings-open'\)\)/)
     expect(html).toContain("document.getElementById('btn-new-notice').onclick = (e) => { e.currentTarget.blur(); document.dispatchEvent(new CustomEvent('backrooms:new-notice')) }")
-    expect(game).toContain("document.addEventListener('backrooms:settings-open', () => renderFileRow())")
+    expect(game).toContain("document.addEventListener('backrooms:settings-open', () => { noticeAsked = false; renderFileRow() })")
     expect(count(/document\.addEventListener\('backrooms:new-notice'/g)).toBe(1)
     // the row on a fake DOM: every line but the last is a faint line, the last is the button; the reply under it
     const mk = () => { const el = { children: [], style: {}, className: '' }; let t = ''; Object.defineProperty(el, 'textContent', { get: () => t, set: (v) => { t = v; if (v === '') el.children.length = 0 } }); el.appendChild = (c) => el.children.push(c); return el }
@@ -1831,17 +1936,28 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
     expect(bare.children.length).toBe(0)
     // the control, lifted and replayed against the real fileStatus: back to the notice nobody answered — once a day, never twice under the same word
     const body = game.match(/document\.addEventListener\('backrooms:new-notice', \(\) => \{\r?\n([^]*?)\r?\n  \}\)/)[1]
-    const press = (file, now) => {
+    const press = (file, now, asked = false) => {
       const out = { applied: [], said: [], rendered: [] }
-      const st = { file, photoIdx: 4, stationIdx: 2, claimFiled: true }
-      new Function('fileStatus', 'Date', 'applyFile', 'showMessage', 'PRIO', 'renderFileRow', 'st',
-        `let { file, photoIdx, stationIdx, claimFiled } = st\n${body}\nObject.assign(st, { photoIdx, stationIdx, claimFiled })`)(fileStatus, { now: () => now }, (f) => out.applied.push(f),
-        (m, p) => out.said.push([m, p]), PRIO, (r) => out.rendered.push(r), st)
-      return { ...out, st }
+      const st = { file, photoIdx: 4, stationIdx: 2, claimFiled: true, noticeAsked: asked }
+      const btn = { textContent: 'request a new notice' }
+      new Function('fileStatus', 'Date', 'applyFile', 'showMessage', 'PRIO', 'renderFileRow', 'newNoticeEl', 'st',
+        `let { file, photoIdx, stationIdx, claimFiled, noticeAsked } = st\nconst fileHolds = () => file.closing != null || file.redacted.length > 0\n;(() => {\n${body}\n})()\nObject.assign(st, { photoIdx, stationIdx, claimFiled, noticeAsked })`)(fileStatus, { now: () => now }, (f) => out.applied.push(f),
+        (m, p) => out.said.push([m, p]), PRIO, (r) => out.rendered.push(r), btn, st)
+      return { ...out, st, btn: btn.textContent }
     }
-    let p = press({ ...ext, closing: 'extension' }, ext.at + DAY_MS)
+    expect(game).toContain('const fileHolds = () => file.closing != null || file.redacted.length > 0')
+    // a file that holds work (a closing reached, pages given up): the first press only asks; the second files
+    for (const held of [{ closing: 'extension' }, { redacted: [1, 2, 3] }]) {
+      let q = press({ ...ext, ...held }, ext.at + DAY_MS)
+      expect([q.applied, q.said, q.rendered, q.btn, q.st.noticeAsked, q.st.claimFiled]).toEqual([[], [], ['a new notice? the old file closes with what it holds. press again to file it.'], 'yes, a new notice', true, true])
+      q = press({ ...ext, ...held }, ext.at + DAY_MS, true)
+      expect([q.applied.length, q.said, q.st.noticeAsked]).toEqual([1, [[STRINGS.NEW_NOTICE, PRIO.discovery]], false])
+    }
+    let p = press({ ...ext, closing: 'extension' }, ext.at + DAY_MS, true)
     expect(p.applied).toEqual([{ status: 'notice-mailed', at: ext.at + DAY_MS, ledgerHeard: true, closing: null, redacted: [] }])
     expect([p.said, p.rendered, p.st.photoIdx, p.st.stationIdx, p.st.claimFiled]).toEqual([[[STRINGS.NEW_NOTICE, PRIO.discovery]], [STRINGS.NEW_NOTICE], 0, 0, false])
+    p = press(ext, ext.at + DAY_MS)                                            // nothing to lose: filed on the first press
+    expect([p.applied.length, p.said]).toEqual([1, [[STRINGS.NEW_NOTICE, PRIO.discovery]]])
     p = press(ext, ext.at + DAY_MS - 1)                                        // the office's day is not up
     expect([p.applied, p.said, p.st.photoIdx]).toEqual([[], [[STRINGS.OFFICE_CLOSED, PRIO.discovery]], 4])
     p = press(loadFile(null), 5)                                               // already the notice nobody answered

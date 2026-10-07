@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseAnchor, anchorSeed, formatAnchor, driftMeters, bodyUrl } from '../src/renderer/anchor.js'
+import { parseAnchor, anchorSeed, pinTag, formatAnchor, driftMeters, bodyUrl } from '../src/renderer/anchor.js'
 
 describe('parseAnchor', () => {
   it('parses bare "lat, lng"', () => {
@@ -52,6 +52,22 @@ describe('anchorSeed', () => {
     for (let i = 0; i < 500; i++) {
       expect(anchorSeed(-90 + i * 0.36, -180 + i * 0.72)).not.toBe(0)
     }
+  })
+})
+
+describe('pinTag', () => {
+  it('is never the seed: 16 bits, salted by the room; the same pin in the same room matches, null stays null', () => {
+    const seed = anchorSeed(51.50135, -0.14189)
+    for (const ws of [0, 7, 3977604621, anchorSeed(40.7, -74)]) {
+      const t = pinTag(seed, ws)
+      expect(Number.isInteger(t)).toBe(true)
+      expect(t).toBeGreaterThanOrEqual(0); expect(t).toBeLessThan(65536)
+      expect(t).not.toBe(seed)
+      expect(pinTag(anchorSeed(51.50135, -0.14189), ws)).toBe(t)
+    }
+    expect(pinTag(seed, 7)).not.toBe(pinTag(seed, 8))                       // another room, another tag
+    expect(pinTag(seed, 7)).not.toBe(pinTag(anchorSeed(51.5014, -0.1420), 7))
+    expect(pinTag(null, 7)).toBe(null)
   })
 })
 

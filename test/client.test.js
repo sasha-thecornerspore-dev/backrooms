@@ -216,6 +216,48 @@ describe('chat ids and ev', () => {
     c.disconnect(); await fs.close()
   })
 
+  it('the relay\'s replay right after welcome reaches a listener registered later (as initGame does, after its world loads), on the next tick', async () => {
+    const fs = await fakeServer((s) => {
+      send(s, { type: 'welcome', playerId: 'me', worldSeed: 7, roomId: 'r', first: false })
+      send(s, { type: 'ev', id: 'ada', name: 'ada', kind: 'cache', payload: { cx: 1 }, t: 1, replay: true })
+      send(s, { type: 'ev', id: 'me', name: 'me', kind: 'cache', payload: { cx: 9 }, t: 2, replay: true })   // my own: never
+      send(s, { type: 'ev', id: 'ada', name: 'ada', kind: 'take', payload: { key: 'c:1:1,1' }, t: 3, replay: true })
+    })
+    const c = createMultiplayerClient(fs.url)
+    await c.connect('r')
+    await sleep(20)                                   // the world.json fetch
+    const evs = []
+    c.onEv(m => evs.push(m))
+    expect(evs).toEqual([])                           // not inside the caller's synchronous setup
+    await sleep(0)
+    expect(evs.map((m) => [m.kind, m.t])).toEqual([['cache', 1], ['take', 3]])
+    const late = []
+    c.onEv(m => late.push(m))                         // drained once: a second listener gets only what comes after
+    await sleep(10)
+    expect(late).toEqual([])
+    c.disconnect(); await fs.close()
+  })
+
+  it('the early queue is bounded and a reconnect forgets it', async () => {
+    let joins = 0
+    const fs = await fakeServer((s) => {
+      joins++
+      send(s, { type: 'welcome', playerId: 'me', worldSeed: 7, roomId: 'r', first: true })
+      for (let i = 0; i < 300; i++) send(s, { type: 'ev', id: 'b', name: 'bo', kind: 'here', payload: {}, t: joins * 1000 + i })
+    })
+    const c = createMultiplayerClient(fs.url)
+    await c.connect('r')
+    await sleep(40)
+    await c.connect('r')                              // a fresh join: the old room's frames are not this one's
+    await sleep(40)
+    const evs = []
+    c.onEv(m => evs.push(m))
+    await sleep(10)
+    expect(evs.length).toBe(256)
+    expect([evs[0].t, evs[255].t]).toEqual([2000, 2255])
+    c.disconnect(); await fs.close()
+  })
+
   it('sendEv is a no-op while disconnected', () => {
     const c = createMultiplayerClient('ws://127.0.0.1:1')
     expect(() => c.sendEv('kneel', {})).not.toThrow()

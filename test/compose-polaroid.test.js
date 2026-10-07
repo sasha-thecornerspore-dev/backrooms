@@ -8,10 +8,10 @@ import { FIRST_SHOT_LINE } from '../src/renderer/origin-thin.js'
 import { GLYPH_LINE } from '../src/renderer/origin-unnamed.js'
 import { pinCaption } from '../src/renderer/origin-anchored.js'
 import { statusMods, STATUSES, depthOf } from '../src/renderer/status.js'
-import { anchorSeed } from '../src/renderer/anchor.js'
+import { anchorSeed, pinTag } from '../src/renderer/anchor.js'
 
 const ANCHOR = { lat: 51.5007, lng: -0.1246 }
-const PIN = anchorSeed(ANCHOR.lat, ANCHOR.lng)
+const PIN = pinTag(anchorSeed(ANCHOR.lat, ANCHOR.lng), 7)   // what 'here' carries: the room-salted tag, never the seed
 const THIN_NEAR = 'the film shows someone who was not in the room. you can see the wall through them.'
 const FINALIZING = 'the film shows the hall as it will finalize: darker, one door fewer.'
 const HONEST = 'the film shows the hall as it is. nothing that was not in the room.'
@@ -61,13 +61,14 @@ describe('(1) a friend in frame', () => {
       [{ origin: null }, 'the file has not finished with them.'],
     ]
     for (const [over, tail] of cases) {
-      const r = polaroidCaption(mkCtx({ subject: setSubject(over), anchor: ANCHOR, index: 3, depth: 3, sanity: 10 }))   // finalizing: no letter
+      const r = polaroidCaption(mkCtx({ subject: setSubject(over), anchor: ANCHOR, pinTag: PIN, index: 3, depth: 3, sanity: 10 }))   // finalizing: no letter
       expect(r.cap).toBe('the film develops maddie. ' + tail)
       expect(r.glyphAdvance).toBe(false)
       expect(r.emitPhoto).toEqual({ of: 'p7', x: 3.5, y: 4.5, lvl: 0 })
       expect(r.sanity).toBe(8)
     }
-    // without an anchor of your own a pin never matches
+    // without an anchor of your own a pin never matches; nor does the raw seed held against your tag
+    expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: anchorSeed(ANCHOR.lat, ANCHOR.lng), origin: 'tenant' }), anchor: ANCHOR, pinTag: PIN, sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them. the street is not there.')
     expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: PIN, origin: 'tenant' }), sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them. the street is not there.')
   })
   it('a letter develops beside them only when the claim develops', () => {

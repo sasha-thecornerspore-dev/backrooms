@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs'
 import {
   createRollCall, createCompany, whistlePitch, bearingLabel, whistleGain, whistlePan, countLine, evKinds,
   SEMIS, FAR_CELLS, WORDS, WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY, FAR_BONUS, ECHO, COMPANY,
-  NO_ANSWER_LINE, ECHO_LINE,
+  NO_ANSWER_LINE, ECHO_LINE, UNANSWERED_LINE,
 } from '../src/renderer/rollcall.js'
 import { exitArrow } from '../src/renderer/compass.js'
 
@@ -173,7 +173,8 @@ describe('constants', () => {
   it('the lines are lowercase, understated, no exclamation marks', () => {
     expect(NO_ANSWER_LINE).toBe('the hall takes it and gives nothing back.')
     expect(ECHO_LINE).toBe('something whistles back. the pitch is wrong.')
-    for (const l of [NO_ANSWER_LINE, ECHO_LINE, countLine(1), countLine(2), countLine(5), countLine(20)]) {
+    expect(UNANSWERED_LINE).toBe('nobody has answered yet.')
+    for (const l of [NO_ANSWER_LINE, ECHO_LINE, UNANSWERED_LINE, countLine(1), countLine(2), countLine(5), countLine(20)]) {
       expect(l).toBe(l.toLowerCase()); expect(l).not.toContain('!')
     }
   })

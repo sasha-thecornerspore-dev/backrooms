@@ -17,6 +17,10 @@ export function createMultiplayerClient(serverUrl) {
   const chatCbs = []               // (from, text, isSystem, id) => void
   const typingCbs = []             // (name, isOn) => void
   const evCbs = []                 // (msg) => void
+  // 'ev' frames that land before anyone listens: the relay replays its kept caches straight after welcome, while the
+  // game is still loading its world — held (bounded) and handed to the first listener on the next tick
+  const evEarly = []
+  const EV_EARLY_MAX = 256
   // 'walked' into an empty room or 'dropped' in on someone (welcome.first); an
   // old server omits first, so the first players list after welcome decides,
   // within ARRIVAL_WAIT_MS, default 'walked'.
@@ -40,6 +44,7 @@ export function createMultiplayerClient(serverUrl) {
   function connect(roomId, worldSeed = null, name = 'wanderer') {
     selfName = String(name || 'wanderer').slice(0, 24)
     if (ws) { try { ws.close() } catch {} ws = null; connected = false; remotePlayers.clear() }
+    evEarly.length = 0
     arrivalV = null
     if (arrivalTimer) { clearTimeout(arrivalTimer); arrivalTimer = null }
     return new Promise((resolve, reject) => {
@@ -100,7 +105,9 @@ export function createMultiplayerClient(serverUrl) {
         } else if (msg.type === 'typing') {
           if (msg.id !== playerId) emitTyping(msg.name || 'someone', !!msg.on)
         } else if (msg.type === 'ev') {
-          if (msg.id !== playerId) emitEv(msg)
+          if (msg.id === playerId) return
+          if (evCbs.length) emitEv(msg)
+          else if (evEarly.length < EV_EARLY_MAX) evEarly.push(msg)
         }
       }
 
@@ -134,7 +141,12 @@ export function createMultiplayerClient(serverUrl) {
 
   function onChat(cb)   { if (typeof cb === 'function') chatCbs.push(cb) }
   function onTyping(cb) { if (typeof cb === 'function') typingCbs.push(cb) }
-  function onEv(cb)     { if (typeof cb === 'function') evCbs.push(cb) }
+  // the first listener gets what came early, asynchronously: after the caller's synchronous setup (the game's first floor) is done
+  function onEv(cb) {
+    if (typeof cb !== 'function') return
+    evCbs.push(cb)
+    if (evEarly.length) setTimeout(() => { for (const m of evEarly.splice(0)) emitEv(m) }, 0)
+  }
 
   // 'walked' | 'dropped' — fixed at join; 'walked' until known
   function arrival() { return arrivalV ?? 'walked' }
@@ -151,6 +163,7 @@ export function createMultiplayerClient(serverUrl) {
     try { ws?.close() } catch {}
     ws = null
     remotePlayers.clear()
+    evEarly.length = 0
     if (arrivalTimer) { clearTimeout(arrivalTimer); arrivalTimer = null }
   }
 

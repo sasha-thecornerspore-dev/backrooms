@@ -7,8 +7,6 @@
 //   anchored pin, the unnamed's letter that is not theirs)   (3) a lost soul in frame   (4) the thin figure beside you
 //   (5) no claim develops: compliance's honest film, else the finalizing hall   (6) the letter.
 // Under LEGACY with nobody in frame this is the core's three captions, by its precedence (thinNear > finalizing > letter).
-import { anchorSeed } from './anchor.js'
-
 export const LINES = Object.freeze({
   SUBJECT_DOWN: 'the film develops {name}, where they fell. they are counted.',
   SUBJECT_THIN: 'the film develops {name}. you can see the wall through them.',
@@ -41,9 +39,10 @@ export function developsClaim(rules, mods, index, depth, sanity) {
   return !!(rules.canDevelopClaim && mods.polaroidGlyph(index, depth, sanity))
 }
 
-function subjectLine(s, anchor) {
+// the friend's 'here' carries their pin's TAG (anchor.js pinTag, room-salted), so it is your own tag it is held against
+function subjectLine(s, tag) {
   if (s.thin === true) return LINES.SUBJECT_THIN
-  if (anchor && s.aseed != null && s.aseed === anchorSeed(anchor.lat, anchor.lng)) return LINES.SUBJECT_PIN   // same pin, never same maze
+  if (tag != null && s.aseed != null && s.aseed === tag) return LINES.SUBJECT_PIN   // same pin, never same maze
   if (s.origin === 'processed') return LINES.SUBJECT_PROCESSED
   if (s.origin === 'anchored') return LINES.SUBJECT_ANCHORED
   if (s.origin === 'tenant') return LINES.SUBJECT_TENANT
@@ -52,7 +51,7 @@ function subjectLine(s, anchor) {
 }
 
 // ctx: { rules, mods, subject, soul, doorArrow, thinNear, status, index, depth, sanity (before this shot), origin, thin,
-//        thinFirstShot, anchor, D, firstShotOfLevel, photoIdx, player, lvl }
+//        thinFirstShot, anchor, pinTag (your pin's tag, or null), D, firstShotOfLevel, photoIdx, player, lvl }
 // -> { cap, glyphAdvance, emitPhoto: { of, x, y, lvl } | null, sanity (to add), leashCalm (0 or the seconds to set) }
 export function polaroidCaption(ctx) {
   const { rules, mods, index, depth, sanity } = ctx
@@ -65,7 +64,7 @@ export function polaroidCaption(ctx) {
   if (s) {
     r.emitPhoto = { of: s.id, x: ctx.player.x, y: ctx.player.y, lvl: ctx.lvl }
     if (s.st === 'down') { r.cap = fill(LINES.SUBJECT_DOWN, '{name}', s.name); return r }
-    r.cap = fill(subjectLine(s, ctx.anchor), '{name}', s.name)
+    r.cap = fill(subjectLine(s, ctx.pinTag ?? null), '{name}', s.name)
     if (dev) { r.cap += fill(LINES.SUBJECT_GLYPH, '{g}', g); r.glyphAdvance = true }
     return r
   }

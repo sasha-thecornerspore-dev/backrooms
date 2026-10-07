@@ -2,7 +2,7 @@
 // nonce LRU, live gates (minGap / maxDist / posKeys), the server-stamped replay
 // path, the 3 s 'here' heartbeat and the floor filter it makes possible.
 import { describe, it, expect } from 'vitest'
-import { createEvBus, floorChangeLine, depthOf, HERE_INTERVAL_MS, STALE_MS, POS_SLACK, NONCE_LRU } from '../src/net/evbus.js'
+import { createEvBus, floorChangeLine, depthOf, HERE_INTERVAL_MS, STALE_MS, POS_SLACK, NONCE_LRU, IN_GAP } from '../src/net/evbus.js'
 
 function rig(opts = {}) {
   const sent = []
@@ -98,6 +98,23 @@ describe('receive — live gates', () => {
     expect(bus.receive(frame('b', 'whistle', {}))).toBe(true)
   })
 
+  it('the inbound gap is three quarters of the outbound one: a sender spaced by the full gap is believed through the jitter of the wire', () => {
+    expect(IN_GAP).toBe(0.75)
+    const a = rig(), b = rig()
+    b.peers.set('a', { x: 5, y: 5 })
+    a.bus.register('take', { check: () => true, minGapMs: 500 })
+    b.bus.register('take', { check: () => true, minGapMs: 500 })
+    // a sends at 0 and at exactly 500 (its own gap); the first frame took 80 ms on the wire, the second 30
+    a.at(0); expect(a.bus.emit('take', { key: 'k1' })).toBe(true)
+    a.at(500); expect(a.bus.emit('take', { key: 'k2' })).toBe(true)
+    const got = []
+    b.at(80); got.push(b.bus.receive(frame('a', 'take', a.sent[0].payload)))
+    b.at(530); got.push(b.bus.receive(frame('a', 'take', a.sent[1].payload)))
+    expect(got).toEqual([true, true])
+    b.at(530 + 374); expect(b.bus.receive(frame('a', 'take', { key: 'k3', n: 99 }))).toBe(false)   // a flood still meets a floor
+    b.at(530 + 375); expect(b.bus.receive(frame('a', 'take', { key: 'k3', n: 99 }))).toBe(true)
+  })
+
   it('maxDist against peerPos; a peer the list does not know is dropped', () => {
     const { bus, peers, selfState } = rig()
     bus.register('ward', { check: () => true, maxDist: 10 })
@@ -172,6 +189,19 @@ describe('emit', () => {
     expect(sent[1].payload).toEqual({ c: 3, n: 1 })
     expect(sent[1].opts).toEqual({ keep: 'k' })
     expect(bus.emit('nope', {})).toBe(false)
+  })
+
+  it('ready(kind, margin) says whether emit() would let the kind out now; an unknown kind is never ready', () => {
+    const { bus, at } = rig()
+    bus.register('cache', { check: () => true, minGapMs: 3000 })
+    bus.register('woke', { check: () => true })
+    at(0)
+    expect([bus.ready('cache'), bus.ready('woke'), bus.ready('nope')]).toEqual([true, true, false])
+    expect(bus.emit('cache', {})).toBe(true)
+    at(2999); expect(bus.ready('cache')).toBe(false)
+    at(3000); expect([bus.ready('cache'), bus.ready('cache', 250)]).toEqual([true, false])
+    at(3250); expect(bus.ready('cache', 250)).toBe(true)
+    bus.emit('woke', {}); expect(bus.ready('woke')).toBe(true)
   })
 
   it('wraps the nonce at 0xffff', () => {

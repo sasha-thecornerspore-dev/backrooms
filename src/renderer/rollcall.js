@@ -20,6 +20,8 @@ export const FAR_BONUS = Object.freeze({ cells: 12, sanity: 4, company: 20 })
 export const ECHO = Object.freeze({ chance: 1 / 6, delayMs: 1200, sanity: 3, footfalls: 2 })
 export const COMPANY = Object.freeze({ max: 60, drain: 3, refill: 0.75, rate: 3 })
 export const NO_ANSWER_LINE = 'the hall takes it and gives nothing back.'
+// a friend is on the floor and has not whistled yet: the count is of answers, but it does not deny who is standing there
+export const UNANSWERED_LINE = 'nobody has answered yet.'
 export const ECHO_LINE = 'something whistles back. the pitch is wrong.'
 
 const defaultNow = () => (typeof performance !== 'undefined' ? performance.now() : Date.now())

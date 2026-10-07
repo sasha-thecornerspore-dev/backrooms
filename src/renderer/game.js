@@ -10,7 +10,7 @@ import { getPref, setPref, onPrefChange } from './prefs.js'
 import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
 import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
 import { writeSave } from './save.js'
-import { formatAnchor, driftMeters, anchorSeed } from './anchor.js'
+import { formatAnchor, driftMeters, anchorSeed, pinTag } from './anchor.js'
 import { initTouchControls, isTouchDevice } from './touch.js'
 import { SCRAPS } from './scraps.js'
 import { createEventScheduler, EVENTS } from './events.js'
@@ -47,7 +47,7 @@ import { RECOIL_DIST, RECOIL_SHAKE, RECOIL_LINE, CURE_LINE } from './origin-thin
 import { perceptionFor } from './compose-perception.js'
 import { createStillness, HUNTS_MOVEMENT_LINE } from './stillness.js'
 import { sanityStep, EXHAUSTED_LINE, DISAGREE_LINE } from './compose-sanity.js'
-import { createCompany, createRollCall, evKinds, whistlePitch, bearingLabel, whistleGain, whistlePan, countLine, WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY, FAR_BONUS, ECHO, NO_ANSWER_LINE, ECHO_LINE } from './rollcall.js'
+import { createCompany, createRollCall, evKinds, whistlePitch, bearingLabel, whistleGain, whistlePan, countLine, WHISTLE_COOLDOWN_MS, WHISTLE_NOISE, QUIET_SANITY, SOLO_SANITY, FAR_BONUS, ECHO, NO_ANSWER_LINE, ECHO_LINE, UNANSWERED_LINE } from './rollcall.js'
 import { createDownState, createKneel, downedInFront, DOWN_LINE, KNEEL_HINT, HANDS_LINE, LIGHT_STAYS_LINE, WOKEN_LINE, KNEELER_LINE, WAKE, KNEELER_SANITY, DOWN_BEAT } from './downed.js'
 import { depthOf, loadFile, saveFile, statusMods, npcLines, canFile, canRefile, wishPrompt, fileStatus, STRINGS as FILE } from './status.js'
 import { standConditions, standTick, closingOverlay, closingLines, isWishOpen, closingProgress, slipText, yourFileLines, CLOSED_OFFICE } from './closings.js'
@@ -57,7 +57,7 @@ import { radioLine, RADIO_GROUPS } from './compose-radio.js'
 import { wishRoute } from './compose-wish.js'
 import { finaleGate, beaconDecision, deathDecision } from './compose-gates.js'
 import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame, createEvidence, photoOutcome, EVIDENCE_FLOOR, EVIDENCE_LINE, COUNTED_LINE } from './evidence.js'
-import { PHRASES, NOTE_NONE, menuFor, cacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger } from './caches.js'
+import { PHRASES, NOTE_NONE, menuFor, cacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from './caches.js'
 import { LIT_RANGE, litFriendNear, inCone, wardOutcome, wardLine, litOffLine } from './lightshare.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
@@ -242,9 +242,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    Solo there is no id: every cache on the floor is yours ──
   const ledger = createCacheLedger()
   const evOutbox = []
+  const OUTBOX_MARGIN_MS = 250
   const myId = () => (mpClient ? mpClient.id ?? null : null)
   const myName = () => (mpClient ? mpClient.getName() : (String(getPref('playerName') ?? '').trim().slice(0, 24) || 'wanderer'))
-  const isMine = (rec) => (rec.byId ?? null) === myId()
+  // yours: set down on this connection — or under your name on an earlier one (the id is new each join and the relay replays the room's
+  // caches to whoever comes back), unless the name is the one everybody has
+  const isMine = (rec) => (rec.byId ?? null) === myId() || (rec.by != null && rec.by === myName() && !NAME_CAP_EXEMPT.includes(rec.by))
+  // a cache leaves the frame it lands in, where the players list has you: never from the outbox (a late frame is somewhere you no longer
+  // stand, and a friend refuses it), and never ahead of a take still waiting there (the same cell's key, in the wrong order)
+  const cacheReady = () => !bus || (!evOutbox.length && bus.ready('cache'))
 
   // persistent effect / combat timers
   let stamina    = 100
@@ -791,7 +797,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       const cut = line.indexOf(' · ')
       if (cut > 0) {
         s.classList.add('stamp')
-        s.addEventListener('pointerdown', (e) => {
+        s.addEventListener('click', (e) => {                    // a click, not a press: a scroll or a touch meant for the textarea files nothing
           e.preventDefault()
           const sub = document.getElementById('wish-submit')
           if (!wishText || wishText.disabled || !sub || sub.disabled) return
@@ -822,6 +828,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     document.activeElement?.blur?.()   // the hidden textarea / button must not keep the keys the card reads
     openCard('confirm', { ...spellCard(name), onConfirm: () => {
       intakeCtx = refileWithName(intakeCtx, name); origin = intake(intakeCtx); rules = rulesFor(origin, thin)
+      evConfig.events = rules.eventWeights()                    // the scheduler reads the new column's weights, as the resume would
       setPref('playerName', name)
       showMessage(spelledLine(name, origin), PRIO.discovery)
       if (mpClient) setTimeout(() => showMessage(ONLINE_LINE, PRIO.discovery), 2600)   // the server-attached name stays this session's
@@ -847,6 +854,26 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     closingTimers.push(setTimeout(() => showMessage(L[0], PRIO.discovery), 0), setTimeout(() => showMessage(L[1], PRIO.discovery), 2600), setTimeout(() => showMessage(L[2], PRIO.discovery), 5600))
   }
   document.getElementById('wish-cancel')?.addEventListener('click', closeDialog)
+  // a status filing (status.js fileStatus): the file is new — the claim's letters, the station and the claim start over
+  function applyFiling(r) {
+    if (r.file === file) return
+    applyFile(r.file)
+    if (r.resets.includes('photoIdx')) photoIdx = 0
+    if (r.resets.includes('stationIdx')) stationIdx = 0
+    if (r.resets.includes('claimFiled')) claimFiled = false
+  }
+  // what a new filing would throw away: a closing reached, or pages given up toward one
+  const fileHolds = () => file.closing != null || file.redacted.length > 0
+  // a stamp that would close a file holding work is asked on the card first (as the spelling is): the dialog closes, Esc files nothing
+  function confirmFiling(r) {
+    closeDialog(); if (wishText) wishText.disabled = false; const sub = document.getElementById('wish-submit'); if (sub) sub.disabled = false
+    document.activeElement?.blur?.()
+    openCard('confirm', { text: `file under ${r.chosen}? the old file closes with what it holds.`, foot: 'e · yes      esc · no', onConfirm: () => {
+      applyFiling(r)
+      showMessage(r.reply, PRIO.discovery)
+      if (r.line) closingTimers.push(setTimeout(() => showMessage(r.line, PRIO.discovery), 2600))
+    } })
+  }
   // what you typed is routed (compose-wish.js wishRoute), in this order: closing the file (compliance), a name (the unnamed), a status word,
   // the claim, an ordinary wish. The first three are the file's own business and never leave the room; the claim and the wish are sent
   // with the status's trailer and the column's meta (a notice nobody answered sends the text byte for byte, as it always did)
@@ -855,6 +882,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (!text) return
     const r = wishRoute({ text, origin, rules, file, canFile: fileable(), now: Date.now(), depth: level.depth })
     if (r.kind === 'name') { refileName(r.name); return }       // the naming re-file: the dialog closes now and a card asks the spelling
+    if (r.kind === 'status' && r.file !== file && fileHolds()) { confirmFiling(r); return }   // the old file holds work: the card asks first
     if (wishResp) wishResp.textContent = r.reply ?? ''
     wishText.disabled = true
     document.getElementById('wish-submit').disabled = true
@@ -865,12 +893,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         closingTimers.push(setTimeout(() => showMessage(L[1], PRIO.discovery), 3000 + 2600), setTimeout(() => showMessage(L[2], PRIO.discovery), 3000 + 5200))
       }
     } else if (r.kind === 'status') {
-      if (r.file !== file) {                                    // filed: the claim's letters, the station and the claim start over
-        applyFile(r.file)
-        if (r.resets.includes('photoIdx')) photoIdx = 0
-        if (r.resets.includes('stationIdx')) stationIdx = 0
-        if (r.resets.includes('claimFiled')) claimFiled = false
-      }
+      applyFiling(r)
       if (r.line) closingTimers.push(setTimeout(() => showMessage(r.line, PRIO.discovery), 3000))
     } else {
       // a claim re-files a filed claimant as processed (the anchored released first) before the seam is tried; an unfiled one — the block,
@@ -911,7 +934,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const lines = s.lines
     noteFootEl.style.display = lines.length ? 'none' : ''
     // (a confirm's foot is its own prompt — 'e · yes      esc · no' — so the put-it-back hint steps aside there too)
-    if (noteHintEl) noteHintEl.style.display = lines.length || s.mode === 'confirm' ? 'none' : ''
+    if (noteHintEl) {
+      noteHintEl.style.display = lines.length || s.mode === 'confirm' ? 'none' : ''
+      noteHintEl.textContent = s.mode === 'read' ? 'tap · e · esc — fold it away' : 'tap · e · esc — put it back'   // a cache read is in your hands already
+    }
     if (!noteLinesEl) return
     noteLinesEl.textContent = ''
     for (let i = 0; i < lines.length; i++) {
@@ -1129,6 +1155,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // glowstick is a breadcrumb. With a note it is a cache: its key is the cell it LANDED in (one live cache a cell — a second replaces the
   // first), the ledger counts it as yours (the oldest of seven goes), and the room is told — the relay keeps it for whoever comes later
   function throwSelected(note = null) {
+    if (note && !cacheReady()) { showMessage('your hands are not ready.'); return }   // it stays in your hands: set it down in a moment
     const r = itemSys.throwSelected(player.x, player.y, player.angle, playT, note)
     if (!r.ok) { if (r.reason === 'kept') showMessage('you do not put that down.') }
     else {
@@ -1155,11 +1182,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // of that floor's memory, so it is not there when you go back; one still waiting for its floor was never laid down
   function removeCache(e) {
     if (e.pending) return
-    if (e.lvl === level.index) { if (e.localKey) itemSys.takeDropped(e.localKey) }
+    if (level && e.lvl === level.index) { if (e.localKey) itemSys.takeDropped(e.localKey) }
     else if (mem.get(e.lvl)) mem.setDropped(e.lvl, mem.droppedFor(e.lvl).filter((r) => r.cacheKey !== e.key))
   }
   // the room hears a cache or a take now — or, inside the kind's outgoing gap, from the outbox, behind whatever is already waiting (in order:
-  // a take never overtakes the cache it takes). Solo: nobody to tell
+  // a take never overtakes the cache it takes; a cache only ever leaves at once, cacheReady). Solo: nobody to tell
   function relayLater(kind, payload, opts) { if (!bus) return; if (evOutbox.length || !bus.emit(kind, payload, opts)) evOutbox.push([kind, payload, opts]) }
   // the flags a cache carries on the wire (a relayed radio arrives silent; the clocks stay with whoever set it down)
   const exOf = (it) => ({ ...(it.sour && { sour: true }), ...(it.tool && { tool: true }) })
@@ -1369,9 +1396,18 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (fileReplyEl) fileReplyEl.textContent = reply
     fileRowEl.style.display = 'block'
   }
-  document.addEventListener('backrooms:settings-open', () => renderFileRow())
+  // a new notice over a file that holds work (a closing, pages given up) is asked first: the first press asks, the second files
+  let noticeAsked = false
+  document.addEventListener('backrooms:settings-open', () => { noticeAsked = false; renderFileRow() })
   document.addEventListener('backrooms:new-notice', () => {
     const r = fileStatus(file, 'notice-mailed', Date.now(), true)
+    if (r.file !== file && fileHolds() && !noticeAsked) {
+      noticeAsked = true
+      renderFileRow('a new notice? the old file closes with what it holds. press again to file it.')
+      if (newNoticeEl) newNoticeEl.textContent = 'yes, a new notice'
+      return
+    }
+    noticeAsked = false
     if (r.file !== file) { applyFile(r.file); photoIdx = 0; stationIdx = 0; claimFiled = false }
     showMessage(r.reply, PRIO.discovery)
     renderFileRow(r.reply)
@@ -1408,7 +1444,6 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     peerPos, peerIds: () => peerIdSet, selfId: () => mpClient.id, mergeRemote: mpClient.mergeRemote,
   }) : null
   if (bus) {
-    mpClient.onEv(bus.receive)
     // a friend's floor change is a people line: 'no-clipped deeper.' / 'climbed back.' / 'fell in.' (none when the depth held)
     bus.onFloorChange((id, name, from, to, line) => { if (line) addChatLine(name || 'someone', line, true) })
     // the room's files on this floor moved (a friend arrived, left or re-filed): the floor's lean is read again — the docket's standing never is
@@ -1445,8 +1480,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // when it happens live; for another floor it waits in the ledger until you get there (buildLevel). Same cell: the newest wins; the
     // seventh from one owner retires their oldest
     bus.on('cache', ({ id, name, payload: p, replay }) => {
-      if (!level) return
-      const key = cacheKey(p.lvl, p.cx, p.cy), here = p.lvl === level.index
+      const key = cacheKey(p.lvl, p.cx, p.cy), here = level != null && p.lvl === level.index   // before the first floor: it waits for its floor
       const r = ledger.place({ key, lvl: p.lvl, cx: p.cx, cy: p.cy, id, name, t: playT, pending: here ? null : { x: p.x, y: p.y, type: p.type, extra: extraFor(p, id, name, key) } })
       if (r.replaced) removeCache(r.replaced)
       for (const e of r.evicted) removeCache(e)
@@ -1483,10 +1517,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
   // what 'here' says of you (bus.here sends it at once when a field changed, else every 3 s from tick): ONE object, filled per call (the bus
   // copies it). Sent about once a second from the loop, and at once after a travel or a death
-  const myAseed = anchor ? anchorSeed(anchor.lat, anchor.lng) : null
-  const hereObj = { lvl: 0, lit: true, st: 'ok', seen: false, o: null, thin: false, status: 'notice-mailed', aseed: myAseed }
+  // your pin goes out as its tag (anchor.js pinTag: 16 bits, salted by the room's seed), never the seed — the seed inverts to the place
+  const myPinTag = pinTag(anchor ? anchorSeed(anchor.lat, anchor.lng) : null, worldSeed)
+  const hereObj = { lvl: 0, lit: true, st: 'ok', seen: false, o: null, thin: false, status: 'notice-mailed', aseed: myPinTag }
   // what the sanity step reads of your own file beside a friend's (the status's affinity, the same pin): ONE object, refilled with 'here'
-  const selfFile = { status: 'notice-mailed', aseed: myAseed, origin: null, thin: false }
+  const selfFile = { status: 'notice-mailed', aseed: myPinTag, origin: null, thin: false }
   let hereTimer = 1                                        // the first frame says it
   function hereFields() {
     hereObj.lvl = level ? level.index : 0
@@ -1496,9 +1531,17 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     hereObj.o = origin
     hereObj.thin = thin
     hereObj.status = file.status
-    hereObj.aseed = myAseed
-    selfFile.status = file.status; selfFile.aseed = myAseed; selfFile.origin = origin; selfFile.thin = thin
+    hereObj.aseed = myPinTag
+    selfFile.status = file.status; selfFile.aseed = myPinTag; selfFile.origin = origin; selfFile.thin = thin
     return hereObj
+  }
+  // the friends on this floor who could come for you: fresh, and not lying down themselves (two down together each die as they fell)
+  function friendsUp() {
+    if (!bus) return 0
+    const fp = bus.freshPeersOnFloor()
+    let up = 0
+    for (let i = 0; i < fp.length; i++) if (fp[i].st !== 'down') up++
+    return up
   }
 
   // ── down, and counted back (downed.js). goDown: the fatal hit laid you down — your light goes out (the stillness rule hides a still,
@@ -1549,8 +1592,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     stillness.noise(playT); standHeld = 0
     const n = rollcall.count(now)
     if (bus) { callOut.x = player.x; callOut.y = player.y; callOut.lvl = level.index; callOut.c = n <= 32; bus.emit('whistle', callOut) }
-    showMessage(n === 1 && !live ? NO_ANSWER_LINE : countLine(n), PRIO.interaction)
-    if (n === 1 && live) {
+    // a friend stands on this floor and has not whistled yet: nobody has answered — not 'just you', and nothing answers in their place
+    const unanswered = n === 1 && bus !== null && bus.freshPeersOnFloor().length > 0
+    showMessage(unanswered ? UNANSWERED_LINE : n === 1 && !live ? NO_ANSWER_LINE : countLine(n), PRIO.interaction)
+    if (n === 1 && live && !unanswered) {
       sanity = Math.min(100, sanity + SOLO_SANITY)
       if (rollcall.echoRoll()) {
         const g = arrivalGen
@@ -1607,7 +1652,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const np = level.decor.nearestNpc(player.x, player.y, SOUL_RANGE)
     const soul = np && inFrame(player, np.x, np.y, FRAME_OPTS) ? np : null
     const r = polaroidCaption({ rules, mods, subject, soul, doorArrow: soul ? knownWayArrow() : null, thinNear, status: file.status,
-      index: level.index, depth: level.depth, sanity, origin, thin, thinFirstShot, anchor, D: driftD(), firstShotOfLevel: !shotOnLevel,
+      index: level.index, depth: level.depth, sanity, origin, thin, thinFirstShot, anchor, pinTag: myPinTag, D: driftD(), firstShotOfLevel: !shotOnLevel,
       photoIdx, player, lvl: level.index })
     shotOnLevel = true
     if (thin) thinFirstShot = false
@@ -1647,11 +1692,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // The counter-claim: fires ONCE, when the player has both typed the claim at a presence AND fired the beacon registered to EXTENSION-30150A
   // — and the file can hold a seam (compose-gates.js finaleGate: a column that can write a name where the dark can read it, a file still
   // open, under litigation or the notice nobody answered). Renderer-side, so it resolves in the browser build too (no Electron bridge
-  // required). Held, it is the litigation's closing, on the file.
+  // required). Held under litigation, it is the litigation's closing, on the file; under the notice nobody answered it is this run's
+  // (the file stays open, so the next run can hold it again).
   function tryFinale() {
     if (!finaleGate({ seamHeld, claimFiled, beaconFired, rules, status: file.status, closing: file.closing })) return
     seamHeld = true
-    applyFile({ ...file, closing: 'litigation' })
+    if (file.status === 'litigation') applyFile({ ...file, closing: 'litigation' })   // litigation's closing; the notice nobody answered holds it again next run
     wardPulse(); calmTimer = 600; flickTgt = 1; flickTimer = 1.2; sanity = Math.min(100, sanity + 30)
     itemSys.grant('ballast'); renderHotbar()
     showMessage('the seam holds. the lights do not stutter. an extension that, for once, stays an extension.')
@@ -2001,6 +2047,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (getPref('solidBodies')) level.solid.settlePlayer(player)               // out of a prop the spawn cell may hug (the online lobby)
   }
   showMessage(level.cfg.levelName, PRIO.combat)
+  // the room's frames reach the bus only now, with a floor to lay a cache on: what came before (the relay's kept caches, replayed straight
+  // after welcome while the world was still loading) the client held, and hands over on the next tick
+  if (bus) mpClient.onEv(bus.receive)
 
   // apply saved audio/visual prefs, then keep them live as the panel changes them
   setMusicEnabled(getPref('music'))
@@ -2525,7 +2574,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     fillRemotes()
     if (bus) { bus.tick(performance.now()); hereTimer += dt; if (hereTimer >= 1) { hereTimer = 0; bus.here(hereFields()) } }
     // a cache or a take the outgoing gap held back goes now, in order (relayLater)
-    if (bus) while (evOutbox.length && bus.emit(evOutbox[0][0], evOutbox[0][1], evOutbox[0][2])) evOutbox.shift()
+    // — a margin past the gap, so the room (which believes at three quarters of it) is never asked to judge a frame at its edge
+    if (bus) while (evOutbox.length && bus.ready(evOutbox[0][0], OUTBOX_MARGIN_MS)) { const o = evOutbox.shift(); bus.emit(o[0], o[1], o[2]) }
     // kneeling: a tick to the friend every 500 ms while they stay down, on this floor and within six; else the kneel ends and your light
     // comes back (they woke, walked off, dropped off the floor)
     if (kneel.st) {
@@ -2595,7 +2645,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (down.tick() === 'timeout') die(deathDecision({ mp: !!mpClient, peers: 0, downSt: down.st, rules, filed, thin, D: driftD(), timeout: true }))
     // hp gone: a friend fresh on this floor and you go down instead (compose-gates.js); already down, you wait; else a death — under LEGACY
     // (or solo) today's die() exactly, with the column's consequences when filed
-    if (player.hp <= 0) { player.hp = 0; const d = deathDecision({ mp: !!mpClient, peers: bus ? bus.freshPeersOnFloor().length : 0, downSt: down.st, rules, filed, thin, D: driftD(), timeout: false }); if (d === 'down') goDown(); else if (d !== 'wait') die(d) }
+    if (player.hp <= 0) { player.hp = 0; const d = deathDecision({ mp: !!mpClient, peers: friendsUp(), downSt: down.st, rules, filed, thin, D: driftD(), timeout: false }); if (d === 'down') goDown(); else if (d !== 'wait') die(d) }
 
     // ── tension (tension.js): the hunted state as heartbeat and music. The hunt's report drives it (Level 0 / ∅, a fade and creatures
     //    off read as calm — null); the heart comes into your ears as the level rises, the floor's own song thickens on 'enter' and takes

@@ -7,7 +7,7 @@
 // attaches id/name/t and forwards; THIS is where a frame is believed or not:
 //   • registered kind + check(payload)       (the allowlist is one list)
 //   • nonce LRU per id                        (a relay replay cannot double a verb)
-//   • LIVE gates: per-(id,kind) minGap, maxDist and posKeys against the
+//   • LIVE gates: per-(id,kind) minGap (× IN_GAP), maxDist and posKeys against the
 //     position the players list reports — you cannot claim to be where the
 //     list says you are not
 //   • REPLAY (msg.replay === true, stamped by the server from its keep/drop
@@ -26,6 +26,9 @@ export const STALE_MS = 8000
 export const POS_SLACK = 2.0
 export const NONCE_LRU = 256
 export const HERE_MIN_GAP_MS = 250
+// a frame is believed at three quarters of the kind's gap: the sender spaces them by the full gap, and the wire's jitter can bring the
+// second one in sooner than it left — a receiver flush with the sender drops a frame the sender believes it sent
+export const IN_GAP = 0.75
 
 export const STATUSES = ['notice-mailed', 'extension', 'compliance', 'litigation']
 const ORIGINS = new Set([null, 'tenant', 'anchored', 'unnamed', 'processed'])
@@ -113,6 +116,13 @@ export function createEvBus(deps) {
     return true
   }
 
+  // would emit() let this kind out now (marginMs: and that long besides)? The caller asks before it acts on what it would send
+  function ready(kind, marginMs = 0) {
+    const spec = kinds.get(kind)
+    if (!spec) return false
+    return !spec.minGapMs || !lastOut.has(kind) || now() - lastOut.get(kind) >= spec.minGapMs + marginMs
+  }
+
   function nonceSeen(id, n) {
     if (typeof n !== 'number' || !Number.isFinite(n)) return false
     let rec = nonces.get(id)
@@ -137,7 +147,7 @@ export function createEvBus(deps) {
         let per = lastIn.get(msg.id)
         if (!per) { per = new Map(); lastIn.set(msg.id, per) }
         const last = per.get(msg.kind)
-        if (last != null && t - last < spec.minGapMs) return false
+        if (last != null && t - last < spec.minGapMs * IN_GAP) return false
         per.set(msg.kind, t)
       }
       if (spec.maxDist != null || spec.posKeys) {
@@ -266,5 +276,5 @@ export function createEvBus(deps) {
   // must not be lost behind its own heartbeat
   register('here', { check: hereOk })
 
-  return { register, emit, receive, on, here, peers, onFloor, fresh, freshPeersOnFloor, roomStanding, onRoomChange, onFloorChange, tick }
+  return { register, emit, ready, receive, on, here, peers, onFloor, fresh, freshPeersOnFloor, roomStanding, onRoomChange, onFloorChange, tick }
 }

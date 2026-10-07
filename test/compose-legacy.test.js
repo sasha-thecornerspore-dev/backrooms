@@ -170,7 +170,7 @@ describe('(4) polaroidCaption(legacy) is the three captions of firePolaroid', ()
     expect(LINES.GLYPH.replace('{g}', '${g}')).toBe('the film develops one letter that was not in the room: "${g}". transcribe it.')
     const fire = game.slice(game.indexOf('function firePolaroid() {'), game.indexOf('function knownWayArrow() {'))
     expect(fire).toContain('const thinNear = ephemera.some(a => a.variant === \'thin\' && (a.x - player.x) ** 2 + (a.y - player.y) ** 2 < 16)')
-    expect(fire).toMatch(/const r = polaroidCaption\(\{ rules, mods, subject, soul, doorArrow: soul \? knownWayArrow\(\) : null, thinNear, status: file\.status,\r?\n\s*index: level\.index, depth: level\.depth, sanity, origin, thin, thinFirstShot, anchor, D: driftD\(\), firstShotOfLevel: !shotOnLevel,\r?\n\s*photoIdx, player, lvl: level\.index \}\)/)
+    expect(fire).toMatch(/const r = polaroidCaption\(\{ rules, mods, subject, soul, doorArrow: soul \? knownWayArrow\(\) : null, thinNear, status: file\.status,\r?\n\s*index: level\.index, depth: level\.depth, sanity, origin, thin, thinFirstShot, anchor, pinTag: myPinTag, D: driftD\(\), firstShotOfLevel: !shotOnLevel,\r?\n\s*photoIdx, player, lvl: level\.index \}\)/)
     expect(fire.indexOf('polaroidCaption(')).toBeLessThan(fire.indexOf('sanity = Math.min(100, sanity + r.sanity); wardPulse()'))   // read before the +8, as finalizing was
     expect(fire).toContain('if (r.glyphAdvance) photoIdx++')
     expect(fire).toMatch(/showMessage\(r\.cap\)\r?\n\s*\}/)

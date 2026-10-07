@@ -43,6 +43,13 @@ export function anchorSeed(lat, lng) {
   return h === 0 ? 1 : h
 }
 
+// What 'here' says of a pin: never the seed itself (it inverts to the place, to ~11 m), but 16 bits of it salted with the room's
+// world seed — two friends with the same pin in the same room still match, and a tag fits ~10^8 places on the grid. null: no pin.
+export function pinTag(seed, worldSeed) {
+  if (seed == null) return null
+  return Math.imul((seed ^ (worldSeed | 0)) >>> 0, 0x9E3779B1) >>> 16
+}
+
 export function formatAnchor({ lat, lng }) {
   return `${lat.toFixed(4)},${lng.toFixed(4)}`
 }
