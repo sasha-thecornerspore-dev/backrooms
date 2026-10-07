@@ -29,7 +29,8 @@ describe('game.js: the real exported names, the passes, the state', () => {
     expect(game).toMatch(/import \{ dressPass \} from '\.\/dress\.js'/)
     expect(game).toMatch(/import \{ CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog \} from '\.\/containers\.js'/)
     expect(game).toMatch(/import \{ hauntsPass, createHauntTracker, hauntEffects \} from '\.\/haunts\.js'/)
-    expect(game).toMatch(/import \{ initAudio, [^\n]*, drawerSlide, bump \} from '\.\/audio\.js'/)
+    // (I10: the whistle sits between the drawer scrape and the bump — solid-wiring pins the `, bump } from './audio.js'` tail)
+    expect(game).toMatch(/import \{ initAudio, [^\n]*, drawerSlide, whistle, bump \} from '\.\/audio\.js'/)
   })
   it('buildLevel runs the passes in the fixed order stairs -> dress -> haunts (none on the block); no TODO(integrate:dress|between) is left', () => {
     expect(game).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\)\]\.filter\(Boolean\),/)
