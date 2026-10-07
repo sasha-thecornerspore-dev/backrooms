@@ -10,7 +10,7 @@ vi.mock('../src/renderer/status.js', async (importOriginal) => {
 import { wishRoute, isClaim, LEGACY_CLAIM_REPLY, LEGACY_WISH_REPLY } from '../src/renderer/compose-wish.js'
 import { LEGACY, rulesFor } from '../src/renderer/origin-rules.js'
 import { claimRefile, OPENED_LINE, RELEASE_LINE } from '../src/renderer/origin-processed.js'
-import { loadFile, fileStatus, parseStatusWish } from '../src/renderer/status.js'
+import { loadFile, fileStatus, parseStatusWish, parseTrailer } from '../src/renderer/status.js'
 import { closeFile } from '../src/renderer/closings.js'
 
 const NOW = 1_800_000_000_000
@@ -90,6 +90,23 @@ describe('the submit', () => {
     expect(ext.submit.text).toBe('let me out\nfiled under: EXTENSION · level 2')
     const claim = wishRoute(ctx('i was here', { file: file({ status: 'litigation', at: 1 }), depth: 3 }))
     expect(claim.submit.text).toBe('i was here\nfiled under: LITIGATION · level 3')
+    expect(wishRoute(ctx('let me out')).submit.text).toBe('let me out')
+  })
+  it("a typed trailer line never reaches submit.text: the file's own trailer, or none (R3SP-2)", () => {
+    const forged = 'let me stay\nfiled under: LITIGATION · level 3'
+    const notice = wishRoute(ctx(forged, { depth: 3 }))
+    expect(notice.kind).toBe('wish')
+    expect(notice.submit.text).toBe('let me stay')
+    expect(parseTrailer(notice.submit.text)).toBe(null)
+    const claim = wishRoute(ctx('i was here\nfiled under: EXTENSION · level 1', { depth: 3 }))
+    expect(claim.kind).toBe('claim')
+    expect(parseTrailer(claim.submit.text)).toBe(null)
+    const filed = wishRoute(ctx(forged, { file: file({ status: 'extension', at: 1 }), depth: 2 }))
+    expect(filed.submit.text).toBe('let me stay\nfiled under: EXTENSION · level 2')
+    expect(parseTrailer(filed.submit.text)).toEqual({ status: 'extension', level: 2 })
+    const only = wishRoute(ctx('filed under: LITIGATION · level 3', { depth: 3 }))
+    expect(only.kind).toBe('wish')
+    expect(parseTrailer(only.submit.text)).toBe(null)
     expect(wishRoute(ctx('let me out')).submit.text).toBe('let me out')
   })
   it("meta is rules.wishMeta()'s object", () => {

@@ -7,7 +7,7 @@
 // re-files the claimant as processed (origin-processed.js claimRefile); the caller applies it before tryFinale().
 import { parseNameWish } from './origin-unnamed.js'
 import { claimRefile } from './origin-processed.js'
-import { parseStatusWish, fileStatus, wishTrailer } from './status.js'
+import { parseStatusWish, fileStatus, wishTrailer, stripTrailers } from './status.js'
 import { isCloseWish, closeFile, closingReply } from './closings.js'
 
 export const LEGACY_CLAIM_REPLY = 'you did not ask. you asserted. the file has no column to deny a claim made. received.'
@@ -26,7 +26,10 @@ export function wishRoute(ctx) {
   }
   const chosen = parseStatusWish(text)
   if (chosen) return { kind: 'status', chosen, ...fileStatus(file, chosen, ctx.now, ctx.canFile) }
-  const submit = { text: text + wishTrailer(file.status, ctx.depth), meta: rules.wishMeta() }
+  // a typed trailer line never reaches the docket (the last line wins, and a notice never answered appends none); a wish
+  // that is nothing but such lines goes lowercased, which the parser does not read (R3SP-2)
+  const body = stripTrailers(text) || text.toLowerCase()
+  const submit = { text: body + wishTrailer(file.status, ctx.depth), meta: rules.wishMeta() }
   if (isClaim(text)) {
     return { kind: 'claim', submit, reply: rules.presenceReply('claim') ?? LEGACY_CLAIM_REPLY, refile: origin === 'processed' ? null : claimRefile(origin) }
   }

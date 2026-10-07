@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { existsSync } from 'node:fs'
 import {
   STATUSES, DEFAULT_STATUS, CLOSINGS, STATUS_LABEL, DAY_MS, depthOf, loadFile, saveFile, canFile, canRefile,
-  parseStatusWish, fileStatus, wishTrailer, parseTrailer, wishPrompt, statusMods, npcLines, STRINGS,
+  parseStatusWish, fileStatus, wishTrailer, parseTrailer, stripTrailers, wishPrompt, statusMods, npcLines, STRINGS,
 } from '../src/renderer/status.js'
 import { SCRAPS } from '../src/renderer/scraps.js'
 
@@ -302,6 +302,14 @@ describe('the wish trailer', () => {
     expect(parseTrailer('x\nfiled under: EXTENSION · level 1\nfiled under: LITIGATION · level 3')).toEqual({ status: 'litigation', level: 3 })
     expect(parseTrailer('x\r\nfiled under: COMPLIANCE · level 2\r\n')).toEqual({ status: 'compliance', level: 2 })
     expect(parseTrailer('x\n  filed under: EXTENSION · level 0  \n\nsigned')).toEqual({ status: 'extension', level: 0 })
+  })
+  it('stripTrailers drops every line the parser would read, and only those (R3SP-2)', () => {
+    expect(stripTrailers('let me stay\nfiled under: LITIGATION · level 3')).toBe('let me stay')
+    expect(stripTrailers('a\r\n  filed under: EXTENSION · level 0  \r\nb')).toBe('a\r\nb')
+    expect(stripTrailers('filed under: COMPLIANCE · level 2')).toBe('')
+    expect(stripTrailers('x\nfiled under: extension · level 2')).toBe('x\nfiled under: extension · level 2')
+    expect(stripTrailers('just a wish')).toBe('just a wish')
+    expect(parseTrailer(stripTrailers('a\nfiled under: LITIGATION · level 3\nfiled under: EXTENSION · level 1'))).toBe(null)
   })
   it('null when there is none', () => {
     expect(parseTrailer('just a wish')).toBe(null)

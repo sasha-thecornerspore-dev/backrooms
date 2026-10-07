@@ -130,6 +130,8 @@ export function parseTrailer(body) {
   }
   return null
 }
+// a typed line that reads as a trailer is the player's, not the file's: dropped before the real one goes on (R3SP-2)
+export const stripTrailers = (t) => String(t).split('\n').filter((l) => !TRAILER.test(l.trim())).join('\n').trim()
 
 // the dialog's placeholder and the faint lines under it
 export function wishPrompt({ origin, status, closing, canFile: cf, canRefile: cr } = {}) {
