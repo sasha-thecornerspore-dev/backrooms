@@ -2061,6 +2061,19 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
     expect(manual.indexOf('<section id="file">')).toBeLessThan(manual.indexOf('<section id="coop">'))
     for (const doc of [sec, manual.slice(manual.indexOf('<section id="file">'), manual.indexOf('<section id="coop">'))]) expect(doc).not.toContain('!')
   })
+  it('F13: the README\'s instruments and the manual\'s file section say the stillness rule, and the rule is what they say', () => {
+    const readme = read('../README.md'), manual = read('../docs/manual.html')
+    const inst = readme.slice(readme.indexOf('## your instruments'), readme.indexOf('## controls'))
+    expect(inst).toContain('once the file has you, the things hunt movement. stand still and make no sound, light and radio off, and after a breath they lose sight of you — until you move, call out, or push. if not all of you arrived, you vanish faster, light or no light.')
+    const file = manual.slice(manual.indexOf('<section id="file">'), manual.indexOf('<section id="coop">'))
+    expect(file).toContain('<p class="callout">Once the file has you, the things hunt movement. Stand still and make no sound, light and radio off, and after a breath they lose sight of you — until you move, call out, or push. If not all of you arrived, you vanish faster, light or no light.</p>')
+    expect(manual).toContain('“if the lights go out, stop moving. it hunts movement.”')                     // the soul's quote stays
+    const hid = (r, c) => r.perception({ stillFor: 0, noiseFor: Infinity, flashlight: false, radioOn: false, litNear: false, ...c }).hidden
+    const filed = rulesFor('tenant', false), thin = rulesFor('tenant', true)
+    expect([hid(LEGACY, { stillFor: 99 }), hid(filed, { stillFor: 1.9 }), hid(filed, { stillFor: 2 })]).toEqual([false, false, true])   // after a breath, once filed
+    expect([hid(filed, { stillFor: 5, flashlight: true }), hid(filed, { stillFor: 5, radioOn: true }), hid(filed, { stillFor: 5, noiseFor: 1 })]).toEqual([false, false, false])
+    expect([hid(thin, { stillFor: 0.6, flashlight: true }), hid(thin, { stillFor: 0.5 })]).toEqual([true, false])   // thin: faster, light or no light
+  })
 })
 
 // I15 closes the wave: every rule the steps above wired, pinned once more in one place against the final game.js (each step's own describe

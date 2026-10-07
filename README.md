@@ -156,6 +156,8 @@ the lost souls know which word you are under, and so does the room — *entered 
 
 top-left, under the level's name, two gauges. **hp** is your body: the things in the fog take it, and bandages and time bring it back. **san** is your mind: the dark eats at it, so does being hunted, so does a thing you cannot stop looking at — and light, sweet water, a page you have not read and a friend standing close give it back. let it run low and the edges of the screen stain, the whispers come closer together, and the floor finds more ways to frighten you. a thin bar at the bottom left is your legs; running and warding spend them.
 
+once the file has you, the things hunt movement. stand still and make no sound, light and radio off, and after a breath they lose sight of you — until you move, call out, or push. if not all of you arrived, you vanish faster, light or no light.
+
 under the gauges sits the compass: an arrow to the nearest way on that you have *seen*, and how far — or, when you have seen none, *something pulls, faintly*. a second line points back the way you came. above the item dock, a prompt says what **f** or **e** will do where you stand. the lines that fade in mid-screen are the building talking; your people talk in the chat at the lower left.
 
 ---
