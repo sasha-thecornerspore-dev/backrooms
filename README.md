@@ -97,7 +97,7 @@ on the deepest floors the machines sometimes give stranger things. these you kee
 
 six slots. `1–6` selects, `q` uses, `x` sets it down. some things are worth carrying, some are worth using where you found them, some are worth leaving behind.
 
-**leave a word.** when you set something down, a card asks whether to leave a word with it — six of m.'s phrases, the same six for that floor and that kind of thing, whoever is holding it. *take the left.* *the water here is sour.* *i am close behind.* pick one (or **0** for nothing) and the thing becomes a **cache**: it lies where it fell, with an arrow for the way you were facing. whoever picks it up reads it on the card — the phrase, the arrow turned to where *they* stand, and who left it. the prompt tells you before you take it: *f · take the bandage · left by maddie*. the floor remembers your caches between visits and across a quit; online, the room sees them as you set them down, and the relay keeps the last of them for whoever comes through after you — come back to a room and your own words are still yours. a hand needs a moment between two words: set a second one down in the same breath and it stays in your hands (*your hands are not ready.*). a stranger's word steadies you, a little. no free text, ever — only what m. wrote.
+**leave a word.** when you set something down, a card asks whether to leave a word with it — six phrases lifted from the pages, m.'s and the replies left beside them. at first everyone is offered the same six for that floor and that kind of thing; once the pages you have read hold six of the twelve phrases, the card offers only words from those. *take the left.* *the dark drinks you back.* *i am close behind.* the more of the record you find, the more of it you can say. pick one (or **0** for nothing) and the thing becomes a **cache**: it lies where it fell, with an arrow for the way you were facing. whoever picks it up reads it on the card — the phrase, the arrow turned to where *they* stand, and who left it. the prompt tells you before you take it: *f · take the bandage · left by maddie*. the floor remembers your caches between visits and across a quit; online, the room sees them as you set them down, and the relay keeps the last of them for whoever comes through after you — come back to a room and your own words are still yours. a hand needs a moment between two words: set a second one down in the same breath and it stays in your hands (*your hands are not ready.*). a stranger's word steadies you, a little. no free text, ever — only what is written on the pages.
 
 ---
 
@@ -174,7 +174,7 @@ under the gauges sits the compass: an arrow to the nearest way on that you have 
 | f · kneel | online, by a friend who is down: face them and press f to stay with them — your light on, holding still — and count them back. f again, a step, space or esc gets up |
 | tab | the map (hold your pace) |
 | q | use selected item |
-| x · set down | set the selected item down where you stand, with one of m.'s phrases and an arrow for whoever finds it — a talking radio keeps talking where it lies |
+| x · set down | set the selected item down where you stand, with a phrase lifted from the pages and an arrow for whoever finds it — a talking radio keeps talking where it lies |
 | c · whistle | call out — a two-note whistle the floor and your friends hear; the things hear it too |
 | l | flashlight on / off — go dark in a friend's light and the things see you less |
 | 1–6 | select inventory slot |

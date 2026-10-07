@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import {
-  PHRASES, MAX_PER_OWNER, NAME_CAP_EXEMPT, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor,
+  PHRASES, PHRASE_FRAG, MAX_PER_OWNER, NAME_CAP_EXEMPT, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor,
   isCachePayload, isTakePayload, extraFor, createCacheLedger,
 } from '../src/renderer/caches.js'
 import { EXIT_DIRS } from '../src/renderer/compass.js'
+import { SCRAPS } from '../src/renderer/scraps.js'
 
 // game.js's ITEM_NAMES shape: an object keyed by type
 const ITEM_NAMES = { 'almond-water': 'almond water', glowstick: 'glowstick', bandage: 'bandage', polaroid: 'polaroid', radio: 'radio' }
@@ -37,6 +38,39 @@ describe('caches: the words', () => {
     const a = menuFor(1, 'radio')
     const differs = [menuFor(2, 'radio'), menuFor(1, 'bandage'), menuFor(3, 'polaroid')].some(m => m.join() !== a.join())
     expect(differs).toBe(true)
+  })
+
+  // F12: every phrase is lifted from a page, and the page is named
+  it('PHRASE_FRAG: one page per phrase, and every word of the phrase is on that page; the rewritten slots are lifted verbatim', () => {
+    expect(Object.isFrozen(PHRASE_FRAG)).toBe(true)
+    expect(PHRASE_FRAG).toHaveLength(PHRASES.length)
+    const words = (t) => t.toLowerCase().split(/[^a-z']+/).filter((w) => w.length >= 3)
+    PHRASES.forEach((ph, i) => {
+      const f = PHRASE_FRAG[i]
+      expect(Number.isInteger(f) && f >= 0 && f < SCRAPS.length, ph).toBe(true)
+      const page = new Set(words(SCRAPS[f]))
+      for (const w of words(ph)) expect(page.has(w), `${ph} / ${w}`).toBe(true)
+    })
+    for (const i of [3, 4, 5, 6, 7, 9, 10, 11]) expect(SCRAPS[PHRASE_FRAG[i]], PHRASES[i]).toContain(PHRASES[i].slice(0, -1))
+    for (const gone of ['the water here is sour.', 'the water here is sweet.', 'something hunts this hall.', 'do not drop in.', 'the way down is close.', 'this is for you.']) {
+      expect(PHRASES).not.toContain(gone)
+    }
+  })
+
+  it("menuFor with a readSet: only the pages you found, once they hold six phrases; fewer, and it is everyone's hashed six", () => {
+    for (const [lvl, type] of [[0, 'radio'], [1, 'bandage'], [3, 'almond-water']]) {
+      const hashed = menuFor(lvl, type)
+      expect(menuFor(lvl, type, new Set())).toEqual(hashed)
+      expect(menuFor(lvl, type, new Set([12, 3]))).toEqual(hashed)                    // five phrases' pages: not yet
+      expect(menuFor(lvl, type, new Set(PHRASE_FRAG))).toEqual(hashed)               // every page: the same six as everyone's
+      const read = new Set([12, 3, 6, 0, 1]), m = menuFor(lvl, type, read)             // six phrases (pages 12, 3 and 6)
+      expect([...m].sort((x, y) => x - y)).toEqual([0, 1, 2, 3, 4, 5])
+      const read7 = new Set([12, 22, 11, 5]), m7 = menuFor(lvl, type, read7)            // seven phrases: six of them, deterministic
+      expect(m7).toHaveLength(6)
+      expect(new Set(m7).size).toBe(6)
+      for (const i of m7) expect(read7.has(PHRASE_FRAG[i])).toBe(true)
+      expect(menuFor(lvl, type, new Set(read7))).toEqual(m7)
+    }
   })
 })
 
@@ -91,6 +125,8 @@ describe('caches: the wire checks', () => {
       { ph: 12 }, { ph: -2 }, { oct: 8 }, { type: 'knife' }, { lvl: 5 }, { lvl: '1' }, { cx: 1.5 }, { x: NaN },
       { ex: { on: true } }, { ex: { sour: false } }, { ex: 'sour' }, { ex: null }, { y: Infinity }, { type: 7 },
       { type: 'toString' }, { oct: -2 }, { cy: '4' },
+      // RN-4: the key's cell must be the cell it lies in (a far cx/cy would erase a cache there)
+      { cx: 300 }, { cy: 300 }, { cx: 4 }, { x: 2.99 }, { y: 5 }, { cx: 300, cy: 300 },
     ]
     for (const b of bad) {
       expect(isCachePayload({ ...ok(), ...b }, ITEM_NAMES)).toBe(false)

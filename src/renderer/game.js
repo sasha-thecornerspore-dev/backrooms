@@ -57,7 +57,7 @@ import { radioLine, RADIO_GROUPS } from './compose-radio.js'
 import { wishRoute } from './compose-wish.js'
 import { finaleGate, beaconDecision, deathDecision } from './compose-gates.js'
 import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame, createEvidence, photoOutcome, EVIDENCE_FLOOR, EVIDENCE_LINE, COUNTED_LINE } from './evidence.js'
-import { PHRASES, NOTE_NONE, menuFor, cacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from './caches.js'
+import { PHRASES, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from './caches.js'
 import { LIT_RANGE, litFriendNear, inCone, wardOutcome, wardLine, litOffLine } from './lightshare.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
@@ -1139,15 +1139,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       el.addEventListener('click', () => { cancelCommit(); itemSys.select(+el.dataset.slot); renderHotbar() })   // a slot change ends a wrap
     }
   }
-  // X and the dock's ✕: set the selected item down. setDown asks first, on the paper card, whether to leave a word with it — six of m.'s
-  // twelve phrases (caches.js menuFor: the same six for this floor and this kind of thing, whoever holds it), or nothing. Nothing (0, Esc)
+  // X and the dock's ✕: set the selected item down. setDown asks first, on the paper card, whether to leave a word with it — six of the
+  // twelve phrases lifted from the pages (caches.js menuFor: this floor and this kind of thing, from the pages you have read once they hold
+  // six; until then the same six for whoever holds it), or nothing. Nothing (0, Esc)
   // is today's plain drop; the thing stays in your hand until you pick, and a hit that folds the card sets nothing down. The deep-stack
   // finds are refused before anything is offered. No card to ask on: today's X exactly
   function setDown() {
     const it = itemSys.peekSelected()
     if (!it || !noteCardEl) { throwSelected(null); return }
     if (KEPT.has(it.type) || it.tool) { showMessage('you do not put that down.'); return }
-    const menu = menuFor(level.index, it.type)
+    const menu = menuFor(level.index, it.type, readSet)
     openCard('choose', { text: `leave a word with the ${ITEM_NAMES[it.type] ?? it.type}, for whoever finds it.`, menu: menu.map((i) => PHRASES[i]),
       onPick: (i) => throwSelected(i == null ? NOTE_NONE : { ph: menu[i], oct: octOf(player.angle), by: myName(), byId: myId() ?? undefined }) })
   }
@@ -1480,6 +1481,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // when it happens live; for another floor it waits in the ledger until you get there (buildLevel). Same cell: the newest wins; the
     // seventh from one owner retires their oldest
     bus.on('cache', ({ id, name, payload: p, replay }) => {
+      if (!replay && bus.fresh(id) && bus.peers.get(id).lvl !== p.lvl) return   // live: set down on the floor their 'here' says they stand on
       const key = cacheKey(p.lvl, p.cx, p.cy), here = level != null && p.lvl === level.index   // before the first floor: it waits for its floor
       const r = ledger.place({ key, lvl: p.lvl, cx: p.cx, cy: p.cy, id, name, t: playT, pending: here ? null : { x: p.x, y: p.y, type: p.type, extra: extraFor(p, id, name, key) } })
       if (r.replaced) removeCache(r.replaced)
@@ -1490,8 +1492,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if (!replay) addChatLine(name || 'someone', 'sets something down.', true)
       }
     })
-    // someone took a cache: it is gone from wherever it lies for you too
-    bus.on('take', ({ payload: { key } }) => { const e = ledger.take(key); if (e) removeCache(e) })
+    // someone took a cache: it is gone from wherever it lies for you too. Live, only from a friend whose 'here' puts them on its floor and
+    // whom the list has within 3 of its cell: nobody erases a cache from across the building
+    bus.on('take', ({ id, payload: { key }, replay }) => {
+      if (!replay) { const k = parseCacheKey(key), pr = bus.peers.get(id), q = peerPos(id); if (!k || !bus.fresh(id) || pr.lvl !== k.lvl || !q || Math.hypot(q.x - (k.cx + 0.5), q.y - (k.cy + 0.5)) > 3) return }
+      const e = ledger.take(key); if (e) removeCache(e)
+    })
     // a friend wards on this floor: their tap is re-run on YOUR things from where they stand (the things are each client's own) — what it
     // staggers, throws or takes apart, it does here too, and they are a noise of 10 the things hear (theirs: never your stillness, never your
     // noiseMul). Only when you stood in its cone and it met something does it reach you: steadied

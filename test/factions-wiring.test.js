@@ -47,7 +47,7 @@ import { createRollCall, whistlePitch, bearingLabel, whistleGain, whistlePan, co
 import { ACTIONS } from '../src/renderer/touch.js'
 import { takeKey } from '../src/renderer/input.js'
 import { createItemSystem, KEPT } from '../src/renderer/items.js'
-import { PHRASES, NOTE_NONE, menuFor, cacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from '../src/renderer/caches.js'
+import { PHRASES, PHRASE_FRAG, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from '../src/renderer/caches.js'
 import { readText, READ_FOOT, chooseLines } from '../src/renderer/papercard.js'
 import { createLevelMemory } from '../src/renderer/levelmem.js'
 import { findOpenNear } from '../src/renderer/topology.js'
@@ -1304,13 +1304,14 @@ describe('I11 (W6): the caches — a thing set down with a word, read on the car
   const setDownSrc = slice('function setDown() {', "document.getElementById('btn-discard')?.addEventListener('click', setDown)")
   const pickupSrc = lift(/if \(res\.ok && res\.item\.cacheKey\) \{[\s\S]*?\r?\n {10}\}/)
   const cacheOn = lift(/bus\.on\('cache', \(\{ id, name, payload: p, replay \}\) => \{[\s\S]*?\r?\n {4}\}\)/)
-  const takeOn = lift(/bus\.on\('take', [^\n]*/)
+  const takeOn = lift(/bus\.on\('take', \(\{ id, payload: \{ key \}, replay \}\) => \{[\s\S]*?\r?\n {4}\}\)/)
   const regs = ['cache', 'take'].map((k) => lift(new RegExp(`bus\\.register\\('${k}'[^\\n]*`)))
   const replace = slice('for (const c of ledger.pendingFor(index)) {', '// the keys still spent at this visit')
+  const HERE_F = { lvl: 1, lit: false, st: 'ok', seen: false, o: null, thin: false, status: 'notice-mailed', aseed: null, v: 1 }
   // setDown / throwSelected / removeCache / relayLater lifted out of game.js, their world faked around the REAL items, ledger and floors' memory
   const readySrc = lift(/const cacheReady = [^\n]*/)
   const mkSetDown = (deps) => new Function(...Object.keys(deps), `${readySrc}\n${setDownSrc}\nreturn { setDown, throwSelected, removeCache, relayLater }`)(...Object.values(deps))
-  function rig({ inv = ['bandage'], cardEl = {}, bus = null, id = null, name = 'wanderer', level = { index: 1 } } = {}) {
+  function rig({ inv = ['bandage'], cardEl = {}, bus = null, id = null, name = 'wanderer', level = { index: 1 }, readSet = new Set() } = {}) {
     const items = createItemSystem({ ...DEFAULT_CONFIG }, () => false, 0)
     for (const t of inv) items.grant(t, t === 'plumb' ? { tool: true } : {})
     items.select(0)
@@ -1318,12 +1319,12 @@ describe('I11 (W6): the caches — a thing set down with a word, read on the car
     const ledger = createCacheLedger(), evOutbox = [], mem = createLevelMemory(), player = { x: 10.5, y: 10.5, angle: 0 }
     const h = mkSetDown({ itemSys: items, noteCardEl: cardEl, KEPT, showMessage: (m) => out.said.push(m), menuFor, level, openCard: (mode, opts) => { out.cards.push([mode, opts]); return {} },
       ITEM_NAMES, PHRASES, NOTE_NONE, octOf, player, myName: () => name, myId: () => id, playT: 42, cancelCommit: () => out.cancels++, cacheKey, ledger,
-      renderHotbar: () => out.hot++, mem, bus, evOutbox })
+      renderHotbar: () => out.hot++, mem, bus, evOutbox, readSet })
     return { h, items, out, ledger, evOutbox, mem, player, level }
   }
 
   it('imports caches.js, KEPT and readText by their real names; caches.js is in both offline shells; nothing of W6 is left to do', () => {
-    expect(game).toMatch(/import \{ PHRASES, NOTE_NONE, menuFor, cacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT \} from '\.\/caches\.js'/)
+    expect(game).toMatch(/import \{ PHRASES, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT \} from '\.\/caches\.js'/)
     expect(game).toMatch(/import \{ createItemSystem, KEPT \} from '\.\/items\.js'/)
     expect(game).toMatch(/import \{ createCard, CARD_KEYS, readText \} from '\.\/papercard\.js'/)
     expect(sw).toContain("'/renderer/caches.js'"); expect(build).toContain("'caches.js'")
@@ -1375,6 +1376,18 @@ describe('I11 (W6): the caches — a thing set down with a word, read on the car
     r = rig({ inv: ['radio'] }); r.items.inventory[0].on = true; r.h.setDown(); r.out.cards[0][1].onPick(0)
     expect(r.out.said).toEqual(['you set the radio down, still talking. let it talk.'])
     expect(r.items.getDropped()[0]).toMatchObject({ on: true, ph: menuFor(1, 'radio')[0], cacheKey: 'c:1:11,10' })
+  })
+  // F12: the words on the card are the part of the record you found — the pages read, once they hold six phrases
+  it('F12: the card offers only phrases from the pages you have read, once there are six of them; before that, the floor\'s six', () => {
+    expect(setDownSrc).toContain('const menu = menuFor(level.index, it.type, readSet)')
+    const readSet = new Set([12, 3, 6])                                                       // the fork, the almond water, the whistle
+    let r = rig({ readSet }); r.h.setDown()
+    expect(r.out.cards[0][1].menu).toEqual(menuFor(1, 'bandage', readSet).map((i) => PHRASES[i]))
+    for (const ph of r.out.cards[0][1].menu) expect(readSet.has(PHRASE_FRAG[PHRASES.indexOf(ph)])).toBe(true)
+    r.out.cards[0][1].onPick(1)
+    expect(r.items.getDropped()[0].ph).toBe(menuFor(1, 'bandage', readSet)[1])
+    r = rig({ readSet: new Set([12]) }); r.h.setDown()
+    expect(r.out.cards[0][1].menu).toEqual(menuFor(1, 'bandage').map((i) => PHRASES[i]))
   })
   it('online: a cache leaves at once or not at all (your hands are not ready); a take waits in the outbox, in order, and leaves past its gap with a margin', () => {
     let ok = true
@@ -1494,10 +1507,11 @@ describe('I11 (W6): the caches — a thing set down with a word, read on the car
     new Function('bus', 'isCachePayload', 'isTakePayload', 'ITEM_NAMES', regs.join('\n'))(bus, isCachePayload, isTakePayload, ITEM_NAMES)
     const level = { index: 1, grid: { floor: (x, y) => !(x === 40 && y === 10) } }
     const r = rig({ level, id: 'me', name: 'jo' }), lines = []
-    new Function('bus', 'level', 'cacheKey', 'ledger', 'playT', 'extraFor', 'removeCache', 'findOpenNear', 'itemSys', 'addChatLine', `${cacheOn}\n${takeOn}`)(
-      bus, level, cacheKey, r.ledger, 7, extraFor, r.h.removeCache, findOpenNear, r.items, (...a) => lines.push(a))
+    new Function('bus', 'level', 'cacheKey', 'ledger', 'playT', 'extraFor', 'removeCache', 'findOpenNear', 'itemSys', 'addChatLine', 'parseCacheKey', 'peerPos', `${cacheOn}\n${takeOn}`)(
+      bus, level, cacheKey, r.ledger, 7, extraFor, r.h.removeCache, findOpenNear, r.items, (...a) => lines.push(a), parseCacheKey, (id) => pos[id] ?? null)
     const frame = (id, payload, n, extra = {}) => ({ id, name: id === 'f' ? 'maddie' : id, kind: 'cache', payload: { ...payload, n }, t: 1, ...extra })
     const p = { lvl: 1, cx: 20, cy: 10, x: 20.5, y: 10.5, type: 'almond-water', ex: { sour: true }, ph: 3, oct: 2 }
+    expect(bus.receive({ id: 'f', name: 'maddie', kind: 'here', payload: { ...HERE_F, n: 0 }, t: 1 })).toBe(true)   // her heartbeat: floor 1
     expect(bus.receive(frame('f', p, 1))).toBe(true)
     expect(r.items.getDropped()).toEqual([{ x: 20.5, y: 10.5, type: 'almond-water', sour: true, ph: 3, oct: 2, by: 'maddie', byId: 'f', cacheKey: 'c:1:20,10' }])
     expect(lines).toEqual([['maddie', 'sets something down.', true]])
@@ -1518,11 +1532,52 @@ describe('I11 (W6): the caches — a thing set down with a word, read on the car
     expect(bus.receive({ id: 'f', name: 'maddie', kind: 'take', payload: { key: 'c:2:3,3', n: 10 }, t: 1 })).toBe(false)   // inside the take's 0.5 s
     t += 600
     expect(bus.receive({ id: 'f', name: 'maddie', kind: 'take', payload: { key: 'c:2:3,3', n: 11 }, t: 1 })).toBe(true)
-    expect(r.ledger.pendingFor(2)).toEqual([])                                                  // never laid down, never will be
+    expect(r.ledger.pendingFor(2).map((e) => e.key)).toEqual(['c:2:3,3'])                     // live, from floor 1: not hers to take
+    expect(bus.receive({ id: 'g', name: 'g', kind: 'take', payload: { key: 'c:2:3,3', n: 20 }, t: 1, replay: true })).toBe(true)
+    expect(r.ledger.pendingFor(2)).toEqual([])                                                  // the relay's take: never laid down, never will be
     expect(bus.receive({ id: 'f', name: 'maddie', kind: 'take', payload: { key: 'x', n: 12 }, t: 1, replay: true })).toBe(false)
     for (const s of regs) expect(s).toMatch(/replayable: true/)
     expect(regs[0]).toContain("posKeys: ['x', 'y'], minGapMs: 3000")
     expect(regs[1]).toContain('minGapMs: 500')
+  })
+  // RN-4: a key is tied to the one who sends it — a live take only from a fresh friend on its floor within 3 of its cell; a live cache only
+  // for the floor their 'here' says, and only on the cell it lies in
+  it('RN-4: nobody erases a cache from across the building — a far take, a take from another floor or a stale friend, a cache keyed to a far cell or another floor: refused', () => {
+    const pos = { f: { x: 20.5, y: 10.5 } }
+    let t = 10000
+    const bus = createEvBus({ send: () => {}, now: () => t, self: () => ({ x: 10, y: 10, lvl: 1 }), peerPos: (id) => pos[id] ?? null, peerIds: () => new Set(Object.keys(pos)), selfId: () => 'me' })
+    new Function('bus', 'isCachePayload', 'isTakePayload', 'ITEM_NAMES', regs.join('\n'))(bus, isCachePayload, isTakePayload, ITEM_NAMES)
+    const level = { index: 1, grid: { floor: () => true } }
+    const r = rig({ level, id: 'me', name: 'jo' })
+    new Function('bus', 'level', 'cacheKey', 'ledger', 'playT', 'extraFor', 'removeCache', 'findOpenNear', 'itemSys', 'addChatLine', 'parseCacheKey', 'peerPos', `${cacheOn}\n${takeOn}`)(
+      bus, level, cacheKey, r.ledger, 7, extraFor, r.h.removeCache, findOpenNear, r.items, () => {}, parseCacheKey, (id) => pos[id] ?? null)
+    let n = 0
+    const take = (key, extra = {}) => bus.receive({ id: 'f', name: 'maddie', kind: 'take', payload: { key, n: n++ }, t: 1, ...extra })
+    const cache = (p) => bus.receive({ id: 'f', name: 'maddie', kind: 'cache', payload: { type: 'bandage', ph: 0, oct: 0, ...p, n: n++ }, t: 1 })
+    // two caches of mine: one far down the hall on this floor, one waiting on floor 2
+    r.ledger.place({ key: 'c:1:300,300', lvl: 1, cx: 300, cy: 300, id: 'me', name: 'jo' })
+    r.ledger.place({ key: 'c:2:20,10', lvl: 2, cx: 20, cy: 10, id: 'me', name: 'jo', pending: { x: 20.5, y: 10.5, type: 'bandage', extra: {} } })
+    expect(bus.receive({ id: 'f', name: 'maddie', kind: 'here', payload: { ...HERE_F, n: n++ }, t: 1 })).toBe(true)
+    take('c:1:300,300'); t += 600
+    take('c:3:300,300'); t += 600                                                                // a floor she is not on, a cell nobody has
+    take('c:2:20,10'); t += 600                                                                  // her cell, but floor 2: she stands on 1
+    expect([r.ledger.get('c:1:300,300') !== null, r.ledger.get('c:2:20,10') !== null]).toEqual([true, true])
+    // a cache keyed to a far cell is not a cache at all; one keyed to her own cell on a floor she is not on is not believed either
+    expect(cache({ lvl: 1, cx: 300, cy: 300, x: 20.5, y: 10.5 })).toBe(false)
+    t += 3100
+    expect(cache({ lvl: 2, cx: 20, cy: 10, x: 20.5, y: 10.5 })).toBe(true)
+    expect(r.ledger.get('c:2:20,10')).toMatchObject({ id: 'me' })                               // still mine: nothing replaced it
+    // within 3 of the cell, on its floor, fresh: taken
+    pos.f = { x: 302, y: 300.5 }; t += 600
+    take('c:1:300,300')
+    expect(r.ledger.get('c:1:300,300')).toBeNull()
+    // a friend whose heartbeat stopped 8 s ago is not believed live; the relay's replay of a take still is
+    r.ledger.place({ key: 'c:1:301,300', lvl: 1, cx: 301, cy: 300, id: 'me', name: 'jo' })
+    t += 9000
+    take('c:1:301,300')
+    expect(r.ledger.get('c:1:301,300')).not.toBeNull()
+    take('c:1:301,300', { replay: true })
+    expect(r.ledger.get('c:1:301,300')).toBeNull()
   })
   it('buildLevel lays down what waited for this floor (the nearest open cell, or gone) and rebinds the floor\'s caches, between the items and the vend memory', () => {
     const enter = buildBody.indexOf('itemSys.enterLevel(cfg, cfg.map ? null : mem.takenFor(index), cfg.map ? null : mem.droppedFor(index))')
@@ -1767,7 +1822,13 @@ describe('I12 (W7): a friend\'s light, a friend\'s ward, a friend\'s photograph 
 describe('I11 / I12: the README and the field manual say what a cache, a friend\'s light, a friend\'s ward and a photograph do', () => {
   const readme = read('../README.md'), manual = read('../docs/manual.html')
   it('README: the x row carries the word and the arrow, an l row, the cache in the items, and the light, the push, evidence and lying down under multiplayer', () => {
-    expect(readme).toMatch(/^\| x · set down \| set the selected item down where you stand, with one of m\.'s phrases and an arrow for whoever finds it — a talking radio keeps talking where it lies \|$/m)
+    expect(readme).toMatch(/^\| x · set down \| set the selected item down where you stand, with a phrase lifted from the pages and an arrow for whoever finds it — a talking radio keeps talking where it lies \|$/m)
+    // F12: the words are the pages' (m.'s and the replies beside them), and the ones you have read once there are six; no claim that m. wrote them all
+    for (const doc of [readme, manual]) {
+      expect(doc).not.toContain('only what m. wrote')
+      expect(doc).not.toContain('the water here is sour.')
+      expect(doc).toContain('once the pages you have read hold six of the twelve phrases, the card offers only words from those.')
+    }
     expect(readme).toMatch(/^\| l \| flashlight on \/ off/m)
     for (const s of ['**leave a word.**', '*f · take the bandage · left by maddie*', '**a friend\'s light (l).**', '**push for each other (space).**', '**evidence (the polaroid).**', '**down, not dead.**']) expect(readme).toContain(s)
     expect(readme).toContain(EVIDENCE_LINE.split('. ')[0])

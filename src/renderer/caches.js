@@ -1,4 +1,4 @@
-// caches.js — a thing set down with one of m.'s phrases and an arrow.
+// caches.js — a thing set down with a phrase lifted from the pages and an arrow.
 //
 // A cache IS a dropped item (items.js `dropped`, persisted per floor by levelmem):
 // the note rides the record as trailing fields (ph, oct, by, byId, cacheKey).
@@ -9,20 +9,24 @@
 // floor's buildLevel places it. No free text anywhere. Pure.
 import { EXIT_DIRS } from './compass.js'
 
+// Every phrase is lifted from a page (scraps.js SCRAPS) — PHRASE_FRAG[i] is the
+// page it came from, so what you can say is the part of the record you found.
+// The index is the wire's `ph`: a slot keeps its place when its words change.
 export const PHRASES = Object.freeze([
   'take the left.',
   'take the right.',
   'it loops.',
-  'the water here is sour.',
-  'the water here is sweet.',
-  'something hunts this hall.',
-  'i counted. keep counting.',
-  'do not drop in.',
+  'the almond water is real. drink it.',
+  'the dark drinks you back.',
+  'it has been an hour of quiet.',
+  'i counted too.',
+  'there is only further in.',
   'stand still here. the lights hold.',
-  'the way down is close.',
+  'presence it cannot touch.',
   'i am close behind.',
-  'this is for you.',
+  'it is easier to be lost together.',
 ])
+export const PHRASE_FRAG = Object.freeze([12, 12, 12, 3, 3, 6, 8, 7, 22, 22, 11, 5])
 
 export const MAX_PER_OWNER = 6
 // the blank-name default: many strangers share it, so it is capped per id only
@@ -36,12 +40,14 @@ function fnv1a(s) {
   return h >>> 0
 }
 
-// Six distinct phrase indices, the same for every player on this floor holding
-// this kind of thing: what you can say depends on where and what, not on you.
-export function menuFor(lvl, type) {
+// Six distinct phrase indices for this floor and this kind of thing. With
+// `readSet` (the frags you have read) the six come only from the pages you
+// found, once they hold six phrases; until then, everyone's hashed six.
+export function menuFor(lvl, type, readSet = null) {
   let s = fnv1a(`${lvl}:${type}`) | 1
   const next = () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return s >>> 0 }
-  const a = PHRASES.map((_, i) => i)
+  let a = PHRASES.map((_, i) => i)
+  if (readSet) { const known = a.filter((i) => readSet.has(PHRASE_FRAG[i])); if (known.length >= 6) a = known }
   for (let i = 0; i < 6; i++) {
     const j = i + next() % (a.length - i)
     const t = a[i]; a[i] = a[j]; a[j] = t
@@ -87,6 +93,8 @@ export function isCachePayload(p, types) {
   if (!p || typeof p !== 'object') return false
   if (!isInt(p.lvl, 0, 4) || !Number.isInteger(p.cx) || !Number.isInteger(p.cy)) return false
   if (!isNum(p.x) || !isNum(p.y)) return false
+  // the cell is where it lies: a key for a far cell would replace (erase) whatever is there
+  if (p.cx !== Math.floor(p.x) || p.cy !== Math.floor(p.y)) return false
   if (typeof p.type !== 'string') return false
   if (!(types instanceof Set ? types.has(p.type) : (!!types && Object.prototype.hasOwnProperty.call(types, p.type)))) return false
   if (!isInt(p.ph, -1, PHRASES.length - 1) || !isInt(p.oct, -1, 7)) return false
