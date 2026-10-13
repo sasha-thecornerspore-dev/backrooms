@@ -24,6 +24,7 @@ export const PREF_DEFAULTS = {
   mouseSensitivity: 100,    // % — 100% == the classic 0.002 rad/px
   creatures:        true,   // do things spawn below level 0 at all
   damage:           true,   // can they hurt you (peaceful mode == false)
+  solidBodies:      true,   // furniture, machines and lost souls are bodies you walk around (off = the old point-vs-wall mover)
   beaconEffect:     'off',  // 'off' | 'ntfy' | 'discord' | 'custom' — what B fires
   beaconWebhook:    '',     // ntfy topic, or an https webhook url, per beaconEffect
 
@@ -42,7 +43,7 @@ export const PREF_CHOICES = {
   fpsCap:          [0, 30, 60],
   renderer:        ['auto', 'gpu', 'cpu'],
 }
-const BOOL_PREFS = ['reduceFlicker', 'hiDpi']
+const BOOL_PREFS = ['reduceFlicker', 'hiDpi', 'solidBodies']
 
 // Defaults that depend on the device rather than being constants. Guarded: importing this in Node (tests) or before
 // matchMedia exists must never throw.

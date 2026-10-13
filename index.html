@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>THE BACKROOMS — you have no-clipped out of reality</title>
-<meta name="description" content="A free first-person horror maze you play in your browser — built on a real paper trail, pinned to a real map, with puzzle cases open now. If you can read this, you have the gift.">
+<meta name="description" content="A free first-person horror maze — in your browser, or as a desktop app for Windows, macOS and Linux — built on a real paper trail, pinned to a real map, with puzzle cases open now. If you can read this, you have the gift.">
 <link rel="canonical" href="https://backrooms.thecornerspore.dev/">
 <meta name="theme-color" content="#050403">
 <meta name="color-scheme" content="dark">
@@ -360,11 +360,26 @@
   .sheet dt,.sheet dd{padding:12px 0;border-bottom:1px solid var(--rule)}
   .sheet dt{font-size:12px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;padding-top:14px;padding-right:12px;text-wrap:balance}
   .sheet dd{font-size:15px;color:var(--prose-2)}
+  .sheet dd a{text-decoration:underline;text-decoration-color:var(--rule-2);text-underline-offset:4px}
+  .sheet dd a:hover{text-decoration-color:var(--y)}
   @media(max-width:520px){.sheet{grid-template-columns:104px minmax(0,1fr)}.sheet dt{letter-spacing:1px}.sheet dd{font-size:14px}}
   @media(max-width:359px){.sheet{grid-template-columns:minmax(0,1fr)}.sheet dt{border-bottom:0;padding-bottom:0}}
   .manual-line{font-family:var(--serif);font-size:16px;color:var(--prose-2);margin:0 0 34px;max-width:62ch;line-height:1.9}
   .descend-acts{display:flex;flex-wrap:wrap;gap:14px 30px;align-items:center}
   @media(max-width:699px){.descend-acts{flex-direction:column;align-items:stretch}.descend-acts .btn{width:100%}}
+
+  /* the building has weight now — what 2.0 changed, one line a system */
+  .weight .sys{list-style:none;display:grid;grid-template-columns:minmax(0,1fr);border-top:1px solid var(--rule);margin:8px 0 34px;max-width:900px}
+  @media(min-width:700px){.weight .sys{grid-template-columns:repeat(2,minmax(0,1fr));column-gap:44px}}
+  .weight .sys li{padding:16px 0 15px;border-bottom:1px solid var(--rule)}
+  .weight .sys .k{display:block;font-size:11px;letter-spacing:3px;color:var(--rust-t);text-transform:uppercase;line-height:1.6}
+  .weight .sys h3{font-family:var(--serif);font-weight:400;font-size:clamp(19px,2.2vw,22px);color:var(--y);line-height:1.25;margin:2px 0 6px}
+  .weight .sys p{font-size:14px;color:var(--prose-2);line-height:1.65;max-width:56ch}
+  .weight .sys .line{display:block;font-family:var(--serif);font-style:italic;font-size:15px;color:var(--yb);line-height:1.5;margin-top:7px}
+  .weight .say{font-family:var(--serif);font-style:italic;font-size:clamp(18px,2.6vw,24px);color:var(--yb);
+    border-left:2px solid var(--rust);padding:6px 0 6px 22px;margin:8px 0 30px;max-width:60ch;line-height:1.55}
+  .weight .where{font-family:var(--serif);font-size:16px;color:var(--prose-2);max-width:62ch;line-height:1.75;margin:0 0 22px}
+  .weight .where b{font-weight:400;color:var(--yb)}
 
   /* condemnation placard + memo (kept markup) */
   .placard{max-width:520px;margin:0 auto;border:3px double var(--dim);padding:26px 28px;
@@ -512,6 +527,16 @@
     .sheet dt{float:left;clear:left;border:0;padding:9px 10px 0 0;font-size:11px;letter-spacing:1px;line-height:19px}
     .sheet dd{padding:8px 0;font-size:14px;line-height:1.5}
     .manual-line{font-size:15px;line-height:1.55;margin:0 0 16px}
+
+    /* what changed: compact rows */
+    .weight .sys{margin:4px 0 16px}
+    .weight .sys li{padding:10px 0}
+    .weight .sys .k{letter-spacing:2px;line-height:1.4}
+    .weight .sys h3{font-size:18px;margin:1px 0 3px}
+    .weight .sys p{font-size:13px;line-height:1.5}
+    .weight .sys .line{font-size:14px;line-height:1.4;margin-top:4px}
+    .weight .say{font-size:17px;line-height:1.45;margin:14px 0 16px;padding:4px 0 4px 16px}
+    .weight .where{font-size:15px;line-height:1.55;margin:0 0 14px}
 
     /* the notice and the memo */
     main>section:not([id]){padding:24px 0}
@@ -677,7 +702,7 @@
       </li>
       <li>
         <svg class="sym" viewBox="0 0 36 36" aria-hidden="true" focusable="false"><rect x="3" y="3" width="30" height="30" fill="none" stroke="#8a7f52"/><rect x="13" y="12" width="10" height="12" fill="rgba(201,186,114,.18)" stroke="#c9ba72"/><path d="M3 3L13 12M33 3L23 12M3 33L13 24M33 33L23 24" stroke="#8a7f52"/><path d="M14 6H22" stroke="#e7dc93" stroke-width="1.5"/></svg>
-        <div><p class="id">LEVEL 0</p><h3><a href="play/">The maze — play it</a></h3><p class="desc">The game itself: a first-person walk through yellow rooms that do not end, and the levels under them. Free in your browser. Add it as an app from your browser’s menu, and it can keep working offline.</p><p class="aside"><a class="jump" href="#way-in">What’s in it, playing with a friend, and the comfort switches: <span class="nw">the way in&nbsp;▾</span></a></p></div>
+        <div><p class="id"><span class="nw">LEVEL 0 ·</span> <span class="nw">v2.0.0</span></p><h3><a href="play/">The maze — play it</a></h3><p class="desc">The game itself: a first-person walk through yellow rooms that do not end, and the floors under them. Free in your browser, where you can add it as an app and keep it offline — or as a desktop app for Windows, macOS and Linux.</p><p class="aside"><a class="jump" href="#weight">What is down there, playing with a friend, and the comfort switches: <span class="nw">the building keeps things now&nbsp;▾</span></a></p></div>
         <span class="to" aria-hidden="true">play/&nbsp;▸</span>
       </li>
       <li>
@@ -697,7 +722,7 @@
       </li>
       <li>
         <svg class="sym" viewBox="0 0 36 36" aria-hidden="true" focusable="false"><path d="M8 8H30L28 13H6Z" fill="none" stroke="#c9ba72"/><path d="M8 16H30L28 21H6Z" fill="none" stroke="#8a7f52"/><path d="M8 24H30L28 29H6Z" fill="rgba(201,186,114,.15)" stroke="#8a7f52"/></svg>
-        <div><p class="id"><span class="nw">DOC-FIELD-00</span></p><h3><a href="manual/">The Field Manual</a></h3><p class="desc">Every control, what your light is for, and the comfort settings that switch the creatures and the damage off.</p></div>
+        <div><p class="id"><span class="nw">DOC-FIELD-00</span></p><h3><a href="manual/">The Field Manual</a></h3><p class="desc">Every control on every screen, what your light is for, how the file reads you, and the comfort settings that switch the creatures and the damage off.</p></div>
         <span class="to" aria-hidden="true">manual/&nbsp;▸</span>
       </li>
     </ul></nav>
@@ -711,7 +736,7 @@
     <p>But something here is <em>different</em>. The Planck length — the grain of reality itself — is nearly <em>closed</em>. In every layer above us it ran wide, and that slack is how they spun up wildly different universes for almost nothing. Not here. Here the world is fixed, and tight, and old.</p>
     <p>The people who find the Backrooms can <em>enter</em> them. That is the gift. It is the only reason you are reading <span class="redact">this recovered file</span>.</p>
     </details>
-    <a class="doc" href="codex/"><div class="code">DOC-GEO-01</div><div class="name">geo-tethered sectors — your county is a world</div></a>
+    <a class="doc" href="codex/"><div class="code">DOC-GEO-01</div><div class="name">geo-tethered sectors — pin a real place and it becomes a world</div></a>
   </section>
 
   <section class="anchor reveal" id="record" aria-labelledby="record-h">
@@ -732,7 +757,7 @@
         <summary><span>read the record</span><span class="arr" aria-hidden="true">▾</span></summary>
       <div class="read">
         <p class="strata-h">strata · read down</p>
-    <p>Three instruments did the work, each one a piece of paper, each one still on file.</p>
+    <p>Three of the papers, read down. Each one is still on file.</p>
         <div class="instr">
       <div class="row still">
         <div class="yr">still</div>
@@ -868,7 +893,7 @@
   <section class="cases reveal" id="cases" aria-labelledby="cases-h">
     <p class="tag">field recovery · case board</p>
     <h2 id="cases-h">Four cases are open. Every clue points at something you can check.</h2>
-    <p class="lede">A case is a chain of instruments: a clue, a source you can check, and a box that only accepts the right reading. File one and the next unseals. The board doesn’t show you the answers — it only recognizes one when you bring it. Every case can be closed from home.</p>
+    <p class="lede">A case is a chain of instruments: a clue, a source you can check, and a box that only accepts the right reading. File one and the next unseals. The board doesn’t show you the answers — it only recognizes one when you bring it. Every case can be closed from home. Inside the game on a computer, press Enter and type <span class="nw">/recover</span>: the field console carries the same cases. On a phone, use the case board.</p>
     <ul class="tags" id="case-tags">
       <li><a class="tagcard start" href="recover/?case=case-d8" data-case="case-d8">
         <span class="code">CASE D-8</span><span class="ti">the redlined district</span><span class="tease">A line was drawn once. The paper never let it go.</span>
@@ -930,14 +955,42 @@
     </div>
   </section>
 
+  <section class="weight reveal" id="weight" aria-labelledby="weight-h">
+    <p class="tag">what is down there <span class="nw">· new in 2.0</span></p>
+    <h2 id="weight-h">The building keeps things now.</h2>
+    <p class="lede">The rooms were always there. Now they keep things. The furniture stops you, the things in the dark can hear you, and the floors remember what you took. Somewhere above the drop ceiling, an office has started writing you down. <em>a notice was mailed to you. you have not answered.</em></p>
+    <details class="fold" id="weight-lore" open>
+      <summary><span>what is down there, in full</span><span class="arr" aria-hidden="true">▾</span></summary>
+    <ul class="sys">
+      <li><span class="k">the form on the counter</span><h3>The file</h3><p>The first time you go through a way, an office you never see writes you into one of four columns — by how you came in, never by choice. Settings ⚙ and <span class="nw">/status</span> read it back to you.<span class="line">the file has you now. it cannot spell you.</span></p></li>
+      <li><span class="k">notice 30150A</span><h3>Three words</h3><p>Once the office can hear you, a presence — an invisible listener, marked <span class="nw">• • •</span> — lets you answer the notice: extension, compliance or litigation. Once a real day. Each turns something inside out, and each has its own way to close.<span class="line">the thirteen who complied — nobody remembers them. that was the point.</span></p></li>
+      <li><span class="k">they hear</span><h3>The things hunt</h3><p>A walk barely carries; a sprint carries round corners. They go to the noise, hunt what they can see, and search where they lost you. Each kind keeps one rule you can learn. And some places are wrong every time you pass: a figure that stands still is the building; one that moves is not.<span class="line">you have lost it. it is still looking.</span></p></li>
+      <li><span class="k">light off · keep still</span><h3>Hiding</h3><p>Once the file has you, the dark is somewhere to hide — light off, radio off, still and silent. Furniture is solid now, and a furnished room is cover. Ask a lost soul, one of the pale people standing in the halls. Some of what they say is true.<span class="line">it hunts movement. you remember that now.</span></p></li>
+      <li><span class="k">space · hold space</span><h3>The ward</h3><p>Tap to push the dark back; hold to charge a longer, harder push. Catch a thing as it turns back to face you. It spends your legs, and so does running.<span class="line">you catch it turning. it reels.</span></p></li>
+      <li><span class="k">x · set it down</span><h3>Lures and leavings</h3><p>A radio left talking draws them off. A glowstick marks the way. A word from m.’s pages, with an arrow, waits for whoever comes after. Cabinets, crates and drums can be searched — press F and keep still.<span class="line">something counts the drawers you open.</span></p></li>
+      <li><span class="k">tab · stairs · the ring</span><h3>A pencil map, and floors that connect</h3><p>Only what you have walked and seen, one sheet a floor. Stairwells up, a lift that goes one place, and a door on the deepest floor that climbs back to the lobby. Every floor remembers what you took.<span class="line">the machine has been refilled. by whom.</span></p></li>
+      <li><span class="k">everything goes dark</span><h3>Waking a floor up</h3><p>When something has you, you wake a floor above, beside the hole you fell through, a little lighter — and whatever was in your hand stays down there. The lowest machines hold a few things you keep even through that.<span class="line">you wake beside the hole you fell through. something of you stayed down there.</span></p></li>
+      <li><span class="k">c · f</span><h3>Together</h3><p>C whistles at your own pitch: friends hear which way, and so do the things. Online, with a friend on your floor, a fatal hit lays you down instead — they kneel, light on, and count you back.<span class="line">you are counted. you come back.</span></p></li>
+    </ul>
+    </details>
+    <p class="say">The film develops letters that were not in the room. The radio on the lowest floors counts, slow and patient, down to someone’s line. The form gives an address on a street that is not on any map. There is an ending. It isn’t an exit.</p>
+    <p class="where">All of this is in the browser and in the desktop app. The desktop app also sends wishes, saves photographs and fires the beacon.</p>
+    <div class="descend-acts">
+      <a class="ghost" href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">download the desktop app&nbsp;↗<small>from the latest release</small></a>
+      <a class="alt" href="manual/"><span>the field manual — <span class="nw">DOC-FIELD-00&nbsp;▸</span></span></a>
+      <a class="alt" href="play/"><span>or play in your browser&nbsp;▸</span></a>
+    </div>
+  </section>
+
   <section class="wayin reveal" id="way-in" aria-labelledby="way-in-h">
     <p class="tag">the way in</p>
-    <h2 id="way-in-h">The way in is a program. It runs in your browser.</h2>
-    <p class="lede">Yellow wallpaper. A light that hums and never turns off. Rooms that open onto more rooms, and levels under those. You carry a flashlight, your nerve, and whatever you find — almond water, and scraps of paper left by someone who came before you. Below level 0, you are not alone.</p>
+    <h2 id="way-in-h">The way in is a program. It runs in your browser, and on your own machine.</h2>
+    <p class="lede">Yellow wallpaper. A light that hums and never turns off. Rooms that open onto more rooms, and levels under those. You carry a flashlight, your nerve, and whatever you find — almond water, and scraps of paper left by someone who signs <em>m.</em> Below level 0, you are not alone. Go down four floors. Learn the one rule each thing keeps. Gather the 26 pages m. left behind. And sooner or later, answer the notice that was mailed to you.</p>
     <details class="fold" id="levels-lore" open>
       <summary><span>the descent, level by level</span><span class="arr" aria-hidden="true">▾</span></summary>
     <h3 class="levels-h" id="levels-h">the descent, as the game files it</h3>
     <ol class="levels" aria-labelledby="levels-h">
+      <li><span class="tube" style="--lc:#8C877A" aria-hidden="true"></span><span class="lv">level ∅ — the block</span><span class="ls">harlem park, west baltimore. a plan erased the street and left this.</span></li>
       <li><span class="tube" style="--lc:#E8E0C0" aria-hidden="true"></span><span class="lv">level 0 — the lobby</span><span class="ls">the hum of fluorescent light. damp carpet. no exit.</span></li>
       <li><span class="tube" style="--lc:#9E9A88" aria-hidden="true"></span><span class="lv">level 1 — habitable zone</span><span class="ls">concrete and dim service lights. something moved in the warehouse dark.</span></li>
       <li><span class="tube" style="--lc:#705C46" aria-hidden="true"></span><span class="lv">level 2 — pipe dreams</span><span class="ls">endless maintenance tunnels. steam, rust, and the dark between the pipes.</span></li>
@@ -946,15 +999,19 @@
     </details>
     <dl class="sheet">
       <dt>cost</dt><dd>free</dd>
-      <dt>runs on</dt><dd>best on a computer or a Chromebook <span class="nw">· works on phones too.</span></dd>
-      <dt>keep it</dt><dd>add it as an app from your browser’s menu, and it can keep playing offline. your solo run stays saved in this browser.</dd>
-      <dt>with a friend</dt><dd>choose PLAY ONLINE, use a made-up name, type nothing real about yourself, and share its room code only with someone you know — you both fall into the same world. the chat is not moderated.</dd>
-      <dt>what’s in it</dt><dd>dark rooms, a heartbeat that quickens as something closes in, and creatures that chase you and can catch you.</dd>
-      <dt>comfort</dt><dd>switch the creatures off, switch damage off, switch the film grain off — walk it as a place, not a threat.</dd>
+      <dt>runs on</dt><dd>in the browser, best on a computer or a Chromebook <span class="nw">· works on phones too.</span> the desktop app runs on Windows, macOS (Intel and Apple silicon) and Linux.</dd>
+      <dt>install</dt><dd>from <a href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">the latest release&nbsp;↗</a>: an installer for Windows (.exe), a .dmg for macOS, an .AppImage or a .deb for Linux. the first time on a mac, right-click the app and choose Open — it is not notarized yet. Windows and the AppImage keep themselves current; settings ⚙ → updates says how.</dd>
+      <dt>keep it</dt><dd>in the browser, add it as an app from your browser’s menu, and it can keep playing offline. a solo run saves itself where you play it: CONTINUE ▶ picks it up, and SOLO ▶ starts over on top of it. online runs are never saved.</dd>
+      <dt>pin a place</dt><dd>paste a Google Maps link to any real place on the title screen and you fall through there — the same maze for anyone who pins the same spot. the pin is never sent to the people you play with. anchored worlds hold their shape. unanchored worlds forget you were ever there.</dd>
+      <dt>with a friend</dt><dd>choose PLAY ONLINE, use a made-up name, type nothing real about yourself, and share its room code only with someone you know — you both fall into the same world. on one network, the desktop app can HOST LAN instead. the chat is not moderated.</dd>
+      <dt>speak</dt><dd>near a presence you can ask for anything. someone, or the spirits, reads it, and a granted wish drifts the world, in a later update, for everyone on the desktop app. wishes leave only from the desktop app. put nothing real about yourself in a wish.</dd>
+      <dt>what’s in it</dt><dd>dark rooms, a heartbeat that quickens as something closes in, and creatures that chase you and can catch you. nothing pauses — not the map, not the settings, not the chat.</dd>
+      <dt>comfort</dt><dd>switch the creatures off, switch damage off, soften the flicker, switch the film grain off — walk it as a place, not a threat.</dd>
     </dl>
-    <p class="manual-line">Controls, your light and every comfort setting are in <a href="manual/">the field manual — <span class="nw">DOC-FIELD-00&nbsp;▸</span></a></p>
+    <p class="manual-line">Every control, your light, your file and every comfort setting are in <a href="manual/">the field manual — <span class="nw">DOC-FIELD-00&nbsp;▸</span></a></p>
     <div class="descend-acts">
       <a class="btn" href="play/">DESCEND&nbsp;▸<small><span class="kb">play free in your browser</span><span class="tc">free · best on a computer · works on phones too</span></small></a>
+      <a class="ghost" href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">download the desktop app&nbsp;↗<small>from the latest release</small></a>
     </div>
   </section>
 
@@ -986,7 +1043,7 @@
       <li><h3><span class="no">2 ·</span> Open a case.</h3><p>Start with CASE D-8 — it is the gentlest; everything it asks is on the public record. Then try CASE L-22: it begins inside a very small book.</p><a class="alt" href="recover/?case=case-d8"><span>open CASE D-8&nbsp;▸</span></a></li>
       <li><h3><span class="no">3 ·</span> Read the map.</h3><p>Open the first door and read its strata down, newest to oldest.</p><a class="alt" href="atlas/#806-n-carey"><span>read the first door&nbsp;▸</span></a></li>
     </ol>
-    <p class="none">This page loads nothing from anyone else — no ads, no trackers, no analytics. Your solo run and your case progress stay in your own browser; online play goes through our server, which keeps each room’s world.</p>
+    <p class="none">This page loads nothing from anyone else — no ads, no trackers, no analytics. Your solo run and your case progress stay where you play them. Online play goes through our server, which keeps each room’s world; a place you pin is never sent to the people you play with. The desktop app reaches out only to check for its own updates, to fetch the cases, to push a beacon you have pointed somewhere yourself, and to carry a wish you choose to make. Someone reads the wishes, so put nothing real about yourself in one.</p>
   </section>
 </main>
 
@@ -1000,7 +1057,7 @@
     <li><a href="codex/">the record</a></li>
     <li><a href="manual/">the field manual</a></li>
     <li><a href="https://littlethings.thecornerspore.dev/">the very small book&nbsp;↗</a></li>
-    <li><a href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">windows build&nbsp;↗</a></li>
+    <li><a href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">desktop app · windows, macos, linux&nbsp;↗</a></li>
     <li><a href="https://github.com/sasha-thecornerspore-dev/backrooms">the source&nbsp;↗</a></li>
   </ul></nav>
   <p class="warn">you were not supposed to find this</p>

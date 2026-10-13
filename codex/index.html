@@ -22,7 +22,7 @@
     overflow-x:hidden;-webkit-font-smoothing:antialiased}
   a{color:var(--yb);text-decoration:none}
   .vignette{position:fixed;inset:0;pointer-events:none;z-index:50;
-    background:radial-gradient(ellipse at 50% 42%,transparent 30%,rgba(0,0,0,.55) 100%)}
+    background:radial-gradient(ellipse at 50% 42%,transparent 45%,rgba(0,0,0,.35) 100%)}
   .grain{position:fixed;inset:-50%;pointer-events:none;z-index:51;opacity:.05;
     background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     animation:grain .5s steps(2) infinite}
@@ -75,7 +75,8 @@
   figure{margin:30px 0}
   .fig{display:block;border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.32);max-width:100%}
   .fig svg{display:block;width:100%;height:auto}
-  figcaption{font-size:10px;letter-spacing:2px;color:var(--faint);text-transform:uppercase;padding:9px 2px 0}
+  figcaption{font-size:10px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;padding:9px 2px 0}
+  @media(max-width:560px){figure{overflow-x:auto;-webkit-overflow-scrolling:touch} svg.fig{min-width:560px;max-width:none}}
   figcaption a{color:var(--dim);border-bottom:1px solid rgba(138,127,82,.4)}
   figcaption a::before{content:"↗ "}
   figcaption a:hover{color:var(--sig)}
@@ -93,7 +94,7 @@
   @keyframes fadein{to{opacity:1}}
 
   /* condemnation stamp */
-  .stampin{opacity:0;transform:rotate(-14deg) scale(1.5)}
+  .stampin{opacity:0;transform-box:fill-box;transform-origin:center;transform:rotate(-14deg) scale(1.5)}
   .in .stampin{animation:stampin .5s cubic-bezier(.2,1.4,.4,1) .5s forwards}
   @keyframes stampin{to{opacity:1;transform:rotate(-6deg) scale(1)}}
 
@@ -161,6 +162,19 @@
   footer .links a{color:var(--faint);margin:0 10px}footer .links a:hover{color:var(--y)}
   footer .warnline{margin-top:26px;font-size:10px;letter-spacing:4px;color:var(--faint);text-transform:uppercase}
   .note{font-size:12px;color:var(--faint);font-style:italic;max-width:66ch;margin-top:22px}
+
+  /* the addendum — the four words, counted */
+  h3{font-family:var(--serif);font-weight:400;letter-spacing:.04em;font-size:clamp(18px,3vw,24px);
+    color:var(--y);margin:38px 0 10px;line-height:1.2}
+  .ledger{border:1px solid rgba(138,127,82,.3);background:rgba(0,0,0,.25);margin:24px 0 8px}
+  .ledger .row{display:grid;grid-template-columns:minmax(0,12em) 3.4em minmax(0,1fr);gap:4px 18px;
+    align-items:baseline;padding:12px 16px;border-top:1px solid rgba(138,127,82,.16)}
+  .ledger .row:first-child{border-top:none}
+  .ledger .w{font-size:11px;letter-spacing:2px;color:var(--rust);text-transform:uppercase}
+  .ledger .n{font-family:var(--serif);font-size:clamp(22px,4vw,30px);color:var(--yb);text-align:right;line-height:1}
+  .ledger .s{font-family:var(--serif);font-style:italic;font-size:15px;color:#c2b884}
+  @media(max-width:600px){.ledger .row{grid-template-columns:minmax(0,1fr) auto}.ledger .s{grid-column:1/-1}}
+  .ledger-cap{font-size:10px;letter-spacing:2px;color:var(--faint);text-transform:uppercase;margin-bottom:22px}
 </style>
 </head>
 <body>
@@ -190,6 +204,7 @@
       <li><a href="#counterclaim">the counter-claim</a></li>
       <li><a href="#observer">the indestructible observer</a></li>
       <li><a href="#cipher">the field cipher</a></li>
+      <li><a href="#addendum">addendum — the form on the counter</a></li>
       <li><a href="#sources">where the record lives</a></li>
     </ol>
   </div>
@@ -199,9 +214,9 @@
 <section id="tether">
   <div class="tag sig">§ 01 — the tether · DOC-GEO-01</div>
   <h2>Your county is a world.</h2>
-  <p class="lead">The Backrooms are not somewhere else. They are <em>here</em>, one layer down, and the maze knows exactly where your body is standing when you fall in.</p>
-  <p>Every descent is tethered to real ground. The seam you drop through opens beneath the actual place you were — so the walls you walk are drawn from the county you are in, and the door nearest you in the real world is always the <em>deepest</em> one available to you in the maze. Presence is the whole physics of it. Walk to a real place and the layer under it remembers you deeply; reach for a far one from your chair and what you leave behind is faint. Distance costs. Nearness is free.</p>
-  <p>This is why the way in asks where you are, and keeps asking. It is not tracking you for anyone's benefit but the map's — it needs to know where the doors are, because the doors are real coordinates and the atlas is the registry of every one that has surfaced. The game hands the same instrument that has always sorted people by their ground back to <em>you</em>: a map, and the standing to read it.</p>
+  <p class="lead">The Backrooms are not somewhere else. They are <em>here</em>, one layer down, and the maze knows exactly where your body is standing when you fall in — if you tell it.</p>
+  <p>Every descent can be tethered to real ground. The seam you drop through opens beneath the place you give it — so the walls you walk are drawn from that place, and the door nearest it in the real world is always the <em>deepest</em> one available to you in the maze. Presence is the whole physics of it. Walk to a real place and the layer under it remembers you deeply; reach for a far one from your chair and what you leave behind is faint. Distance costs. Nearness is free.</p>
+  <p>This is why the way in will take a place, if you choose to give it one — a pin you type yourself, once. It never reads where you are, and it does not keep asking; a place is only ever handed to it. The doors are real coordinates, and the atlas is the registry of every one that has surfaced. The game hands the same instrument that has always sorted people by their ground back to <em>you</em>: a map, and the standing to read it.</p>
   <figure class="reveal">
     <svg class="fig" viewBox="0 0 700 240" role="img" aria-label="diagram: a real address on the surface, with a seam opening directly beneath it into the layer below">
       <rect width="700" height="240" fill="#040302"/>
@@ -314,8 +329,8 @@
       <text x="350" y="138" font-family="Courier New" font-size="13" fill="#8a7f52" text-anchor="middle" letter-spacing="1">unsafe or dangerous for occupancy or use</text>
       <text x="350" y="160" font-family="Courier New" font-size="13" fill="#8a7f52" text-anchor="middle" letter-spacing="1">the public is warned to keep away</text>
       <text x="350" y="200" font-family="Courier New" font-size="12" fill="#5c5636" text-anchor="middle" letter-spacing="2">NOTICE 30150A · 2004 → —</text>
-      <g class="stampin"><text x="500" y="215" font-family="Courier New" font-size="26" fill="#a05a3a" text-anchor="middle" letter-spacing="3" style="opacity:.9">EXTENSION</text>
-      <rect x="410" y="190" width="180" height="36" fill="none" stroke="#a05a3a" stroke-width="2"/></g>
+      <g class="stampin"><text x="520" y="225" font-family="Courier New" font-size="26" fill="#a05a3a" text-anchor="middle" letter-spacing="3" style="opacity:.9">EXTENSION</text>
+      <rect x="430" y="200" width="180" height="36" fill="none" stroke="#a05a3a" stroke-width="2"/></g>
     </svg>
     <figcaption><a href="https://codes.baltimorecity.gov/us/md/cities/baltimore/code/building-codes/II/120" target="_blank" rel="noopener noreferrer">condemnation §120 — Baltimore City building code</a></figcaption>
   </figure>
@@ -377,7 +392,7 @@
       </g>
       <path d="M150,110 L200,100 L205,160 L150,150 Z" fill="rgba(0,0,0,.6)"/>
       <path d="M150,110 L200,100 L175,130 L150,150 Z" fill="rgba(201,186,114,.13)" stroke="rgba(201,186,114,.5)"/>
-      <text x="70" y="180" font-family="Courier New" font-size="10" fill="#5c5636">FORMSTONE — false stone, peeling to the flat wall behind</text>
+      <text x="115" y="172" font-family="Courier New" font-size="10" fill="#8a7f52" text-anchor="middle"><tspan x="115">FORMSTONE — false stone,</tspan><tspan x="115" dy="13">peeling to the flat wall behind</tspan></text>
       <!-- fake photographic window -->
       <rect x="430" y="26" width="150" height="118" fill="rgba(160,90,58,.10)" stroke="rgba(138,127,82,.5)"/>
       <g stroke="rgba(201,186,114,.5)" fill="rgba(201,186,114,.06)">
@@ -386,7 +401,7 @@
       </g>
       <path d="M558,44 L520,44 L558,82 Z" fill="#040302"/>
       <path d="M558,44 L530,52 L558,78 Z" fill="rgba(138,127,82,.3)" stroke="rgba(160,90,58,.7)"/>
-      <text x="505" y="180" font-family="Courier New" font-size="10" fill="#5c5636" text-anchor="middle">A PHOTOGRAPH OF A WINDOW — curling at the corner</text>
+      <text x="505" y="172" font-family="Courier New" font-size="10" fill="#8a7f52" text-anchor="middle"><tspan x="505">A PHOTOGRAPH OF A WINDOW —</tspan><tspan x="505" dy="13">curling at the corner</tspan></text>
     </svg>
     <figcaption><a href="https://en.wikipedia.org/wiki/Formstone" target="_blank" rel="noopener noreferrer">Formstone</a> &nbsp;·&nbsp; <a href="https://www.baltimoresun.com/2004/06/12/illusions-of-occupancy/" target="_blank" rel="noopener noreferrer">"Illusions of Occupancy" — Baltimore Sun</a></figcaption>
   </figure>
@@ -527,13 +542,59 @@ nobody comes out. that is not the same as gone.
   <p>It resolves to an instruction, not an answer — a pointer to the one instrument inside the maze that reads the ledger aloud. Follow it: descend to the <b>deep stacks</b> (levels 2–3), carry a <b>radio</b>, and tune it. It will not talk to you. It will read a list, in slow numbers, counting down.</p>
 
   <h2 style="font-size:clamp(18px,3vw,24px);margin-top:34px">iv · turning the count into a claim</h2>
-  <p>The station's numbers are a simple cipher, but they are <em>drifted</em> — the grain's weekly creep, offset into the count. The <a href="../manual/">field manual</a> keeps the drift, and the operation: <b>subtract the drift, then read A=1 … Z=26</b>. What you get is the claim itself — the exact words to type at a presence (press E), while your beacon is registered to the one status that never closed (<code>EXTENSION-30150A</code>). Walk in, file it, and hold the seam.</p>
+  <p>The station's numbers are a simple cipher, but they are <em>drifted</em> — the grain's weekly creep, offset into the count. The <a href="../manual/">field manual</a> keeps the drift, and the operation: <b>subtract the drift, then read A=1 … Z=26</b>. What you get is the claim itself — the exact words to type at a presence (press E), while your beacon is registered to the one status that never closed (<code>EXTENSION-30150A</code>). Walk in, file it, and hold the seam. The beacon reaches out only from a machine of your own — the desktop app; in a browser it goes quiet.</p>
   <a class="go" href="../play/">▸ into the maze — find the radio</a>
+  <a class="go" href="../manual/#descend">▸ the desktop app — how to descend</a>
 </section>
 
-<!-- 12 SOURCES -->
+<!-- 13 ADDENDUM -->
+<section id="addendum">
+  <div class="tag">§ 13 — addendum · appended 7 october 2026</div>
+  <h2>There is a form on the block now. Its footer calls it the form on the counter. There is no counter.</h2>
+  <p class="lead">It lies on open ground near the stoops, inside the hollow the 1961 plan left. Someone started filling it out. The copy Field Recovery holds is blank where the name should be.</p>
+  <div class="scrap">intake.
+name: ______.
+address: woodyear st. (there is no woodyear st.)
+status: ______. the pen ran out.
+the file cannot spell you. write your name where the dark can read it.
+<span class="sig-m">— the form on the counter</span></div>
+  <p>Nobody fills in the rest. The office does, later, from the way you came in, and tells you once, in the halls. The entries Field Recovery has collected all begin the same way and end in one of four columns:</p>
+  <div class="scrap">the file has you now. it has you at an address.
+the file has you now. it has your body at a pin.
+the file has you now. it cannot spell you.
+the file has you now. it opened a line on you.</div>
+  <p>Some carry a second sentence, which is not a column: <em>you dropped in. not all of you arrived.</em> Ask to have any of it corrected and the office answers the way it has always answered this block: <em>the file does not take amendments. it takes forms.</em></p>
+
+  <h3>The four words are the city's own.</h3>
+  <p>The status line is blank because the pen ran out. The office has the words anyway. They are the statuses the city prints beside every open vacant-building notice, and on 16 July 2026 its open data counted <b>451</b> of those notices in Harlem Park. Four of the words are the ones the maze files people under. Beside each, the line the maze keeps for it:</p>
+  <div class="ledger" role="list" aria-label="Harlem Park open vacant building notices by status, 16 July 2026">
+    <div class="row" role="listitem"><span class="w">notice mailed</span><span class="n">134</span><span class="s">a notice was mailed to you. you have not answered.</span></div>
+    <div class="row" role="listitem"><span class="w">extension</span><span class="n">283</span><span class="s">you can stop looking for the stairs now.</span></div>
+    <div class="row" role="listitem"><span class="w">compliance</span><span class="n">13</span><span class="s">the thirteen who complied — nobody remembers them. that was the point.</span></div>
+    <div class="row" role="listitem"><span class="w">follow up on litigation</span><span class="n">2</span><span class="s">write it where the dark can read it. then write it again.</span></div>
+  </div>
+  <div class="ledger-cap">harlem park · open notices · 16 july 2026 · the other nineteen: 14 approved, 5 legal reject</div>
+  <p>Counted again on 7 October 2026, the column under EXTENSION was seven shorter and the unanswered notices four fewer. The thirteen had not moved. Neither had the two. Notice 30150A still reads <b>EXTENSION</b>.</p>
+  <p>Every wanderer arrives under the first word, mailed and unanswered. Past that, the record will say only what the office does in plain view. It does not always hear you yet. It keeps hours: <em>the office is closed. come back tomorrow.</em> Each of the other three words closes in a way of its own. Whatever you file follows you into every run and every room after, and the office says what it has always said: <em>filed. the office will not confirm receipt.</em></p>
+
+  <h3>What the wanderers say about being minted thin.</h3>
+  <p>§ 09 puts it as arithmetic: a careless arrival mints a faint copy out of the last grain there is. The ones it happened to put it plainer. It happens on the way in, or on the way back up after a bad fall, and the walls tell them so:</p>
+  <div class="scrap">not all of you came back up.
+the green light goes through you. the crack it opens is not for you.
+someone else who dropped in. they wave. you can see the wall through them too.</div>
+  <p>The thin say the light is not the friend it was, and that the things lose hold of them easily. So do their friends: on other screens they come through faint. Film is a witness: <em>someone has evidence of you. you are harder to erase.</em> The ones who came back whole all quote the same sentence about how — <em>you set both feet and mean it. your whole weight arrives.</em> — and the same one after it: <em>you are as here as anyone.</em></p>
+
+  <h3>The roll call is read aloud now.</h3>
+  <p>§ 10 ended on an image: the individual SOS was always a roll call of the living. The halls keep one. Two notes, at a pitch that belongs to whoever made them; the hall counts who answered and says the number back plainly: <em>one. just you.</em> · <em>two of you, counting yourself.</em> · <em>more of you than you can count.</em> It also notices who stops: <em>it has been a while since</em> [a name]<em>. the hall is quiet.</em></p>
+  <p>Near the surface, for anyone who has answered the notice with a word, the radio gives up its crackle and reads the floor's own count of open files. When this addendum was filed, it read the same line on every floor near the surface: <em>the station reads the floor. nothing is filed here.</em></p>
+  <p>When someone goes down where a friend can reach them, the count is done by hand. Somebody kneels, keeps their light on them, and holds still. The record keeps the two lines that end it.</p>
+  <p class="say">you are counted. you come back.<br>— or —<br>nobody came.</p>
+  <a class="go" href="../manual/#file">▸ how the file reads you, in the field manual</a>
+</section>
+
+<!-- 14 SOURCES -->
 <section id="sources">
-  <div class="tag">§ 13 — where the record lives</div>
+  <div class="tag">§ 14 — where the record lives</div>
   <h2>None of the paper is invented. Here is where each instrument is on file.</h2>
   <p>The Backrooms is fiction. The block is not. Every historical instrument the record leans on is public and citable — the maps, the plans, the notices, the court filings. Go read the real thing:</p>
   <div class="src-list">
@@ -552,6 +613,10 @@ nobody comes out. that is not the same as gone.
     <a class="src-item" href="https://codes.baltimorecity.gov/us/md/cities/baltimore/code/building-codes/II/120" target="_blank" rel="noopener noreferrer">
       <div class="n">Condemnation — Baltimore City building code §120</div>
       <div class="u">codes.baltimorecity.gov — the notice, and what "keep away" means in law</div>
+    </a>
+    <a class="src-item" href="https://geodata.baltimorecity.gov/egis/rest/services/Housing/VBN_Service/MapServer/0" target="_blank" rel="noopener noreferrer">
+      <div class="n">Vacant Building Notices — Baltimore City open data</div>
+      <div class="u">geodata.baltimorecity.gov — every open notice, its date and its status; 30150A is still on it</div>
     </a>
     <a class="src-item" href="https://www.justice.gov/archives/opa/pr/justice-department-reaches-settlement-wells-fargo-resulting-more-175-million-relief" target="_blank" rel="noopener noreferrer">
       <div class="n">U.S. DOJ — Wells Fargo fair-lending settlement</div>
