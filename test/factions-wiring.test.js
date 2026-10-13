@@ -1299,8 +1299,8 @@ describe('I10 (W5): the whistle — the C edge, your call, a friend\'s, the roll
     const readme = read('../README.md'), manual = read('../docs/manual.html')
     expect(readme).toMatch(/^\| x · set down \| [^\n]*\r?\n\| c · whistle \| call out — a two-note whistle the floor and your friends hear; the things hear it too \|$/m)
     expect(readme).toContain('**the whistle (c).**')
-    expect(manual).toContain('<span class="k"><kbd>C</kbd></span><span class="d"><b>whistle</b>')
-    expect(manual).toContain('<h3 style="font-size:15px">Call out</h3>')
+    expect(manual).toContain('<div class="cap"><kbd>C</kbd></div><div class="kdesc"><b>Whistle.</b>')
+    expect(manual).toContain('<div class="card"><div class="h">call out</div>')
     for (const s of [NO_ANSWER_LINE, ECHO_LINE, countLine(1), countLine(2), countLine(7), countLine(40)]) { expect(s).toBe(s.toLowerCase()); expect(s).not.toContain('!') }
   })
 })
@@ -1835,15 +1835,16 @@ describe('I11 / I12: the README and the field manual say what a cache, a friend\
     for (const doc of [readme, manual]) {
       expect(doc).not.toContain('only what m. wrote')
       expect(doc).not.toContain('the water here is sour.')
-      expect(doc).toContain('once the pages you have read hold six of the twelve phrases, the card offers only words from those.')
     }
+    expect(readme).toContain('once the pages you have read hold six of the twelve phrases, the card offers only words from those.')
+    expect(manual).toContain('the more of those pages you read, the more of the record you will find you can say.')   // the manual keeps the narrowing a felt thing
     expect(readme).toMatch(/^\| l \| flashlight on \/ off/m)
     for (const s of ['**leave a word.**', '*f · take the bandage · left by maddie*', '**a friend\'s light (l).**', '**push for each other (space).**', '**evidence (the polaroid).**', '**down, not dead.**']) expect(readme).toContain(s)
     expect(readme).toContain(EVIDENCE_LINE.split('. ')[0])
   })
   it('the manual: X sets down with a word, L in a friend\'s light, the cache notice, the three co-op panels; the stale lines are gone', () => {
-    expect(manual).toContain('<span class="k"><kbd>X</kbd></span><span class="d"><b>set down</b> — and leave a word with it, if you like</span>')
-    for (const s of ['<h3>Leave a word</h3>', '<h3 style="font-size:15px">Share the light</h3>', '<h3 style="font-size:15px">Push for each other</h3>', '<h3 style="font-size:15px">Evidence</h3>']) expect(manual).toContain(s)
+    expect(manual).toContain('<div class="cap"><kbd>X</kbd></div><div class="kdesc"><b>Set down</b> what you hold — and leave a word with it, if you like.')
+    for (const s of ['<h3 id="caches">Setting things down — caches</h3>', '<div class="h">share the light</div>', '<div class="h">push for each other</div>', '<div class="h">evidence</div>']) expect(manual).toContain(s)
     expect(manual).not.toContain('wake where you fell in')
     expect(manual).not.toContain('The floor you left does not remember you.')
   })
@@ -2057,17 +2058,17 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
     expect(readme).toMatch(/^\| your file \| [^\n]*\*\*request a new notice\*\* \|$/m)
     expect(readme).toMatch(/^\| enter \| [^\n]*`\/status`/m)
     expect(manual).toContain('<section id="file">')
-    for (const s of ['<h2>The file has you now</h2>', '<h3 style="font-size:15px">The stand</h3>', '<span class="mono">/status</span>', '<h3>Compliance</h3>']) expect(manual, s).toContain(s)
-    expect(manual.indexOf('<section id="file">')).toBeLessThan(manual.indexOf('<section id="coop">'))
-    for (const doc of [sec, manual.slice(manual.indexOf('<section id="file">'), manual.indexOf('<section id="coop">'))]) expect(doc).not.toContain('!')
+    for (const s of ['<h2>Somewhere above the drop ceiling there is an office, and it keeps a file on you.</h2>', '<div class="h">the stand</div>', '<code>/status</code>', '<div class="h">compliance</div>']) expect(manual, s).toContain(s)
+    expect(manual.indexOf('<section id="file">')).toBeLessThan(manual.indexOf('<section id="together">'))
+    for (const doc of [sec, manual.slice(manual.indexOf('<section id="file">'), manual.indexOf('<section id="together">')).replace(/<!--[\s\S]*?-->/g, '')]) expect(doc).not.toContain('!')
   })
   it('F13: the README\'s instruments and the manual\'s file section say the stillness rule, and the rule is what they say', () => {
     const readme = read('../README.md'), manual = read('../docs/manual.html')
     const inst = readme.slice(readme.indexOf('## your instruments'), readme.indexOf('## controls'))
-    expect(inst).toContain('once the file has you, the things hunt movement. stand still and make no sound, light and radio off, and after a breath they lose sight of you — until you move, call out, or push. if not all of you arrived, you vanish faster, light or no light.')
-    const file = manual.slice(manual.indexOf('<section id="file">'), manual.indexOf('<section id="coop">'))
-    expect(file).toContain('<p class="callout">Once the file has you, the things hunt movement. Stand still and make no sound, light and radio off, and after a breath they lose sight of you — until you move, call out, or push. If not all of you arrived, you vanish faster, light or no light.</p>')
-    expect(manual).toContain('“if the lights go out, stop moving. it hunts movement.”')                     // the soul's quote stays
+    expect(inst).toContain('once the file has you, the things hunt movement. stand still and make no sound, light and radio off, and after a breath they lose sight of you — until you move, call out, or push. if not all of you arrived, you vanish faster.')   // the thin's light is felt, not told
+    const file = manual.slice(manual.indexOf('<section id="file">'), manual.indexOf('<section id="together">'))
+    expect(file).toContain('<b>it hunts movement</b>. Stand still and make no sound, light and radio off, and after a breath the things lose sight of you — until you move, call out or push. Before the file has you, there is no hiding.')
+    expect(manual).toContain('<p class="say">if the lights go out, stop moving. it hunts movement.')                     // the soul's quote stays
     const hid = (r, c) => r.perception({ stillFor: 0, noiseFor: Infinity, flashlight: false, radioOn: false, litNear: false, ...c }).hidden
     const filed = rulesFor('tenant', false), thin = rulesFor('tenant', true)
     expect([hid(LEGACY, { stillFor: 99 }), hid(filed, { stillFor: 1.9 }), hid(filed, { stillFor: 2 })]).toEqual([false, false, true])   // after a breath, once filed
@@ -2184,7 +2185,7 @@ describe('I15: the factions wave, closed', () => {
       expect(controls, k).toMatch(new RegExp(`^\\| ${k.replace(/[()]/g, '\\$&')} \\| `, 'm'))
     expect(html).toContain('<span>c whistle</span>')
     expect(html).toContain('<span>x set down</span>')
-    expect(html).toContain('<span>mouse look</span> · <span>space ward</span> · <span>f take / no-clip</span>')   // the hint row teaches the ward too
+    expect(html).toContain('<span>mouse look</span> · <span>space ward (hold to charge)</span> · <span>f take / no-clip</span>')   // the hint row teaches the ward too, and that holding it charges
   })
 
   it('README settings: every control in the settings panel has its row, and the file\'s', () => {
@@ -2211,9 +2212,9 @@ describe('I15: the factions wave, closed', () => {
   })
 
   it('the field manual: the map, the next track, the search and the kneel, the touch buttons, the block, the compass that points at what you have seen', () => {
-    const controls = manual.slice(manual.indexOf('<section id="controls">'), manual.indexOf('<section id="hud">'))
+    const controls = manual.slice(manual.indexOf('<section id="hands">'), manual.indexOf('<section id="screen">'))
     for (const s of ['<kbd>Tab</kbd>', '<kbd>N</kbd>', '<b>search</b>', '<b>kneel</b>', '<b>CALL</b> (C)']) expect(controls, s).toContain(s)
-    expect(manual).toContain('LEVEL ∅ · THE BLOCK')
+    expect(manual).toContain('level ∅ · the block</div>')
     expect(manual).not.toContain('always points to the nearest exit')
     expect(manual).not.toContain('Where everyone begins.')
     expect(manual).not.toContain('✕ discard')
