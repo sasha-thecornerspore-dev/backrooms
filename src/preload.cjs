@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('backrooms', {
   getVersion: () => ipcRenderer.invoke('get-version'),
   savePhoto: (dataUrl) => ipcRenderer.invoke('save-photo', dataUrl),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  copyInvite: (url) => ipcRenderer.invoke('copy-invite', url),
   fireBeacon: (payload) => ipcRenderer.invoke('fire-beacon', payload),
   logError: (msg) => ipcRenderer.send('renderer-log', msg),
 })

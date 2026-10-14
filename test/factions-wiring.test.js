@@ -67,7 +67,7 @@ const loopAt = game.indexOf('function loop(ts) {')
 const buildBody = slice('function buildLevel(index, at = null) {', 'const fader = createFader(')
 const travelBody = slice('function travel(way) {', '// die(): death.js resolves it')
 const dieBody = slice('function die(d = null) {', '// ── input ──')
-const resumeBody = slice('if (resume) {', 'buildLevel(mpClient ? 0 : 4)')
+const resumeBody = slice('if (resume) {', 'buildLevel(entryLevel(')   // (the fresh boot: the lobby first, the block by the front door)
 const ORIGIN_FILES = ['origin-intake.js', 'origin-rules.js', 'origin-tenant.js', 'origin-anchored.js', 'origin-processed.js', 'origin-unnamed.js', 'origin-thin.js']
 
 describe('I14a: the scheduler\'s one mutable config, the file, the floor\'s depth', () => {
@@ -149,7 +149,7 @@ describe('I5: the file (origin-*.js) in game.js', () => {
     expect(game).toMatch(/import \{ spellCard, refileWithName, spelledLine, ONLINE_LINE \} from '\.\/origin-unnamed\.js'/)
     expect(game).not.toMatch(/parseNameWish/)
     expect(game).toMatch(/import \{ RECOIL_DIST, RECOIL_SHAKE, RECOIL_LINE, CURE_LINE \} from '\.\/origin-thin\.js'/)
-    expect(game).toMatch(/export async function initGame\(canvas, \{ worldSeed = null, mpClient = null, anchor = null, resume = null, intakeCtx = null \} = \{\}\) \{/)
+    expect(game).toMatch(/export async function initGame\(canvas, \{ worldSeed = null, mpClient = null, anchor = null, resume = null, intakeCtx = null, room = null, frontDoor = false \} = \{\}\) \{/)   // (+ the room for /invite, the front door)
     expect(game).not.toMatch(/TODO\(integrate:W2\)/)
   })
   it('the state is declared once, before the loop; rules starts LEGACY and is only ever reassigned through rulesFor', () => {
@@ -322,7 +322,7 @@ describe('I5: the form, the doors, the soul, the console, the naming', () => {
   it('/intake re-opens the form or refuses an amendment; the fallback names it', () => {
     const cmd = slice('async function handleCommand(t) {', '// desktop: a fetch that never reached the site')
     expect(cmd).toMatch(/\} else if \(cmd === 'intake'\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const r = parseIntakeCommand\(arg\)\r?\n\s*if \(r\.refuse\) showMessage\(r\.refuse\)\r?\n\s*else openForm\(\)/)
-    expect(cmd).toContain("showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake or /status.')")   // (the ONE string, I13)
+    expect(cmd).toContain("showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status or /invite.')")   // (the ONE string, I13; /invite since the way in)
   })
   it('the naming re-file: an unnamed player\'s naming wish closes the dialog and asks how it is spelled; only a confirm files the name', () => {
     const fn = slice('function refileName(name) {', "document.getElementById('wish-cancel')")
@@ -353,23 +353,25 @@ describe('I5: index.html — the form\'s facts on the four start paths, the leas
   it('intakeFor builds { route, arrival: null, anchor, name } from the title screen; getName is declared above it', () => {
     expect(html).toContain('const intakeFor = (route, anchor) => ({ route, arrival: null, anchor: anchor || null, name: getName() })')
     expect(html.indexOf('const getName = ')).toBeLessThan(html.indexOf('const intakeFor = '))
-    expect(html.indexOf('const intakeFor = ')).toBeLessThan(html.indexOf('async function startSolo()'))
+    expect(html.indexOf('const intakeFor = ')).toBeGreaterThan(0)
+    expect(html.indexOf('const intakeFor = ')).toBeLessThan(html.indexOf('async function startSolo({ frontDoor = false } = {})'))   // (+ the front door)
   })
   it('solo, the relay, JOIN LAN, HOST LAN (host only when this app started the server) and CONTINUE each hand initGame an intake ctx', () => {
-    const solo = html.slice(html.indexOf('async function startSolo()'), html.indexOf('// one connection attempt at a time'))
+    const solo = html.slice(html.indexOf('async function startSolo({ frontDoor = false } = {})'), html.indexOf('// one connection attempt at a time'))
     expect(solo).toContain("const intakeCtx = intakeFor('solo', anchor)")
     expect(solo).toMatch(/\{ worldSeed: anchorSeed\(anchor\.lat, anchor\.lng\), anchor, intakeCtx \}\r?\n\s*: \{ intakeCtx \}/)
-    expect(html).toContain("async function startMultiplayer(serverUrl, roomId, statusEl, route = 'lan') {")
-    expect(html).toContain('await initGame(canvas, { worldSeed, mpClient, anchor, intakeCtx: intakeFor(route, anchor) })')
-    expect(html).toContain("await startMultiplayer(`ws://localhost:${port}`, room, startStatus, r ? 'host' : 'lan')")
+    expect(html).toContain("async function startMultiplayer(serverUrl, roomId, statusEl, route = 'lan', lanUrl = serverUrl) {")   // (+ the address /invite names on a LAN)
+    expect(html).toContain('await initGame(canvas, { worldSeed, mpClient, anchor, intakeCtx: intakeFor(route, anchor), room: { code: roomId, route, lan: route === \'online\' ? null : lanUrl } })')
+    expect(html).toContain("await startMultiplayer(`ws://localhost:${port}`, room, startStatus, r ? 'host' : 'lan', info.url || `ws://localhost:${port}`)")
     expect(html).toContain("startMultiplayer(url, room, null, 'lan')")
-    expect(html).toMatch(/startMultiplayer\(`\$\{RELAY_URL\}\/\?room=\$\{encodeURIComponent\(code\)\}`, code, document\.getElementById\('online-status'\), 'online'\)/)
+    expect(html).toMatch(/startMultiplayer\(`\$\{RELAY_URL\}\/\?room=\$\{encodeURIComponent\(c\)\}`, c, statusEl, 'online'\)/)   // (one joinOnline for the modal and an invite link)
+    expect(html).toContain("document.getElementById('online-connect').onclick = () => joinOnline(document.getElementById('online-room').value, document.getElementById('online-status'))")
     expect(html).toContain("const intakeCtx = savedRun.intakeCtx && typeof savedRun.intakeCtx === 'object' ? savedRun.intakeCtx : intakeFor('solo', anchor)")
     expect(html).toContain('await initGame(canvas, { worldSeed: savedRun.worldSeed ?? null, anchor, resume: savedRun, intakeCtx })')
   })
   it('the locate row carries the leash line; the console placeholder names /intake', () => {
     expect(html).toMatch(/<button id="btn-locate"[^\n]*\r?\n\s*<div id="leash-line" class="set-hint"[^>]*><\/div>/)
-    expect(html).toContain('/recover · /cases · /file … · /intake · /status)')   // (I13: /status landed)
+    expect(html).toContain('/recover · /cases · /file … · /intake · /status · /invite)')   // (I13: /status landed; /invite since the way in)
   })
 })
 
@@ -1990,7 +1992,9 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
   })
   it('/status, lifted and replayed: the file in one line — the word, the column, the closing\'s steps; the fallback is the ONE string', () => {
     const cmd = slice('async function handleCommand(t) {', '// desktop: a fetch that never reached the site')
-    expect(cmd).toMatch(/\} else if \(cmd === 'status'\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*showMessage\(fileLines\(\)\.slice\(0, -1\)\.join\(' · '\)\)\r?\n\s*\} else showMessage\('the file does not recognise that\. try \/recover, \/cases, \/file <answer>, \/intake or \/status\.'\)/)
+    // (since the way in, /invite sits between /status and the fallback, which names it)
+    expect(cmd).toMatch(/\} else if \(cmd === 'status'\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*showMessage\(fileLines\(\)\.slice\(0, -1\)\.join\(' · '\)\)\r?\n\s*\} else if \(cmd === 'invite'\) \{/)
+    expect(cmd).toMatch(/\} else showMessage\('the file does not recognise that\. try \/recover, \/cases, \/file <answer>, \/intake, \/status or \/invite\.'\)/)
     expect(count(/const fileLines = /g)).toBe(1)
     const line = game.match(/const fileLines = \(\) => [^\n]*/)[0]
     const status = (file, origin, claimFiled = false, beaconFired = false) => new Function('yourFileLines', 'closingProgress', 'file', 'origin', 'claimFiled', 'beaconFired',
@@ -2152,8 +2156,8 @@ describe('I15: the factions wave, closed', () => {
 
   it('the console and the card: the ONE fallback string, the placeholder\'s tail, the sealed page read from cardScrap', () => {
     expect(count(/the file does not recognise that\./g)).toBe(1)
-    expect(game).toContain("showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake or /status.')")
-    expect(html).toContain(' · /intake · /status)"')
+    expect(game).toContain("showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status or /invite.')")
+    expect(html).toContain(' · /intake · /status · /invite)"')
     expect(slice('function revealScrap() {', 'function redactScrap() {')).toMatch(/const scrap = cardScrap\r?\n[\s\S]*if \(!level\.cfg\.map\) fog\.pinThing\(level\.index, 'n:' \+ scrap\.key, 'note', scrap\.x, scrap\.y, true\)/)
   })
 

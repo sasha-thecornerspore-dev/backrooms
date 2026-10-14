@@ -163,10 +163,11 @@ export const LEVELS = [
   // A hand-authored real place: an inner-block park in Harlem Park, West
   // Baltimore, grounded in the record (see level-null-map.js). Outdoors —
   // open sky instead of a ceiling — enclosed by rowhouse backs of formstone,
-  // brick, plywood, black windows, and lit occupied houses. The shared front
-  // door of the whole game: you enter here and fall one-way into the lobby.
-  // Appended at index 4; the descent ring (0→1→2→3→0) never targets it, so it
-  // stays a one-time entrance OUTSIDE the ring.
+  // brick, plywood, black windows, and lit occupied houses. The front door:
+  // a run comes in here only when the player chooses it on the title screen
+  // (topology.js entryLevel; every other fresh run starts in the lobby), and
+  // falls one-way into the lobby. Appended at index 4; the descent ring
+  // (0→1→2→3→0) never targets it, so it stays an entrance OUTSIDE the ring.
   {
     id: '∅',
     name: 'level ∅ — the block',

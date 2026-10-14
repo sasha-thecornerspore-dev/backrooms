@@ -12,6 +12,7 @@ const h = vi.hoisted(() => ({
   appEvents: new Map(),
   updater: null,
   ready: null,
+  clipboard: [],
 }))
 
 vi.mock('electron', () => {
@@ -34,6 +35,7 @@ vi.mock('electron', () => {
     app, BrowserWindow,
     ipcMain: { handle: (ch, fn) => h.handlers.set(ch, fn), on: () => {} },
     shell: { openExternal: () => {} },
+    clipboard: { writeText: (t) => { h.clipboard.push(t) } },
   }
 })
 
@@ -125,5 +127,26 @@ describe('submit-wish (W8: the title from the first line, the labels from the tr
     const submit = h.handlers.get('submit-wish')
     expect(typeof submit).toBe('function')
     await expect(submit(null, 'make the fog warmer\nfiled under: EXTENSION · level 2', { origin: 'processed' })).resolves.toBeUndefined()
+  })
+})
+
+describe('copy-invite (growth-spec §1.6: the desktop copies an invite through main, and only our own /play/ link)', () => {
+  const OK = 'https://backrooms.thecornerspore.dev/play/?room=yellow-lamp-42'
+  it('copies a /play/ invite, the pin included, and says so', async () => {
+    const copy = h.handlers.get('copy-invite')
+    expect(typeof copy).toBe('function')
+    h.clipboard.length = 0
+    expect(await copy(null, OK)).toBe(true)
+    expect(await copy(null, OK + '&anchor=39.2854%2C-76.6083')).toBe(true)
+    expect(h.clipboard).toEqual([OK, OK + '&anchor=39.2854%2C-76.6083'])
+  })
+  it('anything else from the page is refused and nothing is written', async () => {
+    const copy = h.handlers.get('copy-invite')
+    h.clipboard.length = 0
+    for (const bad of ['https://evil.example/play/?room=x', 'hello', OK + 'x'.repeat(300), null, 42, { url: OK },
+      'http://backrooms.thecornerspore.dev/play/?room=x', 'https://backrooms.thecornerspore.dev.evil.example/play/?room=x']) {
+      expect(await copy(null, bad), String(bad)).toBe(false)
+    }
+    expect(h.clipboard).toEqual([])
   })
 })
