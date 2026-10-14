@@ -51,7 +51,7 @@ fi
 # a portal copy installs no service worker (growth-spec §3.2): it runs framed, and its origin (html-classic.itch.zone) is shared with
 # every other game there — where this worker's activate step would clear caches that are not ours
 if [ "$PLAY_TARGET" = itch ]; then
-  sed -e "s#if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {#if (false) {   // a portal build registers no service worker (tools/build-play.sh)#" \
+  sed -e "s#if ('serviceWorker' in navigator && location.protocol.startsWith('http') && window.top === window.self) {#if (false) {   // a portal build registers no service worker (tools/build-play.sh)#" \
     "$DEST"/index.html > "$DEST"/index.html.tmp
   mv "$DEST"/index.html.tmp "$DEST"/index.html
   grep -q "if (false) {   // a portal build registers no service worker" "$DEST"/index.html || { echo "the service-worker registration was not found to switch off" >&2; exit 1; }
@@ -126,7 +126,7 @@ self.addEventListener('fetch', (e) => {
     e.respondWith((async () => {
       try {
         const res = await fetch(req, { cache: 'no-cache' })
-        if (res.ok) { const c = await caches.open(CACHE); c.put(req, res.clone()) }
+        if (res.ok) (await caches.open(CACHE)).put(req, res.clone())
         return res
       } catch (err) {
         const cached = await caches.match(req)

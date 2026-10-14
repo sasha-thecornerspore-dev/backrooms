@@ -126,10 +126,10 @@ describe.skipIf(!BASH)('tools/build-play.sh, run (the knobs)', () => {
     expect(fs.existsSync(path.join(d, 'sw.js'))).toBe(false)
     const html = fs.readFileSync(path.join(d, 'index.html'), 'utf8')
     expect(html).toContain("if (false) {   // a portal build registers no service worker (tools/build-play.sh)")
-    expect(html).not.toContain("if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {")
+    expect(html).not.toContain("if ('serviceWorker' in navigator && location.protocol.startsWith('http') && window.top === window.self) {")
     // the site build keeps its worker, registered relatively
     const site = fs.readFileSync(path.join(tmp, 'site', 'index.html'), 'utf8')
-    expect(site).toContain("if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {")
+    expect(site).toContain("if ('serviceWorker' in navigator && location.protocol.startsWith('http') && window.top === window.self) {")
     expect(site).toContain("register('sw.js')")
   })
   it('an unknown PLAY_TARGET fails rather than guessing', () => {
