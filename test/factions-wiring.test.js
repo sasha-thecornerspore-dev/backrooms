@@ -801,14 +801,14 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     const bus = { freshPeersOnFloor: () => [{ id: 'f', name: 'maddie', st: 'ok', thin: false, seen: false, o: 'tenant', status: 'extension', aseed: null }], emit: (k, p) => busOut.push([k, p]) }
     let st = { sanity: 60, photoIdx: 0, thinFirstShot: true, shotOnLevel: true, leashCalm: 0, index: 1 }
     let out = shoot(st, { bus })
-    expect(out.said[0]).toMatch(/^the film develops maddie\. there is an address under them\./)
+    expect(out.said[0]).toMatch(/^the film develops maddie\. there is an address under them: woodyear st\. the street goes on\. not here\./)
     expect(busOut).toEqual([['photo', { of: 'f', x: 10.5, y: 10.5, lvl: 1 }]])
     // the same pin: their 'here' carries its tag, held against yours (never the seed)
     const pinned = { freshPeersOnFloor: () => [{ id: 'f', name: 'maddie', st: 'ok', thin: false, seen: false, o: 'tenant', status: 'extension', aseed: 4242 }], emit: () => {} }
     st = { sanity: 60, photoIdx: 0, thinFirstShot: true, shotOnLevel: true, leashCalm: 0, index: 1 }
     expect(shoot(st, { bus: pinned, anchor: { lat: 1, lng: 2 }, tag: 4242 }).said[0]).toMatch(/^the film develops maddie\. the film shows your pin\./)
     st = { sanity: 60, photoIdx: 0, thinFirstShot: true, shotOnLevel: true, leashCalm: 0, index: 1 }
-    expect(shoot(st, { bus: pinned, anchor: { lat: 1, lng: 2 }, tag: 4243 }).said[0]).toMatch(/^the film develops maddie\. there is an address under them\./)
+    expect(shoot(st, { bus: pinned, anchor: { lat: 1, lng: 2 }, tag: 4243 }).said[0]).toMatch(/^the film develops maddie\. there is an address under them: woodyear st\. the street goes on\. not here\./)
     // a lost soul in frame, and the door behind them when one is on your sheet
     st = { sanity: 60, photoIdx: 0, thinFirstShot: true, shotOnLevel: true, leashCalm: 0, index: 1 }
     out = shoot(st, { npc: { x: 14.5, y: 10.5 }, arrow: '↗' })

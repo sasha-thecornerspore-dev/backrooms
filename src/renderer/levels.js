@@ -171,7 +171,7 @@ export const LEVELS = [
   {
     id: '∅',
     name: 'level ∅ — the block',
-    sub: 'harlem park, west baltimore. a plan erased the street and left this.',
+    sub: 'harlem park, west baltimore. a plan cleared the street out of the block and left this.',
     config: {
       // ceiling is unused (sky replaces it); wall is the material-'0' fallback
       palette: { wall: '#B8A888', ceiling: '#B9B7AE', floor: '#5A5048', fog: '#9A968C' },
@@ -213,7 +213,7 @@ export const LEVELS = [
         'graded hazardous in 1937. the same year they patented the stone to cover it.',
         'the notice on the door says EXTENSION. it has said EXTENSION for twenty-one years.',
         'some of the windows have lights on. nobody comes out.',
-        'you are standing in woodyear street. woodyear street is not there.',
+        'you are standing where woodyear street ran through the block. it runs on somewhere else. not here.',
       ],
     },
   },

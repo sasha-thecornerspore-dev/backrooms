@@ -56,7 +56,7 @@ describe('(1) a friend in frame', () => {
       [{ aseed: PIN, origin: 'processed' }, 'the film shows your pin.'],
       [{ origin: 'processed' }, 'there is a stamp on them.'],
       [{ origin: 'anchored', aseed: PIN + 1 }, 'the film shows a pin, and a distance.'],
-      [{ origin: 'tenant' }, 'there is an address under them. the street is not there.'],
+      [{ origin: 'tenant' }, 'there is an address under them: woodyear st. the street goes on. not here.'],
       [{ origin: 'unnamed' }, 'the caption did not develop.'],
       [{ origin: null }, 'the file has not finished with them.'],
     ]
@@ -68,12 +68,12 @@ describe('(1) a friend in frame', () => {
       expect(r.sanity).toBe(8)
     }
     // without an anchor of your own a pin never matches; nor does the raw seed held against your tag
-    expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: anchorSeed(ANCHOR.lat, ANCHOR.lng), origin: 'tenant' }), anchor: ANCHOR, pinTag: PIN, sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them. the street is not there.')
-    expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: PIN, origin: 'tenant' }), sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them. the street is not there.')
+    expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: anchorSeed(ANCHOR.lat, ANCHOR.lng), origin: 'tenant' }), anchor: ANCHOR, pinTag: PIN, sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here.')
+    expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: PIN, origin: 'tenant' }), sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here.')
   })
   it('a letter develops beside them only when the claim develops', () => {
     const r = polaroidCaption(mkCtx({ subject: setSubject({ origin: 'tenant' }), photoIdx: 2 }))
-    expect(r.cap).toBe('the film develops maddie. there is an address under them. the street is not there. one letter developed beside them: "a".')
+    expect(r.cap).toBe('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here. one letter developed beside them: "a".')
     expect(r.glyphAdvance).toBe(true)
     const un = polaroidCaption(mkCtx({ rules: rulesFor('unnamed', false), subject: setSubject({ origin: 'tenant' }), photoIdx: 2 }))
     expect(un.glyphAdvance).toBe(false)

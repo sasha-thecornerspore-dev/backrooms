@@ -78,7 +78,7 @@ describe('formText — the form on the stoop', () => {
     const t = formText({ route: 'solo', arrival: null, anchor: null, name: '' }, undefined)
     expect(t[0]).toBe('intake.')
     expect(t).toContain('name: ______.')
-    expect(t).toContain('address: woodyear st. (there is no woodyear st.)')
+    expect(t).toContain('address: woodyear st. (the street goes on. the block does not.)')
     expect(t).toContain('status: ______. the pen ran out.')
     expect(t[t.length - 1]).toBe('the file cannot spell you. write your name where the dark can read it.')
     expect(formText({ name: 'wanderer' })).toContain('name: ______.')
