@@ -49,6 +49,14 @@ const WAYS = LEVELS.map((lvl, i) => {
 
 export function waysFor(index) { return WAYS[wrap(index)] }
 
+// ── the way in ──
+// Where a fresh run comes in (game.js boot): the lobby, for everyone — solo, anchored, online. The block (Level ∅, the real place) is a
+// door you choose on the title screen ('the front door'), and only solo: an online room starts together in the lobby. A saved run comes
+// back where it stood (levelmem.applyResume), the block included.
+export const LOBBY = 0
+export const BLOCK = LEVELS.findIndex((l) => l.id === '∅')
+export function entryLevel({ online = false, frontDoor = false } = {}) { return frontDoor && !online ? BLOCK : LOBBY }
+
 // ── the partner gate (child-side, pure) ──
 // A stairwell up exists on floor T at chunk (cx, cy) iff the PARENT floor S = T - 1 has an exit gate pass there (decor.js:104 with the
 // parent's salt and denom) AND T's own 1-in-3 sub-gate passes: so most holes have no stair beneath them, and no stair leads up to a

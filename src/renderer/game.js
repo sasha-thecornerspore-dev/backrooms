@@ -24,7 +24,7 @@ import { quiet, lureWithin, createCommit, QUIET_SECONDS } from './tactics.js'
 import { createWardCharger, wardOpts, WARD_TAP } from './ward.js'
 import { createTension, huntDelta, calmDelta } from './tension.js'
 import { FOV, HF } from './gfx-frame.js'
-import { waysFor, stairsPass, chunkMid, findOpenNear, arrivalFor, wayMessage, wayLabel } from './topology.js'
+import { waysFor, stairsPass, chunkMid, findOpenNear, arrivalFor, wayMessage, wayLabel, entryLevel } from './topology.js'
 import { createLevelMemory, applyResume } from './levelmem.js'
 import { resolveDeath, onArrive, wakeSpot } from './death.js'
 import { createFogMap, revealRadius } from './fogmap.js'
@@ -59,6 +59,7 @@ import { finaleGate, beaconDecision, deathDecision } from './compose-gates.js'
 import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame, createEvidence, photoOutcome, EVIDENCE_FLOOR, EVIDENCE_LINE, COUNTED_LINE } from './evidence.js'
 import { PHRASES, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from './caches.js'
 import { LIT_RANGE, litFriendNear, inCone, wardOutcome, wardLine, litOffLine } from './lightshare.js'
+import { inviteFor, recoverBase, RECOVER_LOCAL } from './site.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -221,7 +222,9 @@ export function frameDue(ts, pacer, fpsCap, gate, relayout) {
   return true
 }
 
-export async function initGame(canvas, { worldSeed = null, mpClient = null, anchor = null, resume = null, intakeCtx = null } = {}) {
+// room: { code, route, lan } of the room you joined (null solo: /invite reads it); frontDoor: a solo run that came in through the title
+// screen's front door, onto the block (topology.js entryLevel)
+export async function initGame(canvas, { worldSeed = null, mpClient = null, anchor = null, resume = null, intakeCtx = null, room = null, frontDoor = false } = {}) {
   const base = await loadConfig()
 
   // ── player state — PERSISTS across level transitions (hp + inventory carry) ──
@@ -642,7 +645,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     mem.setDropped(level.index, itemSys.getDropped())
     fadeThen(() => {
       buildLevel(way.target, fromC)
-      // the first way of a run files you (∅ -> the lobby solo; the lobby -> 1 online, where the form reaches you as this line): the arrival
+      // the first way of a run files you (the lobby -> 1; ∅ -> the lobby when you came in by the front door), the form reaching you as this line: the arrival
       // is the client's (fixed at join; 'walked' solo), the column is intake's, the layer is thin when you dropped into a room already live
       if (!filed) {
         intakeCtx.arrival = mpClient ? mpClient.arrival() : 'walked'
@@ -1292,11 +1295,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const rKey = (c, s) => 'cs.case.' + c + '.' + s
   const rSolved = (c, s) => { try { return localStorage.getItem(rKey(c, s)) === '1' } catch (e) { return false } }
   let recoverManifest = null, recoverIndex = null
-  // The desktop app runs from file://, where ../recover/ does not exist: there the live manifests are read from the public
-  // site, the same https origin /play/ is served from (GitHub Pages sends Access-Control-Allow-Origin: *). The PWA keeps
-  // its relative, same-origin path exactly as before.
-  const RECOVER_REMOTE = typeof location !== 'undefined' && location.protocol === 'file:'
-  const RECOVER_BASE = RECOVER_REMOTE ? 'https://backrooms.thecornerspore.dev/recover/cases/' : '../recover/cases/'
+  // Only the public site serves /recover/ beside /play/: the desktop app (file://), itch's CDN (where ../ escapes the project folder and
+  // itch answers 403) and localhost read the live manifests from the site itself (GitHub Pages sends Access-Control-Allow-Origin: *).
+  // On the site the path stays relative and same-origin, exactly as before (site.js recoverBase)
+  const RECOVER_BASE = recoverBase(typeof location === 'undefined' ? null : location)
+  const RECOVER_REMOTE = RECOVER_BASE !== RECOVER_LOCAL
   async function loadIndex() {
     if (recoverIndex) return recoverIndex
     const r = await fetch(RECOVER_BASE + 'index.json', { cache: 'no-store' })
@@ -1319,6 +1322,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const idx = await loadIndex()
     return idx.find(c => rNorm(c.id) === n || rNorm(c.code) === n || rNorm(c.id) === 'case' + n) || null
   }
+  let pinWarned = false   // '/invite pin' said what a pin in a link is (this session): the next one puts it in the link
   async function handleCommand(t) {
     const parts = t.slice(1).trim().split(/ +/)   // plain-space split — no escapes to lose in transit
     const cmd = parts[0], arg = parts.slice(1).join(' ')
@@ -1364,7 +1368,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         // the file as the office keeps it, in one line: the word you are under, how it has you, how far its closing has come (the settings
         // panel's 'your file' row reads the same lines)
         showMessage(fileLines().slice(0, -1).join(' · '))
-      } else showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake or /status.')
+      } else if (cmd === 'invite') {
+        // a link a friend opens straight into this room (site.js inviteFor): the room only, unless you ask for the pin — and the first
+        // '/invite pin' only warns. index.html copies it (the clipboard, the share sheet or the desktop bridge) and says how it went; the
+        // link is always on screen as well, so a refused clipboard still leaves it to copy by hand
+        const inv = inviteFor({ arg, room, anchor, warned: pinWarned })
+        pinWarned = inv.warned
+        if (!inv.url) { showMessage(inv.say, PRIO.discovery); return }
+        document.dispatchEvent(new CustomEvent('backrooms:invite', { detail: { url: inv.url, say: (t) => showMessage([inv.say, t, inv.url].filter(Boolean).join('\n'), PRIO.discovery) } }))
+      } else showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status or /invite.')
     } catch (e) {
       // desktop: a fetch that never reached the site (offline, DNS, blocked) says so plainly
       if (RECOVER_REMOTE && e && e.name === 'TypeError') showMessage('no signal. the file is kept online —\nconnect to the internet and try again.')
@@ -1374,7 +1386,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   if (mpClient) {
     mpClient.onChat(addChatLine)
     mpClient.onTyping(showTyping)
-    addChatLine('', 'connected — Enter to chat · /me to emote', true)
+    addChatLine('', 'connected — Enter to chat · /me to emote · /invite for a link', true)
   }
 
   // ── your file (status.js / closings.js): what the office has on you, as lines — the word you are under (and since when), how the file
@@ -2010,8 +2022,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     return null
   }
 
-  // ── boot: resume a saved run, else a fresh SOLO run enters through Level ∅
-  //    (the block — index 4), while online play starts in the lobby together. ──
+  // ── boot: resume a saved run, else a fresh run comes in through the lobby — solo, anchored or online. The block (Level ∅) is the title
+  //    screen's front door, solo only (topology.js entryLevel); a saved run on it comes back to it. ──
   if (resume) {
     // levelmem.applyResume owns the order: mem.import + playT + deaths -> buildLevel at the remembered arrival chunk -> the player fields ->
     // the decor / item scan at the resumed chunk -> the dispelled chunks -> the fog -> the settle. A v:1 save missing every new field loads
@@ -2051,8 +2063,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // visit; a save that does carry it is untouched (a resume is not a visit)
     if (!mem.get(level.index)?.visits) mem.arrive(level.index, r.spawnChunk ?? { cx: r.pcx, cy: r.pcy }, playT)
   } else {
-    buildLevel(mpClient ? 0 : 4); mem.arrive(level.index, spawnChunk, playT)   // solo: fall in through the block (∅); online: the lobby
-    if (getPref('solidBodies')) level.solid.settlePlayer(player)               // out of a prop the spawn cell may hug (the online lobby)
+    buildLevel(entryLevel({ online: !!mpClient, frontDoor })); mem.arrive(level.index, spawnChunk, playT)   // the lobby; the block by the front door
+    if (getPref('solidBodies')) level.solid.settlePlayer(player)               // out of a prop the spawn cell may hug (the lobby)
   }
   showMessage(level.cfg.levelName, PRIO.combat)
   // the room's frames reach the bus only now, with a floor to lay a cache on: what came before (the relay's kept caches, replayed straight

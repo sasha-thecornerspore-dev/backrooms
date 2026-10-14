@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, clipboard } from 'electron'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import os from 'os'
@@ -155,6 +155,11 @@ app.whenReady().then(() => {
       shell.openExternal(url)
       return true
     }
+    return false
+  })
+  // an invite (index.html shareInvite, the console's /invite): only ever our own /play/ address, never arbitrary text from the page
+  ipcMain.handle('copy-invite', (_e, url) => {
+    if (typeof url === 'string' && url.length <= 300 && url.startsWith('https://backrooms.thecornerspore.dev/play/?room=')) { clipboard.writeText(url); return true }
     return false
   })
   // beacon (T0 solo): fire the player's OWN registered webhook. All validation

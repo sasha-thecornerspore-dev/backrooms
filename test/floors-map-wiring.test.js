@@ -23,7 +23,7 @@ const slice = (from, to) => { const a = at(from), b = game.indexOf(to, a); expec
 
 describe('game.js: the real exported names, the re-exports, the placeholders gone', () => {
   it('imports topology / levelmem / death / fogmap / sightpins / mapcard / compass by their real names', () => {
-    expect(game).toMatch(/import \{ waysFor, stairsPass, chunkMid, findOpenNear, arrivalFor, wayMessage, wayLabel \} from '\.\/topology\.js'/)
+    expect(game).toMatch(/import \{ waysFor, stairsPass, chunkMid, findOpenNear, arrivalFor, wayMessage, wayLabel, entryLevel \} from '\.\/topology\.js'/)   // (+ entryLevel: the way in, lobby first)
     expect(game).toMatch(/import \{ createLevelMemory, applyResume \} from '\.\/levelmem\.js'/)
     expect(game).toMatch(/import \{ resolveDeath, onArrive, wakeSpot \} from '\.\/death\.js'/)
     expect(game).toMatch(/import \{ createFogMap, revealRadius \} from '\.\/fogmap\.js'/)
@@ -170,7 +170,7 @@ describe('game.js: the save and the resume', () => {
     expect(body).toContain('deaths = r.deaths')
     expect(game).not.toMatch(/buildLevel\(resume\.level \?\? 0\)/)
     // a fresh run records its first arrival so a return to the lobby reads as a return
-    expect(game).toMatch(/buildLevel\(mpClient \? 0 : 4\); mem\.arrive\(level\.index, spawnChunk, playT\)/)
+    expect(game).toMatch(/buildLevel\(entryLevel\(\{ online: !!mpClient, frontDoor \}\)\); mem\.arrive\(level\.index, spawnChunk, playT\)/)   // (the lobby first; the block by the front door)
   })
 })
 

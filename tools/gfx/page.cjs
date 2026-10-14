@@ -7,7 +7,8 @@
 //   --touch            touch emulation at the given --w/--h (a landscape phone: --w 844 --h 390 --touch --memory 4)
 //   --phone            390x844, touch emulation, (pointer: coarse), --memory GB device memory reported (default 2: skips the attract mode)
 //   --src <dir>        the renderer tree (default: ../../src/renderer relative to this file)
-//   --start            click SOLO and wait for the running game (a fresh solo run enters through Level ∅)
+//   --start            click SOLO and wait for the running game (a fresh solo run comes in through the lobby, level 0)
+//   --door             click the title screen's front door instead: a fresh solo run on Level ∅, the block. Implies --start.
 //   --level 0..3|null  start the game ON that level for real: a saved run is planted and CONTINUE is clicked
 //                      (null = level ∅). Implies --start. HUD theme = whatever the game sets for that level.
 //   --theme X          force document.body.dataset.level = X after the page is up ('0'..'3', '∅', or 'none' to remove)
@@ -74,7 +75,7 @@ const H = phone ? 844 : Number(val.h || 720)
 const outPng = val.out ? path.resolve(val.out) : null
 const srcDir = path.resolve(val.src || path.join(__dirname, '..', '..', 'src', 'renderer'))
 const levelArg = val.level
-const wantStart = flags.has('start') || levelArg !== undefined
+const wantStart = flags.has('start') || flags.has('door') || levelArg !== undefined
 const evals = val.eval || []
 const pumpN = Number(val.pump || 0)
 const errors = []
@@ -215,6 +216,7 @@ async function main() {
     // is expected here — nothing forces frames while we sleep or after freeze() — so it stays a warning.
     await exec(`if (!window.backrooms) window.backrooms = { logError: (m) => (/STALLED/.test(String(m)) ? console.warn : console.error)('[loop] ' + m) }; 0`)
     if (levelArg !== undefined) await exec(`document.getElementById('btn-continue').click()`)
+    else if (flags.has('door')) await exec(`document.getElementById('btn-front-door').click()`)
     else await exec(`document.getElementById('btn-solo').click()`)
     let up = false
     for (let i = 0; i < 150 && !up; i++) {

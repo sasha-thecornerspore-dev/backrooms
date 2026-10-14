@@ -4,7 +4,7 @@
 # Flattens the ../net/ imports (client.js from index.html, evbus.js from game.js) so everything lives in one
 # directory, giving clean relative paths that work at any mount point (/, /play/, etc).
 set -euo pipefail
-PLAY_SW_VERSION="${PLAY_SW_VERSION:-21}"
+PLAY_SW_VERSION="${PLAY_SW_VERSION:-22}"
 SRC="${1:?src dir}"      # .../backrooms/src
 DEST="${2:?dest dir}"    # .../play
 
@@ -71,7 +71,7 @@ const SHELL = [
   'dress.js', 'containers.js', 'haunts.js', 'papercard.js',
   'origin-intake.js', 'origin-rules.js', 'origin-tenant.js', 'origin-anchored.js', 'origin-processed.js', 'origin-unnamed.js', 'origin-thin.js',
   'compose-perception.js', 'stillness.js', 'compose-sanity.js', 'rollcall.js', 'downed.js', 'status.js', 'closings.js', 'docket.js',
-  'compose-polaroid.js', 'compose-radio.js', 'compose-wish.js', 'compose-gates.js', 'evidence.js', 'caches.js', 'lightshare.js',
+  'compose-polaroid.js', 'compose-radio.js', 'compose-wish.js', 'compose-gates.js', 'evidence.js', 'caches.js', 'lightshare.js', 'site.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
 ]
 self.addEventListener('install', (e) => e.waitUntil((async () => {
@@ -88,12 +88,13 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return
   if (new URL(req.url).origin !== self.location.origin) return
   if (new URL(req.url).pathname.includes('/recover/')) return   // trail manifests stay live — never cached
+  // a navigation with a query (an invite link, /play/?room=CODE) is the same page: matched ignoring the query, never stored once per code
   e.respondWith((async () => {
-    const cached = await caches.match(req)
+    const cached = await caches.match(req, req.mode === 'navigate' ? { ignoreSearch: true } : undefined)
     if (cached) return cached
     try {
       const res = await fetch(req)
-      if (res.ok) { const c = await caches.open(CACHE); c.put(req, res.clone()) }
+      if (res.ok && !(req.mode === 'navigate' && new URL(req.url).search)) { const c = await caches.open(CACHE); c.put(req, res.clone()) }
       return res
     } catch (err) {
       if (req.mode === 'navigate') {

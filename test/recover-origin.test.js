@@ -7,11 +7,17 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 
 const src = readFileSync(new URL('../src/renderer/game.js', import.meta.url), 'utf8')
+const site = readFileSync(new URL('../src/renderer/site.js', import.meta.url), 'utf8')
 
 describe('field console case manifests (PKG-6)', () => {
-  it('reads from the public https origin only when the page is file://', () => {
-    expect(src).toMatch(/const RECOVER_REMOTE = typeof location !== 'undefined' && location\.protocol === 'file:'/)
-    expect(src).toMatch(/const RECOVER_BASE = RECOVER_REMOTE \? 'https:\/\/backrooms\.thecornerspore\.dev\/recover\/cases\/' : '\.\.\/recover\/cases\/'/)
+  // (launch-fixes F7: not only file:// — itch's CDN 403s a ../ path and localhost has no /recover/, so the site's own https origin is read
+  // whenever the page is not on the site; site.js recoverBase is pinned in test/site.test.js)
+  it('reads from the public https origin whenever the page is not on the site (file://, itch, localhost)', () => {
+    expect(src).toMatch(/const RECOVER_BASE = recoverBase\(typeof location === 'undefined' \? null : location\)/)
+    expect(src).toMatch(/const RECOVER_REMOTE = RECOVER_BASE !== RECOVER_LOCAL/)
+    expect(site).toMatch(/export const RECOVER_SITE = SITE_ORIGIN \+ '\/recover\/cases\/'/)
+    expect(site).toMatch(/export const SITE_ORIGIN = 'https:\/\/backrooms\.thecornerspore\.dev'/)
+    expect(site).toMatch(/export const RECOVER_LOCAL = '\.\.\/recover\/cases\/'/)
   })
   it('every manifest fetch goes through RECOVER_BASE', () => {
     expect(src).not.toMatch(/fetch\('\.\.\/recover/)

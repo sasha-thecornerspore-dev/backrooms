@@ -3,7 +3,7 @@
 // any browser. Cross-origin requests (the Cloudflare multiplayer relay) are
 // never intercepted, so online play is unaffected. This file is only ever
 // registered over http(s); under Electron's file:// it is never loaded.
-const CACHE = 'backrooms-pwa-v10'
+const CACHE = 'backrooms-pwa-v11'
 const SHELL = [
   '/renderer/index.html',
   '/renderer/game.js', '/renderer/touch.js', '/renderer/scraps.js', '/renderer/events.js', '/renderer/anchor.js', '/renderer/items.js', '/renderer/tactics.js', '/renderer/save.js',
@@ -22,7 +22,7 @@ const SHELL = [
   '/renderer/compose-perception.js', '/renderer/stillness.js', '/renderer/compose-sanity.js', '/renderer/rollcall.js', '/renderer/downed.js',
   '/renderer/status.js', '/renderer/closings.js', '/renderer/docket.js',
   '/renderer/compose-polaroid.js', '/renderer/compose-radio.js', '/renderer/compose-wish.js', '/renderer/compose-gates.js', '/renderer/evidence.js',
-  '/renderer/caches.js', '/renderer/lightshare.js',
+  '/renderer/caches.js', '/renderer/lightshare.js', '/renderer/site.js',
   '/net/client.js', '/net/evbus.js', '/settings.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png',
 ]
@@ -47,12 +47,13 @@ self.addEventListener('fetch', (e) => {
   const req = e.request
   if (req.method !== 'GET') return
   if (new URL(req.url).origin !== self.location.origin) return // relay/api pass straight through
+  // a navigation with a query (an invite link, ?room=CODE) is the same page: matched ignoring the query, and never stored once per code
   e.respondWith((async () => {
-    const cached = await caches.match(req)
+    const cached = await caches.match(req, req.mode === 'navigate' ? { ignoreSearch: true } : undefined)
     if (cached) return cached
     try {
       const res = await fetch(req)
-      if (res.ok) { const c = await caches.open(CACHE); c.put(req, res.clone()) }
+      if (res.ok && !(req.mode === 'navigate' && new URL(req.url).search)) { const c = await caches.open(CACHE); c.put(req, res.clone()) }
       return res
     } catch (err) {
       if (req.mode === 'navigate') {

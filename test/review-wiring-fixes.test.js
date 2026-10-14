@@ -20,7 +20,7 @@ const buildBody = slice('function buildLevel(index, at = null) {', 'const fader 
 const travelBody = slice('function travel(way) {', '// die(): death.js resolves it')
 const dieBody = slice('function die(d = null) {', '// ── input ──')
 const loopBody = slice('function loop(ts) {', 'requestAnimationFrame(loop)   // ALWAYS reschedule')
-const resumeBody = slice('if (resume) {', 'buildLevel(mpClient ? 0 : 4)')
+const resumeBody = slice('if (resume) {', 'buildLevel(entryLevel(')   // (the fresh boot: the lobby first, the block by the front door)
 
 describe('W-R1 / RT-A / DS-R1: the items meet the new floor\'s walls, never null and never the old floor\'s', () => {
   it('buildLevel enters the items (and reads the vend memory) only after `level = {` stands, before the first decor / item scan', () => {
@@ -202,7 +202,7 @@ describe('DS-R4 / DS-R5 / FEEL-7: the resume and the fresh boot', () => {
     expect(withMem.mem.get(1).visits).toBe(3)
   })
   it('the fresh boot settles the spawn out of any body it hugs', () => {
-    expect(game).toMatch(/buildLevel\(mpClient \? 0 : 4\); mem\.arrive\(level\.index, spawnChunk, playT\)[^\n]*\r?\n\s*if \(getPref\('solidBodies'\)\) level\.solid\.settlePlayer\(player\)/)
+    expect(game).toMatch(/buildLevel\(entryLevel\(\{ online: !!mpClient, frontDoor \}\)\); mem\.arrive\(level\.index, spawnChunk, playT\)[^\n]*\r?\n\s*if \(getPref\('solidBodies'\)\) level\.solid\.settlePlayer\(player\)/)
   })
 })
 
