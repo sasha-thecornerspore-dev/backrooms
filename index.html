@@ -15,19 +15,21 @@
 <meta property="og:title" content="THE BACKROOMS">
 <meta property="og:description" content="you have no-clipped out of reality. a horror maze you can play in your browser, a map where its paper trail touches the ground, and cases waiting for a reader. if you can read this, you have the gift.">
 <meta property="og:url" content="https://backrooms.thecornerspore.dev/">
-<meta property="og:image" content="https://backrooms.thecornerspore.dev/og/play-v1.jpg">
+<meta property="og:image" content="https://backrooms.thecornerspore.dev/og/play-v2.jpg">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="The title screen of The Backrooms over a dim yellow corridor: solo, play online, join lan, host lan, and a field for a map pin.">
+<meta property="og:image:alt" content="The title screen of The Backrooms over a dim yellow corridor: a field for a map pin, solo, play online, and the front door.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="THE BACKROOMS">
 <meta name="twitter:description" content="you have no-clipped out of reality. play it in your browser, no install. if you can read this, you have the gift.">
-<meta name="twitter:image" content="https://backrooms.thecornerspore.dev/og/play-v1.jpg">
-<meta name="twitter:image:alt" content="The title screen of The Backrooms over a dim yellow corridor.">
+<meta name="twitter:image" content="https://backrooms.thecornerspore.dev/og/play-v2.jpg">
+<meta name="twitter:image:alt" content="The title screen of The Backrooms over a dim yellow corridor: a field for a map pin, solo, play online, and the front door.">
 <!-- the counter: GoatCounter, cookieless, on this page and the browser game only (never the desktop app, never the itch zip).
-     The path is fixed, so no query string is ever counted. The privacy line in the standing orders says so. -->
-<script>window.goatcounter={path:'/'}</script>
+     The counted path is fixed, but count.js always sends the address's query too (its 'q'), and no setting turns that off: so, as
+     /play/ does, this line takes a room code or a pin out of the address before the counter loads (anything else, ?ref= included, stays).
+     If the address cannot be rewritten, nothing is counted. The privacy line in the standing orders says so. -->
+<script>(function () { var s = location.search, ok = true; try { var q = new URLSearchParams(s); if (q.has('room') || q.has('anchor')) { q.delete('room'); q.delete('anchor'); var r = q.toString(); history.replaceState(history.state, '', location.pathname + (r ? '?' + r : '') + location.hash) } } catch (e) { ok = false } window.goatcounter = ok ? { path: '/' } : { path: '/', no_onload: true } })()</script>
 <script data-goatcounter="https://backrooms.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <style>
   :root{
@@ -1005,11 +1007,11 @@
       <summary><span>the descent, level by level</span><span class="arr" aria-hidden="true">▾</span></summary>
     <h3 class="levels-h" id="levels-h">the descent, as the game files it</h3>
     <ol class="levels" aria-labelledby="levels-h">
-      <li><span class="tube" style="--lc:#8C877A" aria-hidden="true"></span><span class="lv">level ∅ — the block</span><span class="ls">harlem park, west baltimore. a plan erased the street and left this.</span></li>
       <li><span class="tube" style="--lc:#E8E0C0" aria-hidden="true"></span><span class="lv">level 0 — the lobby</span><span class="ls">the hum of fluorescent light. damp carpet. no exit.</span></li>
       <li><span class="tube" style="--lc:#9E9A88" aria-hidden="true"></span><span class="lv">level 1 — habitable zone</span><span class="ls">concrete and dim service lights. something moved in the warehouse dark.</span></li>
       <li><span class="tube" style="--lc:#705C46" aria-hidden="true"></span><span class="lv">level 2 — pipe dreams</span><span class="ls">endless maintenance tunnels. steam, rust, and the dark between the pipes.</span></li>
       <li><span class="tube" style="--lc:#4C505A" aria-hidden="true"></span><span class="lv">level 3 — electrical station</span><span class="ls">transformers hum with current in the black. one door leads back up.</span></li>
+      <li><span class="tube" style="--lc:#8C877A" aria-hidden="true"></span><span class="lv">level ∅ — the block</span><span class="ls">behind the front door on the title screen, on purpose. harlem park, west baltimore. a plan erased the street and left this.</span></li>
     </ol>
     </details>
     <dl class="sheet">
@@ -1058,7 +1060,7 @@
       <li><h3><span class="no">2 ·</span> Open a case.</h3><p>Start with CASE D-8 — it is the gentlest; everything it asks is on the public record. Then try CASE L-22: it begins inside a very small book.</p><a class="alt" href="recover/?case=case-d8"><span>open CASE D-8&nbsp;▸</span></a></li>
       <li><h3><span class="no">3 ·</span> Read the map.</h3><p>Open the first door and read its strata down, newest to oldest.</p><a class="alt" href="atlas/#806-n-carey"><span>read the first door&nbsp;▸</span></a></li>
     </ol>
-    <p class="none">No ads, no trackers. One cookieless counter (<a href="https://www.goatcounter.com/">GoatCounter</a>) on this page and in the browser game, so I know whether anyone came. It counts a visit (which page, the site that sent you, your browser, screen size and country), sets no cookie, stores no IP address, and never sees a name, a wish or the chat. The page it counts is always this one or /play/, but its script sends the rest of the address along, so an invite link’s room code — and a pin, if you chose to put one in it — reaches it. The desktop app and the itch.io copy count nothing. Your solo run and your case progress stay where you play them. Online play, wishes and a phone’s short map link go through our server: it keeps each room’s world, answers a short link with only the two numbers, and slows floods by a salted hash of your address that it forgets within a day. A place you pin is never sent to the people you play with unless you put it in a link. The desktop app reaches out only for those, to check for its own updates, to fetch the cases, and to push a beacon you have pointed somewhere yourself. Wishes are posted publicly and a person reads every one, so put nothing real about yourself in one.</p>
+    <p class="none">No ads, no trackers. One cookieless counter (<a href="https://www.goatcounter.com/">GoatCounter</a>) on this page and in the browser game, so I know whether anyone came. It counts a visit (which page, the site that sent you, your browser and operating system, your language, screen width and country), sets no cookie, stores no IP address, and never sees a name, a wish or the chat. The page it counts is always this one or /play/, and an invite link’s room code and pin are taken out of the address before the counter loads, so no room code or pin is ever sent to it. The desktop app and the itch.io copy count nothing. Your solo run and your case progress stay where you play them. Online play, wishes and a phone’s short map link go through our server: it keeps each room’s world, answers a short link with only the two numbers, and slows floods by a salted hash of your address that it forgets within a day. A place you pin is never sent to the people you play with unless you put it in a link. The desktop app reaches out only for those, to check for its own updates, to fetch the cases, and to push a beacon you have pointed somewhere yourself. Wishes are posted publicly and a person reads every one, so put nothing real about yourself in one.</p>
   </section>
 </main>
 
@@ -1075,7 +1077,7 @@
     <li><a href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">desktop app · windows, macos, linux&nbsp;↗</a></li>
     <li><a href="https://github.com/sasha-thecornerspore-dev/backrooms">the source&nbsp;↗</a></li>
   </ul></nav>
-  <p class="lic"><a href="https://github.com/sasha-thecornerspore-dev/backrooms/blob/main/LICENSE">mit</a> · lore <a href="https://github.com/sasha-thecornerspore-dev/backrooms/blob/main/LICENSE-LORE.md">cc by-sa</a>, after the <a href="http://backrooms-wiki.wikidot.com/">backrooms wiki</a></p>
+  <p class="lic"><a href="play/LICENSE">mit</a> · lore <a href="play/LICENSE-LORE.md">cc by-sa</a>, after the <a href="http://backrooms-wiki.wikidot.com/">backrooms wiki</a></p>
   <p class="warn">you were not supposed to find this</p>
 </footer>
 

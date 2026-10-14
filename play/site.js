@@ -12,9 +12,10 @@ export const RECOVER_SITE = SITE_ORIGIN + '/recover/cases/'
 export const RESOLVE_TIMEOUT_MS = 8000
 
 // the lines of the way in
-export const ANCHOR_NOT_FOUND = "that place cannot be found. short links don't work yet: paste the full link from a computer's address bar, or the two numbers."
+export const ANCHOR_NOT_FOUND = "that place cannot be found. paste the full link from a computer's address bar, or the two numbers."
 export const ANCHOR_LOOKING = 'looking for that place…'
-export const PIN_WARNING = "a pin in a link is a place in a link. don't share your home."
+export const PIN_WARNING = "a pin in a link is a place in a link. don't share your home, and don't paste this on stream."   // growth-spec §1.1, both opt-ins
+export const PIN_PRESS_AGAIN = 'press again to send it with your place.'                // the PLAY ONLINE box's second press
 export const PIN_AGAIN = '/invite pin again puts it in the link.'
 export const NO_DOOR_LINE = 'no one can follow you here. play online and leave a door open.'
 export const NO_PIN_LINE = 'you came in without a pin. the link carries the room only.'
