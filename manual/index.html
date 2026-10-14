@@ -248,6 +248,7 @@
   footer .links{margin-top:14px;font-size:12px;letter-spacing:2px;line-height:2.2}
   footer .links a{color:var(--faint);margin:0 10px;border:0}footer .links a:hover{color:var(--y)}
   footer .hum{margin-top:22px;font-size:10px;letter-spacing:4px;color:var(--wall-deep);text-transform:uppercase}
+  footer .lic{margin-top:14px;font-size:11px;letter-spacing:1px;line-height:1.8;color:var(--faint)}footer .lic a{color:var(--dim);border-bottom-color:rgba(138,127,82,.4)}
   footer .warnline{margin-top:14px;font-size:10px;letter-spacing:4px;color:var(--faint);text-transform:uppercase}
 </style>
 </head>
@@ -313,26 +314,30 @@
 <!-- ───────────────────────────── 02 ───────────────────────────── -->
 <section id="begin">
   <div class="tag">§ 02 — how a run begins</div>
-  <h2>Alone, you open your eyes outside. Together, you wake in the lobby.</h2>
-  <p>A <b>solo</b> run begins on <b>Level ∅</b>, the block: a real inner-block park in Harlem Park, West Baltimore, under a flat grey sky. Nothing hunts there. There is a form lying on open ground, and there is one gap that leads down. Once you take it you cannot come back. An <b>online</b> or <b>LAN</b> run skips the block entirely and starts everyone together in the lobby, Level 0.</p>
-  <p>From the lobby the way is down: 0, then 1, then 2, then 3. The bottom floor has a door that climbs back out to the lobby, so the descent is a ring, not a ladder. The block sits outside the ring. You pass through it once.</p>
+  <h2>You wake in the lobby. The block is behind the front door.</h2>
+  <p>Every run begins in the lobby, Level 0: yellow wallpaper, damp carpet, the hum. Solo or online, pinned or not, nothing hunts you there. Online and <b>LAN</b> runs start everyone there together.</p>
+  <p><b>Level ∅</b>, the block, is reached on purpose. Under the title's buttons sits a quiet line, <b>the front door</b>, and it starts a solo run outside instead: a real inner-block park in Harlem Park, West Baltimore, under a flat grey sky. Nothing hunts there either. There is a form lying on open ground, and there is one gap that leads down. Once you take it you cannot come back.</p>
+  <p>From the lobby the way is down: 0, then 1, then 2, then 3. The bottom floor has a door that climbs back out to the lobby, so the descent is a ring, not a ladder. The block sits outside the ring. You pass through it once, if you choose to.</p>
   <p class="say">level 0. somewhere. you are here.<span class="who">— the title screen</span></p>
 
   <h3>The title screen</h3>
   <p>A slow camera drifts down a lobby corridor behind the title. It is the same corridor for everyone. Under the placard:</p>
   <div class="keys">
     <div class="krow"><div class="cap">name</div><div class="kdesc"><b>Your name</b>, up to 24 characters, remembered between sessions. It becomes your name in the chat (with its own colour), the pitch of your whistle, the signature on anything you leave behind, and the first line of a form someone else will fill in. Leave it blank and you are <code>wanderer</code>. The office writes down what you give it — and what you do not.</div></div>
-    <div class="krow"><div class="cap">SOLO ▶</div><div class="kdesc"><b>A fresh solo run</b>, starting on the block. If you already have a solo save, this <b>overwrites it</b> on its first auto-save, without asking. Use CONTINUE if you meant to go back.</div></div>
-    <div class="krow"><div class="cap">CONTINUE ▶</div><div class="kdesc"><b>Resume your solo run</b> — same world, same place, same hands, same map. Shown only when a solo save exists. If something now stands where you stood: <i>you woke somewhere slightly else.</i></div></div>
+    <div class="krow"><div class="cap">no-clip from a real place</div><div class="kdesc"><b>The anchor field</b>, above the buttons: <i>paste a google maps link — that place becomes the maze's seed.</i> Leave it empty and the maze is nobody's. A full link, a dropped pin's link, a phone's short share link, or <code>lat,lng</code>. The line under it answers as you type: <i>anchored — you will fall through …</i>, <i>looking for that place…</i> or <i>that place cannot be found</i>. See below.</div></div>
+    <div class="krow"><div class="cap">SOLO ▶</div><div class="kdesc"><b>A fresh solo run</b>, starting in the lobby. If you already have a solo save, this <b>overwrites it</b> on its first auto-save, without asking. Use CONTINUE if you meant to go back.</div></div>
+    <div class="krow"><div class="cap">CONTINUE ▶</div><div class="kdesc"><b>Resume your solo run</b> — same world, same place, same hands, same map, the block too if that is where you were. Shown only when a solo save exists. If something now stands where you stood: <i>you woke somewhere slightly else.</i></div></div>
     <div class="krow"><div class="cap">PLAY ONLINE ⬡</div><div class="kdesc"><b>Play with friends anywhere</b> through a shared relay and a room code. See <a href="#online">online &amp; lan</a>.</div></div>
-    <div class="krow"><div class="cap">JOIN LAN · HOST LAN</div><div class="kdesc"><b>Play on the same network.</b> Hosting is desktop-only. See <a href="#online">online &amp; lan</a>.</div></div>
-    <div class="krow"><div class="cap">no-clip from a real place</div><div class="kdesc"><b>The anchor field</b> (optional). Paste a Google Maps link, or type <code>lat,lng</code>. The line under it answers as you type: <i>anchored — you will fall through …</i> or <i>that place cannot be found</i>. See below.</div></div>
+    <div class="krow"><div class="cap">JOIN LAN · HOST LAN</div><div class="kdesc"><b>Play on the same network.</b> Desktop app only: the browser and itch.io copies do not show them, because an https page cannot reach your network. See <a href="#online">online &amp; lan</a>.</div></div>
+    <div class="krow"><div class="cap">the front door</div><div class="kdesc"><b>The block.</b> A quiet line under the buttons — <i>a real block. read the form. find the gap.</i> — that starts a fresh solo run on Level ∅ instead of the lobby. Like SOLO, it replaces a solo save. Never online.</div></div>
+    <div class="krow"><div class="cap">a door was left open</div><div class="kdesc"><b>An invite.</b> Opened from a friend's link, the title says <i>a door was left open · room …</i> above one button, <b>JOIN ▶</b>. Your name stays yours. See <a href="#invite">invite links</a>.</div></div>
     <div class="krow"><div class="cap">⚙</div><div class="kdesc"><b>Settings</b>, available here and in play. See <a href="#settings">settings</a>.</div></div>
   </div>
 
   <h3 id="anchors">Anchors — falling through a real place</h3>
   <p>A pin seeds the world from that place. Everyone who pins the same spot falls into the same maze. While anchored, your level plate shows a <b>drift</b> — how far you have wandered from where this floor set you down — and settings gains <b>locate your body</b>. The building speaks of it on every floor: <i>your body remains at …</i>, and later, <i>you are very far from your body now.</i></p>
-  <p>Your pin is yours. It is never sent to the people you play with; they receive only a mark, enough to tell whether you came through the same place they did. Nothing in the game reads your location on its own. You type the pin, or you don't.</p>
+  <p>A phone's share button gives a short link with no place in it, so the game asks the relay where it leads: <i>looking for that place…</i> Only the link is sent, never the words a share sheet puts around it, and only the two numbers come back. A place that cannot be read says <i>that place cannot be found</i>, and the run starts without a pin.</p>
+  <p>Your pin is yours. It is never sent to the people you play with; they receive only a mark, enough to tell whether you came through the same place they did — unless you put it in an <a href="#invite">invite link</a> yourself. Nothing in the game reads your location on its own. You type the pin, or you don't.</p>
 
   <h3>Three kinds of world</h3>
   <div class="cards three">
@@ -393,9 +398,10 @@
     <tr><td class="k">move</td><td data-label="desktop app">WASD / arrows</td><td data-label="browser / installed web app">WASD / arrows</td><td data-label="phone / tablet">the stick</td></tr>
     <tr><td class="k">chat &amp; console</td><td data-label="desktop app">Enter</td><td data-label="browser / installed web app">Enter</td><td data-label="phone / tablet">keyboard only</td></tr>
     <tr><td class="k">beacon</td><td data-label="desktop app">fires</td><td data-label="browser / installed web app">goes quiet; sends nothing</td><td data-label="phone / tablet">no button</td></tr>
-    <tr><td class="k">a wish</td><td data-label="desktop app">leaves your machine and is read</td><td data-label="browser / installed web app">accepted, goes nowhere</td><td data-label="phone / tablet">accepted, goes nowhere</td></tr>
+    <tr><td class="k">a wish</td><td data-label="desktop app">posted, and read by a person</td><td data-label="browser / installed web app">posted, and read by a person</td><td data-label="phone / tablet">posted, and read by a person</td></tr>
     <tr><td class="k">photographs</td><td data-label="desktop app">saved as files</td><td data-label="browser / installed web app">the caption only</td><td data-label="phone / tablet">the caption only</td></tr>
-    <tr><td class="k">HOST LAN</td><td data-label="desktop app">starts a server</td><td data-label="browser / installed web app">joins one already on this machine</td><td data-label="phone / tablet">joins only</td></tr>
+    <tr><td class="k">an invite link</td><td data-label="desktop app">copied; opens in any browser</td><td data-label="browser / installed web app">copied</td><td data-label="phone / tablet">the share sheet</td></tr>
+    <tr><td class="k">HOST LAN · JOIN LAN</td><td data-label="desktop app">starts a server · joins one</td><td data-label="browser / installed web app">not offered</td><td data-label="phone / tablet">not offered</td></tr>
     <tr><td class="k">updates</td><td data-label="desktop app">the app updates itself</td><td data-label="browser / installed web app">picks up a new version the next time you open it (sometimes the time after)</td><td data-label="phone / tablet">the same as the browser</td></tr>
     <tr><td class="k">locate your body</td><td data-label="desktop app">opens the map</td><td data-label="browser / installed web app">does nothing</td><td data-label="phone / tablet">does nothing</td></tr>
   </table></div>
@@ -496,6 +502,7 @@
   <div class="tw stack"><table>
     <tr class="hd"><th>you type</th><th>what answers</th></tr>
     <tr><td class="k">/me waves</td><td data-label="what answers">an emote: <code>✦ name waves</code> (online)</td></tr>
+    <tr><td class="k">/invite</td><td data-label="what answers">online, copies a link to your room and prints it. <code>/invite pin</code> puts your pin in it — the second time you ask; see <a href="#invite">invite links</a>. On a LAN it names the address and room; alone, <i>no one can follow you here. play online and leave a door open.</i></td></tr>
     <tr><td class="k">/status</td><td data-label="what answers">one line: the word you are filed under, how the file has you, and your closing's steps. The same as settings → your file. For instance <code>notice mailed. unanswered. · the file has not written down how you came in.</code></td></tr>
     <tr><td class="k">/intake</td><td data-label="what answers">the intake form again, to read. It cannot be changed: <i>the file does not take amendments. it takes forms.</i></td></tr>
     <tr><td class="k">/recover</td><td data-label="what answers">the open Field Recovery case: its title, how many of its instruments you have read, and where the next one is read. On the level it names, a hint follows a moment later. Also <code>/case</code>.</td></tr>
@@ -503,7 +510,7 @@
     <tr><td class="k">/recover d8</td><td data-label="what answers">switch to another case.</td></tr>
     <tr><td class="k">/file &lt;answer&gt;</td><td data-label="what answers">checks your answer for the next unread instrument — <code>filed. … — read.</code> or <code>the file does not answer to that.</code> When the case is complete, it sends you to <a href="https://backrooms.thecornerspore.dev/recover/">the case board</a>.</td></tr>
   </table></div>
-  <p>Cases live online. Without a connection the clerk says <i>no signal. the file is kept online — connect to the internet and try again.</i> Your progress is kept where you play. In a browser, the case board on the site reads the same record; the desktop app keeps its own. The answers are out there, in the building and in the record. This manual does not have them.</p>
+  <p>Cases live online, on the site; the desktop app and the itch.io copy read them from there too. Without a connection the clerk says <i>no signal. the file is kept online — connect to the internet and try again.</i> Your progress is kept where you play. In a browser, the case board on the site reads the same record; the desktop app keeps its own. The answers are out there, in the building and in the record. This manual does not have them.</p>
   <p>Online, the room also speaks in lines that begin with a dash: someone <code>entered the level.</code>, someone <code>no-clipped deeper.</code>, someone <code>climbed back.</code>, someone <code>sets something down.</code>, someone <code>whistles · near ↗</code>.</p>
 </section>
 
@@ -573,11 +580,11 @@
       <rect width="700" height="300" fill="#040302"/>
       <g font-family="Courier New" font-size="11" letter-spacing="1">
         <rect x="200" y="14" width="300" height="30" fill="rgba(167,164,155,.10)" stroke="#a7a49b" stroke-dasharray="4 3"/>
-        <text x="216" y="34" fill="#d8d4c8">LEVEL ∅ · the block · you start here</text>
+        <text x="216" y="34" fill="#d8d4c8">LEVEL ∅ · the block · the front door</text>
         <path d="M350 44 v22" stroke="#a8d4ec" stroke-width="1.5"/><path d="M345 60 l5 7 5-7" fill="none" stroke="#a8d4ec"/>
         <text x="362" y="60" fill="#5c5636" font-size="10">one way · no return</text>
         <rect x="110" y="72" width="480" height="30" fill="rgba(201,186,114,.16)" stroke="rgba(201,186,114,.5)"/>
-        <text x="126" y="92" fill="#e7dc93">LEVEL 0 · the lobby · nothing hunts here</text>
+        <text x="126" y="92" fill="#e7dc93">LEVEL 0 · the lobby · you start here · nothing hunts here</text>
         <rect x="130" y="122" width="440" height="30" fill="rgba(158,154,136,.12)" stroke="rgba(158,154,136,.45)"/>
         <text x="146" y="142" fill="#c9c3ac">LEVEL 1 · habitable zone · things live here now</text>
         <rect x="150" y="172" width="400" height="30" fill="rgba(112,92,70,.18)" stroke="rgba(160,90,58,.5)"/>
@@ -604,7 +611,7 @@
     <div class="lvl wide"><div class="band" style="background:linear-gradient(180deg,#a7a49b,#6f6c66)">level ∅ · the block</div>
       <div class="body">
         <p class="line">harlem park, west baltimore. a plan erased the street and left this.</p>
-        <p>Every solo run begins here, outdoors, the one real place in the game: an inner-block park ringed by rowhouse backs — formstone, brick, plywood with a sprayed house number, front doors sealed with grey block, black windows, a few lit ones, marble stoops. Trash, tires, weeds. No ceiling, no things, no machines, no pages, no map. A form lies on open ground near the stoops; press <kbd>E</kbd> to read it. Someone started filling it out.</p>
+        <p>Reached on purpose, through the front door on the title screen, solo: outdoors, the one real place in the game — an inner-block park ringed by rowhouse backs — formstone, brick, plywood with a sprayed house number, front doors sealed with grey block, black windows, a few lit ones, marble stoops. Trash, tires, weeds. No ceiling, no things, no machines, no pages, no map. A form lies on open ground near the stoops; press <kbd>E</kbd> to read it. Someone started filling it out.</p>
         <p class="line">the front doors are sealed with block. the only way out is the gap the paperwork left.</p>
         <p>Walk to the gap and press <kbd>F</kbd> — <code>f · no-clip out — level 0</code>. Nothing leads back. Listen while you are here. The block has a few things to say about its doors, and about a street you are standing in that is not there. What it is, and why it is a real place, is the subject of <a href="https://backrooms.thecornerspore.dev/codex/">the record</a>.</p>
         <span class="down">↓ the gap the paperwork left — one way, into the lobby</span>
@@ -969,8 +976,8 @@
     <p><kbd>Enter</kbd> makes a new line; it does not send. <kbd>Esc</kbd> does nothing while the cursor is in the box. Use <b>submit</b> or <b>cancel</b>, or click outside the box first. And the world does not wait while you type.</p>
   </div>
   <p>Understand what this is. Your request is <em>received</em>. Whether it is <em>heard</em> is another matter, and not one the maze promises to settle in your favour. A wish is a door you knock on, not a lever you pull. Ask plainly. Ask for what you actually want. Then keep walking, because the answer, if it comes, comes on its own schedule.</p>
-  <p><b>Wishes are real.</b> From the desktop app, what you type leaves your machine and is read — by someone, or by the spirits. The spirits answer, or they don't. A wish that is granted changes the world, quietly, for everyone who plays the desktop app, in an update that follows: a colour, the fog, the hum, what lies around. The Backrooms never changes obviously. It drifts. In the browser, a wish is accepted and goes nowhere.</p>
-  <p>Because it is read, write it the way you would write on a wall: put nothing real about yourself in it.</p>
+  <p><b>Wishes are real.</b> From the desktop app, the browser or a phone, what you say to the wall is posted publicly, and a person reads it — every one. The spirits answer, or they don't. Some are granted, by hand, and a granted wish changes the world, quietly, for everyone: a colour, the fog, the hum, what lies around. It reaches the browser when the site is next updated and the desktop app in the update that follows. The Backrooms never changes obviously. It drifts.</p>
+  <p>Because it is posted and read, write it the way you would write on a wall: put nothing real about yourself in it.</p>
   <p>A presence also listens for names, from those the file could not spell; give it one and it will ask how that is spelled. And once the office can hear you, a presence is where you choose the word your file is kept under. See <a href="#file">the file</a>.</p>
   <p class="say">your request has been received. whether it is heard is another matter.</p>
 </section>
@@ -1000,7 +1007,7 @@
   </div>
 
   <h3>The filing</h3>
-  <p>Until your first way down, nothing is written. On the block the form lies on open ground near the stoops (<kbd>E</kbd> to read it, or <code>/intake</code> in the console anywhere). Then you take a way — off the block, or, online, off the lobby — and a few breaths after the floor says its name, a line arrives: <i>the file has you now.</i> The rest of that line says which column it wrote you into. Nobody chooses a column. The office decides <b>by how you came in</b>.</p>
+  <p>Until your first way down, nothing is written. <code>/intake</code> in the console reads the form anywhere; behind the front door, on the block, it lies on open ground near the stoops (<kbd>E</kbd>). Then you take your first way — the lobby's way down to level 1, or the gap off the block if you came in by the front door — and a few breaths after the floor says its name, a line arrives: <i>the file has you now.</i> The rest of that line says which column it wrote you into. Nobody chooses a column. The office decides <b>by how you came in</b>.</p>
   <p>The moment the file has you, the building changes in one way that matters at once: <b>it hunts movement</b>. Stand still and make no sound, light and radio off, and after a breath the things lose sight of you — until you move, call out or push. Before the file has you, there is no hiding.</p>
   <p class="say">it hunts movement. you remember that now.</p>
 
@@ -1070,8 +1077,18 @@
     <p>Type your <b>name</b> on the title screen, press <b>PLAY ONLINE ⬡</b>, choose a <b>room code</b> (up to 32 characters; the box starts with a random <code>room-…</code> you can keep), and press <b>ENTER ▶</b>. Empty the box and you join the one shared room called <code>default</code>, with every stranger who did the same. Share the code. Anyone who enters it falls into the same world — anywhere, no host, no setup.</p>
     <p>The first person in decides the world, and their pin with it; everyone after inherits it. An online run starts in the lobby and is <b>never saved</b>. How you arrive is written down.</p>
   </div>
+  <h3 id="invite">Invite links</h3>
+  <p>A room can be handed over as a link: <code>https://backrooms.thecornerspore.dev/play/?room=CODE</code>. Whoever opens it gets the title with <i>a door was left open · room CODE</i> and one button, <b>JOIN ▶</b>. The name field stays theirs; a link never chooses a name for anyone.</p>
   <div class="cards">
-    <div class="card"><div class="h">HOST LAN · desktop app</div><p>Starts a small server inside the app and joins it. A plate on your screen shows the address to give your friend — <code>HOSTING · JOIN LAN → ws://192.168.x.x:8765</code> — and the room, <code>backrooms</code>. In a browser this button can only join a server already running on the same machine.</p></div>
+    <div class="card"><div class="h">from the box</div><p>In the PLAY ONLINE box, <b>copy invite link</b> copies the link for the code in the field. On a phone it reads <b>send invite</b> and opens the share sheet. If the clipboard refuses, the link is shown, selected, to copy by hand.</p></div>
+    <div class="card"><div class="h">from the floor</div><p><code>/invite</code> in the console copies your room's link and prints it too. The desktop app copies the same web link, which opens in any browser; a friend on the desktop app can just type the code.</p></div>
+  </div>
+  <div class="warn">
+    <div class="h">⚠ a pin in a link</div>
+    <p>A link carries the room and nothing else unless you say so. The box's <b>include my place</b> is off every time the page opens and is never remembered; ticking it says at once <i>a pin in a link is a place in a link. don't share your home.</i> In the console, <code>/invite pin</code> says the same and copies nothing; ask a second time and the pin goes in. A link with a pin fills your friend's anchor field and adds <i>the first one in decides the world.</i> — it shapes the maze only if the room is new.</p>
+  </div>
+  <div class="cards">
+    <div class="card"><div class="h">HOST LAN · desktop app</div><p>Starts a small server inside the app and joins it. A plate on your screen shows the address to give your friend — <code>HOSTING · JOIN LAN → ws://192.168.x.x:8765</code> — and the room, <code>backrooms</code>. The browser and itch.io copies do not show HOST LAN or JOIN LAN: an https page cannot reach your network.</p></div>
     <div class="card"><div class="h">JOIN LAN</div><p>Opens a small form: the server address (it starts as <code>ws://localhost:8765</code>) and the room (<code>backrooms</code>). Type what your friend's plate says, on the same network, and press <b>ENTER ▶</b>.</p></div>
   </div>
   <p>A LAN room's world holds for a short while after the last person leaves. Each release also ships a standalone server, <code>backrooms-server.js</code>. Put it in a folder with a <code>package.json</code> that reads <code>{"type":"module","dependencies":{"ws":"^8"}}</code>, run <code>npm install</code>, then <code>node backrooms-server.js</code> (Node 22 or newer). It listens on port 8765. Start it with <code>EV_LOG=1</code> if you want words left in the room to wait for people who arrive later.</p>
@@ -1197,7 +1214,8 @@
   <div class="tag">§ 23 — the web version</div>
   <h2>The same building, with fewer windows to the outside.</h2>
   <p>The game also runs in a browser — the same v2.0.0 building as the desktop app. Add it as an app from your browser's menu and it opens landscape and full-screen and keeps playing offline. Your solo run is saved in that browser. When the site changes, it picks up the new version the next time you open it (sometimes the time after).</p>
-  <p>In a browser, the things that reach outside the game stay inside it: a wish is accepted and goes nowhere, photographs develop their caption but are not saved as files, the beacon goes quiet, HOST LAN can only join a server already running on the same machine, and software rendering and locate your body do nothing. On a phone or tablet, see <a href="#touch">touch</a>.</p>
+  <p>In a browser, fewer things reach outside the game. A wish is posted and read like any other. Photographs develop their caption but are not saved as files, the beacon goes quiet, HOST LAN and JOIN LAN are not offered, and software rendering and locate your body do nothing. On a phone or tablet, see <a href="#touch">touch</a>.</p>
+  <p>The browser game at <code>/play/</code> carries one cookieless counter, GoatCounter, so someone knows whether anyone came: a page view, no cookie, no IP address stored. This manual carries none, and neither do the desktop app or the itch.io copy. The <a href="https://backrooms.thecornerspore.dev/#orders">standing orders</a> on the site say exactly what it counts.</p>
   <p>The <a href="https://backrooms.thecornerspore.dev/recover/">case board</a> on the site shares its record with the <code>/recover</code> console in the same browser.</p>
 </section>
 
@@ -1244,7 +1262,7 @@
     <div class="krow"><div class="cap">testing your device</div><div class="kdesc">Add <code>?gfxbench=1</code> to the address in a browser for a minute-long benchmark instead of the title screen, or <code>?gfxstats=1</code> for a panel of numbers. For when someone asks you how your machine is doing.</div></div>
     <div class="krow"><div class="cap">the mouse won't look</div><div class="kdesc">Click the view. Chat, cards, requests, falling between floors and being laid down (online) all let go of it.</div></div>
     <div class="krow"><div class="cap">Esc won't close the request</div><div class="kdesc">The cursor is in the box. Use <b>cancel</b>, or click outside the box first.</div></div>
-    <div class="krow"><div class="cap">my friends can't hear me</div><div class="kdesc">Everyone needs the same release. On PLAY ONLINE, the relay may not have caught up yet; HOST LAN works.</div></div>
+    <div class="krow"><div class="cap">my friends can't hear me</div><div class="kdesc">Everyone needs the same release. On PLAY ONLINE, the relay may not have caught up yet; HOST LAN, in the desktop app, works.</div></div>
     <div class="krow"><div class="cap">my run is gone</div><div class="kdesc">SOLO ▶ overwrites the solo save. Online runs are never saved. A save in the browser does not carry into the desktop app, or the other way round.</div></div>
     <div class="krow"><div class="cap">i'm somewhere else</div><div class="kdesc"><i>you woke somewhere slightly else.</i> Something now stands where you saved. You have been moved to the nearest open floor.</div></div>
     <div class="krow"><div class="cap">the beacon does nothing</div><div class="kdesc">It fires only from the desktop app, and only once a target is set. Wait a few seconds between pushes.</div></div>
@@ -1265,6 +1283,7 @@
     <a href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">download</a>
   </div>
   <div class="hum">the humming never stops · survive the descent</div>
+  <div class="lic">code <a href="https://github.com/sasha-thecornerspore-dev/backrooms/blob/main/LICENSE">mit</a> · lore <a href="https://creativecommons.org/licenses/by-sa/3.0/">cc by-sa 3.0</a>, after the <a href="http://backrooms-wiki.wikidot.com/">backrooms wiki</a> · <a href="https://github.com/sasha-thecornerspore-dev/backrooms/blob/main/LICENSE-LORE.md">what is which</a></div>
   <div class="warnline">you were not supposed to find this</div>
 </footer>
 

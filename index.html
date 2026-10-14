@@ -423,6 +423,8 @@
   footer nav ul{list-style:none;display:flex;flex-wrap:wrap;justify-content:center;gap:0 6px;margin-top:12px}
   footer nav a{display:inline-flex;align-items:center;min-height:44px;padding:0 8px;font-size:13px;letter-spacing:1px;color:var(--dim)}
   footer nav a:hover{color:var(--y)}
+  footer .lic{margin-top:18px;font-size:12px;letter-spacing:1px;color:var(--dim);text-wrap:balance}
+  footer .lic a{display:inline-block;padding:12px 2px;margin:-12px -2px;color:var(--dim);text-decoration:underline;text-underline-offset:3px}footer .lic a:hover{color:var(--y)}
   footer .warn{margin-top:26px;font-size:11px;letter-spacing:4px;color:var(--dim);text-transform:uppercase;text-wrap:balance}
 
   /* folds: long lore that phones read on request. Open in the markup (so the page reads whole with scripts off);
@@ -987,7 +989,7 @@
     </ul>
     </details>
     <p class="say">The film develops letters that were not in the room. The radio on the lowest floors counts, slow and patient, down to someone’s line. The form gives an address on a street that is not on any map. There is an ending. It isn’t an exit.</p>
-    <p class="where">All of this is in the browser and in the desktop app. The desktop app also sends wishes, saves photographs and fires the beacon.</p>
+    <p class="where">All of this is in the browser and in the desktop app. The desktop app also saves photographs, fires the beacon and hosts a game on your own network.</p>
     <div class="descend-acts">
       <a class="ghost" href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">download the desktop app&nbsp;↗<small>from the latest release</small></a>
       <a class="alt" href="manual/"><span>the field manual — <span class="nw">DOC-FIELD-00&nbsp;▸</span></span></a>
@@ -1015,9 +1017,9 @@
       <dt>runs on</dt><dd>in the browser, best on a computer or a Chromebook <span class="nw">· works on phones too.</span> the desktop app runs on Windows, macOS (Intel and Apple silicon) and Linux.</dd>
       <dt>install</dt><dd>from <a href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">the latest release&nbsp;↗</a>: an installer for Windows (.exe), a .dmg for macOS, an .AppImage or a .deb for Linux. the first time on a mac, right-click the app and choose Open — it is not notarized yet. Windows and the AppImage keep themselves current; settings ⚙ → updates says how.</dd>
       <dt>keep it</dt><dd>in the browser, add it as an app from your browser’s menu, and it can keep playing offline. a solo run saves itself where you play it: CONTINUE ▶ picks it up, and SOLO ▶ starts over on top of it. online runs are never saved.</dd>
-      <dt>pin a place</dt><dd>paste a Google Maps link to any real place on the title screen and you fall through there — the same maze for anyone who pins the same spot. the pin is never sent to the people you play with. anchored worlds hold their shape. unanchored worlds forget you were ever there.</dd>
-      <dt>with a friend</dt><dd>choose PLAY ONLINE, use a made-up name, type nothing real about yourself, and share its room code only with someone you know — you both fall into the same world. on one network, the desktop app can HOST LAN instead. the chat is not moderated.</dd>
-      <dt>speak</dt><dd>near a presence you can ask for anything. someone, or the spirits, reads it, and a granted wish drifts the world, in a later update, for everyone on the desktop app. wishes leave only from the desktop app. put nothing real about yourself in a wish.</dd>
+      <dt>pin a place</dt><dd>paste a Google Maps link to any real place into the field on the title screen — the full link, or the short one a phone's share button gives — and that place becomes the maze's seed: the same maze for anyone who pins the same spot. the pin is never sent to the people you play with, unless you put it in an invite link yourself. anchored worlds hold their shape. unanchored worlds forget you were ever there.</dd>
+      <dt>with a friend</dt><dd>choose PLAY ONLINE, use a made-up name, type nothing real about yourself, and share its room code — or copy its invite link, one click to join — only with someone you know. you both fall into the same world. on one network, the desktop app can HOST LAN instead. the chat is not moderated.</dd>
+      <dt>speak</dt><dd>near a presence you can ask for anything. what you say to the wall is posted publicly, and a person reads every one. some are granted, by hand, and a granted wish drifts the world, in a later update, for everyone. put nothing real about yourself in a wish.</dd>
       <dt>what’s in it</dt><dd>dark rooms, a heartbeat that quickens as something closes in, and creatures that chase you and can catch you. nothing pauses — not the map, not the settings, not the chat.</dd>
       <dt>comfort</dt><dd>switch the creatures off, switch damage off, soften the flicker, switch the film grain off — walk it as a place, not a threat.</dd>
     </dl>
@@ -1056,7 +1058,7 @@
       <li><h3><span class="no">2 ·</span> Open a case.</h3><p>Start with CASE D-8 — it is the gentlest; everything it asks is on the public record. Then try CASE L-22: it begins inside a very small book.</p><a class="alt" href="recover/?case=case-d8"><span>open CASE D-8&nbsp;▸</span></a></li>
       <li><h3><span class="no">3 ·</span> Read the map.</h3><p>Open the first door and read its strata down, newest to oldest.</p><a class="alt" href="atlas/#806-n-carey"><span>read the first door&nbsp;▸</span></a></li>
     </ol>
-    <p class="none">No ads, no trackers. One cookieless counter (<a href="https://www.goatcounter.com/">GoatCounter</a>) on this page and in the browser game, so I know whether anyone came. It counts a visit (which page, the site that sent you, your browser, screen size and country), sets no cookie, stores no IP address, and never sees a name, a room code, a pin or a wish. The desktop app counts nothing. Your solo run and your case progress stay where you play them. Online play goes through our server, which keeps each room’s world; a place you pin is never sent to the people you play with. The desktop app reaches out only to check for its own updates, to fetch the cases, to push a beacon you have pointed somewhere yourself, and to carry a wish you choose to make. Someone reads the wishes, so put nothing real about yourself in one.</p>
+    <p class="none">No ads, no trackers. One cookieless counter (<a href="https://www.goatcounter.com/">GoatCounter</a>) on this page and in the browser game, so I know whether anyone came. It counts a visit (which page, the site that sent you, your browser, screen size and country), sets no cookie, stores no IP address, and never sees a name, a wish or the chat. The page it counts is always this one or /play/, but its script sends the rest of the address along, so an invite link’s room code — and a pin, if you chose to put one in it — reaches it. The desktop app and the itch.io copy count nothing. Your solo run and your case progress stay where you play them. Online play, wishes and a phone’s short map link go through our server: it keeps each room’s world, answers a short link with only the two numbers, and slows floods by a salted hash of your address that it forgets within a day. A place you pin is never sent to the people you play with unless you put it in a link. The desktop app reaches out only for those, to check for its own updates, to fetch the cases, and to push a beacon you have pointed somewhere yourself. Wishes are posted publicly and a person reads every one, so put nothing real about yourself in one.</p>
   </section>
 </main>
 
@@ -1073,6 +1075,7 @@
     <li><a href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">desktop app · windows, macos, linux&nbsp;↗</a></li>
     <li><a href="https://github.com/sasha-thecornerspore-dev/backrooms">the source&nbsp;↗</a></li>
   </ul></nav>
+  <p class="lic"><a href="https://github.com/sasha-thecornerspore-dev/backrooms/blob/main/LICENSE">mit</a> · lore <a href="https://github.com/sasha-thecornerspore-dev/backrooms/blob/main/LICENSE-LORE.md">cc by-sa</a>, after the <a href="http://backrooms-wiki.wikidot.com/">backrooms wiki</a></p>
   <p class="warn">you were not supposed to find this</p>
 </footer>
 
