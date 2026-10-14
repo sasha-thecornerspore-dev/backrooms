@@ -133,3 +133,16 @@ describe('wish-grant.yml: nothing hidden from the person who reads a wish rides 
     expect(strip('i <3 the hum\nfiled under: EXTENSION · level 2')).toBe('i <3 the hum\nfiled under: EXTENSION · level 2')
   })
 })
+
+describe('build-release.yml: every run step works in macOS bash 3.2', () => {
+  it('no mapfile / readarray (bash 4+): 2.0.0\'s mac upload died on mapfile, exit 127, and shipped without a .dmg', () => {
+    const code = rel.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n')
+    expect(code).not.toMatch(/\b(mapfile|readarray)\b/)
+  })
+  it('the upload step collects the asset list with a plain while-read loop', () => {
+    const at = rel.indexOf('- name: Upload to draft release')
+    const step = rel.slice(at, rel.indexOf('\n      - ', at + 1))
+    expect(step).toContain('while IFS= read -r f; do [ -n "$f" ] && FILES+=( "$f" ); done <<<')
+    expect(step).toContain('gh release upload "${{ needs.prepare.outputs.tag }}" "${FILES[@]}" --clobber')
+  })
+})

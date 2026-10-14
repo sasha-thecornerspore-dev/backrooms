@@ -162,8 +162,10 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # no mapfile: macOS runners ship bash 3.2, where it does not exist (2.0.0's mac upload died on it, exit 127)
         run: |
-          mapfile -t FILES <<< "${{ steps.assets.outputs.files }}"
+          FILES=()
+          while IFS= read -r f; do [ -n "$f" ] && FILES+=( "$f" ); done <<< "${{ steps.assets.outputs.files }}"
           gh release upload "${{ needs.prepare.outputs.tag }}" "${FILES[@]}" --clobber --repo "${{ github.repository }}"
 
       - name: Attach installers to the run
