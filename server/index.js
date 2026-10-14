@@ -3,13 +3,12 @@ import { WebSocketServer, WebSocket } from 'ws'
 import { createServer as createHttpServer } from 'http'
 import { randomBytes } from 'crypto'
 import { startUpdater } from './updater.js'
-import { readFileSync } from 'fs'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
 import { evKindOk, evFrameOk, evBucket } from './evguard.js'
 import { createEvLog } from './evlog.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
+// the release's version, stamped into the bundle by esbuild (build-release.yml: --define:__BACKROOMS_VERSION__); a checkout
+// has none, and server/package.json's is not the release's — so only the bundle ever compares itself with a release
+const SERVER_VERSION = typeof __BACKROOMS_VERSION__ === 'string' ? __BACKROOMS_VERSION__ : null
 
 const PORT = parseInt(process.env.PORT ?? '8765', 10)
 // the keep/drop log is the owner's explicit opt-in: `node index.js --evlog` or EV_LOG=1
@@ -155,7 +154,7 @@ export function createServer(port = PORT, host, opts = {}) {
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'))) {
   createServer().then(s => {
     console.log(`backrooms server on :${s.address().port}${EV_LOG ? ' (ev log on)' : ''}`)
-    const { version } = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'))
-    startUpdater(version, 'sasha-thecornerspore-dev/backrooms')
+    // only the bundled release asset updates itself (updater.js); `node server/index.js` from a checkout never does
+    startUpdater(SERVER_VERSION, 'sasha-thecornerspore-dev/backrooms')
   })
 }

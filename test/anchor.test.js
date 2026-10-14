@@ -20,6 +20,15 @@ describe('parseAnchor', () => {
       .toEqual({ lat: 48.8584, lng: 2.2945 })
   })
 
+  it('parses a dropped pin\'s /maps/search/<lat>,+<lng> URL (where a shared "this location" short link lands)', () => {
+    expect(parseAnchor('https://www.google.com/maps/search/48.861500,+2.300271?entry=tts&g_ep=EgoyMDI2MDEyMS4wIPu8ASoASAFQAw%3D%3D'))
+      .toEqual({ lat: 48.8615, lng: 2.300271 })
+    expect(parseAnchor('https://www.google.com/maps/search/39.297500,+-76.643000?entry=tts')).toEqual({ lat: 39.2975, lng: -76.643 })
+    expect(parseAnchor('https://www.google.com/maps/search/39.2975%2C-76.643')).toEqual({ lat: 39.2975, lng: -76.643 })
+    expect(parseAnchor('https://www.google.com/maps/search/pizza+near+39.2975,-76.643')).toBeNull()
+    expect(parseAnchor('https://www.google.com/maps/search/95.0,+10.0')).toBeNull()
+  })
+
   it('prefers the place pin (!3d/!4d) over the map centre', () => {
     const url = 'https://www.google.com/maps/place/Somewhere/@40.7,-74.1,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d40.7484405!4d-73.9856644'
     expect(parseAnchor(url)).toEqual({ lat: 40.7484405, lng: -73.9856644 })

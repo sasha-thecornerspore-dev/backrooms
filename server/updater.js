@@ -1,13 +1,16 @@
-// server/updater.js
+// server/updater.js — the standalone server keeps itself current from the latest release.
+//
+// Only the release's own bundle does: the file running must be named backrooms-server.js (the release asset) and carry the
+// version esbuild stamped into it (index.js SERVER_VERSION). `node server/index.js` from a checkout never updates — it used
+// to download the bundle OVER the tracked server/index.js, respawn and exit, and the respawn read server/package.json's
+// never-bumped 1.0.0 and did it again, in a loop (the 2.0.0 verify report). The update replaces the running file in place
+// and respawns it with the same arguments, so the new copy is still the bundle and still knows its version.
 import { get } from 'https'
-import { createWriteStream, renameSync, existsSync } from 'fs'
+import { createWriteStream, renameSync } from 'fs'
 import { spawn } from 'child_process'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const ASSET_NAME = 'backrooms-server.js'
-const CHECK_INTERVAL = 60 * 60 * 1000  // 1 hour
+export const ASSET_NAME = 'backrooms-server.js'
+export const CHECK_INTERVAL = 60 * 60 * 1000  // 1 hour
 
 function httpsGet(url) {
   return new Promise((resolve, reject) => {
@@ -46,7 +49,12 @@ function semverGt(a, b) {
   return false
 }
 
-async function checkAndUpdate(currentVersion, repoSlug) {
+// the running file is the release asset: by its basename, whichever separator the path uses
+export function isBundledEntry(entry) {
+  return typeof entry === 'string' && entry.split(/[\\/]/).pop() === ASSET_NAME
+}
+
+async function checkAndUpdate(currentVersion, repoSlug, entry) {
   try {
     const release = await fetchLatestRelease(repoSlug)
     const latest = release.tag_name
@@ -54,11 +62,11 @@ async function checkAndUpdate(currentVersion, repoSlug) {
     console.log(`[updater] newer version ${latest} available, downloading...`)
     const asset = release.assets.find(a => a.name === ASSET_NAME)
     if (!asset) return
-    const tmp = join(__dirname, 'index.new.js')
+    const tmp = entry + '.new'
     await downloadFile(asset.browser_download_url, tmp)
-    renameSync(tmp, join(__dirname, 'index.js'))
+    renameSync(tmp, entry)
     console.log('[updater] update applied, restarting...')
-    const child = spawn(process.execPath, [join(__dirname, 'index.js')], {
+    const child = spawn(process.execPath, [entry, ...process.argv.slice(2)], {
       detached: true, stdio: 'ignore',
       env: { ...process.env }
     })
@@ -69,7 +77,10 @@ async function checkAndUpdate(currentVersion, repoSlug) {
   }
 }
 
-export function startUpdater(currentVersion, repoSlug) {
-  checkAndUpdate(currentVersion, repoSlug)
-  setInterval(() => checkAndUpdate(currentVersion, repoSlug), CHECK_INTERVAL)
+// → true when it started (the bundle, with its stamped version); false, and nothing at all happens, otherwise
+export function startUpdater(currentVersion, repoSlug, { entry = process.argv[1], check = checkAndUpdate, every = setInterval } = {}) {
+  if (!isBundledEntry(entry) || typeof currentVersion !== 'string' || !currentVersion) return false
+  check(currentVersion, repoSlug, entry)
+  every(() => check(currentVersion, repoSlug, entry), CHECK_INTERVAL)
+  return true
 }
