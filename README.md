@@ -1,5 +1,7 @@
 # the backrooms
 
+**[▶ play it in your browser — free, no install](https://backrooms.thecornerspore.dev/play/)** · works on phones too · or [download for windows, macos, linux](../../releases/latest)
+
 > you have no-clipped out of reality.
 
 an infinite procedural first-person horror maze that descends through four levels. fluorescent lights, damp carpet, tight office corridors, no exit — only the way down, and a door at the bottom that climbs back to the lobby.
@@ -78,11 +80,14 @@ it is the same game everywhere, with fewer reaches outside the desktop app.
 | look | click the view to grab the mouse | the same | drag anywhere on the view |
 | move | wasd or the arrow keys | the same | the left thumb-stick |
 | chat and the field console | **enter** | **enter** | needs a keyboard |
-| wishes | reach someone | heard, and go nowhere | heard, and go nowhere |
+| wishes | posted, and a person reads each one | the same | the same |
 | the beacon | fires | stays quiet | no button |
 | photographs | saved to `Pictures/backrooms/` | the caption only | the caption only |
-| host lan | starts a server | joins one already running on this machine | joins one already running on this machine |
+| an invite link | copied, opens in any browser | copied | the share sheet |
+| host lan · join lan | starts a server · joins one | not offered (an https page cannot reach your network) | not offered |
 | updates | settings ⚙ → **updates** | the next time you open it | the next time you open it |
+
+**what is counted.** the site and the browser game at backrooms.thecornerspore.dev carry one cookieless counter, [GoatCounter](https://www.goatcounter.com/), so i know whether anyone came. it counts a page view — the page (always `/` or `/play/`), the site that sent you, your browser, screen size and country — sets no cookie and stores no IP address. its script also sends the address's query along with the count, so an invite link's room code (and a pin, if you chose to put one in it) reaches GoatCounter's server, though the page it counts stays `/play/`. no name, wish or chat is ever sent to it. the desktop app and the itch.io copy count nothing.
 
 ### if it misbehaves
 
@@ -95,11 +100,11 @@ it is the same game everywhere, with fewer reaches outside the desktop app.
 
 ## how it begins
 
-you open your eyes outside. it is a real place — an inner-block park in harlem park, west baltimore, under a flat grey sky, ringed by the backs of rowhouses whose doors have been sealed with concrete block. near the stoops lies a form. your name is already on it, or a blank is where your name should be. the address line says *woodyear st. (there is no woodyear st.)* you never filled it in.
+you fall into the lobby — yellow wallpaper, wet carpet, the hum. nothing hunts you there. below it, things do.
 
-there is one way out: a gap the paperwork left. take it and you fall into the lobby — yellow wallpaper, wet carpet, the hum. nothing hunts you there. below it, things do.
+there is another way in, for when you mean it. under the buttons on the title screen sits a quiet line, **the front door**: *a real block. read the form. find the gap.* behind it you open your eyes outside, in a real place — an inner-block park in harlem park, west baltimore, under a flat grey sky, ringed by the backs of rowhouses whose doors have been sealed with concrete block. near the stoops lies a form. your name is already on it, or a blank is where your name should be. the address line says *woodyear st. (there is no woodyear st.)* you never filled it in. there is one way out: a gap the paperwork left. take it and you fall into the lobby.
 
-the first time you take a way down, an office somewhere above the drop ceiling writes you into a column, by how you came in. it never asks. and the backrooms reads what it wrote: how far the things can see you, what the water does to you, what a photograph develops, what the lost souls see on you.
+the first time you take a way down — the lobby's way to level 1, or the block's gap if you came in by the front door — an office somewhere above the drop ceiling writes you into a column, by how you came in. it never asks. and the backrooms reads what it wrote: how far the things can see you, what the water does to you, what a photograph develops, what the lost souls see on you. the form it writes on is never far: `/intake` reads it anywhere.
 
 after that it is the descent — four floors stacked in one building, a way down on each, and at the bottom a door that climbs back to the top. somewhere in the paperwork a notice, *30150A*, has said EXTENSION for twenty-one years. once the office can hear you, it will let you choose a word of your own. the lost souls talk about the thirteen who complied. *nobody remembers them. that was the point.*
 
@@ -111,12 +116,12 @@ what follows is what is known. the rest is in the pages m. left lying around.
 
 ## the first ten minutes
 
-1. **the title.** type a name, or leave it blank — the office writes down what you give it. **SOLO ▶** starts a fresh run on the block. **CONTINUE ▶** appears once a solo run is saved; starting SOLO over it replaces it, and there is no second slot. the anchor field is optional ([anchors](#anchors--no-clip-from-a-real-place)). the gear ⚙ opens settings — creatures, damage and flicker can all be switched off there.
+1. **the title.** type a name, or leave it blank — the office writes down what you give it. above the buttons, the anchor field takes a place if you want one ([anchors](#anchors--no-clip-from-a-real-place)); leave it empty and the maze is nobody's. **SOLO ▶** starts a fresh run in the lobby. **CONTINUE ▶** appears once a solo run is saved; starting SOLO over it replaces it, and there is no second slot. the gear ⚙ opens settings — creatures, damage and flicker can all be switched off there.
 2. **grab the mouse.** click the view. the mouse turns you left and right; there is no looking up or down. a page, the chat or the wish box lets the mouse go — click again to take it back. while it is loose, **←** and **→** turn you.
-3. **the block.** walk with **wasd**; **shift** runs. find the form near the stoops and press **e** to read it. then find the gap. the plate above your items always says what **f** and **e** will do where you stand — here, `f · no-clip out — level 0`. press **f**. nothing leads back up to the block.
-4. **the lobby.** safe; nothing hunts here. learn it. pick things up (**f**), draw from a vending machine (**f**), search a cabinet (**f**, then keep still), read a page lying on the floor (**e**), open the map (**tab**). before long, `• • •  e · speak  • • •` will appear over your items though there is nothing to see. that is a presence. [say something to it](#the-wish-system).
-5. **the way down.** a torn doorway with a cold blue rim and a beam that carries through the fog. the compass under your gauges points at the nearest one you have seen. **f** takes it — and this is when the file writes you in. a line, a few seconds after you land, says how it has you.
-6. **level 1.** things live here now. read the lines that fade in mid-screen: the building talks, and the important lines push in front. when your heart comes into your ears, something has you. **space** pushes it back. a still body in the dark is hard to see. and if it catches you anyway, you wake a floor up, a little lighter.
+3. **the lobby.** walk with **wasd**; **shift** runs. safe; nothing hunts here. learn it. pick things up (**f**), draw from a vending machine (**f**), search a cabinet (**f**, then keep still), read a page lying on the floor (**e**), open the map (**tab**). the plate above your items always says what **f** and **e** will do where you stand. before long, `• • •  e · speak  • • •` will appear over your items though there is nothing to see. that is a presence. [say something to it](#the-wish-system).
+4. **the way down.** a torn doorway with a cold blue rim and a beam that carries through the fog. the compass under your gauges points at the nearest one you have seen. **f** takes it — and this is when the file writes you in. a line, a few seconds after you land, says how it has you.
+5. **level 1.** things live here now. read the lines that fade in mid-screen: the building talks, and the important lines push in front. when your heart comes into your ears, something has you. **space** pushes it back. a still body in the dark is hard to see. and if it catches you anyway, you wake a floor up, a little lighter.
+6. **the front door, when you mean it.** the line under the title's buttons starts a solo run on **the block**, level ∅ — the one real place in the game. find the form near the stoops and press **e** to read it. then find the gap: `f · no-clip out — level 0`. press **f**. nothing leads back up to the block.
 
 **the game never pauses.** settings, the map, a page, the chat and the wish box all leave the world running behind them, and the things keep moving. there is no quit menu: close the window. a solo run saves as it goes.
 
@@ -126,11 +131,13 @@ the keys you need first: **wasd** walk · **shift** run · click to look · **f*
 
 ## anchors — no-clip from a real place
 
-on the start screen you can paste a **google maps link** (or bare `lat,lng`) into the anchor field. you will fall through *that* place. the same place always produces the same maze — for everyone. the level plate shows your drift — how far you have wandered from where this floor set you down — and settings ⚙ has **locate your body**, which opens google maps at the spot where you fell through (desktop app only).
+the anchor field sits above the buttons on the title screen: *paste a google maps link — that place becomes the maze's seed.* the full link from a computer's address bar works, so does a dropped pin's link, the short link a phone's share button gives you (`maps.app.goo.gl/…`), or the two numbers, `lat,lng`. you will fall through *that* place. the same place always produces the same maze — for everyone.
+
+a short link has no place in it, so the game asks the relay where it leads (*looking for that place…*). only the link is sent — never the words a share sheet puts around it — and only the two numbers come back. a place that cannot be read says *that place cannot be found.*, and the run starts without a pin. the level plate shows your drift — how far you have wandered from where this floor set you down — and settings ⚙ has **locate your body**, which opens google maps at the spot where you fell through (desktop app only).
 
 anchored worlds hold their shape. unanchored worlds forget you were ever there.
 
-hosting with an anchor carries the whole room down with you — the first player into a room decides its world. join someone else's room and the pin you pasted stays yours: the others are told only a mark, enough to know whether you fell through the same place they did. the pin itself never goes to the other players.
+hosting with an anchor carries the whole room down with you — the first player into a room decides its world. join someone else's room and the pin you pasted stays yours: the others are told only a mark, enough to know whether you fell through the same place they did. the pin itself never goes to the other players — unless you put it in an [invite link](#invite-links) yourself.
 
 ---
 
@@ -154,11 +161,11 @@ the whole screen speaks too. it flashes red when you are hit, closes in violet w
 
 ## the descent
 
-every solo run begins outside, in **the block** — the one real place in the game. after that the maze is a stack of levels, and each one has a way on. a way looks like a torn doorway standing in the fog: a cold blue rim that breathes, a ring on the floor, a beam you can see from far off. walk up to it and press **f**.
+every run begins in **the lobby**. the one real place in the game, **the block**, sits outside the stack, behind the front door on the title screen: you go there on purpose, solo. after that the maze is a stack of levels, and each one has a way on. a way looks like a torn doorway standing in the fog: a cold blue rim that breathes, a ring on the floor, a beam you can see from far off. walk up to it and press **f**.
 
 | level | what it is | the way on |
 |-------|-----------|--------------|
-| **∅ — the block** | a real inner-block park in harlem park, west baltimore, under open grey sky. rowhouse backs of formstone, brick, plywood with sprayed house numbers, doors sealed with concrete, black open windows, marble stoops. some houses are lived in — a light on, nobody comes out. a plan erased the street and left this. no creatures. one form. | the front doors are sealed with block. the only way out is the gap the paperwork left — no-clip through it and fall into the lobby. **one way, once.** |
+| **∅ — the block** | behind the front door. a real inner-block park in harlem park, west baltimore, under open grey sky. rowhouse backs of formstone, brick, plywood with sprayed house numbers, doors sealed with concrete, black open windows, marble stoops. some houses are lived in — a light on, nobody comes out. a plan erased the street and left this. no creatures. one form. | the front doors are sealed with block. the only way out is the gap the paperwork left — no-clip through it and fall into the lobby. **one way, once.** |
 | **0 — the lobby** | mono-yellow rooms, damp carpet, the fluorescent hum, offices with cabinets and chairs, muzak that is not quite right. safe: nothing hunts here. the most pages. | *the walls are thin here* — no-clip through a torn corner and fall out of the lobby. |
 | **1 — habitable zone** | colder concrete, dim service lights, storerooms of crates and pallets. *you are not the only thing awake here.* | a hole in the floor down to the pipes. a **stairwell up** under some of the holes above. and somewhere, standing uncalled, a **lift**. |
 | **2 — pipe dreams** | maintenance tunnels with no lights of their own. steam, rust, pump rooms, and the dark between the pipes. *level 2. bring your own light.* the radio starts reading numbers here. | a service hatch down into the dark, or a stairwell back up. |
@@ -281,7 +288,7 @@ on the deepest floors the machines sometimes give stranger things. these you kee
 - **which words.** at first everyone is offered the same six for that floor and that kind of thing; once the pages you have read hold six of the twelve phrases, the card offers only words from those. the more of the record you find, the more of it you can say.
 - **no free text, ever** — only what is written on the pages. and a hand needs a moment between two words: set a second one down in the same breath and it stays in your hands (*your hands are not ready.*).
 
-**the field console.** press **enter**, solo too, and type a line that starts with `/`. `/status` reads your file, `/intake` the form. `/recover`, `/cases` and `/file <answer>` work through the field recovery cases — instruments to read on the floors, answers to file. progress is shared with [the case board](https://backrooms.thecornerspore.dev/recover/) in the same browser. the cases are kept online; without a connection, *no signal.*
+**the field console.** press **enter**, solo too, and type a line that starts with `/`. `/status` reads your file, `/intake` the form. `/recover`, `/cases` and `/file <answer>` work through the field recovery cases — instruments to read on the floors, answers to file. progress is shared with [the case board](https://backrooms.thecornerspore.dev/recover/) in the same browser. the cases are kept online, on the site — the desktop app and the itch.io copy read them from there too; without a connection, *no signal.* online, `/invite` copies a link to your room ([invite links](#invite-links)).
 
 ---
 
@@ -291,7 +298,7 @@ while wandering, you may encounter a presence. there is nothing to see — only,
 
 press **e** to speak. *state your request.* type anything. **enter** starts a new line rather than sending; press **submit**, or **cancel** to walk away (**esc** does not close it while you are typing). the faint lines under the box are things you may say. at first there is only one: *a notice was mailed to you. you have not answered.*
 
-wishes are real. from the desktop app, every wish is filed where someone reads it. some are granted. when a wish is granted, the world drifts — palette shifts, sounds change, items grow scarce or plentiful, messages grow more specific — and everyone on the desktop app walks into the changed building once an update carries it. players notice the world is not quite as it was. the spirits answer, or they don't. from the browser, a wish is heard and goes nowhere.
+wishes are real. from every copy — the desktop app, the browser, a phone — what you say to the wall is posted publicly, and a person reads it. every one. some are granted, by hand. when a wish is granted, the world drifts — palette shifts, sounds change, items grow scarce or plentiful, messages grow more specific — and everyone walks into the changed building: in the browser once the site is next updated, in the desktop app once an update carries it. players notice the world is not quite as it was. the spirits answer, or they don't. because it is posted, put nothing real about yourself in a wish.
 
 the spirits decide. or rather, i do.
 
@@ -314,7 +321,7 @@ somewhere above the drop ceiling there is an office, and it keeps a file on ever
 
 and over any of them, a layer: **thin**. drop into a room someone already walks, or come back from dying once the file has you, and *not all of you arrived*. the things lose you faster and hear you less — but light does not sit on you the way it did, and a ward pushes you back too. ballast cures it.
 
-until the first way down nothing is written. on the block the form lies near the stoops (**e** to read it; `/intake` reads it anywhere). *the file does not take amendments. it takes forms.*
+until the first way down nothing is written. `/intake` reads the form anywhere; behind the front door, on the block, it lies near the stoops (**e**). *the file does not take amendments. it takes forms.*
 
 **filed under.** the file also keeps a **status**, and this one is yours to choose. it begins as a notice nobody answered. once the file can hear you — the numbers station has read you its last group, or you have found five of m.'s pages, or you are deep enough — a presence offers three stamps under the request. tap one, or type it. a file that already holds something — a closing reached, pages given up — is asked on the card first, because a new word lets go of all of it:
 
@@ -357,7 +364,7 @@ the lost souls know which word you are under, and so does the room — *entered 
 | l | flashlight on / off — tap it, don't hold it. go dark in a friend's light and the things see you less |
 | 1–6 | select an inventory slot |
 | e | speak to a presence or a lost soul · read a page, or the form on the block |
-| enter | chat (in online play) — and the field console, solo too: `/status` (your file), `/intake` (the form), `/recover` · `/cases` · `/file <answer>` (field recovery), `/me` (an emote, online) |
+| enter | chat (in online play) — and the field console, solo too: `/status` (your file), `/intake` (the form), `/recover` · `/cases` · `/file <answer>` (field recovery), `/me` (an emote, online), `/invite` (a link to your room) |
 | b | fire your beacon — your own webhook, set in settings ⚙; it fires only from the desktop app |
 | m | mute / unmute the music |
 | n | next track — cycle the ambient beds, or back to the floor's own song |
@@ -403,18 +410,28 @@ hit the gear ⚙ (top-right) for the control panel — on the title screen or mi
 type your **name**, hit **PLAY ONLINE**, pick a **room code** — the box comes pre-filled with a random one — and share it. (empty the box and you land in the one shared room called `default`, with every stranger who did the same.) anyone who enters the same code falls into the same world — anywhere on the internet, no host and no port-forwarding. it runs on a small always-on Cloudflare relay (`relay/`). you see each other as pale figures with nameplates and a small health bar, and **press enter to chat**. the chat is not moderated: use a made-up name, and type nothing real about yourself.
 
 - **PLAY ONLINE** — the public relay + a room code (the easy way).
-- **HOST LAN** — the desktop app starts a server on this machine (port 8765 — or, if that is taken, a port the system picks; the plate shows which) in the room `backrooms`, and a plate on your screen shows the address: `HOSTING · JOIN LAN → ws://192.168.x.x:8765`. the browser cannot host; its HOST LAN only joins a server already running on the same machine.
+- **HOST LAN** — the desktop app starts a server on this machine (port 8765 — or, if that is taken, a port the system picks; the plate shows which) in the room `backrooms`, and a plate on your screen shows the address: `HOSTING · JOIN LAN → ws://192.168.x.x:8765`.
 - **JOIN LAN** — type the address from your friend's plate and the room. same network.
-- **the standalone server** ships as `backrooms-server.js` on each release. put it in a folder with a `package.json` of `{"type":"module","dependencies":{"ws":"^8"}}`, run `npm install`, then `node backrooms-server.js` (node 22 or newer). it listens on port 8765.
+- **lan is the desktop app's.** an https page is not allowed to open a `ws://` address on your network, so the browser game at backrooms.thecornerspore.dev and the itch.io copy do not show HOST LAN or JOIN LAN at all.
+- **the standalone server** ships as `backrooms-server.js` on each release. put it in a folder with a `package.json` of `{"type":"module","dependencies":{"ws":"^8"}}`, run `npm install`, then `node backrooms-server.js` (node 22 or newer). it listens on port 8765, and once an hour it looks for a newer release and replaces itself.
 - the first person into a room fixes its world; everyone else inherits it.
-- online, everyone starts in the lobby together — never on the block — and the file writes each of you in on your first way down. how you arrive is written down: opening a room is not the same as dropping into one someone already walks (*not all of you arrived* — see **thin**, above).
+- online, everyone starts in the lobby together, as a solo run does — the front door is for solo runs only — and the file writes each of you in on your first way down. how you arrive is written down: opening a room is not the same as dropping into one someone already walks (*not all of you arrived* — see **thin**, above).
 - online runs are not saved. the room keeps its world, and you fall back into it.
+
+### invite links
+
+a room can be handed over as a link: `https://backrooms.thecornerspore.dev/play/?room=CODE`. whoever opens it gets the title screen with *a door was left open · room CODE* and one button, **JOIN ▶**. their name field stays theirs — the link never chooses a name for anyone.
+
+- **from the PLAY ONLINE box:** **copy invite link** copies the link for the code in the field. on a phone it reads **send invite** and opens the share sheet. if the clipboard refuses, the link is shown, selected, to copy by hand.
+- **in a game:** `/invite` copies your room's link and prints it too. on a lan it names the address and room for JOIN LAN instead; alone, *no one can follow you here. play online and leave a door open.*
+- **your place stays out unless you put it in.** the box's **include my place** is off on every load and never remembered, and ticking it says at once: *a pin in a link is a place in a link. don't share your home.* in a game, `/invite pin` says the same and copies nothing; a second `/invite pin` puts the pin in the link. a link with a pin carries `&anchor=lat,lng`, fills the friend's anchor field, and adds *the first one in decides the world.* — the pin shapes the maze only if the room is new.
+- the desktop app copies the same web link, which opens in any browser. a friend on the desktop app can just type the code.
 
 down there you can do a few things for each other — call out, leave a word, light the way, push the dark back, photograph, count each other back. **update together:** these pass only between copies of this release; an older copy still walks beside you, drawn as a plain figure, but it hears none of them. on **PLAY ONLINE** they ride one new kind of message the public relay has to carry, so a room on a relay that has not been updated plays as it always did — walking, chat and nameplates, nothing more. **HOST LAN** from this release carries them from the start.
 
 **if your friends cannot hear your whistle online,** the relay has not caught up with this release yet. HOST LAN carries everything.
 
-**running your own relay** (a fork, or a copy of this one): redeploy it with every release that changes what rides it — `cd relay && npx wrangler deploy` — and point `RELAY_URL` in `src/renderer/index.html` at your worker. the details are under [the relay](#the-relay-maintainer-notes).
+**running your own relay** (a fork, or a copy of this one): redeploy it with every release that changes what rides it — `cd relay && npx wrangler deploy` — and point `RELAY_URL` in `src/renderer/index.html`, `RELAY_HTTP` in `src/renderer/site.js` (the short-link lookup) and `WISH_URL` in `src/renderer/wish-post.js` at your worker. a phone's short map links resolve only once your relay serves `/maps`, and wishes are filed only once it serves `/wish` with its own token. the details are under [the relay](#the-relay-maintainer-notes).
 
 **the whistle (c).** call out, and everyone on your floor hears two notes at a pitch that is only yours — panned to where you stand, fainter the farther you are, with a line in their chat that says *near*, *far* or *very far*, and which way. the hall counts who has answered lately and tells you, in words: *two of you, counting yourself.* a friend standing beside you who has not whistled back yet is not counted — *nobody has answered yet.* a friend who goes a long while without a whistle, a word, or standing near you has gone quiet, and you will feel it. *it has been a while since maddie. the hall is quiet.* alone, the hall keeps the sound. sometimes it does not, and the pitch that answers is wrong. the things hear every call — a whistle carries further than a ward. you can whistle while you are down. on a phone it is the **CALL** button.
 
@@ -432,7 +449,7 @@ down there you can do a few things for each other — call out, leave a word, li
 
 ## save & continue
 
-solo runs auto-save — your level, position, hit points and whole inventory, what every floor remembers of you, the pages you have read, the words you left with things, who the file has you as, and the sheets of your map — every few seconds, on every way you take, when you set something down or pick it up, when something has you, and when you quit. **CONTINUE** on the title screen drops you back exactly where you left off. if that spot has since closed, *you woke somewhere slightly else.*
+solo runs auto-save — your level, position, hit points and whole inventory, what every floor remembers of you, the pages you have read, the words you left with things, who the file has you as, and the sheets of your map — every few seconds, on every way you take, when you set something down or pick it up, when something has you, and when you quit. **CONTINUE** on the title screen drops you back exactly where you left off — on the block too, if that is where you were. if that spot has since closed, *you woke somewhere slightly else.*
 
 your mind and your legs start fresh when you continue, and so does whatever the deep was in the middle of telling you. the status you are filed under is not in the save at all: it is the office's, and it follows you into every run and every room.
 
@@ -461,16 +478,24 @@ npm run dist        # installers for this OS into dist/ (windows signing uses CS
 npm run dist:win    # or dist:linux, dist:mac — one platform's installers
 ```
 
-the LAN server runs from source as `node server/index.js` (`PORT` sets the port, default 8765; `--evlog` or `EV_LOG=1` keeps caches for later arrivals). the release bundles it into `backrooms-server.js` with `npx esbuild server/index.js --bundle --platform=node --format=esm --outfile=dist/backrooms-server.js --external:ws`. because `ws` is left out of the bundle and the file is esm, it runs only beside a `package.json` with `"type":"module"` and `ws` installed (see [multiplayer](#multiplayer)); run directly, it also reads `package.json` for its version after it starts listening, and exits if there is none.
+the LAN server runs from source as `node server/index.js` (`PORT` sets the port, default 8765; `--evlog` or `EV_LOG=1` keeps caches for later arrivals); run that way it never updates itself. the release bundles it into `backrooms-server.js` with `npx esbuild server/index.js --bundle --platform=node --format=esm --outfile=dist/backrooms-server.js --external:ws --define:__BACKROOMS_VERSION__='"<version>"'` — the version is stamped in at build time. because `ws` is left out of the bundle and the file is esm, it runs only beside a `package.json` with `"type":"module"` and `ws` installed (see [multiplayer](#multiplayer)). only a file named `backrooms-server.js` that carries a stamped version updates itself: once an hour it checks the latest release, replaces itself in place, and restarts with the same arguments. a bundle built by hand without the `--define` never does.
 
-the browser build is a flat copy of `src/` for the site's `/play/`: `PLAY_SW_VERSION=<n> bash tools/build-play.sh src <gh-pages>/play`. bump `<n>` on every rebuild so installed copies fetch the new one.
+the browser build is a flat copy of `src/` for the site's `/play/`, `world.json` included, so a granted wish reaches the browser when the site is rebuilt and deployed:
+
+```bash
+PLAY_SW_VERSION=<n> bash tools/build-play.sh src <gh-pages>/play          # the site's /play/ (PLAY_TARGET=site, the default)
+bash tools/build-itch.sh src dist/backrooms-web-<version>.zip               # the same bundle as a zip for itch.io, game jolt, newgrounds
+```
+
+bump `<n>` on every site rebuild so installed copies fetch the new one (it defaults to 22; the site last shipped 21). the site target adds the GoatCounter tag (`GOATCOUNTER_CODE`, default `backrooms`, counting at `https://backrooms.goatcounter.com/count` with the path pinned to `/play/`) and a service worker. `build-itch.sh` runs the same script with `PLAY_TARGET=itch` — no counter, no service worker — and checks the zip before it writes it: `index.html` at the root, at most 1000 files, no path over 240 characters, no absolute paths, no `goatcounter`, no token, no `build-config.json`. both bundles carry `LICENSE` and `LICENSE-LORE.md`.
 
 ### releasing
 
 1. bump `version` in `package.json` and write `docs/release-notes/v<version>.md` — it becomes the release's notes.
-2. push to `main`. **Build & Release** creates a draft release, builds the windows, linux and macos installers and the LAN server into it, and publishes it only once every required file has landed, so updaters never see half a release. pull requests and manual runs build the same installers as artifacts and publish nothing. a push whose version is already published skips the build.
-3. only release builds carry the wish token (the `ISSUES_TOKEN` secret, written into `src/build-config.json`); every other build sends wishes nowhere.
-4. if the release changes what rides the relay, redeploy it (below), and rebuild `/play/` on the site with it.
+2. push to `main`. **Build & Release** creates a draft release, builds the windows, linux and macos installers, the LAN server and the web zip (`backrooms-web-<version>.zip`) into it, and publishes it only once every required file has landed, so updaters never see half a release. pull requests and manual runs build the same files as artifacts and publish nothing. a push whose version is already published skips the build.
+3. no build carries a token. every copy of the game sends a wish to the relay's `/wish`, and the relay files it with its own token (below). the `ISSUES_TOKEN` secret and `src/build-config.json` are no longer read by anything.
+4. once the release is public, the itch job pushes the same files to itch.io with butler (pinned): channels `windows` (.exe), `linux` (.AppImage), `mac` (the `-universal.zip`) and `html5` (the web zip), to `vars.ITCH_GAME` (default `sasha-thecornerspore/the-backrooms`). until the `BUTLER_API_KEY` secret exists it skips with a notice, and the release is untouched either way.
+5. if the release changes what rides the relay, redeploy it (below), and rebuild `/play/` on the site with it.
 
 ---
 
@@ -478,16 +503,35 @@ the browser build is a flat copy of `src/` for the site's `/play/`: `PLAY_SW_VER
 
 every co-op verb (the whistle, a cache and its taking, the kneel, a friend's ward, a photograph, the `here` heartbeat) rides one relayed message type, `ev`. a release that adds or changes one needs the relay redeployed with it (`cd relay && npx wrangler deploy`), or PLAY ONLINE rooms will not carry it. decide the keep/drop log on purpose: the relay keeps the last caches a room set down for whoever joins later — in the room's memory, so a room that sleeps forgets them — unless its `EV_LOG` var is `'0'`; the standalone node server (`node backrooms-server.js`) keeps them only with `--evlog` or `EV_LOG=1`, and HOST LAN only when the app was started with `EV_LOG=1`.
 
+besides the rooms, the relay answers two plain requests:
+
+- **`POST /wish`** — `{text, meta, version?}` → `{ok, number}` or `{ok:false, reason}`. it files the wish as a github issue in `GITHUB_REPO` (a var in `wrangler.jsonc`) with its own token. it refuses — silently, as far as the player can tell — text that is empty or over 500 characters, slurs (`words`), links, invites, email addresses, @mentions and ad spam (`spam`), more than 3 wishes in 10 minutes or 10 a day from one address (`rate`), and any browser origin but the site, the itch CDN and `file://`. without its token it answers 503 `closed`. a dev run (`electron .`) sends nothing; a local copy on `localhost` is refused by origin.
+- **`GET /maps?u=<link>`** → `{lat, lng}`. it resolves only `https://maps.app.goo.gl/<id>` and `https://goo.gl/maps/<id>` (an ios `?g_st=` tag is fine), follows at most 3 redirects and only to `https://(www.)google.com/maps`, and returns the coordinates and nothing else. the title's anchor field uses it for a phone's short link; until a relay serves it, every short link reads *that place cannot be found.*
+
+both are rate-limited per address by the **Gate** durable object, named by a salted hash of the IP; it keeps only the times of recent requests and forgets them a day after the last. invocation logs are off for the whole worker, so the relay logs nothing about a request.
+
+- **secrets:** `GITHUB_TOKEN` (required for `/wish`: a fine-grained token on this repository with issues read and write, nothing else) and `IP_SALT` (optional; without it a built-in salt is used). set them with `npx wrangler secret put <NAME>` from `relay/`.
+- **migrations:** `v1` adds `Room`, `v2` adds `Gate`. `wrangler deploy` applies them.
+- **deploy from a full checkout.** `relay/` imports `src/wish-labels.js`, `src/renderer/origin-intake.js` and `src/renderer/anchor.js`, so a wish's title and labels, and a link's coordinates, match the game by construction.
+
 ---
 
 ## wish pipeline (maintainer notes)
 
-1. a player submits a wish from the desktop release build → a github issue opens, titled `[WISH] <first line>`, labelled `wish`, `pending` (plus `status:<word>` when filed, and `amendment` from a processed player). a filed wish ends with its trailer, `filed under: EXTENSION · level 2`.
+**during the launch, a person reads every wish and grants it by hand.** the auto-arbiter is paused.
+
+1. a player submits a wish from any copy of the game — the desktop app, the browser, a phone, itch.io — and the relay files it: a github issue titled `[WISH] <first line>`, labelled `wish`, `pending` (plus `status:<word>` when filed, and `amendment` from a processed player). a filed wish ends with its trailer, `filed under: EXTENSION · level 2`. the body's last line says where it came from: `submitted from backrooms v<version>`, or `submitted from backrooms on the web`.
 2. review the issue — edit the body to your interpretation if needed.
 3. label `granted` → **Grant Wish** has claude (claude code on the maintainer's subscription, `CLAUDE_CODE_OAUTH_TOKEN`) rewrite `src/renderer/world.json` subtly, recounts the docket (`node tools/docket.mjs`), validates it (`node tools/validate-world.mjs`), and opens a PR with a patch version bump.
-4. review the diff, adjust if needed, merge
-5. release builds automatically, players auto-update
+4. review the diff, adjust if needed, merge. nothing a stranger types reaches `main` without that merge.
+5. the release builds automatically and desktop players auto-update. the browser has it once `/play/` is rebuilt and deployed; itch.io with the next release's push.
 
-**the spirits answer on their own.** every 6 hours **Auto-Grant Wishes (48h)** takes the oldest wish still `pending` after 48 hours: a flat 20 % are denied (*the spirits did not answer.*); the rest claude arbitrates — grant, partial or deny, with one short in-fiction note. a grant is recounted, validated and tested, then committed straight to `main`; it ships with the next release build. (the push uses the workflow's own `GITHUB_TOKEN`, and github starts no workflow from that push, so **Build & Release** does not run for it — check out or push with a personal or app token, such as a `RELEASE_PUSH_TOKEN` secret, to make an auto-grant ship by itself.) a denial labels the issue `denied` and closes it.
+**the auto-arbiter is paused.** **Auto-Grant Wishes (48h)** has no schedule for the launch; it runs only when started by hand from the Actions tab. when run, it takes the oldest wish still `pending` after 48 hours: a flat 20 % are denied (*the spirits did not answer.*); the rest claude arbitrates — grant, partial or deny, with one short in-fiction note — and a grant is recounted, validated, tested and committed straight to `main`. to resume it, put back `schedule: - cron: '23 */6 * * *'` under `on:` in `.github/workflows/wish-auto.yml` (the comment at its top shows it). (its push uses the workflow's own `GITHUB_TOKEN`, so **Build & Release** does not run for it — a personal or app token, such as a `RELEASE_PUSH_TOKEN` secret, makes an auto-grant ship by itself.) a denial labels the issue `denied` and closes it.
 
 **the docket** is the count of wish trailers per floor and status, recounted from the issues on every grant (never incremented) and written into `world.json`; both workflows run `tools/docket.mjs` (it needs `GH_TOKEN`). it ships at 2.0.0 with every count zero.
+
+---
+
+## license
+
+the code is [MIT](LICENSE), copyright (c) 2026 Corner Spore. the lore and text drawn from the backrooms canon — the site's lore pages and the codex, the field manual's prose, the canon-derived lines the game says, and the message pool in `world.json` — are [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), the licence of the [Backrooms Wiki on Wikidot](http://backrooms-wiki.wikidot.com/) they come from. [LICENSE-LORE.md](LICENSE-LORE.md) says exactly which is which, and how to credit it. this game is not affiliated with or endorsed by the wiki or its authors.
