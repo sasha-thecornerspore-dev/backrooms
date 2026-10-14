@@ -70,7 +70,7 @@ describe('the counter, the licences, the share card', () => {
   })
   it('the manual carries the site copy\'s share-card tags, so the next copy to the site keeps them', () => {
     expect(manual).toContain('<link rel="canonical" href="https://backrooms.thecornerspore.dev/manual/">')
-    expect(manual).toContain('<meta property="og:image" content="https://backrooms.thecornerspore.dev/og/manual-v1.jpg">')
+    expect(manual).toContain('<meta property="og:image" content="https://backrooms.thecornerspore.dev/og/manual-v2.jpg">')
   })
 })
 
