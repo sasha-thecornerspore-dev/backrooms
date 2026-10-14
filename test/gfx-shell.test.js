@@ -59,3 +59,26 @@ describe('offline shell lists: the net modules', () => {
     expect(build).toMatch(/! grep -l "\\\.\\\.\/net\/" "\$DEST"\/\*\.js \|\| \{ echo .* >&2; exit 1; \}/)
   })
 })
+
+// world.js fetches './world.json' and falls back to DEFAULT_CONFIG: a bundle without the file never sees a granted wish (growth-spec §0.1,
+// launch-fixes F4.2). The file changes with every grant, so both service workers fetch it network-first and keep the cached copy for offline.
+describe('offline shell lists: world.json', () => {
+  it('the browser build ships world.json (granted wishes reach /play/)', () => {
+    expect(build).toContain('cp "$SRC"/renderer/world.json "$DEST"/world.json')
+    expect(build).toContain(`'world.json'`)
+    expect(sw).toContain(`'/renderer/world.json'`)
+  })
+  it('both service workers serve world.json network-first (revalidated), falling back to the cache only when the network fails', () => {
+    for (const s of [sw, build]) {
+      expect(s).toContain("if (url.pathname.endsWith('/world.json')) {")
+      const at = s.indexOf("if (url.pathname.endsWith('/world.json')) {")
+      const block = s.slice(at, s.indexOf('return\n', at))
+      expect(block).toContain("const res = await fetch(req, { cache: 'no-cache' })")
+      expect(block.indexOf('await fetch(req')).toBeLessThan(block.indexOf('caches.match(req)'))   // the network first, the cache after
+    }
+  })
+  it('both caches were renamed for it, so installed copies refetch the shell', () => {
+    expect(Number(/backrooms-pwa-v(\d+)/.exec(sw)[1])).toBeGreaterThanOrEqual(11)
+    expect(Number(/PLAY_SW_VERSION:-(\d+)/.exec(build)[1])).toBeGreaterThanOrEqual(22)
+  })
+})

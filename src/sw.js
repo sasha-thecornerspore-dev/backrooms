@@ -3,9 +3,10 @@
 // any browser. Cross-origin requests (the Cloudflare multiplayer relay) are
 // never intercepted, so online play is unaffected. This file is only ever
 // registered over http(s); under Electron's file:// it is never loaded.
-const CACHE = 'backrooms-pwa-v10'
+// world.json is precached but fetched network-first: it changes with every granted wish.
+const CACHE = 'backrooms-pwa-v11'
 const SHELL = [
-  '/renderer/index.html',
+  '/renderer/index.html', '/renderer/world.json',
   '/renderer/game.js', '/renderer/touch.js', '/renderer/scraps.js', '/renderer/events.js', '/renderer/anchor.js', '/renderer/items.js', '/renderer/tactics.js', '/renderer/save.js',
   '/renderer/world.js', '/renderer/decor.js', '/renderer/fixedmap.js', '/renderer/level-null-map.js',
   '/renderer/levels.js', '/renderer/raycaster.js', '/renderer/renderer.js', '/renderer/entities.js',
@@ -46,7 +47,23 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request
   if (req.method !== 'GET') return
-  if (new URL(req.url).origin !== self.location.origin) return // relay/api pass straight through
+  const url = new URL(req.url)
+  if (url.origin !== self.location.origin) return // relay/api pass straight through
+  // world.json changes with every granted wish: the network first (revalidated, never a stale HTTP-cache copy), the cache only offline
+  if (url.pathname.endsWith('/world.json')) {
+    e.respondWith((async () => {
+      try {
+        const res = await fetch(req, { cache: 'no-cache' })
+        if (res.ok) { const c = await caches.open(CACHE); c.put(req, res.clone()) }
+        return res
+      } catch (err) {
+        const cached = await caches.match(req)
+        if (cached) return cached
+        throw err
+      }
+    })())
+    return
+  }
   e.respondWith((async () => {
     const cached = await caches.match(req)
     if (cached) return cached

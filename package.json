@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "The Backrooms — infinite procedural horror maze",
   "author": "Corner Spore",
+  "license": "MIT",
   "main": "src/main.js",
   "type": "module",
   "scripts": {

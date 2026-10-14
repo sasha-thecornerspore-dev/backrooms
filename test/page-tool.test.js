@@ -58,3 +58,31 @@ describe('page.cjs frame pumping and the loop-error bridge (source guards)', () 
     expect(src).toMatch(/--eval JS[^\n]*\n\/\/ {22}May be repeated/)
   })
 })
+
+// --nohud (launch-fixes F6): a clean capture. The game's own HUD is hidden by CSS — the gauges cluster, the item dock, the compass's
+// waypoint line, the controls line (#hint, which the touch layout already hides the same way) and the settings gear — nothing is painted over.
+describe('page.cjs --nohud', () => {
+  it('is a flag, not a valued option', () => {
+    const { val, flags } = parseArgs(['--start', '--nohud', '--w', '960'])
+    expect(flags.has('nohud')).toBe(true)
+    expect(val.w).toBe('960')
+    expect('nohud' in val).toBe(false)
+  })
+  it('hides #hud-cluster, the dock, the compass, #hint and the settings gear with one display:none !important rule (beats inline styles)', () => {
+    const css = /const NOHUD_CSS = '([^']*)'/.exec(src)
+    expect(css).toBeTruthy()
+    expect(css[1]).toBe('#hud-cluster, #hotbar-dock, #exit-compass, #hint, #btn-settings { display: none !important }')
+  })
+  it('injects it as a <style> once the page is up (before the settle, the --demo fill, the --eval statements and the capture), only with the flag', () => {
+    const inject = src.indexOf("if (flags.has('nohud')) await exec(")
+    expect(inject).toBeGreaterThan(src.indexOf('if (wantStart) {'))
+    expect(inject).toBeLessThan(src.indexOf('await sleep(Number(val.wait'))
+    expect(inject).toBeLessThan(src.indexOf("if (flags.has('demo')) {"))
+    expect(inject).toBeLessThan(src.indexOf('for (const js of evals)'))
+    expect(src.slice(inject, src.indexOf('\n', inject))).toContain("document.createElement('style')")
+    expect(src.slice(inject, src.indexOf('\n', inject))).toContain('NOHUD_CSS')
+  })
+  it('is documented in the usage header', () => {
+    expect(src).toMatch(/^\/\/ {3}--nohud {12}hide the HUD/m)
+  })
+})

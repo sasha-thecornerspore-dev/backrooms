@@ -14,6 +14,8 @@
 //   --demo             freeze the game loop and fill the HUD with representative content (message, prompts, compass,
 //                      chat, low-ish bars, a full hotbar) so every element can be seen and measured at once
 //   --note / --wish    open the found-scrap card / the wish dialog on top (use with --start)
+//   --nohud            hide the HUD for a clean capture: the gauges cluster, the item dock, the compass's waypoint line, the
+//                      controls line (#hint) and the settings gear, by CSS — the game hides them, nothing is painted over (centre messages stay)
 //   --attract-t S      title screen: restart the attract mode at S seconds along its route as a still frame
 //   --reduced-motion   emulate prefers-reduced-motion: reduce
 //   --wait MS          extra settle time before the capture (default 1500 with --start, 2500 on the title)
@@ -81,6 +83,8 @@ const errors = []
 const log = (...a) => process.stderr.write(a.join(' ') + '\n')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const step = (m) => { if (flags.has('verbose')) process.stderr.write('[step] ' + m + '\n') }
+// --nohud: one rule, the way the touch layout hides #hint; !important wins over any inline style the game sets on these elements
+const NOHUD_CSS = '#hud-cluster, #hotbar-dock, #exit-compass, #hint, #btn-settings { display: none !important }'
 
 if (!outPng) { process.stderr.write('usage: electron tools/gfx/page.cjs --out <png> [--w 1280 --h 720] [--phone] [--start] [--level 0..3|null] [--theme X] [--demo] ...\n'); process.exit(2) }
 
@@ -223,6 +227,7 @@ async function main() {
     }
     if (!up) { errors.push('the game did not come up (start screen still showing or the HUD is empty)'); process.stderr.write('[page error] game did not start\n') }
   }
+  if (flags.has('nohud')) await exec(`(() => { const st = document.createElement('style'); st.id = '__nohud'; st.textContent = ${JSON.stringify(NOHUD_CSS)}; document.head.appendChild(st) })()`)
 
   await sleep(Number(val.wait || (wantStart ? 1500 : 2500)))
 
