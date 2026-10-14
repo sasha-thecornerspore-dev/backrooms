@@ -7,16 +7,20 @@
 an infinite procedural first-person horror maze that descends through four levels. fluorescent lights, damp carpet, tight office corridors, no exit — only the way down, and a door at the bottom that climbs back to the lobby.
 
 <p align="center">
-  <img src="docs/screenshots/pillars.jpg" width="100%" alt="the backrooms — pillars under a fluorescent ceiling grid">
+  <img src="docs/screenshots/level0-hall.jpg" width="100%" alt="level 0 — a long corridor of yellow diamond wallpaper and damp brown carpet under a speckled drop ceiling, running to a pale square at the end">
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/lights.jpg"   width="49%" alt="glowing ceiling panels over yellow rooms">
-  <img src="docs/screenshots/corridor.jpg" width="49%" alt="a symmetric corridor receding into fog">
+  <img src="docs/screenshots/level0-tv-wall.jpg" width="49%" alt="level 0 — nine boxy televisions stacked in a yellow room, all on, all static">
+  <img src="docs/screenshots/level3-smiler.jpg"  width="49%" alt="level 3 in the dark — a thin figure with a white grin stands under the cable grid: it stops when you look. do not look away.">
 </p>
 <p align="center">
-  <img src="docs/screenshots/expanse.jpg"  width="49%" alt="an endless expanse of pillars in the haze">
-  <img src="docs/screenshots/title.jpg"    width="49%" alt="the title screen: a field for a map pin, solo, play online, and the front door">
+  <img src="docs/screenshots/level2-pipes.jpg"   width="49%" alt="level 2 — a rust-plated tunnel under a ceiling of pipes, a red valve, grates underfoot, and the way down: a torn doorway with a cold blue rim and a beam">
+  <img src="docs/screenshots/level3-station.jpg" width="49%" alt="level 3 — steel walls lined with lit electrical cabinets, a floor grate, and a yellow warning cone where two walls meet">
+</p>
+<p align="center">
+  <img src="docs/screenshots/pencil-map.jpg"     width="49%" alt="the pencil map held up over the lobby — only the cells you walked, a loop, and a small arrow that is you">
+  <img src="docs/screenshots/title.jpg"          width="49%" alt="the title screen: a field for a map pin, solo, play online, and the front door">
 </p>
 
 <sub>rendered by a hand-written textured raycaster — no game engine, no assets, just math and the colour yellow.</sub>
