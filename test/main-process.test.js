@@ -106,27 +106,52 @@ describe('fire-beacon (an anchored beacon carries the pin)', () => {
   })
 })
 
-describe('submit-wish (W8: the title from the first line, the labels from the trailer)', () => {
+// The wish no longer goes to GitHub from here: the app posts { text, meta, version } to the relay's /wish, and the relay
+// (relay/wishgate.js buildIssue) builds the title from the first line and the labels from the trailer — W8's guards, repointed.
+describe('submit-wish (W8: the title from the first line, the labels from the trailer — built by the relay now)', () => {
   const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8')
   const preload = readFileSync(new URL('../src/preload.cjs', import.meta.url), 'utf8')
+  const gate = readFileSync(new URL('../relay/wishgate.js', import.meta.url), 'utf8')
 
-  it('src/main.js hands text and meta to the pure label builder', () => {
+  it('src/main.js hands text and meta to the relay; the relay hands them to the pure label builder', () => {
     expect(main).toContain("ipcMain.handle('submit-wish', async (_event, text, meta) =>")
-    expect(main).toContain('title: wishTitle(text)')
-    expect(main).toContain('labels: wishLabels(text, meta)')
-    expect(main).toContain("from './wish-labels.js'")
-    expect(main).toContain(String.raw`body:  ` + '`${text}' + String.raw`\n\n---\nsubmitted from backrooms v` + '${appVersion}`')
+    expect(main).toContain('postWish(text, meta, { version: app.getVersion() })')
+    expect(gate).toContain('title: wishTitle(text)')
+    expect(gate).toContain('labels: wishLabels(text, meta)')
+    expect(gate).toContain("from '../src/wish-labels.js'")
+    expect(gate).toContain('`${text}' + String.raw`\n\n---\nsubmitted from backrooms v` + '${appVersion}`')
     expect(main).not.toContain("labels: ['wish', 'pending']")
+    expect(gate).not.toContain("labels: ['wish', 'pending']")
   })
 
   it('preload.cjs bridges two arguments', () => {
     expect(preload).toContain("submitWish: (text, meta) => ipcRenderer.invoke('submit-wish', text, meta)")
   })
 
-  it('the handler is registered and stays a silent no-op without a token', async () => {
+  it('the handler posts text, meta and the app version to the relay, and hands back its answer', async () => {
     const submit = h.handlers.get('submit-wish')
     expect(typeof submit).toBe('function')
-    await expect(submit(null, 'make the fog warmer\nfiled under: EXTENSION · level 2', { origin: 'processed' })).resolves.toBeUndefined()
+    const f = vi.fn(async () => new Response(JSON.stringify({ ok: true, number: 12 }), { status: 201 }))
+    vi.stubGlobal('fetch', f)
+    try {
+      const text = 'make the fog warmer\nfiled under: EXTENSION · level 2'
+      await expect(submit(null, text, { origin: 'processed' })).resolves.toEqual({ ok: true, number: 12 })
+      const [url, init] = f.mock.calls[0]
+      expect(url).toBe('https://backrooms-relay.jeff-schatz112.workers.dev/wish')
+      expect(JSON.parse(init.body)).toEqual({ text, meta: { origin: 'processed' }, version: '0.0.0-test' })
+      expect(JSON.stringify(init)).not.toMatch(/Bearer|token/i)
+    } finally { vi.unstubAllGlobals() }
+  })
+
+  it('a dev run (not packaged) stays a silent no-op and sends nothing', async () => {
+    const { app } = await import('electron')
+    const f = vi.fn()
+    vi.stubGlobal('fetch', f)
+    app.isPackaged = false
+    try {
+      await expect(h.handlers.get('submit-wish')(null, 'let me out', { origin: null })).resolves.toBeUndefined()
+      expect(f).not.toHaveBeenCalled()
+    } finally { app.isPackaged = true; vi.unstubAllGlobals() }
   })
 })
 

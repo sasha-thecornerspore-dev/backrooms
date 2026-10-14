@@ -107,12 +107,8 @@ jobs:
       - if: matrix.platform == 'linux'
         run: npm test
 
-      # only release builds carry the wish token; PR/dry-run installers submit wishes as a silent no-op
-      - name: Write build config
-        if: needs.prepare.outputs.publish == 'true'
-        shell: bash
-        run: |
-          echo '{"wishToken":"${{ secrets.ISSUES_TOKEN }}","githubOwner":"${{ github.repository_owner }}","githubRepo":"backrooms"}' > src/build-config.json
+      # no build config and no secret goes into the app: a wish is filed by the relay (relay/relay.js POST /wish),
+      # which holds the only GitHub token as a wrangler secret
 
       - name: Build & sign installer (Windows)
         if: matrix.platform == 'win'
@@ -132,9 +128,13 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:mac
 
+      # the release's version is stamped into the bundle: its self-updater compares the latest release with it, and only a
+      # file named backrooms-server.js that carries one ever updates itself (server/updater.js)
       - name: Bundle server
         if: matrix.platform == 'linux'
-        run: npx esbuild server/index.js --bundle --platform=node --format=esm --outfile=dist/backrooms-server.js --external:ws
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          npx esbuild server/index.js --bundle --platform=node --format=esm --outfile=dist/backrooms-server.js --external:ws --define:__BACKROOMS_VERSION__="\"$VER\""
 
       - name: Collect assets
         id: assets

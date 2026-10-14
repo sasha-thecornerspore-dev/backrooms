@@ -33,7 +33,7 @@
     },
     "files": [
       "src/**/*",
-      "!src/build-config.template.json",
+      "!src/build-config.json",
       "server/**/*",
       "!server/node_modules/**"
     ],

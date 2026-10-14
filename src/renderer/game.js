@@ -55,6 +55,7 @@ import { standing, placementMods, applyPlacement, ambientMods, trayLean, rollCal
 import { polaroidCaption } from './compose-polaroid.js'
 import { radioLine, RADIO_GROUPS } from './compose-radio.js'
 import { wishRoute } from './compose-wish.js'
+import { postWish } from './wish-post.js'
 import { finaleGate, beaconDecision, deathDecision } from './compose-gates.js'
 import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame, createEvidence, photoOutcome, EVIDENCE_FLOOR, EVIDENCE_LINE, COUNTED_LINE } from './evidence.js'
 import { PHRASES, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from './caches.js'
@@ -907,7 +908,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         for (let i = 0; i < r.refile.lines.length; i++) { const l = r.refile.lines[i]; setTimeout(() => showMessage(l, PRIO.discovery), 3000 + 2600 * i) }
         bus?.here(hereFields())
       }
-      try { if (window.backrooms?.submitWish) await window.backrooms.submitWish(r.submit.text, r.submit.meta) } catch (e) { /* silent */ }
+      // the desktop app hands it to its main process; a browser posts it to the relay's /wish itself (wish-post.js) — either way
+      // the relay files it, and a failure stays silent: the reply above is all the room ever says
+      try { if (window.backrooms?.submitWish) await window.backrooms.submitWish(r.submit.text, r.submit.meta); else await postWish(r.submit.text, r.submit.meta) } catch (e) { /* silent */ }
       if (r.kind === 'claim') { claimFiled = true; tryFinale() }
     }
     setTimeout(() => {

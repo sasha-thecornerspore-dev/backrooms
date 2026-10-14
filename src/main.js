@@ -3,13 +3,12 @@ import { fileURLToPath } from 'url'
 import path from 'path'
 import os from 'os'
 import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'fs'
-import https from 'https'
 import electronUpdater from 'electron-updater'
 const { autoUpdater } = electronUpdater
 import { readSettings, writeSettings } from './settings.js'
 import { createUpdateController, RELEASES_URL } from './updater.js'
 import { fireBeacon } from './webhook.js'
-import { wishTitle, wishLabels } from './wish-labels.js'
+import { postWish } from './renderer/wish-post.js'
 import { createLanHost, lanUrl, LAN_ROOM } from './lan.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -34,47 +33,13 @@ try {
   if (s.softwareRender) { app.disableHardwareAcceleration(); hwAccel = false; logLine('software rendering ON — hardware acceleration disabled') }
 } catch { /* no settings yet, or userData not ready: default to hardware accel */ }
 
-// Build-time config (written by CI, gitignored)
-let buildConfig = { wishToken: '', githubOwner: 'GITHUB_OWNER', githubRepo: 'backrooms' }
-try {
-  const raw = readFileSync(path.join(__dirname, 'build-config.json'), 'utf8')
-  buildConfig = { ...buildConfig, ...JSON.parse(raw) }
-} catch { /* dev mode: wish submission will fail gracefully */ }
-
-// GitHub Issues API — creates a wish issue. `meta` ({ origin }) and the trailer inside `text`
-// become labels; the title is the first line only (wish-labels.js)
+// A wish goes to the relay's /wish (renderer/wish-post.js), which files the issue with the only key there is —
+// relay/wishgate.js builds the title (first line), the labels (the trailer in `text`, `meta` { origin }) and
+// the body, as this handler once did. The app carries no token. A dev run (`electron .`, not packaged) sends
+// nothing, as it never did.
 ipcMain.handle('submit-wish', async (_event, text, meta) => {
-  if (!buildConfig.wishToken) return  // dev mode: silent no-op
-
-  const appVersion = app.getVersion()
-  const body = JSON.stringify({
-    title: wishTitle(text),
-    body:  `${text}\n\n---\nsubmitted from backrooms v${appVersion}`,
-    labels: wishLabels(text, meta),
-  })
-
-  return new Promise((resolve, reject) => {
-    const req = https.request({
-      hostname: 'api.github.com',
-      path: `/repos/${buildConfig.githubOwner}/${buildConfig.githubRepo}/issues`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${buildConfig.wishToken}`,
-        'Content-Type':  'application/json',
-        'Content-Length': Buffer.byteLength(body),
-        'User-Agent':     `backrooms/${appVersion}`,
-        'Accept':         'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    }, (res) => {
-      res.resume()
-      if (res.statusCode === 201) resolve()
-      else reject(new Error(`GitHub API ${res.statusCode}`))
-    })
-    req.on('error', reject)
-    req.write(body)
-    req.end()
-  })
+  if (!app.isPackaged) return  // dev mode: silent no-op
+  return postWish(text, meta, { version: app.getVersion() })
 })
 
 let mainWindow = null

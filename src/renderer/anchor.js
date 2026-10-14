@@ -5,6 +5,8 @@
 
 const PIN_RE   = /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/
 const QUERY_RE = /[?&]q(?:uery)?=(-?\d+(?:\.\d+)?)(?:%2C|,)\s*(-?\d+(?:\.\d+)?)/i
+// a dropped pin's share link lands on /maps/search/39.297500,+-76.643000 — the searched point, so it outranks the map centre
+const SEARCH_RE = /\/maps\/search\/(-?\d+(?:\.\d+)?)(?:%2C|,)(?:\+|%20|\s)*(-?\d+(?:\.\d+)?)/i
 const AT_RE    = /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/
 const BARE_RE  = /^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/
 
@@ -13,14 +15,15 @@ function valid(lat, lng) {
     lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
 }
 
-// Accepts Google Maps URLs (place pin !3d..!4d.., ?q=/query= param, @lat,lng
-// map centre) or a bare "lat, lng" pair. Returns {lat, lng} or null.
+// Accepts Google Maps URLs (place pin !3d..!4d.., ?q=/query= param, /maps/search/lat,lng,
+// @lat,lng map centre) or a bare "lat, lng" pair. Returns {lat, lng} or null.
+// The relay's GET /maps (relay/mapslink.js) reads a short link's redirect with this same function.
 export function parseAnchor(text) {
   if (typeof text !== 'string') return null
   const t = text.trim()
   if (!t) return null
-  // pin coords are the most specific in a maps URL, then explicit query, then map centre
-  for (const re of [PIN_RE, QUERY_RE, AT_RE, BARE_RE]) {
+  // pin coords are the most specific in a maps URL, then explicit query or searched point, then map centre
+  for (const re of [PIN_RE, QUERY_RE, SEARCH_RE, AT_RE, BARE_RE]) {
     const m = t.match(re)
     if (m) {
       const lat = parseFloat(m[1])
