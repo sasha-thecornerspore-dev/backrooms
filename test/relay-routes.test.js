@@ -272,10 +272,14 @@ describe('relay.js and its config', () => {
   it('logs nothing: no console call anywhere in the worker', () => {
     for (const f of ['../relay/relay.js', '../relay/wishgate.js', '../relay/mapslink.js']) expect([f, /console\./.test(read(f))]).toEqual([f, false])
   })
-  it('wrangler.jsonc binds GATE, adds it in a v2 migration after v1, names the repo, and turns invocation logs off', () => {
+  it('wrangler.jsonc keeps the deployed history (v1 Room, v2 Atlas) and adds GATE in v3, names the repo, and turns invocation logs off', () => {
     const cfg = JSON.parse(read('../relay/wrangler.jsonc'))
-    expect(cfg.durable_objects.bindings).toEqual([{ name: 'ROOM', class_name: 'Room' }, { name: 'GATE', class_name: 'Gate' }])
-    expect(cfg.migrations).toEqual([{ tag: 'v1', new_sqlite_classes: ['Room'] }, { tag: 'v2', new_sqlite_classes: ['Gate'] }])
+    expect(cfg.durable_objects.bindings).toEqual([{ name: 'ROOM', class_name: 'Room' }, { name: 'ATLAS', class_name: 'Atlas' }, { name: 'GATE', class_name: 'Gate' }])
+    // the live worker already holds Atlas data under tag v2 (deployed from the atlas branch): renumbering or dropping it deletes that data
+    expect(cfg.migrations).toEqual([{ tag: 'v1', new_sqlite_classes: ['Room'] }, { tag: 'v2', new_sqlite_classes: ['Atlas'] }, { tag: 'v3', new_sqlite_classes: ['Gate'] }])
+    const src = read('../relay/relay.js')
+    expect(src).toMatch(/export class Atlas extends DurableObject/)
+    expect(src).toMatch(/url\.pathname\.startsWith\('\/atlas'\)/)
     expect(cfg.vars.GITHUB_REPO).toBe('sasha-thecornerspore-dev/backrooms')
     expect(cfg.observability.logs.invocation_logs).toBe(false)
     expect(JSON.stringify(cfg)).not.toMatch(/GITHUB_TOKEN|IP_SALT/)    // secrets, set with `wrangler secret put`, never in the file

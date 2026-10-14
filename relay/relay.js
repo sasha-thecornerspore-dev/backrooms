@@ -24,12 +24,29 @@
 // a salted hash of CF-Connecting-IP (an IPv6 address by its /64), and /wish
 // also by one Gate every sender shares. Nothing here logs; wrangler.jsonc turns
 // the invocation log off, so not even the URL of a /maps call is kept.
+//
+// /atlas/* is the atlas's live data layer (the Atlas durable object, logic in
+// atlas.js): open reads, a presence-proved check-in, the passage economy, and
+// admin writes behind env.ATLAS_ADMIN_KEY. It was deployed from the atlas branch
+// before 2.0.0 and lives here unchanged so a deploy never drops its stored data.
+// wrangler.jsonc's migration tags are that deployed history — v1 Room, v2 Atlas
+// (from the atlas branch), v3 Gate — never renumber or drop one: a deploy that
+// leaves out a class Cloudflare already holds data for deletes that data.
 import { DurableObject } from 'cloudflare:workers'
 import { roomSeed } from './seed.js'
 import { evKindOk, evFrameOk, evBucket } from './evguard.js'
 import { createEvLog } from './evlog.js'
 import { BODY_MAX, DAY_MS, GATE_RULES, GLOBAL_GATE, ALLOWED_ORIGINS, WISH_ORIGINS, originOk, corsHeaders, validateWish, filterWish, buildIssue, issueRequest, gateTake, gateKey, hashIp } from './wishgate.js'
 import { shortLink, resolveShortLink } from './mapslink.js'
+import SEED from './atlas-seed.js'
+import { parseAtlasPath, authorize, readAtlas, upsertBeacon, appendStratum, checkin, dropin, regenBalance } from './atlas.js'
+
+// sha256 hex — salts the per-device check-in dedup key with the beacon id so the
+// same device is never correlatable across beacons, even in DO storage.
+async function sha256Hex(s) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('')
+}
 
 export class Room extends DurableObject {
   async fetch(request) {
@@ -235,9 +252,106 @@ async function maps(request, env, origin, url) {
   return reply({ ok: false, reason: r.reason }, status, origin)
 }
 
+const ATLAS_CORS = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-methods': 'GET,PUT,POST,OPTIONS',
+  'access-control-allow-headers': 'authorization,content-type',
+}
+function atlasJson(status, obj) {
+  return new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json', ...ATLAS_CORS } })
+}
+
+// A single global store of beacons + strata. Reads are open (CORS); writes need
+// the admin bearer secret. All logic is the pure module atlas.js; this shell just
+// loads the store, calls it, and persists. Seeded from atlas-seed.js on first use.
+export class Atlas extends DurableObject {
+  async fetch(request) {
+    const url = new URL(request.url)
+    const route = parseAtlasPath(url.pathname)
+    if (!route) return atlasJson(404, { error: 'not found' })
+    if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: ATLAS_CORS })
+
+    let store = await this.ctx.storage.get('store')
+    if (!store) { store = SEED; await this.ctx.storage.put('store', store) }
+
+    if (request.method === 'GET') {
+      const r = readAtlas(store, route, Date.now())
+      return atlasJson(r.status, r.json)
+    }
+
+    // presence-proved check-in — NO admin key; geolocation proximity is the gate.
+    // Coords are used only to verify distance, then discarded (never stored).
+    if (request.method === 'POST' && route.resource === 'checkin') {
+      const body = await request.json().catch(() => null)
+      if (!body || typeof body !== 'object') return atlasJson(400, { error: 'body must be json' })
+      const visitor = typeof body.visitor === 'string' ? body.visitor.slice(0, 100) : ''
+      if (!visitor) return atlasJson(400, { error: 'visitor required' })
+      const key = await sha256Hex(route.id + ':' + visitor)
+      const dedupKey = 'dedup:' + route.id
+      const dedup = (await this.ctx.storage.get(dedupKey)) || {}
+      const r = checkin(store, dedup, route.id, { lat: body.lat, lng: body.lng }, key, Date.now())
+      try {
+        if (r.store) await this.ctx.storage.put('store', r.store)
+        if (r.dedup) await this.ctx.storage.put(dedupKey, r.dedup)
+      } catch { return atlasJson(503, { error: 'atlas write failed' }) }
+      return atlasJson(r.status, r.json)
+    }
+
+    // passage balance for an anonymous device token (regenerated, read-only)
+    if (request.method === 'POST' && route.resource === 'passage') {
+      const body = await request.json().catch(() => null)
+      const visitor = body && typeof body.visitor === 'string' ? body.visitor.slice(0, 100) : ''
+      if (!visitor) return atlasJson(400, { error: 'visitor required' })
+      const rec = await this.ctx.storage.get('passage:' + await sha256Hex(visitor))
+      return atlasJson(200, { passage: Math.floor(regenBalance(rec, Date.now())) })
+    }
+
+    // drop in on a far beacon — spends distance-scaled passage; coords discarded.
+    if (request.method === 'POST' && route.resource === 'dropin') {
+      const body = await request.json().catch(() => null)
+      if (!body || typeof body !== 'object') return atlasJson(400, { error: 'body must be json' })
+      const visitor = typeof body.visitor === 'string' ? body.visitor.slice(0, 100) : ''
+      if (!visitor) return atlasJson(400, { error: 'visitor required' })
+      const pKey = 'passage:' + await sha256Hex(visitor)
+      const rec = await this.ctx.storage.get(pKey)
+      const r = dropin(store, rec, route.id, { lat: body.lat, lng: body.lng }, Date.now())
+      try {
+        if (r.store) await this.ctx.storage.put('store', r.store)
+        if (r.passage) await this.ctx.storage.put(pKey, r.passage)
+      } catch { return atlasJson(503, { error: 'atlas write failed' }) }
+      return atlasJson(r.status, r.json)
+    }
+
+    // writes require the admin key
+    if (!authorize(request.headers.get('authorization'), this.env.ATLAS_ADMIN_KEY)) {
+      return atlasJson(401, { error: 'unauthorized' })
+    }
+    const body = await request.json().catch(() => null)
+    if (body == null) return atlasJson(400, { error: 'body must be json' })
+
+    if (request.method === 'PUT' && route.resource === 'beacon') {
+      const r = upsertBeacon(store, route.id, body)
+      try { if (r.store) await this.ctx.storage.put('store', r.store) }
+      catch { return atlasJson(503, { error: 'atlas write failed' }) }
+      return atlasJson(r.status, r.json)
+    }
+    if (request.method === 'POST' && route.resource === 'strata') {
+      const r = appendStratum(store, route.id, body)
+      try { if (r.store) await this.ctx.storage.put('store', r.store) }
+      catch { return atlasJson(503, { error: 'atlas write failed' }) }
+      return atlasJson(r.status, r.json)
+    }
+    return atlasJson(405, { error: 'method not allowed' })
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
+    if (url.pathname.startsWith('/atlas')) {
+      const stub = env.ATLAS.get(env.ATLAS.idFromName('global'))
+      return stub.fetch(request)
+    }
     if (request.headers.get('Upgrade') !== 'websocket') {
       if (url.pathname === '/wish' || url.pathname === '/maps') {
         const origin = request.headers.get('Origin')
