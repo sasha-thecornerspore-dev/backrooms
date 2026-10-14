@@ -53,7 +53,7 @@ export function formText(ctx, fileStatus) {
   const lines = [
     'intake.',
     `name: ${blank ? '______' : c.name.trim().toLowerCase()}.`,
-    isValidPin(c.anchor) ? `address: ${formatAnchor(c.anchor)}. the body is there.` : 'address: woodyear st. (there is no woodyear st.)',
+    isValidPin(c.anchor) ? `address: ${formatAnchor(c.anchor)}. the body is there.` : 'address: woodyear st. (the street goes on. the block does not.)',
     fileStatus ? `status: ${fileStatus.replace('-', ' ')}.` : 'status: ______. the pen ran out.',   // the word as every voice says it; the pen runs out only on a blank
   ]
   if (blank) lines.push('the file cannot spell you. write your name where the dark can read it.')

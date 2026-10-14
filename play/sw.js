@@ -4,7 +4,7 @@
 // neither are the recovery-engine case manifests under /recover/ — those
 // must always be live so a case can change without a cache bump. world.json
 // is precached but fetched network-first: it changes with every granted wish.
-const CACHE = 'backrooms-play-v22'
+const CACHE = 'backrooms-play-v23'
 const SHELL = [
   './', 'index.html', 'world.json',
   'game.js', 'touch.js', 'scraps.js', 'events.js', 'anchor.js', 'items.js', 'tactics.js', 'save.js', 'world.js', 'decor.js',

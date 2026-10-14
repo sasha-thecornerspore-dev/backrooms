@@ -1,8 +1,9 @@
 // level-null-map.js — the hand-authored Harlem Park inner-block-park (Level ∅).
 //
 // A real place, grounded in the record: the 800-block of N Carey St, West
-// Baltimore. A 1937 HOLC map graded it "hazardous"; a 1961 renewal plan erased
-// the alley streets (Woodyear, Vincent) and left 29 "inner block parks" nobody
+// Baltimore. A 1937 HOLC map graded it "hazardous"; a 1961 renewal plan cleared
+// the alley houses on Woodyear, Vincent and other back alleys, inside the blocks,
+// and left 29 "inner block parks" nobody
 // asked for and the city never maintained. Front doors were later sealed with
 // concrete block behind their original frames — so the only way in is the gap
 // the paperwork left. See docs/superpowers/specs/2026-07-16-level-zero-*.md.
@@ -14,8 +15,9 @@
 //   O  occupied house (curtains, glass, a light on — nobody comes out)
 //   M  marble stoop                   X  (reserved: out-of-bounds solid)
 //
-// The block is enclosed by rowhouse backs on all sides; the player stands in
-// Woodyear Street. Woodyear Street is not there.
+// The block is enclosed by rowhouse backs on all sides; the player stands where
+// Woodyear Street ran through the block. Woodyear still runs north and south of
+// Harlem Park; inside the block its houses are gone. The file keeps it.
 export const NULL_MAP = [
   'FOCPWBOFCPWBOFCPWBOFCPWB',   // 0  rowhouse backs (top)
   'F......................B',   // 1

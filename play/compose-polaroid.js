@@ -13,7 +13,7 @@ export const LINES = Object.freeze({
   SUBJECT_PIN: 'the film develops {name}. the film shows your pin.',
   SUBJECT_PROCESSED: 'the film develops {name}. there is a stamp on them.',
   SUBJECT_ANCHORED: 'the film develops {name}. the film shows a pin, and a distance.',
-  SUBJECT_TENANT: 'the film develops {name}. there is an address under them. the street is not there.',
+  SUBJECT_TENANT: 'the film develops {name}. there is an address under them: woodyear st. the street goes on. not here.',
   SUBJECT_UNNAMED: 'the film develops {name}. the caption did not develop.',
   SUBJECT_UNKNOWN: 'the film develops {name}. the file has not finished with them.',
   SUBJECT_GLYPH: ' one letter developed beside them: "{g}".',
