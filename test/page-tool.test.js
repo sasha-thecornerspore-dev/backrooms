@@ -86,3 +86,51 @@ describe('page.cjs --nohud', () => {
     expect(src).toMatch(/^\/\/ {3}--nohud {12}hide the HUD/m)
   })
 })
+
+// --save / --force-size / --osr (the promo-shot copy of page.cjs, brought home): --save is merged over the save --level plants, so a
+// capture starts the camera at a chosen x / y / angle; --force-size resizes the window's content to exactly --w x --h after it is made
+// (Windows clamps a new window to the screen's work area: 1920x1080 on a 1080p screen came out short); --osr renders offscreen.
+describe('page.cjs --save, --force-size and --osr', () => {
+  it('--save takes a value; --force-size and --osr are flags; the old options are unchanged', () => {
+    const save = '{"x":33.5,"y":11.5,"angle":0}'
+    const { val, flags } = parseArgs(['--level', '0', '--save', save, '--force-size', '--osr', '--nohud', '--w', '1920', '--h', '1080'])
+    expect(val.save).toBe(save)
+    expect(flags.has('save')).toBe(false)
+    expect(flags.has('force-size')).toBe(true); expect(flags.has('osr')).toBe(true); expect(flags.has('nohud')).toBe(true)
+    expect('force-size' in val).toBe(false); expect('osr' in val).toBe(false)
+    expect([val.level, val.w, val.h]).toEqual(['0', '1920', '1080'])
+  })
+  it('merges --save over the planted save, after level ∅ drops x / y for its authored spawn and before the save is written', () => {
+    const merge = src.indexOf('if (val.save) Object.assign(save, JSON.parse(val.save))')
+    const spawn = src.indexOf('if (lv === 4) { save.x = undefined; save.y = undefined }')
+    const write = src.indexOf("await exec(`localStorage.setItem('backrooms:save'")
+    expect(merge).toBeGreaterThan(src.indexOf('if (levelArg !== undefined) {'))
+    expect(spawn).toBeGreaterThan(0)
+    expect(merge).toBeGreaterThan(spawn)    // a --save with x / y wins over the fixed map's spawn; one without them keeps it
+    expect(merge).toBeLessThan(write)
+  })
+  it('refuses --save without --level (there is no planted save to merge it into)', () => {
+    expect(src).toMatch(/if \(val\.save !== undefined && levelArg === undefined\) \{[^\n]*process\.exit\(2\) \}/)
+  })
+  it('--force-size sets the content bounds and size to W x H right after the window is made; --osr turns on offscreen rendering', () => {
+    const made = src.indexOf('const win = new BrowserWindow({')
+    const force = src.indexOf("if (flags.has('force-size')) { win.setContentBounds({ x: 0, y: 0, width: W, height: H }); win.setContentSize(W, H);")
+    expect(force).toBeGreaterThan(made)
+    expect(force).toBeLessThan(src.indexOf('await win.loadURL(url)'))
+    expect(src.slice(made, force)).toContain("offscreen: flags.has('osr')")
+  })
+  it('reports the size actually captured and warns when it is not the size asked for', () => {
+    expect(src).toContain('const got = nativeImage.createFromBuffer(png).getSize()')
+    expect(src).toMatch(/if \(got\.width !== W \|\| got\.height !== H\) process\.stderr\.write\(`\[page warn\] captured/)
+  })
+  it('keeps --nohud, --door and the lobby-first wording', () => {
+    expect(src).toContain("const wantStart = flags.has('start') || flags.has('door') || levelArg !== undefined")
+    expect(src).toMatch(/^\/\/ {3}--start {12}click SOLO and wait for the running game \(a fresh solo run comes in through the lobby, level 0\)/m)
+    expect(src).toContain("if (flags.has('nohud')) await exec(")
+  })
+  it('documents all three in the usage header', () => {
+    expect(src).toMatch(/^\/\/ {3}--save JSON {8}with --level: merged over the planted save \(Object\.assign\)/m)
+    expect(src).toMatch(/^\/\/ {3}--force-size {7}size the window's CONTENT to exactly --w x --h/m)
+    expect(src).toMatch(/^\/\/ {3}--osr {14}offscreen rendering \(webPreferences\.offscreen\)/m)
+  })
+})

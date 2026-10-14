@@ -4,6 +4,10 @@
 //   node_modules/electron/dist/electron.exe tools/gfx/page.cjs --w 1280 --h 720 --out <png> [options]
 //
 //   --w N --h N        viewport size in CSS px (default 1280x720)
+//   --force-size       size the window's CONTENT to exactly --w x --h once it is made (setContentBounds + setContentSize): Windows
+//                      clamps a new window to the screen's work area (1920x1080 on a 1920x1080 screen, taskbar up, came out 1904x993)
+//   --osr              offscreen rendering (webPreferences.offscreen). NOT a size fix on its own (it still came out 1920x1032 there):
+//                      the size comes from --force-size, with or without --osr
 //   --touch            touch emulation at the given --w/--h (a landscape phone: --w 844 --h 390 --touch --memory 4)
 //   --phone            390x844, touch emulation, (pointer: coarse), --memory GB device memory reported (default 2: skips the attract mode)
 //   --src <dir>        the renderer tree (default: ../../src/renderer relative to this file)
@@ -11,6 +15,9 @@
 //   --door             click the title screen's front door instead: a fresh solo run on Level ∅, the block. Implies --start.
 //   --level 0..3|null  start the game ON that level for real: a saved run is planted and CONTINUE is clicked
 //                      (null = level ∅). Implies --start. HUD theme = whatever the game sets for that level.
+//   --save JSON        with --level: merged over the planted save (Object.assign), so the camera starts where you put it, e.g.
+//                      --save '{"x":33.5,"y":11.5,"angle":0}' (angle in radians; any other save field too). Level ∅ keeps its
+//                      fixed map's authored spawn unless --save gives x / y. Without --level it is a usage error.
 //   --theme X          force document.body.dataset.level = X after the page is up ('0'..'3', '∅', or 'none' to remove)
 //   --demo             freeze the game loop and fill the HUD with representative content (message, prompts, compass,
 //                      chat, low-ish bars, a full hotbar) so every element can be seen and measured at once
@@ -57,7 +64,7 @@ const { pathToFileURL } = require('url')
 
 function parseArgs(argv) {
   const val = {}, flags = new Set()
-  const valued = new Set(['w', 'h', 'out', 'src', 'level', 'theme', 'attract-t', 'wait', 'timeout', 'memory', 'prefs', 'ropts', 'query', 'pump', 'drive'])
+  const valued = new Set(['w', 'h', 'out', 'src', 'level', 'theme', 'attract-t', 'wait', 'timeout', 'memory', 'prefs', 'ropts', 'query', 'pump', 'drive', 'save'])
   const multi = new Set(['eval'])   // may be repeated: collected in order
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i]
@@ -88,6 +95,7 @@ const step = (m) => { if (flags.has('verbose')) process.stderr.write('[step] ' +
 const NOHUD_CSS = '#hud-cluster, #hotbar-dock, #exit-compass, #hint, #btn-settings { display: none !important }'
 
 if (!outPng) { process.stderr.write('usage: electron tools/gfx/page.cjs --out <png> [--w 1280 --h 720] [--phone] [--start] [--level 0..3|null] [--theme X] [--demo] ...\n'); process.exit(2) }
+if (val.save !== undefined && levelArg === undefined) { process.stderr.write('page.cjs: --save is merged into the save --level plants: give --level too\n'); process.exit(2) }
 
 if (!flags.has('gpu')) app.disableHardwareAcceleration()
 app.commandLine.appendSwitch('force-device-scale-factor', '1')
@@ -117,8 +125,10 @@ async function main() {
   fs.writeFileSync(preload, `const { webFrame } = require('electron'); webFrame.executeJavaScript(${JSON.stringify(preJs)})`)
   const win = new BrowserWindow({
     show: false, width: W, height: H, useContentSize: true, backgroundColor: '#000000',
-    webPreferences: { backgroundThrottling: false, contextIsolation: true, nodeIntegration: false, sandbox: true, preload },
+    webPreferences: { backgroundThrottling: false, contextIsolation: true, nodeIntegration: false, sandbox: true, preload, offscreen: flags.has('osr') },
   })
+  // --force-size: the constructor's width/height were clamped to the work area; resizing the content afterwards is not
+  if (flags.has('force-size')) { win.setContentBounds({ x: 0, y: 0, width: W, height: H }); win.setContentSize(W, H); step('content size ' + JSON.stringify(win.getContentSize())) }
   const wc = win.webContents
   // --visible: a real, composited window parked far off-screen, so requestAnimationFrame runs at the display rate (a hidden window
   // only produces frames on demand) — needed to measure a live loop's frame rate
@@ -186,6 +196,7 @@ async function main() {
       selected: 1, pagesRead: [], worldSeed: null, anchor: null,
     }
     if (lv === 4) { save.x = undefined; save.y = undefined }   // let the fixed map place you at its authored spawn
+    if (val.save) Object.assign(save, JSON.parse(val.save))     // --save: the camera (x / y / angle) or any other field, over the defaults
     await exec(`localStorage.setItem('backrooms:save', ${JSON.stringify(JSON.stringify(save))})`)
     p = loaded(); wc.reload(); await p
   }
@@ -272,7 +283,9 @@ async function main() {
   // ── capture ──
   const png = await snap()   // works for a hidden window here (a 2nd DevTools screenshot did not return)
   fs.writeFileSync(outPng, png)
-  log(`saved ${outPng} (${W}x${H}, ${(png.length / 1024).toFixed(0)} KB)`)
+  const got = nativeImage.createFromBuffer(png).getSize()   // the size actually captured: a clamped window shows up here, not in --w / --h
+  log(`saved ${outPng} (${got.width}x${got.height}, ${(png.length / 1024).toFixed(0)} KB)`)
+  if (got.width !== W || got.height !== H) process.stderr.write(`[page warn] captured ${got.width}x${got.height}, not the ${W}x${H} asked for: the window was clamped (add --force-size)\n`)
 
   if (flags.has('measure')) await measure(exec, wc, snap)
 
