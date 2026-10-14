@@ -15,14 +15,20 @@
 <meta property="og:title" content="THE BACKROOMS">
 <meta property="og:description" content="you have no-clipped out of reality. a horror maze you can play in your browser, a map where its paper trail touches the ground, and cases waiting for a reader. if you can read this, you have the gift.">
 <meta property="og:url" content="https://backrooms.thecornerspore.dev/">
-<meta property="og:image" content="https://backrooms.thecornerspore.dev/og.jpg">
+<meta property="og:image" content="https://backrooms.thecornerspore.dev/og/play-v1.jpg">
+<meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Yellow walls under a drop ceiling, running into light — level 0, drawn by the game's engine.">
+<meta property="og:image:alt" content="The title screen of The Backrooms over a dim yellow corridor: solo, play online, join lan, host lan, and a field for a map pin.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="THE BACKROOMS">
-<meta name="twitter:description" content="you have no-clipped out of reality. play it in your browser. if you can read this, you have the gift.">
-<meta name="twitter:image" content="https://backrooms.thecornerspore.dev/og.jpg">
+<meta name="twitter:description" content="you have no-clipped out of reality. play it in your browser, no install. if you can read this, you have the gift.">
+<meta name="twitter:image" content="https://backrooms.thecornerspore.dev/og/play-v1.jpg">
+<meta name="twitter:image:alt" content="The title screen of The Backrooms over a dim yellow corridor.">
+<!-- the counter: GoatCounter, cookieless, on this page and the browser game only (never the desktop app, never the itch zip).
+     The path is fixed, so no query string is ever counted. The privacy line in the standing orders says so. -->
+<script>window.goatcounter={path:'/'}</script>
+<script data-goatcounter="https://backrooms.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <style>
   :root{
     --bg:#050403; --plate:#040302; --ink:#020201;
@@ -66,8 +72,15 @@
   /* the topbar and the legend sit above the vignette, grain and scan layers (z 50–52) so their small text keeps its contrast */
   .topbar{position:absolute;z-index:53;top:14px;left:var(--g);right:var(--g);display:flex;
     justify-content:space-between;gap:16px;font-size:11px;letter-spacing:2px;color:var(--dim);line-height:1.5}
-  .topbar span:last-child{text-align:right;white-space:nowrap}
-  @media(max-width:359px){.topbar{letter-spacing:1px}}
+  .topbar .tr{display:flex;flex-wrap:wrap;justify-content:flex-end;align-items:baseline;gap:0 22px;text-align:right}
+  .topbar .coord{white-space:nowrap}
+  /* the first thing on the page: the game, in this browser, nothing to install (the DESCEND button below says it again) */
+  .topbar .toplay{color:var(--yb);text-decoration:underline;text-decoration-color:var(--rule-2);text-underline-offset:4px;
+    display:inline-block;padding:13px 2px;margin:-13px -2px}
+  .topbar .toplay:hover{text-decoration-color:var(--y)}
+  /* phones: the coordinates step aside and the bar tightens, so the link keeps to two lines above the case line */
+  @media(max-width:699px){.topbar{letter-spacing:1px}.topbar .coord{display:none}.topbar .tr{flex:0 1 auto;max-width:58%}}
+  @media(max-width:359px){.topbar{letter-spacing:0}}
   .head{position:relative;z-index:53;min-width:0;display:flex;flex-direction:column;align-items:center;text-align:center;
     gap:clamp(10px,1.9vh,18px);padding:clamp(78px,11vh,104px) var(--g) 6px}
   /* phones: a tighter stack, so the play button's two-line caption still leaves both plate marks on a 375x812 first screen */
@@ -109,7 +122,7 @@
     background:rgba(4,3,2,.6);transition:border-color .2s,background .2s}
   .ghost:hover{border-color:var(--y);background:rgba(201,186,114,.07)}
   .ghost small{font-size:11px;letter-spacing:2px;color:var(--prose-2);text-wrap:balance}
-  .ghost,.gift,.topbar span:first-child{text-wrap:balance}
+  .ghost,.gift,.topbar>span:first-child{text-wrap:balance}
   @media(max-width:699px){.acts{flex-direction:column;align-self:stretch;align-items:stretch}}
   @media(max-width:400px){.ghost{letter-spacing:1px;padding:10px 14px}.btn{padding-left:16px;padding-right:16px}}   /* the caption stays on one line */
 
@@ -601,7 +614,7 @@
   <canvas class="fan" aria-hidden="true"></canvas>
   <div class="topbar">
     <span>CORNER SPORE // FIELD RECOVERY</span>
-    <span>39.2854, −76.6083</span>
+    <span class="tr"><a class="toplay" href="play/">play in your browser <span class="nw">— no install&nbsp;▸</span></a><span class="coord">39.2854, −76.6083</span></span>
   </div>
   <div class="head">
     <p class="meta">case ∅ — do not distribute</p>
@@ -610,7 +623,7 @@
     <p class="gift"><span class="vh">if you can read this, you have the gift.</span><span id="gift" aria-hidden="true">ᛁᚠ ᛃᛟᚢ ᚲᚨᚾ ᚱᛖᚨᛞ ᛏᚺᛁᛊ, ᛃᛟᚢ ᚺᚨᚹᛖ ᛏᚺᛖ ᚷᛁᚠᛏ</span></p>
     <p class="facts"><span>a horror game in an endless maze</span><span class="dot" aria-hidden="true">·</span><span>built on a real paper trail</span><span class="dot" aria-hidden="true">·</span><span>pinned to a real map</span></p>
     <div class="acts">
-      <a class="btn" href="play/">DESCEND&nbsp;▸<small><span class="kb">play free in your browser</span><span class="tc">free · best on a computer · works on phones too</span></small></a>
+      <a class="btn" href="play/">DESCEND&nbsp;▸<small><span class="kb">play free in your browser — no install</span><span class="tc">free · no install · best on a computer · works on phones too</span></small></a>
       <a class="ghost" href="atlas/">open the atlas&nbsp;▸<small>a real map of Baltimore</small></a>
     </div>
     <p class="touchnote">not ready to descend? start with <span class="nw"><a href="atlas/">the atlas</a>,</span> <a href="#cases">a case</a> or <a href="#book">the book</a>.</p>
@@ -1010,7 +1023,7 @@
     </dl>
     <p class="manual-line">Every control, your light, your file and every comfort setting are in <a href="manual/">the field manual — <span class="nw">DOC-FIELD-00&nbsp;▸</span></a></p>
     <div class="descend-acts">
-      <a class="btn" href="play/">DESCEND&nbsp;▸<small><span class="kb">play free in your browser</span><span class="tc">free · best on a computer · works on phones too</span></small></a>
+      <a class="btn" href="play/">DESCEND&nbsp;▸<small><span class="kb">play free in your browser — no install</span><span class="tc">free · no install · best on a computer · works on phones too</span></small></a>
       <a class="ghost" href="https://github.com/sasha-thecornerspore-dev/backrooms/releases/latest">download the desktop app&nbsp;↗<small>from the latest release</small></a>
     </div>
   </section>
@@ -1039,11 +1052,11 @@
     <h2 class="tag" id="orders-h">standing orders</h2>
     <p class="lede">There is no roster to join and nothing to sign. If the runes resolved for you, you were recruited on the first screen.</p>
     <ol>
-      <li><h3><span class="no">1 ·</span> Descend.</h3><p>Every solo run begins at level ∅. <span class="nw">No-clip</span> out, then play level 0 until the wallpaper starts to feel familiar. Then go lower.</p><a class="alt" href="play/"><span>play in your browser&nbsp;▸</span></a></li>
+      <li><h3><span class="no">1 ·</span> Descend.</h3><p>Every run begins in the lobby, level 0. Play it until the wallpaper starts to feel familiar. Then go lower. The block, level ∅, is behind the front door on the title screen, for when you mean it.</p><a class="alt" href="play/"><span>play in your browser&nbsp;▸</span></a></li>
       <li><h3><span class="no">2 ·</span> Open a case.</h3><p>Start with CASE D-8 — it is the gentlest; everything it asks is on the public record. Then try CASE L-22: it begins inside a very small book.</p><a class="alt" href="recover/?case=case-d8"><span>open CASE D-8&nbsp;▸</span></a></li>
       <li><h3><span class="no">3 ·</span> Read the map.</h3><p>Open the first door and read its strata down, newest to oldest.</p><a class="alt" href="atlas/#806-n-carey"><span>read the first door&nbsp;▸</span></a></li>
     </ol>
-    <p class="none">This page loads nothing from anyone else — no ads, no trackers, no analytics. Your solo run and your case progress stay where you play them. Online play goes through our server, which keeps each room’s world; a place you pin is never sent to the people you play with. The desktop app reaches out only to check for its own updates, to fetch the cases, to push a beacon you have pointed somewhere yourself, and to carry a wish you choose to make. Someone reads the wishes, so put nothing real about yourself in one.</p>
+    <p class="none">No ads, no trackers. One cookieless counter (<a href="https://www.goatcounter.com/">GoatCounter</a>) on this page and in the browser game, so I know whether anyone came. It counts a visit (which page, the site that sent you, your browser, screen size and country), sets no cookie, stores no IP address, and never sees a name, a room code, a pin or a wish. The desktop app counts nothing. Your solo run and your case progress stay where you play them. Online play goes through our server, which keeps each room’s world; a place you pin is never sent to the people you play with. The desktop app reaches out only to check for its own updates, to fetch the cases, to push a beacon you have pointed somewhere yourself, and to carry a wish you choose to make. Someone reads the wishes, so put nothing real about yourself in one.</p>
   </section>
 </main>
 
