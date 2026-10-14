@@ -73,3 +73,55 @@ describe('the counter, the licences, the share card', () => {
     expect(manual).toContain('<meta property="og:image" content="https://backrooms.thecornerspore.dev/og/manual-v1.jpg">')
   })
 })
+
+describe('the launch review: what the docs must now say', () => {
+  const html = read('src/renderer/index.html')
+  it('the old wish token is revoked by the owner before 2.0.0 is published (review SEC-1)', () => {
+    for (const [k, d] of [['readme', readme], ['notes', notes]]) {
+      const at = d.indexOf('revoke')
+      expect(at, k).toBeGreaterThan(-1)
+      const near = d.slice(Math.max(0, at - 300), at + 600)
+      expect(near, k).toContain('ISSUES_TOKEN')
+      expect(near, k).toMatch(/delete the `ISSUES_TOKEN` repository secret/)
+      expect(near, k).toMatch(/this repository only, issues read and write, nothing else/)
+    }
+  })
+  it('the counter: what GoatCounter stores, the front page too, and no room code or pin (review PRIV-1, PRIV-4, DOC-4)', () => {
+    for (const [k, d] of Object.entries(docs)) {
+      for (const s of ['ride along', 'reaches GoatCounter\'s server', 'though the page it counts stays']) expect(d, `${k}: ${s}`).not.toContain(s)
+    }
+    expect(readme).toContain('your browser and operating system, your language, screen width and country')
+    expect(readme).toContain('no room code or pin is ever sent to it')
+    expect(notes).toContain('your browser and operating system, your language, screen width and country')
+    expect(manual).toContain("The site's front page and the browser game at <code>/play/</code> carry one cookieless counter")
+    expect(manual).toContain('your browser and system, your language, screen width and country')
+  })
+  it('the front door replaces a solo save just as SOLO does, and every warning says so (review DOC-5)', () => {
+    expect(readme).toContain('starting SOLO (or the front door) over it replaces it')
+    expect(readme).toContain('**SOLO** or **the front door** with a save present starts over and replaces it')
+    expect(manual).toContain('⚠ before you press SOLO or the front door')
+    expect(manual).toContain('<b>SOLO ▶</b> and the front door start over and overwrite your solo save without asking.')
+  })
+  it('the manual\'s licence links reach the copies the site ships with /play/, not a branch that may not hold them yet (review DOC-6)', () => {
+    expect(manual).not.toContain('blob/main/LICENSE')
+    expect(manual).toContain('href="https://backrooms.thecornerspore.dev/play/LICENSE"')
+    expect(manual).toContain('href="https://backrooms.thecornerspore.dev/play/LICENSE-LORE.md"')
+  })
+  it('the wish box itself says a wish is posted publicly (review DOC-3)', () => {
+    expect(html).toContain('<p id="wish-note">what you say here is posted publicly. put nothing real about yourself in it.</p>')
+    const inner = html.slice(html.indexOf('<div id="wish-inner">'), html.indexOf('<div id="wish-actions">'))
+    expect(inner).toContain('id="wish-note"')
+    expect(html).toMatch(/#wish-note \{[^}]*font-size: 11px;[^}]*\}/)
+  })
+  it('/play/ carries its share card right after <title> (growth-spec §2.2; review DOC-10)', () => {
+    const head = html.slice(html.indexOf('<title>'), html.indexOf('<!-- PWA'))
+    for (const s of ['<link rel="canonical" href="https://backrooms.thecornerspore.dev/play/">', '<meta property="og:type" content="website">',
+      '<meta property="og:url" content="https://backrooms.thecornerspore.dev/play/">', '<meta property="og:image" content="https://backrooms.thecornerspore.dev/og/play-v2.jpg">',
+      '<meta property="og:image:width" content="1200">', '<meta property="og:image:height" content="630">', '<meta name="twitter:card" content="summary_large_image">',
+      '<meta name="twitter:image" content="https://backrooms.thecornerspore.dev/og/play-v2.jpg">',
+      '<meta property="og:image:alt" content="The title screen of The Backrooms over a dim yellow corridor: a field for a map pin, solo, play online, and the front door.">']) {
+      expect(head, s).toContain(s)
+    }
+    expect(html).not.toContain('play-v1.jpg')                      // the old card showed the pre-2.0 title (review DOC-9)
+  })
+})

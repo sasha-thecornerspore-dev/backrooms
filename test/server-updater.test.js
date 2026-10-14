@@ -3,13 +3,14 @@
 // OVER the tracked server/index.js, respawned it detached and exited — and the respawn read the same 1.0.0 and did it again, in a
 // loop (the 2.0.0 verify report, open issue 1). Now the updater runs only when the running file is named backrooms-server.js and
 // carries the version esbuild stamped into it; it replaces that file in place, never index.js.
-import { describe, it, expect, vi } from 'vitest'
-import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'fs'
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest'
+import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync } from 'fs'
+import http from 'http'
 import { spawn } from 'child_process'
 import { tmpdir } from 'os'
 import path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
-import { ASSET_NAME, CHECK_INTERVAL, isBundledEntry, startUpdater } from '../server/updater.js'
+import { ASSET_NAME, CHECK_INTERVAL, isBundledEntry, startUpdater, downloadFile, checkAndUpdate, parsesAsModule } from '../server/updater.js'
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -63,7 +64,7 @@ describe('the update replaces the running bundle in place, from the version stam
   const updater = read('../server/updater.js')
   const index = read('../server/index.js')
   it('updater.js downloads beside the entry, renames onto it and respawns it with its own arguments — never index.js', () => {
-    expect(updater).toContain("const tmp = entry + '.new'")
+    expect(updater).toContain("tmp = entry + '.new'")
     expect(updater).toContain('renameSync(tmp, entry)')
     expect(updater).toContain('spawn(process.execPath, [entry, ...process.argv.slice(2)]')
     expect(updater).not.toMatch(/'index(\.new)?\.js'/)
@@ -115,4 +116,78 @@ describe('`node server/index.js` from a checkout, run for real', () => {
       try { rmSync(dir, { recursive: true, force: true }) } catch { /* ignore */ }
     }
   }, 15000)
+})
+
+// review LR-2: the release bundle really updates itself now, so a failed download must never be renamed over the running server
+describe('a download that is not the whole server never replaces it', () => {
+  const dirs = []
+  const fresh = () => { const d = mkdtempSync(path.join(tmpdir(), 'backrooms-upd-')); dirs.push(d); return d }
+  afterAll(() => { for (const d of dirs) try { rmSync(d, { recursive: true, force: true }) } catch { /* ignore */ } })
+  const GOOD = "import { WebSocketServer } from 'ws'\nexport const v = '9.9.9'\n"
+
+  // a local http server standing in for GitHub's asset CDN
+  let srv, base
+  beforeAll(async () => {
+    srv = http.createServer((req, res) => {
+      if (req.url === '/moved') { res.writeHead(302, { location: '/good' }); return res.end() }
+      if (req.url === '/good') { res.writeHead(200, { 'content-length': Buffer.byteLength(GOOD) }); return res.end(GOOD) }
+      if (req.url === '/forbidden') { res.writeHead(403); return res.end('<html>403</html>') }
+      if (req.url === '/gone') { res.writeHead(404); return res.end('Not Found') }
+      if (req.url === '/short') { res.writeHead(200, { 'content-length': 100000 }); res.write(GOOD); return setTimeout(() => res.socket.destroy(), 30) }
+      res.writeHead(500); res.end()
+    })
+    await new Promise((r) => srv.listen(0, '127.0.0.1', r))
+    base = `http://127.0.0.1:${srv.address().port}`
+  })
+  afterAll(() => new Promise((r) => srv.close(r)))
+
+  it('downloadFile: a 200 (after a redirect) is written; a 403, a 404 and a body cut short reject, and an error page is never written', async () => {
+    const d = fresh()
+    await downloadFile(`${base}/moved`, path.join(d, 'a'), { get: http.get })
+    expect(readFileSync(path.join(d, 'a'), 'utf8')).toBe(GOOD)
+    for (const u of ['/forbidden', '/gone']) {
+      await expect(downloadFile(base + u, path.join(d, 'b'), { get: http.get }), u).rejects.toThrow(/answered (403|404)/)
+      expect(existsSync(path.join(d, 'b')), u).toBe(false)
+    }
+    await expect(downloadFile(`${base}/short`, path.join(d, 'c'), { get: http.get })).rejects.toThrow()
+  })
+
+  const entryIn = (d) => { const e = path.join(d, 'backrooms-server.js'); writeFileSync(e, 'the running server'); return e }
+  const release = (url, size) => async () => ({ tag_name: 'v9.9.9', assets: [{ name: 'backrooms-server.js', size, browser_download_url: url }] })
+  const viaHttp = (url, dest) => downloadFile(url, dest, { get: http.get })
+  for (const [why, url, size] of [
+    ['the CDN answers 404', '/gone', Buffer.byteLength(GOOD)],
+    ['the CDN answers 403', '/forbidden', 16],
+    ['the body is cut short', '/short', 100000],
+    ['the file is not the size the release says', '/good', Buffer.byteLength(GOOD) + 1],
+  ]) {
+    it(`${why}: the entry is left untouched, the partial file is gone, and nothing restarts`, async () => {
+      const d = fresh(), entry = entryIn(d), restart = vi.fn()
+      expect(await checkAndUpdate('2.0.0', 'o/r', entry, { fetchRelease: release(base + url, size), download: viaHttp, restart })).toBe(false)
+      expect(readFileSync(entry, 'utf8')).toBe('the running server')
+      expect(existsSync(entry + '.new')).toBe(false)
+      expect(restart).not.toHaveBeenCalled()
+    })
+  }
+  it('a whole file that does not parse (an error page of the right size) is not used either', async () => {
+    const d = fresh(), entry = entryIn(d), restart = vi.fn()
+    const page = '<html><body>rate limited</body></html>'
+    const download = async (_u, dest) => writeFileSync(dest, page)
+    expect(await checkAndUpdate('2.0.0', 'o/r', entry, { fetchRelease: release('x', page.length), download, restart })).toBe(false)
+    expect(readFileSync(entry, 'utf8')).toBe('the running server')
+    expect(existsSync(entry + '.new')).toBe(false)
+    expect(restart).not.toHaveBeenCalled()
+  })
+  it('a whole server that parses replaces the entry, and only then restarts', async () => {
+    const d = fresh(), entry = entryIn(d), restart = vi.fn()
+    expect(await checkAndUpdate('2.0.0', 'o/r', entry, { fetchRelease: release(`${base}/moved`, Buffer.byteLength(GOOD)), download: viaHttp, restart })).toBe(true)
+    expect(readFileSync(entry, 'utf8')).toBe(GOOD)
+    expect(restart).toHaveBeenCalledWith(entry)
+    expect(parsesAsModule(entry)).toBe(true)
+  })
+  it('no newer release: nothing is downloaded', async () => {
+    const d = fresh(), entry = entryIn(d), download = vi.fn()
+    expect(await checkAndUpdate('9.9.9', 'o/r', entry, { fetchRelease: release('x', 1), download })).toBe(false)
+    expect(download).not.toHaveBeenCalled()
+  })
 })

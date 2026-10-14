@@ -79,6 +79,6 @@ describe('offline shell lists: world.json', () => {
   })
   it('both caches were renamed for it, so installed copies refetch the shell', () => {
     expect(Number(/backrooms-pwa-v(\d+)/.exec(sw)[1])).toBeGreaterThanOrEqual(11)
-    expect(Number(/PLAY_SW_VERSION:-(\d+)/.exec(build)[1])).toBeGreaterThanOrEqual(22)
+    expect(build).toContain('PLAY_SW_VERSION="${PLAY_SW_VERSION:-}"')   // no default any more: the site build is told its number (review DOC-2)
   })
 })

@@ -3,7 +3,7 @@
 // opt-in. Pure functions, so every rule is pinned here; index.html and game.js only wire them (test/invite-wiring.test.js).
 import { describe, it, expect, vi } from 'vitest'
 import {
-  SITE_ORIGIN, PLAY_URL, RELAY_HTTP, ROOM_MAX, RECOVER_LOCAL, RECOVER_SITE, ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, PIN_AGAIN,
+  SITE_ORIGIN, PLAY_URL, RELAY_HTTP, ROOM_MAX, RECOVER_LOCAL, RECOVER_SITE, ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, PIN_AGAIN, PIN_PRESS_AGAIN,
   NO_DOOR_LINE, NO_PIN_LINE, NO_FIELD_PIN, lanLine, normalizeRoom, readInvite, buildInvite, isOwnSite, recoverBase, lanReachable,
   shortMapsLink, shortLinkQuery, pinFromResolver, resolveShortLink, inviteFor,
 } from '../src/renderer/site.js'
@@ -19,9 +19,13 @@ describe('the addresses', () => {
     expect(RECOVER_SITE).toBe('https://backrooms.thecornerspore.dev/recover/cases/')
   })
   it('the lines are the ones the owner signed off', () => {
-    expect(ANCHOR_NOT_FOUND).toBe("that place cannot be found. short links don't work yet: paste the full link from a computer's address bar, or the two numbers.")
-    expect(PIN_WARNING).toBe("a pin in a link is a place in a link. don't share your home.")
-    for (const s of [ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, PIN_AGAIN, NO_DOOR_LINE, NO_PIN_LINE, NO_FIELD_PIN]) {
+    // the relay resolves a phone's short link now: a failure never says they don't work (review DOC-1)
+    expect(ANCHOR_NOT_FOUND).toBe("that place cannot be found. paste the full link from a computer's address bar, or the two numbers.")
+    expect(ANCHOR_NOT_FOUND).not.toMatch(/short links/)
+    // both opt-in paths say the stream clause the revised spec asks for (growth-spec §1.1; review PRIV-3)
+    expect(PIN_WARNING).toBe("a pin in a link is a place in a link. don't share your home, and don't paste this on stream.")
+    expect(PIN_PRESS_AGAIN).toBe('press again to send it with your place.')
+    for (const s of [ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, PIN_AGAIN, PIN_PRESS_AGAIN, NO_DOOR_LINE, NO_PIN_LINE, NO_FIELD_PIN]) {
       expect(s).toBe(s.toLowerCase())
       expect(s).not.toContain('!')
     }

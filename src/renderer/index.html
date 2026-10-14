@@ -4,6 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>The Backrooms</title>
+  <!-- the share card a /play/ link unfurls with (growth-spec §2.2); build-play.sh carries it to the site and the itch zip, Electron ignores it -->
+  <link rel="canonical" href="https://backrooms.thecornerspore.dev/play/">
+  <meta name="description" content="the backrooms, in your browser. free, no install, works on phones. bring a friend: same room code, same world.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="The Corner Spore">
+  <meta property="og:title" content="THE BACKROOMS — play it in your browser">
+  <meta property="og:description" content="a free first-person horror maze. no install. walk until something pulls.">
+  <meta property="og:url" content="https://backrooms.thecornerspore.dev/play/">
+  <meta property="og:image" content="https://backrooms.thecornerspore.dev/og/play-v2.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The title screen of The Backrooms over a dim yellow corridor: a field for a map pin, solo, play online, and the front door.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="THE BACKROOMS — play it in your browser">
+  <meta name="twitter:description" content="a free first-person horror maze. no install. walk until something pulls.">
+  <meta name="twitter:image" content="https://backrooms.thecornerspore.dev/og/play-v2.jpg">
+  <meta name="twitter:image:alt" content="The title screen of The Backrooms over a dim yellow corridor: a field for a map pin, solo, play online, and the front door.">
   <!-- PWA (active when served over http(s); inert under Electron file://) -->
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="theme-color" content="#c9ba72">
@@ -276,6 +294,8 @@
     #wish-sub:empty { display: none; }
     #wish-sub .wish-line.stamp { cursor: pointer; touch-action: manipulation; }
     #wish-sub .wish-line.stamp:hover { color: var(--wall); }
+    /* every copy posts a wish (the relay files it as a public issue): the box itself says so, for whoever never read the docs */
+    #wish-note { margin-top: -8px; color: var(--text-dim); font-size: 11px; letter-spacing: 1px; line-height: 1.5; opacity: 0.8; }
     #wish-actions { display: flex; gap: 12px; }
     #wish-actions button {
       background: #2a1e00; color: var(--wall); border: 1px solid #6a5424;
@@ -666,6 +686,7 @@
       <p id="wish-prompt">state your request.</p>
       <textarea id="wish-text" maxlength="280" rows="3" placeholder="speak."></textarea>
       <p id="wish-sub"></p>
+      <p id="wish-note">what you say here is posted publicly. put nothing real about yourself in it.</p>
       <div id="wish-actions">
         <button id="wish-submit">submit</button>
         <button id="wish-cancel">cancel</button>
@@ -697,7 +718,7 @@
     import { parseAnchor, anchorSeed, formatAnchor, bodyUrl } from './anchor.js'
     import { getPrefs, setPref } from './prefs.js'
     import { readSave } from './save.js'
-    import { readInvite, buildInvite, normalizeRoom, lanReachable, shortMapsLink, resolveShortLink, ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, NO_FIELD_PIN } from './site.js'
+    import { readInvite, buildInvite, normalizeRoom, lanReachable, shortMapsLink, resolveShortLink, ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, PIN_PRESS_AGAIN, NO_FIELD_PIN } from './site.js'
     const RELAY_URL = 'wss://backrooms-relay.jeff-schatz112.workers.dev'
 
     const startEl = document.getElementById('start')
@@ -805,8 +826,10 @@
 
     // ── an invite: /play/?room=CODE[&anchor=LAT,LNG] (site.js readInvite; the desktop page reads the same query when it has one). The pin
     //    fills the anchor field; the room fills the PLAY ONLINE field and a plate offers one click in. The code reaches the page as text
-    //    only (textContent), never markup, and the link never picks a name: what is in the name field (or nothing) is the player's ──
-    const invite = readInvite(location.search)
+    //    only (textContent), never markup, and the link never picks a name: what is in the name field (or nothing) is the player's.
+    //    On the site, a line in <head> (tools/build-play.sh) took room and anchor out of the address before the counter could send them,
+    //    and kept the query it found as window.__playQuery; the desktop page and the itch copy have no such line and read their own ──
+    const invite = readInvite(window.__playQuery ?? location.search)
     if (invite.anchor) { anchorInput.value = formatAnchor(invite.anchor); anchorInput.dispatchEvent(new Event('input')) }
     if (invite.room) {
       document.getElementById('online-room').value = invite.room
@@ -830,12 +853,26 @@
     // in (solo, the relay, a LAN you joined or hosted), the pin, the name. The arrival is written by the game at the filing.
     const intakeFor = (route, anchor) => ({ route, arrival: null, anchor: anchor || null, name: getName() })
 
+    // One start, whichever way in: SOLO, the front door, CONTINUE, an online room (ENTER or an invite's JOIN) and HOST / JOIN LAN all
+    // pass here first. The anchor may still be out with the relay (up to 8 s) while the title stays up, so the title goes inert: nothing
+    // on it can start a second game over the first. A start that fails (a room that would not connect) gives the title back
+    let starting = false
+    function beginStart() {
+      if (starting) return false
+      starting = true
+      startEl.inert = true
+      return true
+    }
+    function startFailed() {
+      starting = false
+      startEl.inert = false
+    }
+
     // a fresh solo run comes in through the lobby; through the front door it comes in on the block, Level ∅ (game.js / topology.js
-    // entryLevel). One start: the anchor may still be out with the relay, and a second click meanwhile must not start a second game
-    let soloBusy = false
+    // entryLevel). A short link still out with the relay is said on the title, so the press visibly did something
     async function startSolo({ frontDoor = false } = {}) {
-      if (soloBusy) return
-      soloBusy = true
+      if (!beginStart()) return
+      if (!fieldAnchorNow() && shortMapsLink(anchorInput.value)) startStatus.textContent = ANCHOR_LOOKING
       const anchor = await takeAnchor()
       const intakeCtx = intakeFor('solo', anchor)
       const opts = anchor
@@ -847,10 +884,8 @@
 
     // one connection attempt at a time: a double click on HOST / ENTER must not join the room twice (or start the game twice).
     // lanUrl: the address a friend types into JOIN LAN (HOST LAN's own network address), which /invite says on a LAN
-    let mpBusy = false
     async function startMultiplayer(serverUrl, roomId, statusEl, route = 'lan', lanUrl = serverUrl) {
-      if (mpBusy) return
-      mpBusy = true
+      if (!beginStart()) return
       const st = statusEl || joinStatus
       st.textContent = 'connecting...'
       try {
@@ -865,7 +900,7 @@
         await initGame(canvas, { worldSeed, mpClient, anchor, intakeCtx: intakeFor(route, anchor), room: { code: roomId, route, lan: route === 'online' ? null : lanUrl } })
       } catch (e) {
         st.textContent = `failed: ${e.message || 'could not connect'}`
-        mpBusy = false                                   // (a started game keeps it set: there is no second start)
+        startFailed()                                    // (a started game keeps it set: there is no second start)
       }
     }
 
@@ -976,11 +1011,22 @@
     const onlineStatus = document.getElementById('online-status')
     if (sharePhone()) inviteBtn.textContent = 'send invite'
     invitePin.checked = false
+    // Two presses, like /invite pin: the pin is read when the link is made (a short link's lookup may have answered since the box was
+    // ticked, or a pin been pasted), and the first press that would carry one only says what a pin in a link is and sends nothing.
+    // warnedFor: the pin that warning was last said for; ticking the box or opening the box again forgets it
+    let warnedFor = null
     invitePin.addEventListener('change', () => {
+      warnedFor = null
       onlineStatus.textContent = !invitePin.checked ? '' : fieldAnchorNow() ? PIN_WARNING : NO_FIELD_PIN
     })
+    document.getElementById('btn-online').addEventListener('click', () => { warnedFor = null })
     inviteBtn.onclick = () => {
       const pin = invitePin.checked ? fieldAnchorNow() : null
+      if (pin && warnedFor !== formatAnchor(pin)) {
+        warnedFor = formatAnchor(pin)
+        onlineStatus.textContent = `${PIN_WARNING} ${PIN_PRESS_AGAIN}`
+        return
+      }
       shareInvite(buildInvite({ room: document.getElementById('online-room').value, anchor: pin }), (t) => { onlineStatus.textContent = pin ? `${PIN_WARNING} ${t}` : t }, inviteUrlEl)
     }
 
@@ -990,6 +1036,7 @@
       const cont = document.getElementById('btn-continue')
       cont.style.display = ''
       cont.onclick = async () => {
+        if (!beginStart()) return                        // SOLO pressed first may still be waiting on its pin
         startStatus.textContent = ''
         // Restore the identity, not just the world: currentAnchor was never set
         // on this path, so a resumed anchored run had a working drift HUD but a

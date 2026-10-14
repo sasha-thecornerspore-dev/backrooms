@@ -47,6 +47,14 @@ describe('game.js: the boot goes through entryLevel; nothing else about ∅ chan
     expect(game).not.toMatch(/buildLevel\(mpClient \? 0 : 4\)/)
     expect((game.match(/buildLevel\(entryLevel\(/g) || []).length).toBe(1)
   })
+  it('a fresh run says how to leave its first floor, as a first visit through travel() does (review LR-3)', () => {
+    const boot = slice(game, 'buildLevel(entryLevel(', 'showMessage(level.cfg.levelName, PRIO.combat)')
+    expect(boot).toMatch(/if \(getPref\('solidBodies'\)\) level\.solid\.settlePlayer\(player\)[^\n]*\r?\n\s*\/\/[^\n]*\r?\n\s*if \(level\.cfg\.exit\?\.hint\) later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\)\r?\n\s*\}/)
+    const resume = slice(game, 'if (resume) {', 'buildLevel(entryLevel(')
+    expect(resume).not.toContain('exit?.hint')                    // a resumed run is not a first visit
+    expect(levelConfig(DEFAULT_CONFIG, LOBBY).exit.hint).toBe('the walls are thin here — no-clip through a torn corner and you fall out of the lobby.')
+    expect(at(game, 'function later(ms, text, prio)')).toBeLessThan(at(game, 'buildLevel(entryLevel('))
+  })
   it('the resume is untouched: a saved run on ∅ comes back to ∅', () => {
     const resume = slice(game, 'if (resume) {', 'buildLevel(entryLevel(')
     expect(resume).toContain('const r = applyResume(resume, {')
@@ -89,6 +97,37 @@ describe('index.html: the front door, quiet, under the ways in', () => {
     expect(solo).toContain('await initGame(canvas, { ...opts, frontDoor })')
     expect(html).toMatch(/document\.getElementById\('btn-solo'\)\.onclick = \(\) => \{\r?\n\s*startStatus\.textContent = ''\r?\n\s*startSolo\(\)/)
     expect(html).toMatch(/document\.getElementById\('btn-front-door'\)\.onclick = \(\) => \{\r?\n\s*startStatus\.textContent = ''\r?\n\s*startSolo\(\{ frontDoor: true \}\)/)
+  })
+  it('one start for every way in: SOLO, the front door, CONTINUE and every online / LAN join check the same flag (review LR-1)', () => {
+    expect(html).toMatch(/let starting = false\r?\n\s*function beginStart\(\) \{\r?\n\s*if \(starting\) return false\r?\n\s*starting = true\r?\n\s*startEl\.inert = true\r?\n\s*return true\r?\n\s*\}/)
+    expect(html).toMatch(/function startFailed\(\) \{\r?\n\s*starting = false\r?\n\s*startEl\.inert = false\r?\n\s*\}/)
+    const solo = slice(html, 'async function startSolo(', '// one connection attempt at a time')
+    expect(solo).toMatch(/\{\r?\n\s*if \(!beginStart\(\)\) return\r?\n/)
+    const mp = slice(html, 'async function startMultiplayer(', '// the relay\'s room')
+    expect(mp).toMatch(/\{\r?\n\s*if \(!beginStart\(\)\) return\r?\n/)
+    expect(mp).toMatch(/catch \(e\) \{\r?\n[^\n]*\r?\n\s*startFailed\(\)/)
+    const cont = slice(html, 'cont.onclick = async () => {', 'await initGame(')
+    expect(cont).toMatch(/cont\.onclick = async \(\) => \{\r?\n\s*if \(!beginStart\(\)\) return/)
+    expect(html).not.toMatch(/soloBusy|mpBusy/)
+    // the invite's JOIN, the modal's ENTER, JOIN LAN and HOST LAN all reach the game only through startMultiplayer
+    expect((html.match(/await initGame\(/g) || []).length).toBe(3)
+    expect((html.match(/if \(!beginStart\(\)\) return/g) || []).length).toBe(3)
+  })
+  it('the guard, run: SOLO waiting on a short link, then CONTINUE, starts one game, not two (review LR-1)', async () => {
+    const decl = slice(html, 'let starting = false', '// a fresh solo run comes in')
+    const startEl = { inert: false }
+    const { beginStart, startFailed } = new Function('startEl', decl + '\nreturn { beginStart, startFailed }')(startEl)
+    let games = 0, answer
+    const lookup = new Promise((r) => { answer = r })
+    const solo = async () => { if (!beginStart()) return; await lookup; games++ }
+    const cont = async () => { if (!beginStart()) return; games++ }
+    const s = solo()
+    expect(startEl.inert).toBe(true)                                // the title takes no second press while the pin is looked up
+    await cont()
+    answer(); await s
+    expect(games).toBe(1)
+    startFailed()
+    expect([startEl.inert, beginStart()]).toEqual([false, true])      // a join that failed gives the title back
   })
   it('the title no longer promises the block to everyone', () => {
     expect(html).toContain('<div class="sub">level 0. somewhere. you are here.</div>')

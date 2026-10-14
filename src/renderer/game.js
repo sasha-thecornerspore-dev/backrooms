@@ -2068,6 +2068,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   } else {
     buildLevel(entryLevel({ online: !!mpClient, frontDoor })); mem.arrive(level.index, spawnChunk, playT)   // the lobby; the block by the front door
     if (getPref('solidBodies')) level.solid.settlePlayer(player)               // out of a prop the spawn cell may hug (the lobby)
+    // a first visit, as travel() says it: how to leave this floor, a few seconds in (the lobby's torn corner; the block's gap)
+    if (level.cfg.exit?.hint) later(3800, level.cfg.exit.hint, PRIO.discovery)
   }
   showMessage(level.cfg.levelName, PRIO.combat)
   // the room's frames reach the bus only now, with a floor to lay a cache on: what came before (the relay's kept caches, replayed straight

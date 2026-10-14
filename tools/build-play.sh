@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# usage: PLAY_SW_VERSION=22 bash tools/build-play.sh src <gh-pages>/play   (bump the version on every rebuild so clients refetch)
+# usage: PLAY_SW_VERSION=<n> bash tools/build-play.sh src <gh-pages>/play  (required for the site: one more than it last shipped — 22 is out, so 23 — so clients refetch)
 #        PLAY_TARGET=itch bash tools/build-play.sh src <dir>              (the same bundle for a portal: no counter, no service worker; tools/build-itch.sh)
 #        GOATCOUNTER_CODE=<code>                                          (the site build's counter; default backrooms)
 # Build a self-contained, path-independent PWA bundle of the game into $DEST.
 # Flattens the ../net/ imports (client.js from index.html, evbus.js from game.js) so everything lives in one
 # directory, giving clean relative paths that work at any mount point (/, /play/, etc).
 set -euo pipefail
-PLAY_SW_VERSION="${PLAY_SW_VERSION:-22}"
+PLAY_SW_VERSION="${PLAY_SW_VERSION:-}"              # no default: a default would quietly repeat the cache name the site already ships
 PLAY_TARGET="${PLAY_TARGET:-site}"                  # site = backrooms.thecornerspore.dev/play/ (the counter goes in) · itch = a portal zip (it never does)
 GOATCOUNTER_CODE="${GOATCOUNTER_CODE:-backrooms}"   # the one constant: the site counts at https://<code>.goatcounter.com/count
 SRC="${1:?src dir}"      # .../backrooms/src
 DEST="${2:?dest dir}"    # .../play
 case "$PLAY_TARGET" in site|itch) ;; *) echo "PLAY_TARGET must be site or itch (got '$PLAY_TARGET')" >&2; exit 1 ;; esac
+# the site's service worker is named by it: the same number twice and installed copies never fetch the new build
+if [ "$PLAY_TARGET" = site ] && ! [[ "$PLAY_SW_VERSION" =~ ^[0-9]+$ ]]; then
+  echo "PLAY_SW_VERSION must be set for the site build: one more than the number in <gh-pages>/play/sw.js (got '$PLAY_SW_VERSION')" >&2; exit 1
+fi
 # the code lands inside a URL in the page: a plain goatcounter code or nothing
 [[ "$GOATCOUNTER_CODE" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "GOATCOUNTER_CODE must be a plain goatcounter code (a-z, 0-9, -), got '$GOATCOUNTER_CODE'" >&2; exit 1; }
 
@@ -41,11 +45,17 @@ sed -e "s#\.\./net/client\.js#./client.js#g" \
 # the counter (owner decision 2026-10-13): GoatCounter, cookieless, on the site's /play/ only — never the desktop app (it never runs
 # this script), never a portal zip (PLAY_TARGET=itch). The counted path is pinned to /play/, so nothing after a ? is ever the path.
 if [ "$PLAY_TARGET" = site ]; then
-  GC_SETTINGS="<script>window.goatcounter = { path: '/play/' }</script>"
+  # count.js always sends location.search with the count (its 'q'), and no setting turns that off: an invite link's room code and
+  # pin would reach GoatCounter on every friend's page load. So this classic script, parsed before the async count.js can run, keeps
+  # the query for the page (window.__playQuery; index.html reads its invite from it) and takes room and anchor out of the address
+  # bar. Other parameters (?ref=, ?gfxstats=1) stay. If the address cannot be rewritten, nothing is counted.
+  GC_SETTINGS="<script>(function () { var s = location.search, ok = true; window.__playQuery = s; try { var q = new URLSearchParams(s); if (q.has('room') || q.has('anchor')) { q.delete('room'); q.delete('anchor'); var r = q.toString(); history.replaceState(history.state, '', location.pathname + (r ? '?' + r : '') + location.hash) } } catch (e) { ok = false } window.goatcounter = ok ? { path: '/play/' } : { path: '/play/', no_onload: true } })()</script>"
   GC_TAG="<script data-goatcounter=\"https://${GOATCOUNTER_CODE}.goatcounter.com/count\" async src=\"//gc.zgo.at/count.js\"></script>"
   awk -v a="  $GC_SETTINGS" -v b="  $GC_TAG" '!done && /<\/head>/ { print a; print b; done = 1 } { print }' "$DEST"/index.html > "$DEST"/index.html.tmp
   mv "$DEST"/index.html.tmp "$DEST"/index.html
   [ "$(grep -c 'data-goatcounter=' "$DEST"/index.html)" = 1 ] || { echo "the counter was not injected exactly once" >&2; exit 1; }
+  awk '/window\.__playQuery = s/ { s = NR } /data-goatcounter=/ { t = NR } END { exit !(s && t && s < t) }' "$DEST"/index.html \
+    || { echo "the line that takes room and anchor out of the address must come before the counter" >&2; exit 1; }
 fi
 
 # a portal copy installs no service worker (growth-spec §3.2): it runs framed, and its origin (html-classic.itch.zone) is shared with

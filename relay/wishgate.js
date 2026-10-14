@@ -21,13 +21,17 @@ export const DAY_MS = 86_400_000
 // A request with no Origin at all is the desktop app's main process (or a script): CORS is a browser's rule, the gate is ours.
 export const ALLOWED_ORIGINS = Object.freeze(['https://backrooms.thecornerspore.dev', 'https://html-classic.itch.zone', 'https://html.itch.zone',
   'https://v6p9d9t4.ssl.hwcdn.net', 'null', 'file://'])
+// POST /wish is narrower: the site and the itch CDN only. Nothing real files a wish with Origin 'null' or 'file://' (the desktop app
+// files from its main process, which sends none), while any page can send one — a sandboxed iframe or a data: URL is 'null' — and so
+// turn its visitors into a flood of wishes under the owner's token, each from a fresh address. GET /maps keeps the desktop page's two.
+export const WISH_ORIGINS = Object.freeze(ALLOWED_ORIGINS.filter((o) => o.startsWith('https://')))
 
-export function originOk(origin) {
-  return origin == null || ALLOWED_ORIGINS.includes(origin)
+export function originOk(origin, allowed = ALLOWED_ORIGINS) {
+  return origin == null || allowed.includes(origin)
 }
 
-export function corsHeaders(origin) {
-  if (origin == null || !ALLOWED_ORIGINS.includes(origin)) return { Vary: 'Origin' }
+export function corsHeaders(origin, allowed = ALLOWED_ORIGINS) {
+  if (origin == null || !allowed.includes(origin)) return { Vary: 'Origin' }
   return {
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -82,7 +86,12 @@ const SPAM = [
   /\bt\.me\//,
   /\b(?:bit\.ly|tinyurl\.com)\b/,
   /[\w.+-]+@[\w-]+\.[a-z]{2,}/,                              // an address in a public issue is someone's privacy
-  /(?:^|[^\w@])@[a-z0-9][a-z0-9-]{0,38}(?![\w-])/,             // a @mention in the issue would ping a stranger from the owner's account
+  // (a @mention is not refused: buildIssue quiets every one, so '@3am' still reaches the person who reads the wishes)
+  /&(?:#0*64|#x0*40|commat);/,                                 // an '@' spelled as an entity renders as one, past buildIssue's quieting
+  /\b[\w.-]+\/[\w.-]+#\d+/,                                   // owner/repo#1: a cross-reference on a stranger's issue, from the owner's account
+  /<[a-z!\/?]/,                                                // any tag or <!-- comment -->: text the person who reads the wish would not see
+  /\]\s*\(/,                                                   // a markdown link
+  /(?:^|[\s("'=])\/\/[a-z0-9-]+\.[a-z]/,                       // a protocol-relative link (//host.example)
   /\bfree\s+(?:robux|v-?bucks|nitro)\b/,
   /\bonlyfans\b/,
   /\b(?:viagra|cialis)\b/,
@@ -98,8 +107,14 @@ export function filterWish(text) {
 }
 
 // ── the issue ────────────────────────────────────────────────────────────────────────────────
-// the desktop app's issue, byte for byte (the body's last line says where it came from: a browser sends no version)
-export function buildIssue({ text, meta, version }) {
+// An '@' a name could follow gets a zero-width space after it, so GitHub links no mention: '@someone', '@@someone' and '@org/team'
+// ping nobody from the owner's account, and a sincere '@3am' or '@midnight' is still filed, reading the same. The trailer has no '@'.
+const MENTION_RE = /@(?=[a-z0-9])/gi
+export function quietMentions(text) { return String(text).replace(MENTION_RE, '@​') }
+
+// the desktop app's issue, byte for byte (the body's last line says where it came from: a browser sends no version), its mentions quiet
+export function buildIssue({ text: said, meta, version }) {
+  const text = quietMentions(said)
   const appVersion = version
   return {
     title: wishTitle(text),
@@ -130,10 +145,13 @@ export function issueRequest(issue, { repo, token } = {}) {
 
 // ── the gate's arithmetic ────────────────────────────────────────────────────────────────────
 // Every rule is { windowMs, max }: at most max takes in any window of windowMs. The Gate durable object (relay.js) keeps one
-// list of take times per bucket per hashed address and wipes it all a day after the last take.
+// list of take times per bucket per hashed address and wipes it all a day after the last take. wishAll is the one bucket every
+// sender shares (the Gate named GLOBAL_GATE): however many addresses someone has, the relay files at most that many wishes a day.
 const MIN = 60_000
+export const GLOBAL_GATE = 'global'
 export const GATE_RULES = Object.freeze({
   wish: Object.freeze([Object.freeze({ windowMs: 10 * MIN, max: 3 }), Object.freeze({ windowMs: DAY_MS, max: 10 })]),
+  wishAll: Object.freeze([Object.freeze({ windowMs: DAY_MS, max: 300 })]),
   maps: Object.freeze([Object.freeze({ windowMs: 10 * MIN, max: 12 }), Object.freeze({ windowMs: DAY_MS, max: 60 })]),
 })
 
@@ -153,7 +171,36 @@ export function gateTake(stamps, now, rules) {
   return { ok: true, stamps: kept, retryMs: 0 }
 }
 
-// the gate's name: a salted SHA-256 of the address (CF-Connecting-IP), cut to 128 bits. The address itself is never stored.
+// Who one sender is: an IPv4 address, or an IPv6 address's /64. A home line or a VPS is handed a whole /64 (2^64 addresses to pick
+// from at will), so keying on the full IPv6 address would be a fresh gate per request. An IPv4-mapped address (::ffff:a.b.c.d) is that
+// IPv4. What does not read as an address is kept as it came (it still gets a gate of its own).
+const HEX4 = /^[0-9a-f]{1,4}$/
+const V4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/
+export function gateKey(ip) {
+  const raw = String(ip ?? '').trim().toLowerCase()
+  if (!raw.includes(':')) return raw
+  const a = raw.replace(/^\[|\]$/g, '').replace(/%.*$/, '')
+  const halves = a.split('::')
+  if (halves.length > 2) return raw
+  const part = (h) => (h ? h.split(':') : [])
+  const head = part(halves[0]), tail = part(halves[1])
+  const last = halves.length === 2 ? tail : head
+  const v4 = last.length ? last[last.length - 1].match(V4) : null
+  if (v4) {
+    const n = v4.slice(1).map(Number)
+    if (n.some((x) => x > 255)) return raw
+    last.splice(-1, 1, ((n[0] << 8) | n[1]).toString(16), ((n[2] << 8) | n[3]).toString(16))
+  }
+  const fill = halves.length === 2 ? 8 - head.length - tail.length : 0
+  if (fill < 0 || (halves.length === 2 && fill === 0)) return raw
+  const g = [...head, ...Array(fill).fill('0'), ...tail]
+  if (g.length !== 8 || !g.every((x) => HEX4.test(x))) return raw
+  const w = g.map((x) => parseInt(x, 16))
+  if (w.slice(0, 5).every((x) => x === 0) && w[5] === 0xffff) return `${w[6] >> 8}.${w[6] & 255}.${w[7] >> 8}.${w[7] & 255}`
+  return w.slice(0, 4).map((x) => x.toString(16)).join(':') + '::/64'
+}
+
+// the gate's name: a salted SHA-256 of the sender (gateKey of CF-Connecting-IP), cut to 128 bits. The address itself is never stored.
 export async function hashIp(ip, salt) {
   const data = new TextEncoder().encode(`${salt}|${ip || 'unknown'}`)
   const buf = new Uint8Array(await crypto.subtle.digest('SHA-256', data))

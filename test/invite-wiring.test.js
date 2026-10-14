@@ -40,10 +40,10 @@ describe('index.html: the title screen', () => {
 })
 
 describe('index.html: an invite link, ?room=CODE[&anchor=LAT,LNG]', () => {
-  const block = slice(html, 'const invite = readInvite(location.search)', '// player name (persisted)')
+  const block = slice(html, 'const invite = readInvite(window.__playQuery ?? location.search)', '// player name (persisted)')
   it('the pin fills the anchor field and says so through its own input event', () => {
     expect(block).toContain("if (invite.anchor) { anchorInput.value = formatAnchor(invite.anchor); anchorInput.dispatchEvent(new Event('input')) }")
-    expect(at(html, "anchorInput.addEventListener('input'")).toBeLessThan(at(html, 'const invite = readInvite(location.search)'))
+    expect(at(html, "anchorInput.addEventListener('input'")).toBeLessThan(at(html, 'const invite = readInvite(window.__playQuery ?? location.search)'))
   })
   it('the room fills the online field and raises the plate; the code reaches the page as text only', () => {
     expect(block).toContain("document.getElementById('online-room').value = invite.room")
@@ -88,12 +88,46 @@ describe('index.html: copying an invite', () => {
   const modal = slice(html, "const inviteBtn = document.getElementById('online-invite')", '// ── continue a saved run ──')
   it('the pin is never remembered and is warned about the moment it is ticked', () => {
     expect(modal).toContain('invitePin.checked = false')
-    expect(modal).toMatch(/invitePin\.addEventListener\('change', \(\) => \{\r?\n\s*onlineStatus\.textContent = !invitePin\.checked \? '' : fieldAnchorNow\(\) \? PIN_WARNING : NO_FIELD_PIN\r?\n\s*\}\)/)
+    expect(modal).toMatch(/invitePin\.addEventListener\('change', \(\) => \{\r?\n\s*warnedFor = null\r?\n\s*onlineStatus\.textContent = !invitePin\.checked \? '' : fieldAnchorNow\(\) \? PIN_WARNING : NO_FIELD_PIN\r?\n\s*\}\)/)
     expect(modal).not.toMatch(/setPref|localStorage/)
   })
   it('the copy is the room only unless the box is ticked; with the pin it says the warning again', () => {
     expect(modal).toContain('const pin = invitePin.checked ? fieldAnchorNow() : null')
     expect(modal).toContain("shareInvite(buildInvite({ room: document.getElementById('online-room').value, anchor: pin }), (t) => { onlineStatus.textContent = pin ? `${PIN_WARNING} ${t}` : t }, inviteUrlEl)")
+  })
+  it('a pin leaves only on a second press: the first that would carry one warns and sends nothing (review PRIV-2)', () => {
+    const click = slice(modal, 'inviteBtn.onclick = () => {', '\n    }')
+    const warn = at(click, 'if (pin && warnedFor !== formatAnchor(pin)) {'), share = at(click, 'shareInvite(')
+    expect(warn).toBeLessThan(share)
+    expect(click).toMatch(/if \(pin && warnedFor !== formatAnchor\(pin\)\) \{\r?\n\s*warnedFor = formatAnchor\(pin\)\r?\n\s*onlineStatus\.textContent = `\$\{PIN_WARNING\} \$\{PIN_PRESS_AGAIN\}`\r?\n\s*return\r?\n\s*\}/)
+    expect(modal).toMatch(/invitePin\.addEventListener\('change', \(\) => \{\r?\n\s*warnedFor = null\r?\n/)
+    expect(modal).toContain("document.getElementById('btn-online').addEventListener('click', () => { warnedFor = null })")
+    expect(modal).toMatch(/let warnedFor = null/)
+  })
+  it('the two presses, run: a pin that turns up after the box was ticked is warned about before it goes', async () => {
+    // the modal's handler, lifted from the page and run against fakes: the short link's lookup answers between the tick and the press
+    const src = modal.slice(at(modal, 'let warnedFor = null'))
+    const shared = []
+    let fieldPin = null
+    const el = () => ({ textContent: '', addEventListener(t, f) { this[t] = f } })
+    const invitePin = { checked: false, ...el() }, onlineStatus = el(), inviteBtn = {}, online = el()
+    const run = new Function('invitePin', 'onlineStatus', 'inviteBtn', 'fieldAnchorNow', 'formatAnchor', 'shareInvite', 'buildInvite', 'document', 'PIN_WARNING', 'PIN_PRESS_AGAIN', 'NO_FIELD_PIN', 'inviteUrlEl',
+      src + '\nreturn { change: invitePin.change }')
+    const { change } = run(invitePin, onlineStatus, inviteBtn, () => fieldPin, (a) => `${a.lat},${a.lng}`, (url) => { shared.push(url) },
+      ({ anchor }) => (anchor ? `link&anchor=${anchor.lat},${anchor.lng}` : 'link'), { getElementById: (id) => (id === 'btn-online' ? online : { value: 'room-1' }) },
+      'WARN', 'AGAIN', 'NOPIN', null)
+    invitePin.checked = true; change()
+    expect(onlineStatus.textContent).toBe('NOPIN')                   // the field has no pin yet: the status says the room only
+    fieldPin = { lat: 39.2854, lng: -76.6083 }                       // ...and then the relay answers
+    inviteBtn.onclick()
+    expect(shared).toEqual([])                                        // the first press sends nothing
+    expect(onlineStatus.textContent).toBe('WARN AGAIN')
+    inviteBtn.onclick()
+    expect(shared).toEqual(['link&anchor=39.2854,-76.6083'])           // the second does
+    change(); inviteBtn.onclick()                                     // ticked again: warned again
+    expect(shared.length).toBe(1)
+    invitePin.checked = false; change(); inviteBtn.onclick()           // unticked: the room only, at once
+    expect(shared).toEqual(['link&anchor=39.2854,-76.6083', 'link'])
   })
   it('one copy helper: the share sheet on a phone, the desktop bridge, the clipboard, else the link shown selected', () => {
     const fn = slice(html, 'async function shareInvite(url, say, fallbackEl) {', "document.addEventListener('backrooms:invite'")
@@ -116,7 +150,7 @@ describe('index.html: copying an invite', () => {
 })
 
 describe('index.html: the anchor field, a short link, the LAN buttons, the service worker', () => {
-  const anchorBlock = slice(html, '// ── anchor — no-clip from a real place', 'const invite = readInvite(location.search)')
+  const anchorBlock = slice(html, '// ── anchor — no-clip from a real place', 'const invite = readInvite(window.__playQuery ?? location.search)')
   it('a place that cannot be found says the owner\'s line, from site.js only', () => {
     expect(anchorBlock).toContain('anchorStatus.textContent = ANCHOR_NOT_FOUND')
     expect(html).not.toContain('that place cannot be found')
@@ -137,7 +171,8 @@ describe('index.html: the anchor field, a short link, the LAN buttons, the servi
   })
   it('a solo start runs once even when the lookup holds it', () => {
     const solo = slice(html, 'async function startSolo(', '// one connection attempt at a time')
-    expect(solo).toMatch(/if \(soloBusy\) return\r?\n\s*soloBusy = true/)
+    expect(solo).toMatch(/async function startSolo\(\{ frontDoor = false \} = \{\}\) \{\r?\n\s*if \(!beginStart\(\)\) return\r?\n/)
+    expect(solo).toContain('if (!fieldAnchorNow() && shortMapsLink(anchorInput.value)) startStatus.textContent = ANCHOR_LOOKING')
   })
   it('JOIN LAN / HOST LAN are not offered on an https page', () => {
     expect(html).toContain("if (!lanReachable(location)) for (const id of ['btn-join', 'btn-host']) document.getElementById(id).hidden = true")
@@ -170,7 +205,7 @@ describe('the offline shells and the desktop bridge', () => {
     expect(sw).toContain(`'/renderer/site.js'`)
     expect(build).toContain(`'site.js'`)
     expect(Number(/backrooms-pwa-v(\d+)/.exec(sw)[1])).toBeGreaterThanOrEqual(11)
-    expect(Number(/PLAY_SW_VERSION:-(\d+)/.exec(build)[1])).toBeGreaterThanOrEqual(22)
+    expect(build).toMatch(/PLAY_SW_VERSION="\$\{PLAY_SW_VERSION:-\}"/)          // no default: the site build is told its number (review DOC-2)
   })
   it('a navigation with a query (an invite) is the same page: matched ignoring the query, never stored once per code', () => {
     for (const src of [sw, build]) {

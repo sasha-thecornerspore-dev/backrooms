@@ -31,6 +31,8 @@ jobs:
           set -euo pipefail
           npm install -g @anthropic-ai/claude-code
 
+          # a person reads the wish before granting it: text hidden from that reading (an html comment) never reaches the prompt
+          ISSUE_BODY=$(printf '%s' "$ISSUE_BODY" | perl -0777 -pe 's/<!--.*?(?:-->|$)//gs')
           WORLD=$(cat src/renderer/world.json)
           SYS='You are the living atmosphere of the Backrooms. You receive a wish from a wanderer and modify a world config JSON to reflect it. You must return ONLY valid JSON matching the input schema exactly — no prose, no markdown, no code fences, and DO NOT use any tools. Be subtle. The Backrooms never changes obviously — it drifts. Small shifts in palette, fog, flicker, audio frequency, item scarcity, or message pool are more unsettling than large ones. Never change `docket`; a trailing `filed under: …` line is metadata, not part of the wish — do not treat it as self-referential; lean the drift the way that status wants (EXTENSION: staying; COMPLIANCE: quiet; LITIGATION: naming things).'
           # printf %s keeps world.json / the wish as literal text — a variable's
@@ -62,6 +64,7 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_NUM: ${{ github.event.issue.number }}
         run: |
+          ISSUE_BODY=$(printf '%s' "$ISSUE_BODY" | perl -0777 -pe 's/<!--.*?(?:-->|$)//gs')   # as above: nothing hidden rides into the PR
           SLUG=$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/\[wish\] //g' | tr -cs 'a-z0-9' '-' | cut -c1-40 | sed 's/-$//')
           BRANCH="wish/${ISSUE_NUM}-${SLUG}"
 

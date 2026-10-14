@@ -184,6 +184,6 @@ describe('safety (source guards)', () => {
     const sw = src('src/sw.js'), build = src('tools/build-play.sh')
     for (const f of ['gfx-bench.js', 'gfx-stats.js']) { expect(sw).toContain(`'/renderer/${f}'`); expect(build).toContain(`'${f}'`) }
     expect(Number(/backrooms-pwa-v(\d+)/.exec(sw)[1])).toBeGreaterThanOrEqual(9)
-    expect(Number(/PLAY_SW_VERSION:-(\d+)/.exec(build)[1])).toBeGreaterThanOrEqual(19)
+    expect(build).toContain('PLAY_SW_VERSION="${PLAY_SW_VERSION:-}"')   // no default any more: the site build is told its number (review DOC-2)
   })
 })

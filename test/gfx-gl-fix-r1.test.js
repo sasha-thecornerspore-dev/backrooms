@@ -503,6 +503,6 @@ describe('the crash marker: clean unloads and slow GPUs (LC-9, P7)', () => {
 describe('the PWA cache names were bumped past everything deployed (P5)', () => {
   it('src/sw.js CACHE is above the v7 baseline and the play bundle default above the deployed v16', () => {
     expect(Number(/backrooms-pwa-v(\d+)/.exec(src('src/sw.js'))[1])).toBeGreaterThanOrEqual(8)
-    expect(Number(/PLAY_SW_VERSION:-(\d+)/.exec(src('tools/build-play.sh'))[1])).toBeGreaterThanOrEqual(18)
+    expect(src('tools/build-play.sh')).toContain('PLAY_SW_VERSION="${PLAY_SW_VERSION:-}"')   // no default any more: the site build is told its number (review DOC-2)
   })
 })

@@ -33,7 +33,7 @@ describe('game.js: one voice (messages.js)', () => {
     // dying: 'everything goes dark.' is combat; the wake line (death.js) follows as discovery
     expect(game).toMatch(/showMessage\('everything goes dark\.', PRIO\.combat\)/)
     expect(game).toMatch(/later\(2600, r\.message, PRIO\.discovery\)/)
-    expect(game).toMatch(/buildLevel\(entryLevel\(\{ online: !!mpClient, frontDoor \}\)\)[^\n]*\r?\n\s*if \(getPref\('solidBodies'\)\) level\.solid\.settlePlayer\(player\)[^\n]*\r?\n\s*\}\r?\n\s*showMessage\(level\.cfg\.levelName, PRIO\.combat\)/)
+    expect(game).toMatch(/buildLevel\(entryLevel\(\{ online: !!mpClient, frontDoor \}\)\)[^\n]*\r?\n\s*if \(getPref\('solidBodies'\)\) level\.solid\.settlePlayer\(player\)[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)?\s*if \(level\.cfg\.exit\?\.hint\) later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\)\r?\n\s*\}\r?\n\s*showMessage\(level\.cfg\.levelName, PRIO\.combat\)/)
     expect(game).toMatch(/showMessage\(level\.messages\[Math\.floor\(Math\.random\(\) \* level\.messages\.length\)\], PRIO\.ambient\)/)
     // event lines: fireEvent's prio — ambient by default (the scheduler passes none), interaction when a drawer fires them — except the two
     // that answer to you, which stay on the interaction default

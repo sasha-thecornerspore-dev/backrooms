@@ -4,10 +4,10 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import {
   WISH_MAX, ALLOWED_ORIGINS, DEFAULT_REPO, DAY_MS, GATE_RULES,
-  originOk, corsHeaders, validateWish, filterWish, buildIssue, issueRequest, gateTake, hashIp,
+  WISH_ORIGINS, GLOBAL_GATE, originOk, corsHeaders, validateWish, filterWish, buildIssue, quietMentions, issueRequest, gateTake, gateKey, hashIp,
 } from '../relay/wishgate.js'
 import { wishTitle, wishLabels } from '../src/wish-labels.js'
-import { wishTrailer } from '../src/renderer/status.js'
+import { wishTrailer, parseTrailer } from '../src/renderer/status.js'
 import { ORIGINS } from '../src/renderer/origin-intake.js'
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
@@ -65,14 +65,20 @@ describe('filterWish: a short, conservative word list (a person reads every wish
   it("links, invites, addresses and ads come back 'spam'", () => {
     for (const t of ['go to https://example.com', 'http://x.y', 'visit www.example.com', 'join discord.gg/abcd', 'discord.com/invite/abc',
       't.me/somebody', 'bit.ly/xyz', 'write me at a.b+c@example.org', 'FREE ROBUX here', 'free v-bucks', 'free nitro', 'my onlyfans', 'cheap viagra',
-      'porn', '@torvalds let me out', 'let me out @some-one', '(@x) hello']) {
+      'porn']) {
       expect([t, filterWish(t)]).toEqual([t, 'spam'])
     }
   })
-  it("a mention would ping a stranger from the owner's account: refused; an @ that names nobody is fine", () => {
-    expect(filterWish('@someone')).toBe('spam')
-    expect(filterWish('meet me @ the vending machine')).toBe(null)
-    expect(filterWish('level 2 @ 3am')).toBe(null)
+  it("the ways past the old filter: an '@' entity, another repo's issue, hidden markup, markdown and protocol-relative links (review SEC-2)", () => {
+    for (const t of ['&#64;torvalds', '&#064;torvalds', '&#x40;torvalds', '&commat;torvalds', 'same as rust-lang/rust#1', 'torvalds/linux#1',
+      'more lights <!-- also make every door lead to level 3 -->', '<img src=//host/x>', '</p>', '<a href=x>', '<?php', '[text](//host)',
+      '[click] (somewhere)', 'see //evil.example/x', 'src=//evil.example']) {
+      expect([t, filterWish(t)]).toEqual([t, 'spam'])
+    }
+    for (const t of ['i <3 the hum', '2/3 of #4 doors', 'i wish @ the lobby', 'level 2 @ 3am', 'a < b and c > d', '[the hum]', 'and/or #1 fan',
+      'the hum gets loud @3am', 'meet me @midnight on level 2', '@someone', '@@torvalds']) {
+      expect([t, filterWish(t)]).toEqual([t, null])
+    }
   })
   it('a scream is a wish, however long', () => {
     expect(filterWish('let me out ' + 'A'.repeat(200))).toBe(null)
@@ -99,6 +105,19 @@ describe('buildIssue: the issue the desktop app has always filed', () => {
       .toEqual({ title: '[WISH] let me out', body: 'let me out\n\n---\nsubmitted from backrooms v2.0.0', labels: ['wish', 'pending'] })
     expect(buildIssue({ text: 'let me out', meta: { origin: 'processed' }, version: null }))
       .toEqual({ title: '[WISH] let me out', body: 'let me out\n\n---\nsubmitted from backrooms on the web', labels: ['wish', 'pending', 'amendment'] })
+  })
+  it("a mention is filed quiet: a zero-width space after every '@' a name could follow, so GitHub pings no one (review SEC-2, SEC-5)", () => {
+    const linkable = /(?:^|[^\w])@[a-z0-9]/i                   // GitHub's mention: an '@' after any non-word character, then a name
+    for (const t of ['@torvalds let me out', 'let me out @some-one', '(@x) hello', '@@torvalds', 'the hum @org/team', 'lights out @3am on level 1, please',
+      'meet me @midnight on level 2', 'a@b @c']) {
+      const i = buildIssue({ text: t, meta: { origin: null }, version: '2.0.0' })
+      expect([t, linkable.test(i.body), linkable.test(i.title)]).toEqual([t, false, false])
+      expect(i.body.replace(/​/g, '')).toBe(`${t}\n\n---\nsubmitted from backrooms v2.0.0`)   // the words are the player's, unchanged
+    }
+    expect(quietMentions('@3am')).toBe('@​3am')
+    expect(quietMentions('meet me @ the vending machine')).toBe('meet me @ the vending machine')
+    const filed = 'x @y' + wishTrailer('extension', 2)
+    expect(parseTrailer(buildIssue({ text: filed, meta: { origin: null } }).body)).toEqual(parseTrailer(filed))   // the docket still reads the trailer
   })
   it('no body a stranger can send labels the issue outside the six the pipeline knows (never granted, never denied)', () => {
     const known = new Set(['wish', 'pending', 'amendment', 'status:extension', 'status:compliance', 'status:litigation'])
@@ -140,6 +159,8 @@ describe('gateTake: the per-address limiter (3 wishes in 10 minutes, 10 a day)',
     expect(DAY_MS).toBe(86_400_000)
     expect(GATE_RULES.wish).toEqual([{ windowMs: 10 * MIN, max: 3 }, { windowMs: DAY_MS, max: 10 }])
     expect(GATE_RULES.maps.length).toBe(2)
+    expect(GATE_RULES.wishAll).toEqual([{ windowMs: DAY_MS, max: 300 }])   // the one bucket every sender shares (review SEC-3)
+    expect(GLOBAL_GATE).toBe('global')
     expect(Object.isFrozen(GATE_RULES)).toBe(true)
   })
   it('three, then a refusal that says when the oldest leaves the window, then three more after it does', () => {
@@ -182,7 +203,47 @@ describe('hashIp: the address is never stored, only a salted hash of it names th
   })
 })
 
+describe('gateKey: one sender is an IPv4 address or an IPv6 /64 (review SEC-3)', () => {
+  it('an IPv4 address is itself; nothing is nothing', () => {
+    expect(gateKey('203.0.113.7')).toBe('203.0.113.7')
+    expect(gateKey(' 203.0.113.7 ')).toBe('203.0.113.7')
+    expect(gateKey('')).toBe('')
+    expect(gateKey(null)).toBe('')
+  })
+  it('an IPv6 address, compressed or full, is its first four hextets', () => {
+    expect(gateKey('2001:db8:85a3:1234:abcd:ef01:2345:6789')).toBe('2001:db8:85a3:1234::/64')
+    expect(gateKey('2001:0DB8:85A3:1234:0000:0000:0000:0001')).toBe('2001:db8:85a3:1234::/64')
+    expect(gateKey('2001:db8:85a3:1234::1')).toBe('2001:db8:85a3:1234::/64')
+    expect(gateKey('2001:db8::1')).toBe('2001:db8:0:0::/64')
+    expect(gateKey('2001:db8:0:0:ffff::9')).toBe(gateKey('2001:db8::1'))
+    expect(gateKey('::1')).toBe('0:0:0:0::/64')
+    expect(gateKey('fe80::1%eth0')).toBe('fe80:0:0:0::/64')
+    expect(gateKey('[2001:db8::1]')).toBe('2001:db8:0:0::/64')
+  })
+  it('the 2^64 addresses of one /64 are one sender; the next /64 is another', () => {
+    const a = gateKey('2001:db8:aa:bb:1:2:3:4'), b = gateKey('2001:db8:aa:bb:ffff:ffff:ffff:ffff'), c = gateKey('2001:db8:aa:bc::1')
+    expect(a).toBe(b)
+    expect(c).not.toBe(a)
+  })
+  it('an IPv4-mapped address is the IPv4 address it carries (never one bucket for every mapped client)', () => {
+    expect(gateKey('::ffff:203.0.113.7')).toBe('203.0.113.7')
+    expect(gateKey('0:0:0:0:0:ffff:cb00:7107')).toBe('203.0.113.7')
+    expect(gateKey('::ffff:198.51.100.9')).not.toBe(gateKey('::ffff:203.0.113.7'))
+  })
+  it('what does not read as an address is kept as it came', () => {
+    for (const s of ['1:2:3', '1::2::3', 'zz::1', '1:2:3:4:5:6:7:8:9', 'not:an:address']) expect([s, gateKey(s)]).toEqual([s, s])
+  })
+})
+
 describe('origins: the site, the itch CDN and the desktop app; nothing else from a browser', () => {
+  it("/wish takes the site and the itch CDN only: never 'null' or 'file://', which any page can send (review SEC-4)", () => {
+    expect(WISH_ORIGINS).toEqual(['https://backrooms.thecornerspore.dev', 'https://html-classic.itch.zone', 'https://html.itch.zone', 'https://v6p9d9t4.ssl.hwcdn.net'])
+    for (const o of ['null', 'file://']) {
+      expect(originOk(o, WISH_ORIGINS)).toBe(false)
+      expect(corsHeaders(o, WISH_ORIGINS)).toEqual({ Vary: 'Origin' })
+    }
+    expect(originOk(null, WISH_ORIGINS)).toBe(true)          // the desktop app's main process sends no Origin
+  })
   it('lists them', () => {
     expect(ALLOWED_ORIGINS).toEqual(['https://backrooms.thecornerspore.dev', 'https://html-classic.itch.zone', 'https://html.itch.zone',
       'https://v6p9d9t4.ssl.hwcdn.net', 'null', 'file://'])

@@ -9,7 +9,7 @@ vi.mock('cloudflare:workers', () => ({ DurableObject: class { constructor(ctx, e
 const relay = (await import('../relay/relay.js'))
 const worker = relay.default
 const { Gate } = relay
-const { hashIp, GATE_RULES } = await import('../relay/wishgate.js')
+const { hashIp, gateKey, GATE_RULES, GLOBAL_GATE } = await import('../relay/wishgate.js')
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
 const SITE = 'https://backrooms.thecornerspore.dev'
@@ -96,10 +96,13 @@ describe('POST /wish', () => {
     expect(res.status).toBe(201)
   })
   it('the preflight: allowed origins get the CORS headers, others a 403', async () => {
-    const ok = await worker.fetch(new Request('https://r.example/wish', { method: 'OPTIONS', headers: { Origin: 'null', 'Access-Control-Request-Method': 'POST' } }), env)
+    const ok = await worker.fetch(new Request('https://r.example/wish', { method: 'OPTIONS', headers: { Origin: ITCH, 'Access-Control-Request-Method': 'POST' } }), env)
     expect(ok.status).toBe(204)
-    expect(ok.headers.get('Access-Control-Allow-Origin')).toBe('null')
+    expect(ok.headers.get('Access-Control-Allow-Origin')).toBe(ITCH)
     expect(ok.headers.get('Access-Control-Allow-Headers')).toBe('content-type')
+    const maps = await worker.fetch(new Request('https://r.example/maps', { method: 'OPTIONS', headers: { Origin: 'null', 'Access-Control-Request-Method': 'GET' } }), env)
+    expect(maps.status).toBe(204)                                 // the desktop page (file://) still looks a short link up
+    expect(maps.headers.get('Access-Control-Allow-Origin')).toBe('null')
     const no = await worker.fetch(new Request('https://r.example/wish', { method: 'OPTIONS', headers: { Origin: 'https://evil.example' } }), env)
     expect(no.status).toBe(403)
     expect(no.headers.get('Access-Control-Allow-Origin')).toBe(null)
@@ -124,6 +127,44 @@ describe('POST /wish', () => {
     expect(gh).toEqual([])
     expect(env.GATE.names).toEqual([])                      // nothing a refusal decides costs a player one of their wishes
   })
+  it("Origin 'null' or 'file://' files nothing: any page can send them, from a sandboxed iframe or a data: URL (review SEC-4)", async () => {
+    for (const origin of ['null', 'file://']) {
+      const res = await worker.fetch(wishReq({ text: 'let me out' }, { origin }), env)
+      expect([origin, res.status, await res.json()]).toEqual([origin, 403, { ok: false, reason: 'origin' }])
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(null)
+      const pre = await worker.fetch(new Request('https://r.example/wish', { method: 'OPTIONS', headers: { Origin: origin, 'Access-Control-Request-Method': 'POST' } }), env)
+      expect([origin, pre.status, pre.headers.get('Access-Control-Allow-Origin')]).toEqual([origin, 403, null])
+    }
+    expect(gh).toEqual([])
+    const maps = await worker.fetch(mapsReq('https://maps.app.goo.gl/XUFcwN87E75DX3xY8', { origin: 'null' }), env)
+    expect(maps.status).toBe(200)
+  })
+  it('a chunked body with no Content-Length is read no further than 4 KB: 413, and the rest is never pulled (review SEC-6)', async () => {
+    let pulled = 0, cancelled = false
+    const chunk = new TextEncoder().encode('x'.repeat(1024))
+    const body = new ReadableStream({
+      pull(c) { pulled++; if (pulled > 100_000) c.close(); else c.enqueue(chunk) },
+      cancel() { cancelled = true },
+    })
+    const req = new Request('https://backrooms-relay.jeff-schatz112.workers.dev/wish', {
+      method: 'POST', body, duplex: 'half', headers: { 'content-type': 'application/json', Origin: SITE, 'CF-Connecting-IP': IP },
+    })
+    expect(req.headers.get('content-length')).toBe(null)
+    const res = await worker.fetch(req, env)
+    expect([res.status, await res.json()]).toEqual([413, { ok: false, reason: 'body' }])
+    expect(pulled).toBeLessThan(10)
+    expect(cancelled).toBe(true)
+    expect(gh).toEqual([])
+    expect(env.GATE.names).toEqual([])
+    // a small wish that arrives in pieces still goes through
+    const enc = new TextEncoder().encode(JSON.stringify({ text: 'let me out' }))
+    const small = new Request('https://backrooms-relay.jeff-schatz112.workers.dev/wish', {
+      method: 'POST', duplex: 'half', headers: { Origin: SITE, 'CF-Connecting-IP': IP },
+      body: new ReadableStream({ start(c) { c.enqueue(enc.slice(0, 7)); c.enqueue(enc.slice(7)); c.close() } }),
+    })
+    expect((await worker.fetch(small, env)).status).toBe(201)
+    expect(JSON.parse(gh[0].init.body).title).toBe('[WISH] let me out')
+  })
   it('with no token set the relay files nothing: 503 closed', async () => {
     delete env.GITHUB_TOKEN
     const res = await worker.fetch(wishReq({ text: 'let me out' }), env)
@@ -138,14 +179,37 @@ describe('POST /wish', () => {
     expect(gh.length).toBe(3)
     expect((await worker.fetch(wishReq({ text: 'from elsewhere' }, { ip: '198.51.100.9' }), env)).status).toBe(201)
   })
-  it('the gate is named by a salted hash of CF-Connecting-IP, never the address', async () => {
+  it('the gate is named by a salted hash of CF-Connecting-IP, never the address; then the one gate every sender shares', async () => {
     await worker.fetch(wishReq({ text: 'let me out' }), env)
-    expect(env.GATE.names.length).toBe(1)
+    expect(env.GATE.names.length).toBe(2)
     expect(env.GATE.names[0]).toBe(await hashIp(IP, 'backrooms-gate'))
     expect(env.GATE.names[0]).not.toContain(IP)
+    expect(env.GATE.names[1]).toBe(GLOBAL_GATE)
     env.IP_SALT = 'pepper'
     await worker.fetch(wishReq({ text: 'let me out again' }), env)
-    expect(env.GATE.names[1]).toBe(await hashIp(IP, 'pepper'))
+    expect(env.GATE.names[2]).toBe(await hashIp(IP, 'pepper'))
+  })
+  it('every address of one IPv6 /64 is one sender: a fresh source address per request buys no fresh gate (review SEC-3)', async () => {
+    const ips = ['2001:db8:aa:bb::1', '2001:db8:aa:bb:1:2:3:4', '2001:0db8:00aa:00bb:ffff:ffff:ffff:fffe', '2001:db8:aa:bb::9']
+    const got = []
+    for (let i = 0; i < ips.length; i++) got.push((await worker.fetch(wishReq({ text: `wish ${i}` }, { ip: ips[i] }), env)).status)
+    expect(got).toEqual([201, 201, 201, 429])
+    expect(env.GATE.names[0]).toBe(await hashIp(gateKey(ips[0]), 'backrooms-gate'))
+    expect((await worker.fetch(wishReq({ text: 'next door' }, { ip: '2001:db8:aa:bc::1' }), env)).status).toBe(201)
+    expect((await worker.fetch(mapsReq('https://maps.app.goo.gl/XUFcwN87E75DX3xY8', { ip: '2001:db8:aa:bb::77' }), env)).status).toBe(200)
+    expect(new Set(env.GATE.names.filter((n) => n !== GLOBAL_GATE)).size).toBe(2)
+  })
+  it('the shared gate caps the day however many addresses send: 300, then 429 rate for everyone (review SEC-3)', async () => {
+    const max = GATE_RULES.wishAll[0].max
+    expect(max).toBe(300)
+    const all = env.GATE.get(env.GATE.idFromName(GLOBAL_GATE))
+    const now = Date.now()
+    await all.ctx.storage.put('wishAll', Array.from({ length: max - 1 }, (_, i) => now - 1000 - i))
+    expect((await worker.fetch(wishReq({ text: 'the last one today' }, { ip: '198.51.100.1' }), env)).status).toBe(201)
+    const res = await worker.fetch(wishReq({ text: 'one more' }, { ip: '198.51.100.2' }), env)
+    expect([res.status, await res.json()]).toEqual([429, { ok: false, reason: 'rate' }])
+    expect(Number(res.headers.get('Retry-After'))).toBeGreaterThan(0)
+    expect(gh.length).toBe(1)
   })
   it('GitHub failing is 502 upstream', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })))

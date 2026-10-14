@@ -20,14 +20,15 @@
 //               ← {ok:true, number} | {ok:false, reason}
 //   GET  /maps?u=<maps.app.goo.gl link> → {lat, lng}: the pin a phone's share
 //               link redirects to, for the anchor field (relay/mapslink.js).
-// Both are rate-limited per address through the Gate durable object, keyed by
-// a salted hash of CF-Connecting-IP. Nothing here logs; wrangler.jsonc turns
+// Both are rate-limited per sender through the Gate durable object, keyed by
+// a salted hash of CF-Connecting-IP (an IPv6 address by its /64), and /wish
+// also by one Gate every sender shares. Nothing here logs; wrangler.jsonc turns
 // the invocation log off, so not even the URL of a /maps call is kept.
 import { DurableObject } from 'cloudflare:workers'
 import { roomSeed } from './seed.js'
 import { evKindOk, evFrameOk, evBucket } from './evguard.js'
 import { createEvLog } from './evlog.js'
-import { BODY_MAX, DAY_MS, GATE_RULES, originOk, corsHeaders, validateWish, filterWish, buildIssue, issueRequest, gateTake, hashIp } from './wishgate.js'
+import { BODY_MAX, DAY_MS, GATE_RULES, GLOBAL_GATE, ALLOWED_ORIGINS, WISH_ORIGINS, originOk, corsHeaders, validateWish, filterWish, buildIssue, issueRequest, gateTake, gateKey, hashIp } from './wishgate.js'
 import { shortLink, resolveShortLink } from './mapslink.js'
 
 export class Room extends DurableObject {
@@ -155,43 +156,70 @@ export class Gate extends DurableObject {
   async alarm() { await this.ctx.storage.deleteAll() }
 }
 
-function reply(obj, status, origin, extra) {
+// each route's own origins: a browser may call /maps from the desktop page ('null' / 'file://'), /wish only from the site and itch
+const ROUTE_ORIGINS = { '/wish': WISH_ORIGINS, '/maps': ALLOWED_ORIGINS }
+
+function reply(obj, status, origin, extra, allowed = ALLOWED_ORIGINS) {
   return new Response(JSON.stringify(obj), {
     status,
-    headers: { 'content-type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin), ...extra },
+    headers: { 'content-type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders(origin, allowed), ...extra },
   })
 }
 
 async function gate(request, env, bucket) {
-  const key = await hashIp(request.headers.get('CF-Connecting-IP') || '', env.IP_SALT || 'backrooms-gate')
+  const key = await hashIp(gateKey(request.headers.get('CF-Connecting-IP') || ''), env.IP_SALT || 'backrooms-gate')
   return env.GATE.get(env.GATE.idFromName(key)).take(bucket)
 }
 
-const refused = (g, origin) => reply({ ok: false, reason: 'rate' }, 429, origin, { 'Retry-After': String(Math.max(1, Math.ceil(g.retryMs / 1000))) })
+const refused = (g, origin, allowed) => reply({ ok: false, reason: 'rate' }, 429, origin, { 'Retry-After': String(Math.max(1, Math.ceil(g.retryMs / 1000))) }, allowed)
+
+// The body, never more than max bytes of it: a chunked request has no Content-Length to refuse up front, and request.text() would
+// buffer all of it (up to Cloudflare's 100 MB) before anything could be checked. -> the text, or null once it runs past max
+export async function readCapped(request, max) {
+  if (!request.body) return ''
+  const reader = request.body.getReader()
+  const parts = []
+  let n = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    n += value.byteLength
+    if (n > max) { try { await reader.cancel() } catch { /* already gone */ } return null }
+    parts.push(value)
+  }
+  const all = new Uint8Array(n)
+  let at = 0
+  for (const p of parts) { all.set(p, at); at += p.byteLength }
+  return new TextDecoder().decode(all)
+}
 
 // refusals that cost nothing come first (origin, token, shape, words); only a
 // wish that would be filed takes one of the address's wishes
 async function wish(request, env, origin) {
-  if (!env.GITHUB_TOKEN) return reply({ ok: false, reason: 'closed' }, 503, origin)
-  if (Number(request.headers.get('content-length')) > BODY_MAX) return reply({ ok: false, reason: 'body' }, 413, origin)
-  const raw = await request.text()
-  if (raw.length > BODY_MAX) return reply({ ok: false, reason: 'body' }, 413, origin)
+  const say = (obj, status, extra) => reply(obj, status, origin, extra, WISH_ORIGINS)
+  if (!env.GITHUB_TOKEN) return say({ ok: false, reason: 'closed' }, 503)
+  if (Number(request.headers.get('content-length')) > BODY_MAX) return say({ ok: false, reason: 'body' }, 413)
+  const raw = await readCapped(request, BODY_MAX)
+  if (raw == null) return say({ ok: false, reason: 'body' }, 413)
   let body
-  try { body = JSON.parse(raw) } catch { return reply({ ok: false, reason: 'body' }, 400, origin) }
+  try { body = JSON.parse(raw) } catch { return say({ ok: false, reason: 'body' }, 400) }
   const v = validateWish(body)
-  if (!v.ok) return reply({ ok: false, reason: v.reason }, 400, origin)
+  if (!v.ok) return say({ ok: false, reason: v.reason }, 400)
   const bad = filterWish(v.wish.text)
-  if (bad) return reply({ ok: false, reason: bad }, 422, origin)
+  if (bad) return say({ ok: false, reason: bad }, 422)
   const g = await gate(request, env, 'wish')
-  if (!g.ok) return refused(g, origin)
+  if (!g.ok) return refused(g, origin, WISH_ORIGINS)
+  // the one gate every sender shares: the worst any number of addresses can do in a day is bounded
+  const all = await env.GATE.get(env.GATE.idFromName(GLOBAL_GATE)).take('wishAll')
+  if (!all.ok) return refused(all, origin, WISH_ORIGINS)
   const { url, init } = issueRequest(buildIssue(v.wish), { repo: env.GITHUB_REPO, token: env.GITHUB_TOKEN })
   try {
     const res = await fetch(url, init)
-    if (res.status !== 201) return reply({ ok: false, reason: 'upstream' }, 502, origin)
+    if (res.status !== 201) return say({ ok: false, reason: 'upstream' }, 502)
     const issue = await res.json()
-    return reply({ ok: true, number: issue.number }, 201, origin)
+    return say({ ok: true, number: issue.number }, 201)
   } catch {
-    return reply({ ok: false, reason: 'upstream' }, 502, origin)
+    return say({ ok: false, reason: 'upstream' }, 502)
   }
 }
 
@@ -213,12 +241,13 @@ export default {
     if (request.headers.get('Upgrade') !== 'websocket') {
       if (url.pathname === '/wish' || url.pathname === '/maps') {
         const origin = request.headers.get('Origin')
+        const allowed = ROUTE_ORIGINS[url.pathname]
         if (request.method === 'OPTIONS') {
-          return originOk(origin) && origin != null
-            ? new Response(null, { status: 204, headers: corsHeaders(origin) })
+          return originOk(origin, allowed) && origin != null
+            ? new Response(null, { status: 204, headers: corsHeaders(origin, allowed) })
             : new Response(null, { status: 403, headers: { Vary: 'Origin' } })
         }
-        if (!originOk(origin)) return reply({ ok: false, reason: 'origin' }, 403, null)
+        if (!originOk(origin, allowed)) return reply({ ok: false, reason: 'origin' }, 403, null)
         if (url.pathname === '/wish') return request.method === 'POST' ? wish(request, env, origin) : reply({ ok: false, reason: 'method' }, 405, origin)
         return request.method === 'GET' ? maps(request, env, origin, url) : reply({ ok: false, reason: 'method' }, 405, origin)
       }

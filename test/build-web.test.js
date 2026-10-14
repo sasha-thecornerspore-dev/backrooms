@@ -25,7 +25,19 @@ const BASH = findBash()
 function run(script, args, env = {}) {
   const e = { ...process.env }
   for (const k of ['PLAY_TARGET', 'GOATCOUNTER_CODE', 'PLAY_SW_VERSION']) delete e[k]
-  return spawnSync(BASH, [script, ...args.map(fwd)], { cwd: root, encoding: 'utf8', env: { ...e, ...env } })
+  return spawnSync(BASH, [script, ...args.map(fwd)], { cwd: root, encoding: 'utf8', env: { ...e, PLAY_SW_VERSION: '99', ...env } })
+}
+
+// the site build's line before the counter, lifted out of the built page and run against a fake address bar
+function runStrip(html, { search = '', pathname = '/play/', hash = '', replaceThrows = false } = {}) {
+  const m = html.match(/<script>(\(function \(\) \{ var s = location\.search[\s\S]*?)<\/script>/)
+  expect(m, 'the strip line').not.toBe(null)
+  const calls = []
+  const win = {}
+  const location = { search, pathname, hash }
+  const history = { state: { k: 1 }, replaceState(st, t, url) { if (replaceThrows) throw new Error('SecurityError'); calls.push([st, t, url]) } }
+  new Function('window', 'location', 'history', 'URLSearchParams', m[1])(win, location, history, URLSearchParams)
+  return { win, calls }
 }
 const hasZipper = !!BASH && spawnSync(BASH, ['-c', "command -v zip >/dev/null || python3 -c 'import zipfile' 2>/dev/null || python -c 'import zipfile' 2>/dev/null"]).status === 0
 
@@ -86,10 +98,37 @@ describe.skipIf(!BASH)('tools/build-play.sh, run (the site build)', () => {
     const html = fs.readFileSync(path.join(site, 'index.html'), 'utf8')
     expect(html.split(TAG).length - 1).toBe(1)
     expect(html.match(/data-goatcounter=/g)).toHaveLength(1)
-    expect(html).toContain(`<script>window.goatcounter = { path: '/play/' }</script>`)
-    expect(html.indexOf(`window.goatcounter = { path: '/play/' }`)).toBeLessThan(html.indexOf(TAG))   // the settings exist before count.js reads them
+    expect(html).toContain(`window.goatcounter = ok ? { path: '/play/' } : { path: '/play/', no_onload: true }`)
+    expect(html.indexOf(`window.goatcounter = ok ?`)).toBeLessThan(html.indexOf(TAG))   // the settings exist before count.js reads them
     expect(html.indexOf(TAG)).toBeLessThan(html.indexOf('</head>'))
     expect(html.indexOf(TAG)).toBeGreaterThan(html.indexOf('<title>'))
+  })
+  it('takes room and anchor out of the address before count.js (which always sends the query) can load (review PRIV-1)', () => {
+    const html = fs.readFileSync(path.join(site, 'index.html'), 'utf8')
+    const strip = html.indexOf('window.__playQuery = s')
+    expect(strip).toBeGreaterThan(-1)
+    expect(strip).toBeLessThan(html.indexOf('data-goatcounter='))
+    expect(html.slice(html.lastIndexOf('<script', strip), strip)).toBe('<script>(function () { var s = location.search, ok = true; ')   // classic, inline, not a module
+    // the page reads its invite from what the line kept, never from the cleaned address
+    expect(html).toContain('const invite = readInvite(window.__playQuery ?? location.search)')
+  })
+  it('the strip, run: an invite\'s room and pin leave the address bar; the page keeps them; ?ref= and the device tools stay', () => {
+    const html = fs.readFileSync(path.join(site, 'index.html'), 'utf8')
+    const a = runStrip(html, { search: '?room=yellow-lamp-42&anchor=39.2854%2C-76.6083', hash: '#x' })
+    expect(a.win.__playQuery).toBe('?room=yellow-lamp-42&anchor=39.2854%2C-76.6083')
+    expect(a.calls).toEqual([[{ k: 1 }, '', '/play/#x']])
+    expect(a.win.goatcounter).toEqual({ path: '/play/' })
+    const b = runStrip(html, { search: '?ref=hn&room=r&gfxstats=1' })
+    expect(b.calls).toEqual([[{ k: 1 }, '', '/play/?ref=hn&gfxstats=1']])
+    const c = runStrip(html, { search: '?gfxbench=1' })
+    expect(c.calls).toEqual([])                                     // nothing to take out: the address is left alone
+    expect(c.win.__playQuery).toBe('?gfxbench=1')
+    const d = runStrip(html, { search: '' })
+    expect([d.calls, d.win.__playQuery, d.win.goatcounter]).toEqual([[], '', { path: '/play/' }])
+    // an address that cannot be rewritten is not counted at all, rather than counted with the pin in it
+    const e = runStrip(html, { search: '?room=r&anchor=1,2', replaceThrows: true })
+    expect(e.win.goatcounter).toEqual({ path: '/play/', no_onload: true })
+    expect(e.win.__playQuery).toBe('?room=r&anchor=1,2')
   })
   it('the licenses travel with the bundle', () => {
     expect(fs.readFileSync(path.join(site, 'LICENSE'), 'utf8')).toContain('MIT License')
@@ -132,6 +171,19 @@ describe.skipIf(!BASH)('tools/build-play.sh, run (the knobs)', () => {
     expect(site).toContain("if ('serviceWorker' in navigator && location.protocol.startsWith('http') && window.top === window.self) {")
     expect(site).toContain("register('sw.js')")
   })
+  it('the site build has no default service-worker number: without PLAY_SW_VERSION it fails, so a rebuild never repeats one (review DOC-2)', () => {
+    for (const v of ['', 'x', '22a']) {
+      const r = run('tools/build-play.sh', ['src', path.join(tmp, 'nover')], { PLAY_SW_VERSION: v })
+      expect(r.status, v).not.toBe(0)
+      expect(r.stderr).toContain('PLAY_SW_VERSION')
+    }
+    const ok = run('tools/build-play.sh', ['src', path.join(tmp, 'v23')], { PLAY_SW_VERSION: '23' })
+    expect(ok.status, ok.stderr).toBe(0)
+    expect(fs.readFileSync(path.join(tmp, 'v23', 'sw.js'), 'utf8')).toContain("const CACHE = 'backrooms-play-v23'")
+    const itch = run('tools/build-play.sh', ['src', path.join(tmp, 'itchnover')], { PLAY_TARGET: 'itch', PLAY_SW_VERSION: '' })
+    expect(itch.status, itch.stderr).toBe(0)                         // a portal copy has no worker to name
+    expect(fs.readFileSync(path.join(root, 'tools', 'build-play.sh'), 'utf8')).not.toMatch(/PLAY_SW_VERSION:-\d/)
+  }, 120000)
   it('an unknown PLAY_TARGET fails rather than guessing', () => {
     const r = run('tools/build-play.sh', ['src', path.join(tmp, 'unknown')], { PLAY_TARGET: 'steam' })
     expect(r.status).not.toBe(0)

@@ -191,7 +191,9 @@ jobs:
   # The itch.io mirror (growth-spec §3): once the GitHub release is public, push the same files to itch with butler
   # (itch.io/docs/butler). It runs only behind the publish job's own gate, never blocks or changes the GitHub release, and skips
   # cleanly (a notice, a green check) until the owner adds the BUTLER_API_KEY secret. Secrets cannot be read in `if:`, so the
-  # key rides job env and the first step tests it (docs.github.com, "Using secrets"). The key is never echoed.
+  # first step tests the key (docs.github.com, "Using secrets"). The key is never echoed, and it rides only the two steps that use
+  # it (the gate and the push), never the job: the download, the unzip and `butler -V` run without it, and butler itself runs only
+  # once its checksum matches the one pinned below.
   itch:
     needs: [prepare, publish]
     if: needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success'
@@ -199,15 +201,18 @@ jobs:
     permissions:
       contents: read
     env:
-      BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
       # OWNER: confirm the itch project (user/game, lower case, from its URL) — set the ITCH_GAME repo variable to override this default
       ITCH_GAME: ${{ vars.ITCH_GAME || 'sasha-thecornerspore/the-backrooms' }}
       BUTLER_VERSION: '15.32.0'   # broth.itch.zone LATEST on 2026-10-13; bump on purpose, never float
-      BUTLER_SHA256: ''           # pin it after the first run prints it (no checksum is published)
+      # OWNER: pin it BEFORE adding BUTLER_API_KEY (no checksum is published): download the archive below for BUTLER_VERSION and
+      # run sha256sum on it. Until it is pinned the job stops before butler ever runs.
+      BUTLER_SHA256: ''
       TAG: ${{ needs.prepare.outputs.tag }}
     steps:
       - name: Is itch.io set up?
         id: gate
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
         run: |
           if [ -z "$BUTLER_API_KEY" ]; then
             echo "::notice title=itch.io::push skipped: add the BUTLER_API_KEY secret to turn it on (the project is $ITCH_GAME)"
@@ -230,7 +235,7 @@ jobs:
         run: |
           curl -fsSL -o butler.zip "https://broth.itch.zone/butler/linux-amd64/${BUTLER_VERSION}/archive/default"
           if [ -n "$BUTLER_SHA256" ]; then echo "$BUTLER_SHA256  butler.zip" | sha256sum -c -
-          else echo "::warning title=butler::checksum not pinned yet: $(sha256sum butler.zip | cut -d' ' -f1)"; fi
+          else echo "::error title=butler::BUTLER_SHA256 not pinned: set it in build-release.yml before butler may run"; exit 1; fi
           unzip -q butler.zip -d "$RUNNER_TEMP/butler" && chmod +x "$RUNNER_TEMP/butler/butler"
           echo "$RUNNER_TEMP/butler" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/butler/butler" -V
@@ -239,6 +244,8 @@ jobs:
       # hand, on the itch edit page. A build missing from the release (mac is optional) is a warning, never a failure.
       - name: Push to itch.io
         if: steps.gate.outputs.go == 'true'
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
         run: |
           VER="${TAG#v}"
           shopt -s nullglob

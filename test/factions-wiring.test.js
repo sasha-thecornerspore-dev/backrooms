@@ -618,7 +618,7 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
     expect(open).toContain('const wp = wishPrompt({ origin, status: file.status, closing: file.closing, canFile: fileable(), canRefile: canRefile(file.at, Date.now()), redacted: file.redacted.length })')
     expect(open).toContain('wishText.placeholder = wp.placeholder; renderWishSub(wp.sub)')
     expect(game).toContain('const fileable = () => canFile({ ledgerHeard: file.ledgerHeard, pagesRead: readSet.size, depth: level.depth })')
-    expect(html).toMatch(/<textarea id="wish-text"[^>]*><\/textarea>\r?\n\s*<p id="wish-sub"><\/p>\r?\n\s*<div id="wish-actions">/)
+    expect(html).toMatch(/<textarea id="wish-text"[^>]*><\/textarea>\r?\n\s*<p id="wish-sub"><\/p>\r?\n\s*<p id="wish-note">[^<]*<\/p>\r?\n\s*<div id="wish-actions">/)
     expect(html).toMatch(/#wish-sub \{[^}]*font-size: 11px;[^}]*\}/)
   })
   it('#wish-sub, lifted and run on a fake DOM: one faint line each; a stamp line types the word before \' · \' and submits, never while the dialog is busy', () => {
@@ -2173,7 +2173,7 @@ describe('I15: the factions wave, closed', () => {
     expect(sw).toContain("'/net/evbus.js'")
     expect(build).toContain("'evbus.js'")
     expect(Number(/backrooms-pwa-v(\d+)/.exec(sw)[1])).toBeGreaterThanOrEqual(10)
-    expect(Number(/PLAY_SW_VERSION:-(\d+)/.exec(build)[1])).toBeGreaterThanOrEqual(21)
+    expect(build).toContain('PLAY_SW_VERSION="${PLAY_SW_VERSION:-}"')   // no default any more: the site build is told its number (review DOC-2)
   })
 
   it('touch: six buttons, the sixth is CALL; the README names every one, and the keys a phone cannot press', () => {
