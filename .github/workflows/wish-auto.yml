@@ -1,18 +1,23 @@
-name: Auto-Grant Wishes (48h)
+name: Auto-Grant Wishes (48h) — paused
 
-# The spirits answer on their own when the keeper does not. Every 6 hours this
-# finds the oldest wish still 'pending' after 48h (i.e. you never labeled it
-# granted/denied), rolls a flat 20% denial, and otherwise lets Claude arbitrate
-# with full discretion — grant, partial, or deny. A granted drift is validated
-# and tested before it is committed to main (which auto-ships to players).
+# PAUSED for the launch (owner decision 2026-10-13): there is no schedule, so it
+# never runs on its own. A person reads every wish and grants it by hand —
+# labelling a wish 'granted' runs wish-grant.yml, which opens a PR the owner
+# reviews and merges. To resume, put back under `on:`
+#   schedule:
+#     - cron: '23 */6 * * *'   # every 6 hours
+#
+# When run (by hand, from the Actions tab), it finds the oldest wish still
+# 'pending' after 48h (i.e. you never labeled it granted/denied), rolls a flat
+# 20% denial, and otherwise lets Claude arbitrate with full discretion — grant,
+# partial, or deny. A granted drift is validated and tested before it is
+# committed to main (which auto-ships to players).
 #
 # One wish per run, so it can never spam releases. It only ever touches
-# src/renderer/world.json — never code. Merging THIS workflow is what turns the
-# automation on; until then it does nothing.
+# src/renderer/world.json — never code.
 
 on:
-  schedule:
-    - cron: '23 */6 * * *'   # every 6 hours
+  # launch: paused — a person reads every wish and grants it by hand (wish-grant.yml's PR); this runs only when started by hand
   workflow_dispatch: {}
 
 concurrency:

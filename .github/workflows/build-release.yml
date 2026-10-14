@@ -79,7 +79,7 @@ jobs:
             assets: "dist/*.exe dist/*.exe.blockmap dist/latest.yml"
           - os: ubuntu-latest
             platform: linux
-            assets: "dist/*.AppImage dist/*.deb dist/latest-linux.yml"
+            assets: "dist/*.AppImage dist/*.deb dist/latest-linux.yml dist/backrooms-web-*.zip"
           # macOS builds are ad-hoc signed (no Apple Developer ID yet): they run after the player
           # clears Gatekeeper once, and the app points mac players at the release page instead of
           # self-installing. A mac-only failure must not hold back the Windows/Linux release.
@@ -136,6 +136,12 @@ jobs:
           VER=$(node -p "require('./package.json').version")
           npx esbuild server/index.js --bundle --platform=node --format=esm --outfile=dist/backrooms-server.js --external:ws --define:__BACKROOMS_VERSION__="\"$VER\""
 
+      # the browser build zipped for itch.io and the other portals: no counter, no service worker, relative paths, nothing from
+      # the build config (tools/build-itch.sh checks each). A run attaches it; a release carries it, and the itch job pushes it.
+      - name: Build the browser zip (itch.io)
+        if: matrix.platform == 'linux'
+        run: bash tools/build-itch.sh src "dist/backrooms-web-$(node -p "require('./package.json').version").zip"
+
       - name: Collect assets
         id: assets
         shell: bash
@@ -181,3 +187,73 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ needs.prepare.outputs.tag }}" --draft=false --latest --repo "${{ github.repository }}"
+
+  # The itch.io mirror (growth-spec §3): once the GitHub release is public, push the same files to itch with butler
+  # (itch.io/docs/butler). It runs only behind the publish job's own gate, never blocks or changes the GitHub release, and skips
+  # cleanly (a notice, a green check) until the owner adds the BUTLER_API_KEY secret. Secrets cannot be read in `if:`, so the
+  # key rides job env and the first step tests it (docs.github.com, "Using secrets"). The key is never echoed.
+  itch:
+    needs: [prepare, publish]
+    if: needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+      # OWNER: confirm the itch project (user/game, lower case, from its URL) — set the ITCH_GAME repo variable to override this default
+      ITCH_GAME: ${{ vars.ITCH_GAME || 'sasha-thecornerspore/the-backrooms' }}
+      BUTLER_VERSION: '15.32.0'   # broth.itch.zone LATEST on 2026-10-13; bump on purpose, never float
+      BUTLER_SHA256: ''           # pin it after the first run prints it (no checksum is published)
+      TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - name: Is itch.io set up?
+        id: gate
+        run: |
+          if [ -z "$BUTLER_API_KEY" ]; then
+            echo "::notice title=itch.io::push skipped: add the BUTLER_API_KEY secret to turn it on (the project is $ITCH_GAME)"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch this release's files
+        if: steps.gate.outputs.go == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "$TAG" --repo "${{ github.repository }}" --dir rel \
+            --pattern '*.exe' --pattern '*.AppImage' --pattern '*-universal.zip' --pattern 'backrooms-web-*.zip'
+          ls -la rel
+
+      - name: Install butler (pinned)
+        if: steps.gate.outputs.go == 'true'
+        run: |
+          curl -fsSL -o butler.zip "https://broth.itch.zone/butler/linux-amd64/${BUTLER_VERSION}/archive/default"
+          if [ -n "$BUTLER_SHA256" ]; then echo "$BUTLER_SHA256  butler.zip" | sha256sum -c -
+          else echo "::warning title=butler::checksum not pinned yet: $(sha256sum butler.zip | cut -d' ' -f1)"; fi
+          unzip -q butler.zip -d "$RUNNER_TEMP/butler" && chmod +x "$RUNNER_TEMP/butler/butler"
+          echo "$RUNNER_TEMP/butler" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/butler/butler" -V
+
+      # channels: windows / linux / mac take their platform tag from the name; html5 is marked "played in the browser" once, by
+      # hand, on the itch edit page. A build missing from the release (mac is optional) is a warning, never a failure.
+      - name: Push to itch.io
+        if: steps.gate.outputs.go == 'true'
+        run: |
+          VER="${TAG#v}"
+          shopt -s nullglob
+          one() { # a channel, then its files, pushed from a folder of their own
+            local ch="$1"; shift
+            if [ $# -eq 0 ]; then echo "::warning title=itch.io::nothing to push to $ch"; return 0; fi
+            mkdir -p "push/$ch" && cp "$@" "push/$ch/" && chmod +x "push/$ch"/*
+            butler push "push/$ch" "$ITCH_GAME:$ch" --userversion "$VER" --if-changed
+          }
+          zipped() { # a channel, then one zip, pushed as its contents (butler unzips it): the mac .app, the web build's index.html at the root
+            local ch="$1"; shift
+            if [ $# -eq 0 ]; then echo "::warning title=itch.io::nothing to push to $ch"; return 0; fi
+            butler push "$1" "$ITCH_GAME:$ch" --userversion "$VER" --if-changed
+          }
+          one windows rel/*.exe
+          one linux   rel/*.AppImage
+          zipped mac   rel/*-universal.zip
+          zipped html5 rel/backrooms-web-*.zip
