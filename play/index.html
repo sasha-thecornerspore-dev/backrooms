@@ -90,21 +90,43 @@
     }
     #start button:hover { background: rgba(58,44,23,0.88); border-color: var(--wall); }
     #start button:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
-    /* the two ways in (a fresh run / a saved one) are the notice panels: wall-yellow, dark ink, inset hairline */
-    #start #btn-solo, #start #btn-continue {
+    /* the ways in (a fresh run / a saved one / a friend's open door) are the notice panels: wall-yellow, dark ink, inset hairline */
+    #start #btn-solo, #start #btn-continue, #start #btn-invite-join {
       color: var(--ink-on-wall); text-shadow: none; border-color: var(--carpet);
       background: linear-gradient(180deg, var(--wall), var(--wall-deep));
       box-shadow: 0 8px 26px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.16);
       outline: 1px solid rgba(25,19,5,0.3); outline-offset: -5px;
     }
-    #start #btn-solo:hover, #start #btn-continue:hover { background: linear-gradient(180deg, #d8c982, #a4925a); }
-    #start #btn-solo:focus-visible, #start #btn-continue:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
+    #start #btn-solo:hover, #start #btn-continue:hover, #start #btn-invite-join:hover { background: linear-gradient(180deg, #d8c982, #a4925a); }
+    #start #btn-solo:focus-visible, #start #btn-continue:focus-visible, #start #btn-invite-join:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
+    /* an invite link (/play/?room=CODE, index.html readInvite): a plate above the ways in. While it shows, its JOIN is the one primary
+       button and SOLO steps back to the plain style */
+    #invite-plate { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    #invite-plate[hidden] { display: none; }
+    #invite-line {
+      font: 12px var(--mono); letter-spacing: 0.24em; color: var(--glow); text-align: center; max-width: 90vw; overflow-wrap: anywhere;
+      background: rgba(10,8,3,0.7); padding: 4px 14px 5px; border: 1px solid rgba(138,122,58,0.35); text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+    }
+    #invite-sub:empty { display: none; }
+    #start.invited #btn-solo { color: var(--glow); text-shadow: 0 0 8px rgba(239,231,196,0.25); border-color: #8a7a3a; background: rgba(14,12,7,0.74); box-shadow: none; outline: none; }
+    #start.invited #btn-solo:hover { background: rgba(58,44,23,0.88); border-color: var(--wall); }
+    #start.invited #btn-solo:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
+    /* the front door (topology.js entryLevel): Level ∅, the real block, on purpose — a quiet line under the ways in, never a notice panel */
+    #front-door { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    #start #btn-front-door {
+      font: 12px var(--mono); letter-spacing: 0.14em; padding: 4px 10px; color: #cfc39a; background: none; border: none;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95); text-decoration: underline dotted rgba(207,195,154,0.55); text-underline-offset: 4px;
+    }
+    #start #btn-front-door:hover { color: var(--glow); background: none; }
+    #front-door-hint { font: italic 11px var(--mono); letter-spacing: 0.04em; color: var(--text-dim); text-align: center; text-shadow: 0 1px 4px rgba(0,0,0,0.95); }
     .btns { display:flex; flex-wrap:wrap; gap:14px 22px; justify-content:center; margin-top:26px; max-width:100%; padding:0 16px; box-sizing:border-box; }
     /* narrow screens: every start button stays on screen (they used to overflow both edges, hiding SOLO) */
     @media (max-width: 700px) { #start .btns { gap:12px; margin-top:16px; } #start .btns button { padding:12px 18px; letter-spacing:3px; font-size:14px; } #start .placard { letter-spacing: 0.2em; font-size: 10px; } }
     @media (max-height: 560px) { #start { justify-content:flex-start; overflow-y:auto; padding:16px 0 24px; gap:14px; } }
     @media (prefers-reduced-motion: reduce) { #start h1, .title { animation: none; } }
-    #join-modal { position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;z-index:100; }
+    /* the two connect boxes lie over the title (#start, z 100, earlier in the page). PLAY ONLINE's had no rule of its own and opened in the
+       page flow UNDER the title, unseen: it shares JOIN LAN's now */
+    #join-modal, #online-modal { position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;z-index:100; }
     .modal-box { background:#1a1508;border:1px solid #8a7a3a;padding:40px;min-width:360px;max-height:88vh;overflow-y:auto; }
     .modal-title { color:#c9ba72;font-family:monospace;font-size:20px;letter-spacing:4px;margin-bottom:24px; }
     .modal-box input { display:block;width:100%;box-sizing:border-box;background:#0a0a05;border:1px solid #4a3a1a;color:#c9ba72;font-family:monospace;font-size:14px;padding:8px;margin-bottom:12px; }
@@ -114,7 +136,16 @@
     #settings-modal .modal-box { padding-bottom:0; }
     #settings-modal .modal-foot { position:sticky;bottom:0;z-index:1;background:#1a1508;margin-top:24px;padding:14px 0 18px;border-top:1px solid #3a2f14;box-shadow:0 -10px 14px -8px #0009; }
     #settings-modal .modal-foot .modal-btns { margin-top:0; }
-    #join-status { color:#a09060;font-family:monospace;font-size:13px;margin-top:12px;min-height:20px; }
+    #join-status, #online-status { color:#a09060;font-family:monospace;font-size:13px;margin-top:12px;min-height:20px; }
+    #online-status { max-width:360px;line-height:1.5; }
+    /* the PLAY ONLINE modal's invite: a quiet button and the pin's opt-in beside the room field; the link itself shows only when it
+       could not be copied (read-only, selected, to copy by hand) */
+    #online-invite-row { display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:-2px 0 12px; }
+    #online-invite { background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:13px;padding:6px 14px;cursor:pointer;letter-spacing:1px; }
+    #online-invite:hover { border-color:#c9ba72; }
+    #online-invite-row label { display:flex;align-items:center;gap:6px;color:#a09060;font-family:monospace;font-size:12px;cursor:pointer; }
+    .modal-box #online-invite-pin { display:inline-block;width:16px;height:16px;margin:0;padding:0;accent-color:#c9ba72; }
+    .modal-box #online-invite-url[hidden] { display:none; }
 
     /* ── HUD: everything that must stay legible over a scene of ANY brightness sits on a translucent plate ── */
     #hud-cluster {
@@ -205,7 +236,7 @@
       position: fixed; top: 34%; left: 50%; transform: translateX(-50%);
       width: max-content; max-width: min(92vw, 640px); padding: 13px 24px 14px;
       background: var(--hud-plate-hi);
-      font: 700 14px/1.8 var(--mono); letter-spacing: 0.12em; text-align: center; white-space: pre-wrap;
+      font: 700 14px/1.8 var(--mono); letter-spacing: 0.12em; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere;   /* (an /invite link has no spaces to wrap at) */
       opacity: 0; pointer-events: none; transition: opacity 1.5s;
     }
     #hint {
@@ -326,14 +357,15 @@
     #btn-new-notice { background:none; border:1px solid #8a7a3a; color:#c9ba72; font-family:monospace; font-size:13px; padding:8px 16px; cursor:pointer; letter-spacing:2px; }
     #btn-new-notice:hover { background:rgba(58,44,23,0.88); }
     #file-reply { margin-top:8px; color:#c9ba72; font-family:monospace; min-height:12px; }
-    #anchor-wrap { display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:8px; }
+    /* the anchor field sits above the ways in (launch-fixes F7): the pin is the hook, so it reads before the buttons, at full contrast */
+    #anchor-wrap { display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:4px; }
     #anchor-input {
-      width: min(460px, 90vw); background: rgba(14,12,7,0.72); border: 1px solid #6a5a2a; color: var(--text);
+      width: min(500px, 90vw); background: rgba(14,12,7,0.86); border: 1px solid #8a7a3a; color: var(--text);
       font: 12px var(--mono); padding: 9px 12px; letter-spacing: 0.5px; text-overflow: ellipsis;
     }
-    #anchor-input::placeholder { color: var(--text-dim); }
+    #anchor-input::placeholder { color: #c9bd8f; }
     #anchor-input:focus { outline: none; border-color: var(--wall); box-shadow: 0 0 0 1px rgba(200,184,112,0.4); }
-    #anchor-status { color: var(--text-dim); font-size: 11px; letter-spacing: 2px; min-height: 14px; text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
+    #anchor-status { color: var(--text-dim); font-size: 11px; letter-spacing: 2px; min-height: 14px; text-shadow: 0 1px 4px rgba(0,0,0,0.9); max-width: min(500px, 90vw); text-align: center; line-height: 1.5; }
     /* settings gear: lifted above the title screen (it sat UNDER #start and was unreachable there), on a plate like the rest */
     body #btn-settings {
       top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); z-index: 101;
@@ -441,6 +473,8 @@
         window.backrooms.logError('reject: ' + ((r && r.stack) || r)); } catch (_) {}
     });
   </script>
+  <script>window.goatcounter = { path: '/play/' }</script>
+  <script data-goatcounter="https://backrooms.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
   <canvas id="c"></canvas>
@@ -544,6 +578,15 @@
     <div class="title">THE BACKROOMS</div>
     <div class="sub">level 0. somewhere. you are here.</div>
     <input id="player-name" type="text" placeholder="your name" maxlength="24" spellcheck="false"/>
+    <div id="invite-plate" hidden>
+      <div id="invite-line"></div>
+      <button id="btn-invite-join" type="button">JOIN ▶</button>
+      <div id="invite-sub" class="set-hint"></div>
+    </div>
+    <div id="anchor-wrap">
+      <input id="anchor-input" type="text" placeholder="paste a google maps link — that place becomes the maze's seed" spellcheck="false"/>
+      <div id="anchor-status"></div>
+    </div>
     <div class="btns">
       <button id="btn-continue" style="display:none">CONTINUE ▶</button>
       <button id="btn-solo">SOLO ▶</button>
@@ -551,9 +594,9 @@
       <button id="btn-join">JOIN LAN</button>
       <button id="btn-host">HOST LAN</button>
     </div>
-    <div id="anchor-wrap">
-      <input id="anchor-input" type="text" placeholder="anchor — paste a google maps link or lat,lng (optional)" spellcheck="false"/>
-      <div id="anchor-status"></div>
+    <div id="front-door">
+      <button id="btn-front-door" type="button">the front door</button>
+      <div id="front-door-hint">a real block. read the form. find the gap.</div>
     </div>
     <div id="start-status" style="color:#a09060;font-family:monospace;font-size:13px;margin-top:16px;min-height:20px;text-align:center;"></div>
   </div>
@@ -578,6 +621,11 @@
         pick a room code and share it with your friend. you'll both fall into the same world — anywhere, no setup.
       </div>
       <input id="online-room" type="text" value="" placeholder="room code (e.g. yellow-lamp-42)" spellcheck="false"/>
+      <div id="online-invite-row">
+        <button id="online-invite" type="button">copy invite link</button>
+        <label for="online-invite-pin"><input id="online-invite-pin" type="checkbox"/> include my place</label>
+      </div>
+      <input id="online-invite-url" type="text" readonly hidden spellcheck="false"/>
       <div class="modal-btns">
         <button id="online-cancel">CANCEL</button>
         <button id="online-connect">ENTER ▶</button>
@@ -604,7 +652,7 @@
     <div id="chat-log"></div>
     <div id="chat-typing"></div>
   </div>
-  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file … · /intake · /status)" spellcheck="false" style="display:none"/>
+  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file … · /intake · /status · /invite)" spellcheck="false" style="display:none"/>
   <div id="msg"></div>
   <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>space ward (hold to charge)</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x set down</span> · <span>c whistle</span><span class="k-map"> · tab map</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span></div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
@@ -651,6 +699,7 @@
     import { parseAnchor, anchorSeed, formatAnchor, bodyUrl } from './anchor.js'
     import { getPrefs, setPref } from './prefs.js'
     import { readSave } from './save.js'
+    import { readInvite, buildInvite, normalizeRoom, lanReachable, shortMapsLink, resolveShortLink, ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, NO_FIELD_PIN } from './site.js'
     const RELAY_URL = 'wss://backrooms-relay.jeff-schatz112.workers.dev'
 
     const startEl = document.getElementById('start')
@@ -695,21 +744,51 @@
       }).catch(() => {})
     })
 
-    // ── anchor — no-clip from a real place ──
+    // ── anchor — no-clip from a real place. A full maps link or the two numbers parse here (anchor.js). A phone's Share gives a short link
+    //    with no numbers in it: the relay follows it (site.js resolveShortLink; only the link goes, never the text around it), once per link,
+    //    and its answer counts for that link from then on; a refusal is forgotten, so a paste again asks again ──
     const anchorInput = document.getElementById('anchor-input')
     const anchorStatus = document.getElementById('anchor-status')
     let currentAnchor = null
+    const shortAsk = new Map(), shortPin = new Map()      // short link -> its lookup (a promise of a pin or null) / its pin, once in
+    function lookUpShort(link) {
+      if (!shortAsk.has(link)) shortAsk.set(link, resolveShortLink(link).then((p) => { if (p) shortPin.set(link, p); else shortAsk.delete(link); return p }))
+      return shortAsk.get(link)
+    }
+    const anchoredLine = (a) => `anchored — you will fall through ${formatAnchor(a)}`
 
     anchorInput.addEventListener('input', () => {
-      const a = parseAnchor(anchorInput.value)
-      if (anchorInput.value.trim() === '') {
+      const v = anchorInput.value
+      const a = parseAnchor(v)
+      const link = a ? null : shortMapsLink(v)
+      if (v.trim() === '') {
         anchorStatus.textContent = ''
       } else if (a) {
-        anchorStatus.textContent = `anchored — you will fall through ${formatAnchor(a)}`
+        anchorStatus.textContent = anchoredLine(a)
+      } else if (!link) {
+        anchorStatus.textContent = ANCHOR_NOT_FOUND
       } else {
-        anchorStatus.textContent = 'that place cannot be found'
+        anchorStatus.textContent = ANCHOR_LOOKING
+        // the answer is said only if the field still holds that link (a later paste is not overwritten by an earlier lookup); a link already
+        // looked up answers within the same task, before anything is painted
+        lookUpShort(link).then((p) => {
+          if (shortMapsLink(anchorInput.value) === link && !parseAnchor(anchorInput.value)) anchorStatus.textContent = p ? anchoredLine(p) : ANCHOR_NOT_FOUND
+        })
       }
     })
+
+    // the pin the field holds right now (a short link counts once the relay has answered), and the same waiting for a lookup still out —
+    // SOLO pressed straight after the paste starts on that place, not a random one
+    function fieldAnchorNow() {
+      const v = anchorInput.value
+      return parseAnchor(v) ?? shortPin.get(shortMapsLink(v)) ?? null
+    }
+    async function fieldAnchor() {
+      const now = fieldAnchorNow()
+      if (now) return now
+      const link = shortMapsLink(anchorInput.value)
+      return link ? lookUpShort(link) : null
+    }
 
     // The single place currentAnchor and the locate row are set. Called from
     // all three start paths — solo, online, continue — so a resumed run gets a
@@ -722,9 +801,26 @@
       return currentAnchor
     }
 
-    function takeAnchor() {
-      return applyIdentity({ anchor: parseAnchor(anchorInput.value) })
+    async function takeAnchor() {
+      return applyIdentity({ anchor: await fieldAnchor() })
     }
+
+    // ── an invite: /play/?room=CODE[&anchor=LAT,LNG] (site.js readInvite; the desktop page reads the same query when it has one). The pin
+    //    fills the anchor field; the room fills the PLAY ONLINE field and a plate offers one click in. The code reaches the page as text
+    //    only (textContent), never markup, and the link never picks a name: what is in the name field (or nothing) is the player's ──
+    const invite = readInvite(location.search)
+    if (invite.anchor) { anchorInput.value = formatAnchor(invite.anchor); anchorInput.dispatchEvent(new Event('input')) }
+    if (invite.room) {
+      document.getElementById('online-room').value = invite.room
+      document.getElementById('invite-line').textContent = `a door was left open · room ${invite.room}`
+      document.getElementById('invite-sub').textContent = invite.anchor ? 'the first one in decides the world.' : ''
+      document.getElementById('invite-plate').hidden = false
+      startEl.classList.add('invited')
+      document.getElementById('btn-invite-join').onclick = () => { startStatus.textContent = ''; joinOnline(invite.room, startStatus) }
+    }
+
+    // JOIN LAN / HOST LAN reach ws:// on your network, which an https page (/play/, itch) can never open: there they are not offered
+    if (!lanReachable(location)) for (const id of ['btn-join', 'btn-host']) document.getElementById(id).hidden = true
 
     // player name (persisted)
     const nameInput = document.getElementById('player-name')
@@ -736,24 +832,31 @@
     // in (solo, the relay, a LAN you joined or hosted), the pin, the name. The arrival is written by the game at the filing.
     const intakeFor = (route, anchor) => ({ route, arrival: null, anchor: anchor || null, name: getName() })
 
-    async function startSolo() {
-      const anchor = takeAnchor()
+    // a fresh solo run comes in through the lobby; through the front door it comes in on the block, Level ∅ (game.js / topology.js
+    // entryLevel). One start: the anchor may still be out with the relay, and a second click meanwhile must not start a second game
+    let soloBusy = false
+    async function startSolo({ frontDoor = false } = {}) {
+      if (soloBusy) return
+      soloBusy = true
+      const anchor = await takeAnchor()
       const intakeCtx = intakeFor('solo', anchor)
-      hideStart()
-      await initGame(canvas, anchor
+      const opts = anchor
         ? { worldSeed: anchorSeed(anchor.lat, anchor.lng), anchor, intakeCtx }
-        : { intakeCtx })
+        : { intakeCtx }
+      hideStart()
+      await initGame(canvas, { ...opts, frontDoor })
     }
 
-    // one connection attempt at a time: a double click on HOST / ENTER must not join the room twice (or start the game twice)
+    // one connection attempt at a time: a double click on HOST / ENTER must not join the room twice (or start the game twice).
+    // lanUrl: the address a friend types into JOIN LAN (HOST LAN's own network address), which /invite says on a LAN
     let mpBusy = false
-    async function startMultiplayer(serverUrl, roomId, statusEl, route = 'lan') {
+    async function startMultiplayer(serverUrl, roomId, statusEl, route = 'lan', lanUrl = serverUrl) {
       if (mpBusy) return
       mpBusy = true
       const st = statusEl || joinStatus
       st.textContent = 'connecting...'
       try {
-        const anchor = takeAnchor()
+        const anchor = await takeAnchor()
         const requestedSeed = anchor ? anchorSeed(anchor.lat, anchor.lng) : null
         const mpClient = createMultiplayerClient(serverUrl)
         // first joiner's seed wins; later joiners inherit the room's world
@@ -761,16 +864,28 @@
         joinModal.style.display = 'none'
         document.getElementById('online-modal').style.display = 'none'
         hideStart()
-        await initGame(canvas, { worldSeed, mpClient, anchor, intakeCtx: intakeFor(route, anchor) })
+        await initGame(canvas, { worldSeed, mpClient, anchor, intakeCtx: intakeFor(route, anchor), room: { code: roomId, route, lan: route === 'online' ? null : lanUrl } })
       } catch (e) {
         st.textContent = `failed: ${e.message || 'could not connect'}`
         mpBusy = false                                   // (a started game keeps it set: there is no second start)
       }
     }
 
+    // the relay's room, from the PLAY ONLINE modal's ENTER or an invite link's JOIN: one path, so the two cannot drift apart
+    function joinOnline(code, statusEl) {
+      const c = normalizeRoom(code) || 'default'
+      return startMultiplayer(`${RELAY_URL}/?room=${encodeURIComponent(c)}`, c, statusEl, 'online')
+    }
+
     document.getElementById('btn-solo').onclick = () => {
       startStatus.textContent = ''
       startSolo()
+    }
+
+    // the front door: the same solo run, on the real block (a quiet line under the ways in, not a button among them)
+    document.getElementById('btn-front-door').onclick = () => {
+      startStatus.textContent = ''
+      startSolo({ frontDoor: true })
     }
 
     document.getElementById('btn-join').onclick = () => {
@@ -801,7 +916,7 @@
           badge.textContent = lines.join('\n')
           badge.hidden = false
         }
-        await startMultiplayer(`ws://localhost:${port}`, room, startStatus, r ? 'host' : 'lan')   // 'host' only when this app started the server
+        await startMultiplayer(`ws://localhost:${port}`, room, startStatus, r ? 'host' : 'lan', info.url || `ws://localhost:${port}`)   // 'host' only when this app started the server
         if (startEl.style.display !== 'none') badge.hidden = true   // still on the title: the join failed
       } catch (e) {
         startStatus.textContent = `host failed: ${e.message}`
@@ -829,9 +944,46 @@
     document.getElementById('online-cancel').onclick = () => {
       document.getElementById('online-modal').style.display = 'none'
     }
-    document.getElementById('online-connect').onclick = () => {
-      const code = (document.getElementById('online-room').value.trim() || 'default').slice(0, 32)
-      startMultiplayer(`${RELAY_URL}/?room=${encodeURIComponent(code)}`, code, document.getElementById('online-status'), 'online')
+    document.getElementById('online-connect').onclick = () => joinOnline(document.getElementById('online-room').value, document.getElementById('online-status'))
+
+    // ── an invite, copied: the share sheet on a phone, else the desktop bridge (main copies only our own /play/ link), else the clipboard;
+    //    when none of them will take it, the link is shown selected to copy by hand. say(line) reports how it went ──
+    const sharePhone = () => !!navigator.share && matchMedia('(pointer: coarse)').matches
+    async function shareInvite(url, say, fallbackEl) {
+      if (!url) { say('name the room first.'); return false }
+      if (sharePhone()) {
+        try { await navigator.share({ url }); say('the link is on its way.'); return true } catch { /* dismissed or refused: copy it instead */ }
+      }
+      try {
+        if (window.backrooms?.copyInvite) {
+          if (await window.backrooms.copyInvite(url)) { say('the link is on your clipboard.'); return true }
+        } else {
+          await navigator.clipboard.writeText(url)
+          say('the link is on your clipboard.')
+          return true
+        }
+      } catch { /* no permission (a frame without clipboard-write, an old browser): by hand, below */ }
+      if (fallbackEl) { fallbackEl.value = url; fallbackEl.hidden = false; fallbackEl.select() }
+      say('copy this and send it.')
+      return false
+    }
+    // the console's /invite (game.js) asks through one document event; the line it says carries the link too
+    document.addEventListener('backrooms:invite', (e) => { const d = e.detail || {}; shareInvite(d.url, (t) => d.say?.(t), null) })
+
+    // the PLAY ONLINE modal's invite: the room in the field, as a link (site.js buildInvite). The room only, unless 'include my place' is
+    // ticked — off on every load, never remembered — and ticking it says at once what a pin in a link is
+    const inviteBtn = document.getElementById('online-invite')
+    const invitePin = document.getElementById('online-invite-pin')
+    const inviteUrlEl = document.getElementById('online-invite-url')
+    const onlineStatus = document.getElementById('online-status')
+    if (sharePhone()) inviteBtn.textContent = 'send invite'
+    invitePin.checked = false
+    invitePin.addEventListener('change', () => {
+      onlineStatus.textContent = !invitePin.checked ? '' : fieldAnchorNow() ? PIN_WARNING : NO_FIELD_PIN
+    })
+    inviteBtn.onclick = () => {
+      const pin = invitePin.checked ? fieldAnchorNow() : null
+      shareInvite(buildInvite({ room: document.getElementById('online-room').value, anchor: pin }), (t) => { onlineStatus.textContent = pin ? `${PIN_WARNING} ${t}` : t }, inviteUrlEl)
     }
 
     // ── continue a saved run ──
@@ -979,8 +1131,10 @@
   <script>
     // Register the PWA service worker — only over http(s). Under Electron the
     // page loads from file://, where service workers are unsupported, so this
-    // is skipped and the desktop build is unaffected.
-    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    // is skipped and the desktop build is unaffected. Only on a top-level page:
+    // framed (itch.io, a portal) a worker is partitioned or blocked, and could
+    // keep serving an old build after the host updates the files.
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http') && window.top === window.self) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js').catch((e) => console.warn('sw register failed', e))
       })

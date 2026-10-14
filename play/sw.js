@@ -2,10 +2,11 @@
 // Precaches the whole game so it installs and runs offline. Cross-origin
 // requests (the Cloudflare multiplayer relay) are never intercepted, and
 // neither are the recovery-engine case manifests under /recover/ — those
-// must always be live so a case can change without a cache bump.
-const CACHE = 'backrooms-play-v21'
+// must always be live so a case can change without a cache bump. world.json
+// is precached but fetched network-first: it changes with every granted wish.
+const CACHE = 'backrooms-play-v22'
 const SHELL = [
-  './', 'index.html',
+  './', 'index.html', 'world.json',
   'game.js', 'touch.js', 'scraps.js', 'events.js', 'anchor.js', 'items.js', 'tactics.js', 'save.js', 'world.js', 'decor.js',
   'fixedmap.js', 'level-null-map.js', 'levels.js', 'raycaster.js', 'renderer.js',
   'gfx-util.js', 'gfx-textures.js', 'gfx-world.js', 'gfx-sprites.js', 'gfx-post.js', 'gfx-cpu.js', 'gfx-sky.js', 'gfx-light.js', 'gfx-quality.js', 'gfx-attract.js',
@@ -18,7 +19,7 @@ const SHELL = [
   'dress.js', 'containers.js', 'haunts.js', 'papercard.js',
   'origin-intake.js', 'origin-rules.js', 'origin-tenant.js', 'origin-anchored.js', 'origin-processed.js', 'origin-unnamed.js', 'origin-thin.js',
   'compose-perception.js', 'stillness.js', 'compose-sanity.js', 'rollcall.js', 'downed.js', 'status.js', 'closings.js', 'docket.js',
-  'compose-polaroid.js', 'compose-radio.js', 'compose-wish.js', 'compose-gates.js', 'evidence.js', 'caches.js', 'lightshare.js',
+  'compose-polaroid.js', 'compose-radio.js', 'compose-wish.js', 'wish-post.js', 'compose-gates.js', 'evidence.js', 'caches.js', 'lightshare.js', 'site.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
 ]
 self.addEventListener('install', (e) => e.waitUntil((async () => {
@@ -33,14 +34,31 @@ self.addEventListener('activate', (e) => e.waitUntil((async () => {
 self.addEventListener('fetch', (e) => {
   const req = e.request
   if (req.method !== 'GET') return
-  if (new URL(req.url).origin !== self.location.origin) return
-  if (new URL(req.url).pathname.includes('/recover/')) return   // trail manifests stay live — never cached
+  const url = new URL(req.url)
+  if (url.origin !== self.location.origin) return
+  if (url.pathname.includes('/recover/')) return   // trail manifests stay live — never cached
+  // world.json changes with every granted wish: the network first (revalidated, never a stale HTTP-cache copy), the cache only offline
+  if (url.pathname.endsWith('/world.json')) {
+    e.respondWith((async () => {
+      try {
+        const res = await fetch(req, { cache: 'no-cache' })
+        if (res.ok) (await caches.open(CACHE)).put(req, res.clone())
+        return res
+      } catch (err) {
+        const cached = await caches.match(req)
+        if (cached) return cached
+        throw err
+      }
+    })())
+    return
+  }
+  // a navigation with a query (an invite link, /play/?room=CODE) is the same page: matched ignoring the query, never stored once per code
   e.respondWith((async () => {
-    const cached = await caches.match(req)
+    const cached = await caches.match(req, req.mode === 'navigate' ? { ignoreSearch: true } : undefined)
     if (cached) return cached
     try {
       const res = await fetch(req)
-      if (res.ok) { const c = await caches.open(CACHE); c.put(req, res.clone()) }
+      if (res.ok && !(req.mode === 'navigate' && new URL(req.url).search)) { const c = await caches.open(CACHE); c.put(req, res.clone()) }
       return res
     } catch (err) {
       if (req.mode === 'navigate') {
