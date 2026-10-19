@@ -1,13 +1,14 @@
 // The pin and the room (fix/pin-privacy). Solo keeps the pin's own ~11 m seed — the game's promise, its golden values below. Whatever leaves
 // the machine for a room is the NEIGHBOURHOOD's (anchor.js ROOM_GRID, two decimals): the join's worldSeed, host or joiner, relay or LAN;
-// the 'here' mark; an invite's anchor. A pinned player is told once, beside 'connected', what the room has of it. The rules are pinned
+// the 'here' mark; an invite's anchor. A pinned player is told before ENTER and once beside 'connected' what the room has of it — and
+// what a square kilometre is worth to someone with a short list of addresses (review: "never the door" was not true). The rules are pinned
 // here; the wiring is lifted out of index.html / game.js and run (they only run in a page); the wire is a real client against a stand-in
 // server that keeps every frame, and against the real LAN server for what another player receives.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import fs from 'node:fs'
 import { WebSocket, WebSocketServer } from 'ws'
 import { anchorSeed, neighbourhood, neighbourhoodSeed, pinTag, ROOM_GRID } from '../src/renderer/anchor.js'
-import { buildInvite, readInvite, inviteFor, roomPinLine, ROOM_PIN_LINE, ROOM_PIN_MARK } from '../src/renderer/site.js'
+import { buildInvite, readInvite, inviteFor, roomPinLine, shortMapsLink, ROOM_PIN_LINE, ROOM_PIN_MARK, ROOM_PIN_DOOR, ROOM_PIN_AHEAD } from '../src/renderer/site.js'
 import { createMultiplayerClient } from '../src/net/client.js'
 import { createEvBus } from '../src/net/evbus.js'
 import { createServer } from '../server/index.js'
@@ -19,6 +20,7 @@ global.WebSocket = WebSocket   // the client finds it on globalThis (client.test
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const html = read('../src/renderer/index.html')
 const game = read('../src/renderer/game.js')
+const readme = read('../README.md'), manual = read('../docs/manual.html')
 const at = (src, s, from = 0) => { const k = src.indexOf(s, from); expect(k, s).toBeGreaterThan(0); return k }
 const slice = (src, from, to) => { const a = at(src, from), b = src.indexOf(to, a); expect(b, to).toBeGreaterThan(a); return src.slice(a, b) }
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
@@ -220,17 +222,36 @@ describe('an invite carries the neighbourhood, never the door', () => {
 })
 
 describe('the line: a pinned player is told once what the room has of it', () => {
-  it('opened from your neighbourhood: drawn from it; drawn before you came: a mark; no pin: nothing', () => {
-    expect(ROOM_PIN_LINE).toBe("this room is drawn from your pin's neighbourhood. anyone with the code can see roughly where — never the door.")
-    expect(ROOM_PIN_MARK).toBe("this room was drawn before you came. the others get only a mark of your pin's neighbourhood — enough to read roughly where, never the door.")
-    for (const s of [ROOM_PIN_LINE, ROOM_PIN_MARK]) { expect(s).toBe(s.toLowerCase()); expect(s).not.toContain('!') }
+  it('the lines say what a square kilometre is worth to someone with a short list — none of them promises "never the door"', () => {
+    expect(ROOM_PIN_LINE).toBe("this room is drawn from your pin's neighbourhood. anyone with the code can see which square kilometre — to someone who already has a few of your addresses, that is the door.")
+    expect(ROOM_PIN_MARK).toBe("this room was drawn before you came. the others get a mark of your pin's neighbourhood — with marks from two rooms, or a guess at your city, enough to find which square kilometre. to someone who already has a few of your addresses, that is the door.")
+    expect(ROOM_PIN_DOOR).toBe("this room was drawn from your pin itself, by an older copy. anyone with the code can find the door. leave the code and open a new one.")
+    expect(ROOM_PIN_AHEAD).toBe("a room you open with this pin is drawn from its neighbourhood and kept for good. anyone with the code can see which square kilometre — to someone who already has a few of your addresses, that is the door.")
+    for (const s of [ROOM_PIN_LINE, ROOM_PIN_MARK, ROOM_PIN_DOOR, ROOM_PIN_AHEAD]) {
+      expect(s).toBe(s.toLowerCase()); expect(s).not.toContain('!'); expect(s).not.toMatch(/never the door/)
+    }
+  })
+  it('opened from your neighbourhood: drawn from it; drawn from your very door by an older copy: the door; drawn before you came: a mark; no pin: nothing', () => {
     expect(roomPinLine({ anchor: PIN, worldSeed: HOOD })).toBe(ROOM_PIN_LINE)
     expect(roomPinLine({ anchor: { lat: 39.3021, lng: -76.6388 }, worldSeed: HOOD })).toBe(ROOM_PIN_LINE)   // someone from your cell drew it
     expect(roomPinLine({ anchor: PIN, worldSeed: String(HOOD) })).toBe(ROOM_PIN_LINE)
     expect(roomPinLine({ anchor: PIN, worldSeed: 7 })).toBe(ROOM_PIN_MARK)
-    expect(roomPinLine({ anchor: PIN, worldSeed: SEED })).toBe(ROOM_PIN_MARK)   // a 2.0.1 room drawn from the very door: not this copy's doing
+    expect(roomPinLine({ anchor: PIN, worldSeed: SEED })).toBe(ROOM_PIN_DOOR)   // a 2.0.1 room drawn from this very door: the code gives it away
+    expect(roomPinLine({ anchor: PIN, worldSeed: String(SEED) })).toBe(ROOM_PIN_DOOR)
+    expect(roomPinLine({ anchor: PIN, worldSeed: anchorSeed(39.2976, -76.643) })).toBe(ROOM_PIN_MARK)   // a 2.0.1 room from the next door over
+    // a pin on the grid itself (two decimals, or an invite's point) has one seed for both: its own room is drawn from the neighbourhood
+    const grid = { lat: 39.3, lng: -76.64 }
+    expect(anchorSeed(grid.lat, grid.lng)).toBe(HOOD)
+    expect(roomPinLine({ anchor: grid, worldSeed: HOOD })).toBe(ROOM_PIN_LINE)
     expect(roomPinLine({ anchor: null, worldSeed: HOOD })).toBe(null)
+    expect(roomPinLine({ anchor: null, worldSeed: SEED })).toBe(null)
     expect(roomPinLine()).toBe(null)
+  })
+  it('the door\'s seed really is the door: the welcome\'s 2.0.1 seed is found again over a city box, so the line has to say so', () => {
+    // every 4-decimal door in a 0.2 x 0.2 degree box around baltimore (4 million): the one whose solo seed is the room's
+    const hits = []
+    for (let a = 392000; a < 394000; a++) for (let b = -767000; b < -765000; b++) if (anchorSeed(a / 1e4, b / 1e4) === SEED) hits.push([a / 1e4, b / 1e4])
+    expect(hits).toEqual([[PIN.lat, PIN.lng]])
   })
   it('lifted and run: game.js says it in the chat beside \'connected\', in a room only, once', () => {
     const block = slice(game, '  if (mpClient) {\n    mpClient.onChat(addChatLine)', '\n  }\n') + '\n  }'
@@ -246,8 +267,35 @@ describe('the line: a pinned player is told once what the room has of it', () =>
     const mp = { onChat() {}, onTyping() {} }
     expect(run(mp, PIN, HOOD).slice(1)).toEqual([ROOM_PIN_LINE])
     expect(run(mp, PIN, 99).slice(1)).toEqual([ROOM_PIN_MARK])
+    expect(run(mp, PIN, SEED).slice(1)).toEqual([ROOM_PIN_DOOR])
     expect(run(mp, null, HOOD).slice(1)).toEqual([])
     expect(run(null, PIN, SEED)).toEqual([])                                // solo: no room, no line
+  })
+  it('lifted and run: the PLAY ONLINE box says it before ENTER, with a pin (or a short link still out) in the field; unticking the invite\'s place brings it back', () => {
+    const modal = slice(html, "const inviteBtn = document.getElementById('online-invite')", '// ── continue a saved run ──')
+    const line = modal.match(/const onlineAtRest = [^\n]*/)[0]
+    expect(line).toBe("const onlineAtRest = () => (fieldAnchorNow() || shortMapsLink(anchorInput.value) ? ROOM_PIN_AHEAD : '')")
+    expect(modal).toContain("document.getElementById('btn-online').addEventListener('click', () => { warnedFor = null; onlineStatus.textContent = onlineAtRest() })")
+    expect(modal).toContain('onlineStatus.textContent = !invitePin.checked ? onlineAtRest() : fieldAnchorNow() ? PIN_WARNING : NO_FIELD_PIN')
+    expect(html).toMatch(/import \{[^}]*\bROOM_PIN_AHEAD\b[^}]*\} from '\.\/site\.js'/)
+    const atRest = (pin, value) => new Function('fieldAnchorNow', 'shortMapsLink', 'anchorInput', 'ROOM_PIN_AHEAD', `${line}\nreturn onlineAtRest()`)(
+      () => pin, shortMapsLink, { value }, ROOM_PIN_AHEAD)
+    expect(atRest(PIN, '39.2975,-76.643')).toBe(ROOM_PIN_AHEAD)
+    expect(atRest(null, 'https://maps.app.goo.gl/abc123')).toBe(ROOM_PIN_AHEAD)   // the relay has not answered yet
+    expect(atRest(null, '')).toBe('')
+    expect(atRest(null, 'not a place')).toBe('')
+  })
+})
+
+describe('the docs say what the game says', () => {
+  it('README and the manual quote the chat\'s lines, and neither promises "never the door"', () => {
+    for (const [k, d] of Object.entries({ readme, manual })) {
+      for (const s of [ROOM_PIN_LINE, ROOM_PIN_DOOR]) expect(d, `${k}: ${s}`).toContain(s)
+      expect(d, k).not.toMatch(/never the door|never matches that mark|for someone who guesses your city/)
+      expect(d, k).toMatch(/locate your body(\*\*|<\/b>) opens google maps at it, when you press it/i)   // the one solo send the player starts
+      expect(d, k).toContain('with marks from two rooms, or a guess at your city')
+      expect(d, k).toContain('matches that mark only when the older copy came in through a newer invite')
+    }
   })
 })
 
@@ -266,12 +314,21 @@ describe('mixed versions: the room\'s stored world wins, and nothing breaks', ()
     expect(roomSeed(HOOD, SEED)).toBe(SEED)                                // a 2.0.1 room drawn from the door keeps it: give the code up
     expect(roomSeed(SEED, HOOD)).toBe(HOOD)                                // a 2.0.1 joiner into a 2.0.2 room gets the neighbourhood's world
   })
-  it('a 2.0.1 host first: the newer copy joins the old world and is told it was drawn before it came', async () => {
+  it('a 2.0.1 host first, from the same door: the newer copy joins the old world and is told the code gives the door away', async () => {
     const old = await join201('mixed-a', SEED)
     expect(old.worldSeed).toBe(SEED)
     const c = createMultiplayerClient(url)
     const { worldSeed } = await c.connect('mixed-a', HOOD, 'new')
     expect(worldSeed).toBe(SEED)
+    expect(roomPinLine({ anchor: PIN, worldSeed })).toBe(ROOM_PIN_DOOR)
+    c.disconnect(); old.ws.close()
+  })
+  it('a 2.0.1 host first, from another door: the newer copy joins the old world and is told it was drawn before it came', async () => {
+    const other = anchorSeed(39.2854, -76.6083)
+    const old = await join201('mixed-c', other)
+    const c = createMultiplayerClient(url)
+    const { worldSeed } = await c.connect('mixed-c', HOOD, 'new')
+    expect(worldSeed).toBe(other)
     expect(roomPinLine({ anchor: PIN, worldSeed })).toBe(ROOM_PIN_MARK)
     c.disconnect(); old.ws.close()
   })

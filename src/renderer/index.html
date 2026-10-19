@@ -718,7 +718,7 @@
     import { parseAnchor, anchorSeed, neighbourhoodSeed, formatAnchor, bodyUrl } from './anchor.js'
     import { getPrefs, setPref } from './prefs.js'
     import { readSave } from './save.js'
-    import { readInvite, buildInvite, normalizeRoom, lanReachable, shortMapsLink, resolveShortLink, ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, PIN_PRESS_AGAIN, NO_FIELD_PIN } from './site.js'
+    import { readInvite, buildInvite, normalizeRoom, lanReachable, shortMapsLink, resolveShortLink, ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, PIN_PRESS_AGAIN, NO_FIELD_PIN, ROOM_PIN_AHEAD } from './site.js'
     const RELAY_URL = 'wss://backrooms-relay.jeff-schatz112.workers.dev'
 
     const startEl = document.getElementById('start')
@@ -1018,11 +1018,14 @@
     // ticked, or a pin been pasted), and the first press that would carry one only says what a pin in a link is and sends nothing.
     // warnedFor: the pin that warning was last said for; ticking the box or opening the box again forgets it
     let warnedFor = null
+    // the box at rest: with a pin in the field (or a short link still out with the relay) it says before ENTER what a room keeps of it
+    // (site.js ROOM_PIN_AHEAD) — the relay stores a new room's world the moment it is drawn, so the chat's line would come too late
+    const onlineAtRest = () => (fieldAnchorNow() || shortMapsLink(anchorInput.value) ? ROOM_PIN_AHEAD : '')
     invitePin.addEventListener('change', () => {
       warnedFor = null
-      onlineStatus.textContent = !invitePin.checked ? '' : fieldAnchorNow() ? PIN_WARNING : NO_FIELD_PIN
+      onlineStatus.textContent = !invitePin.checked ? onlineAtRest() : fieldAnchorNow() ? PIN_WARNING : NO_FIELD_PIN
     })
-    document.getElementById('btn-online').addEventListener('click', () => { warnedFor = null })
+    document.getElementById('btn-online').addEventListener('click', () => { warnedFor = null; onlineStatus.textContent = onlineAtRest() })
     inviteBtn.onclick = () => {
       const pin = invitePin.checked ? fieldAnchorNow() : null
       if (pin && warnedFor !== formatAnchor(pin)) {

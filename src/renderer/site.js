@@ -1,7 +1,7 @@
 // site.js — where the game lives on the web: the public origin, the invite link a friend opens (/play/?room=CODE[&anchor=LAT,LNG]), the
 // case board's address off the site, and the relay's door for a phone's short maps link. Pure: no DOM, no globals read — index.html and
 // game.js hand in what they have (location, fetch) and do the wiring.
-import { parseAnchor, neighbourhood, neighbourhoodSeed } from './anchor.js'
+import { parseAnchor, anchorSeed, neighbourhood, neighbourhoodSeed } from './anchor.js'
 
 export const SITE_ORIGIN = 'https://backrooms.thecornerspore.dev'
 export const PLAY_URL = SITE_ORIGIN + '/play/'
@@ -21,11 +21,16 @@ export const NO_DOOR_LINE = 'no one can follow you here. play online and leave a
 export const NO_PIN_LINE = 'you came in without a pin. the link carries the room only.'
 export const NO_FIELD_PIN = 'there is no pin in the anchor field. the link carries the room only.'   // the modal's 'include my place', unpinned
 export const lanLine = ({ code, lan }) => `this room is on your network. a friend uses JOIN LAN → ${lan || 'your address'} · room ${code}.`
-// a pin in a room, said once beside 'connected' (game.js): a room's world is drawn from a pin's neighbourhood, never the pin. The first
-// when the room's seed is your neighbourhood's (you opened it, or someone from the same cell did); the second when it was drawn before you
-// came — your pin then reaches the others only as its neighbourhood's 'here' mark (anchor.js pinTag)
-export const ROOM_PIN_LINE = "this room is drawn from your pin's neighbourhood. anyone with the code can see roughly where — never the door."
-export const ROOM_PIN_MARK = "this room was drawn before you came. the others get only a mark of your pin's neighbourhood — enough to read roughly where, never the door."
+// a pin in a room, said once beside 'connected' (game.js). LINE: the room's seed is your neighbourhood's (you opened it, or someone from
+// your cell did). DOOR: it is your pin's own exact seed — an older copy drew it from this very door (yours, or another at the same door),
+// and the code now gives the door away. MARK: drawn before you came; your pin reaches the others only as its neighbourhood's 'here' mark
+// (anchor.js pinTag). None says "never the door": a cell is the door to anyone holding a short list of your addresses, so each says so
+export const ROOM_PIN_LINE = "this room is drawn from your pin's neighbourhood. anyone with the code can see which square kilometre — to someone who already has a few of your addresses, that is the door."
+export const ROOM_PIN_MARK = "this room was drawn before you came. the others get a mark of your pin's neighbourhood — with marks from two rooms, or a guess at your city, enough to find which square kilometre. to someone who already has a few of your addresses, that is the door."
+export const ROOM_PIN_DOOR = "this room was drawn from your pin itself, by an older copy. anyone with the code can find the door. leave the code and open a new one."
+// the PLAY ONLINE box, before ENTER, with a pin in the field (index.html): the relay keeps a new room's world the moment it is drawn, so
+// the chat's line comes too late to change your mind
+export const ROOM_PIN_AHEAD = "a room you open with this pin is drawn from its neighbourhood and kept for good. anyone with the code can see which square kilometre — to someone who already has a few of your addresses, that is the door."
 
 // a room code as the relay will see it: text, no control characters, trimmed, at most 32; nothing -> null. The case is kept: the relay's
 // room name is case-sensitive, so lowering it would split a room in two
@@ -53,11 +58,15 @@ export function buildInvite({ room, anchor = null } = {}) {
   return `${PLAY_URL}?${q}`
 }
 
-// the line for a pin in a room (above), or null: no pin. worldSeed: the room's, as the welcome handed it over
+// the line for a pin in a room (above), or null: no pin. worldSeed: the room's, as the welcome handed it over. The neighbourhood is
+// asked first: a pin on the grid itself (a two-decimal pin, an invite's point) has one seed for both, and that room is this copy's doing
 export function roomPinLine({ anchor = null, worldSeed = null } = {}) {
   const own = neighbourhoodSeed(anchor)
   if (own == null) return null
-  return Number(worldSeed) === own ? ROOM_PIN_LINE : ROOM_PIN_MARK
+  const ws = Number(worldSeed)
+  if (ws === own) return ROOM_PIN_LINE
+  if (ws === anchorSeed(anchor.lat, anchor.lng)) return ROOM_PIN_DOOR
+  return ROOM_PIN_MARK
 }
 
 // the public site serves /recover/ beside /play/; everywhere else (the desktop app's file://, itch's CDN, localhost) reads the cases from

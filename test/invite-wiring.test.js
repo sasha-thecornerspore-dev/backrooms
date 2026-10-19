@@ -88,7 +88,7 @@ describe('index.html: copying an invite', () => {
   const modal = slice(html, "const inviteBtn = document.getElementById('online-invite')", '// ── continue a saved run ──')
   it('the pin is never remembered and is warned about the moment it is ticked', () => {
     expect(modal).toContain('invitePin.checked = false')
-    expect(modal).toMatch(/invitePin\.addEventListener\('change', \(\) => \{\r?\n\s*warnedFor = null\r?\n\s*onlineStatus\.textContent = !invitePin\.checked \? '' : fieldAnchorNow\(\) \? PIN_WARNING : NO_FIELD_PIN\r?\n\s*\}\)/)
+    expect(modal).toMatch(/invitePin\.addEventListener\('change', \(\) => \{\r?\n\s*warnedFor = null\r?\n\s*onlineStatus\.textContent = !invitePin\.checked \? onlineAtRest\(\) : fieldAnchorNow\(\) \? PIN_WARNING : NO_FIELD_PIN\r?\n\s*\}\)/)
     expect(modal).not.toMatch(/setPref|localStorage/)
   })
   it('the copy is the room only unless the box is ticked; with the pin it says the warning again', () => {
@@ -101,7 +101,7 @@ describe('index.html: copying an invite', () => {
     expect(warn).toBeLessThan(share)
     expect(click).toMatch(/if \(pin && warnedFor !== formatAnchor\(pin\)\) \{\r?\n\s*warnedFor = formatAnchor\(pin\)\r?\n\s*onlineStatus\.textContent = `\$\{PIN_WARNING\} \$\{PIN_PRESS_AGAIN\}`\r?\n\s*return\r?\n\s*\}/)
     expect(modal).toMatch(/invitePin\.addEventListener\('change', \(\) => \{\r?\n\s*warnedFor = null\r?\n/)
-    expect(modal).toContain("document.getElementById('btn-online').addEventListener('click', () => { warnedFor = null })")
+    expect(modal).toContain("document.getElementById('btn-online').addEventListener('click', () => { warnedFor = null; onlineStatus.textContent = onlineAtRest() })")
     expect(modal).toMatch(/let warnedFor = null/)
   })
   it('the two presses, run: a pin that turns up after the box was ticked is warned about before it goes', async () => {
@@ -112,10 +112,13 @@ describe('index.html: copying an invite', () => {
     const el = () => ({ textContent: '', addEventListener(t, f) { this[t] = f } })
     const invitePin = { checked: false, ...el() }, onlineStatus = el(), inviteBtn = {}, online = el()
     const run = new Function('invitePin', 'onlineStatus', 'inviteBtn', 'fieldAnchorNow', 'formatAnchor', 'shareInvite', 'buildInvite', 'document', 'PIN_WARNING', 'PIN_PRESS_AGAIN', 'NO_FIELD_PIN', 'inviteUrlEl',
+      'shortMapsLink', 'anchorInput', 'ROOM_PIN_AHEAD',
       src + '\nreturn { change: invitePin.change }')
     const { change } = run(invitePin, onlineStatus, inviteBtn, () => fieldPin, (a) => `${a.lat},${a.lng}`, (url) => { shared.push(url) },
       ({ anchor }) => (anchor ? `link&anchor=${anchor.lat},${anchor.lng}` : 'link'), { getElementById: (id) => (id === 'btn-online' ? online : { value: 'room-1' }) },
-      'WARN', 'AGAIN', 'NOPIN', null)
+      'WARN', 'AGAIN', 'NOPIN', null, () => null, { value: '' }, 'AHEAD')
+    online.click()
+    expect(onlineStatus.textContent).toBe('')                        // the box opened with no pin in the field says nothing
     invitePin.checked = true; change()
     expect(onlineStatus.textContent).toBe('NOPIN')                   // the field has no pin yet: the status says the room only
     fieldPin = { lat: 39.2854, lng: -76.6083 }                       // ...and then the relay answers
@@ -128,6 +131,10 @@ describe('index.html: copying an invite', () => {
     expect(shared.length).toBe(1)
     invitePin.checked = false; change(); inviteBtn.onclick()           // unticked: the room only, at once
     expect(shared).toEqual(['link&anchor=39.2854,-76.6083', 'link'])
+    invitePin.checked = false; change()
+    expect(onlineStatus.textContent).toBe('AHEAD')                   // unticked with a pin: back to what a room keeps of it (pin-privacy.test.js)
+    online.click()
+    expect(onlineStatus.textContent).toBe('AHEAD')                   // and so on opening the box
   })
   it('one copy helper: the share sheet on a phone, the desktop bridge, the clipboard, else the link shown selected', () => {
     const fn = slice(html, 'async function shareInvite(url, say, fallbackEl) {', "document.addEventListener('backrooms:invite'")

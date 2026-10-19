@@ -1390,7 +1390,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     mpClient.onChat(addChatLine)
     mpClient.onTyping(showTyping)
     addChatLine('', 'connected — Enter to chat · /me to emote · /invite for a link', true)
-    // a pin in a room, said once: what the room has of it — its neighbourhood, never the door (site.js roomPinLine)
+    // a pin in a room, said once: what the room has of it — its neighbourhood, or, in a room an older copy drew from this very pin,
+    // the door (site.js roomPinLine)
     const pinLine = roomPinLine({ anchor, worldSeed })
     if (pinLine) addChatLine('', pinLine, true)
   }

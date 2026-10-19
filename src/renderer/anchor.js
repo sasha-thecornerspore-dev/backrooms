@@ -63,7 +63,8 @@ export function neighbourhood(anchor) {
 }
 
 // The seed a room is asked for, by a host or a joiner, on the relay or a LAN: the solo seed of the neighbourhood's grid point. It inverts to
-// the neighbourhood (what the player is told: site.js roomPinLine), never the door. Snapping first keeps it a function of the cell alone,
+// the neighbourhood, not the door — though a cell picks the door out of a short list of addresses (what the player is told: site.js
+// roomPinLine). Snapping first keeps it a function of the cell alone,
 // and an invite's two-decimal anchor (site.js buildInvite) asks for the same seed on any copy, 2.0.1 too. null: no pin.
 export function neighbourhoodSeed(anchor) {
   const n = neighbourhood(anchor)
