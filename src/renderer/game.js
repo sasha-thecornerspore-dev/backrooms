@@ -10,7 +10,7 @@ import { getPref, setPref, onPrefChange } from './prefs.js'
 import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
 import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
 import { writeSave } from './save.js'
-import { formatAnchor, driftMeters, anchorSeed, pinTag } from './anchor.js'
+import { formatAnchor, driftMeters, pinTag } from './anchor.js'
 import { initTouchControls, isTouchDevice } from './touch.js'
 import { SCRAPS } from './scraps.js'
 import { createEventScheduler, EVENTS } from './events.js'
@@ -60,7 +60,7 @@ import { finaleGate, beaconDecision, deathDecision } from './compose-gates.js'
 import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame, createEvidence, photoOutcome, EVIDENCE_FLOOR, EVIDENCE_LINE, COUNTED_LINE } from './evidence.js'
 import { PHRASES, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from './caches.js'
 import { LIT_RANGE, litFriendNear, inCone, wardOutcome, wardLine, litOffLine } from './lightshare.js'
-import { inviteFor, recoverBase, RECOVER_LOCAL } from './site.js'
+import { inviteFor, roomPinLine, recoverBase, RECOVER_LOCAL } from './site.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -1390,6 +1390,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     mpClient.onChat(addChatLine)
     mpClient.onTyping(showTyping)
     addChatLine('', 'connected — Enter to chat · /me to emote · /invite for a link', true)
+    // a pin in a room, said once: what the room has of it — its neighbourhood, never the door (site.js roomPinLine)
+    const pinLine = roomPinLine({ anchor, worldSeed })
+    if (pinLine) addChatLine('', pinLine, true)
   }
 
   // ── your file (status.js / closings.js): what the office has on you, as lines — the word you are under (and since when), how the file
@@ -1540,8 +1543,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
   // what 'here' says of you (bus.here sends it at once when a field changed, else every 3 s from tick): ONE object, filled per call (the bus
   // copies it). Sent about once a second from the loop, and at once after a travel or a death
-  // your pin goes out as its tag (anchor.js pinTag: 16 bits, salted by the room's seed), never the seed — the seed inverts to the place
-  const myPinTag = pinTag(anchor ? anchorSeed(anchor.lat, anchor.lng) : null, worldSeed)
+  // your pin goes out as its neighbourhood's tag (anchor.js pinTag: 16 bits of the ~1 km cell's seed, salted by the room's), never a seed —
+  // the pin's own inverts to the door. The same tag for every door in the cell, in every room: no number of rooms narrows it further
+  const myPinTag = pinTag(anchor, worldSeed)
   const hereObj = { lvl: 0, lit: true, st: 'ok', seen: false, o: null, thin: false, status: 'notice-mailed', aseed: myPinTag }
   // what the sanity step reads of your own file beside a friend's (the status's affinity, the same pin): ONE object, refilled with 'here'
   const selfFile = { status: 'notice-mailed', aseed: myPinTag, origin: null, thin: false }

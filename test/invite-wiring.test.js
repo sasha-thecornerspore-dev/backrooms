@@ -193,7 +193,7 @@ describe('game.js: /invite and the case board', () => {
     expect(game).toContain("addChatLine('', 'connected — Enter to chat · /me to emote · /invite for a link', true)")
   })
   it('the case board: relative on the site, the site\'s own address everywhere else (itch, the desktop app, localhost)', () => {
-    expect(game).toContain("import { inviteFor, recoverBase, RECOVER_LOCAL } from './site.js'")
+    expect(game).toContain("import { inviteFor, roomPinLine, recoverBase, RECOVER_LOCAL } from './site.js'")   // (+ the pin's line in a room: pin-privacy.test.js)
     expect(game).toContain("const RECOVER_BASE = recoverBase(typeof location === 'undefined' ? null : location)")
     expect(game).toContain('const RECOVER_REMOTE = RECOVER_BASE !== RECOVER_LOCAL')
     expect(game).not.toContain('recover/cases')

@@ -4,7 +4,7 @@
 // floor filter on the friend rule and the sprite list, and the joined line's status.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
-import { anchorSeed, pinTag } from '../src/renderer/anchor.js'
+import { anchorSeed, neighbourhoodSeed, pinTag } from '../src/renderer/anchor.js'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const game = read('../src/renderer/game.js')
@@ -13,11 +13,11 @@ const loopAt = game.indexOf('function loop(ts) {')
 const count = (re) => (game.match(re) || []).length
 
 describe('game.js: the event bus (I3)', () => {
-  it('imports createEvBus from ../net/evbus.js and anchorSeed / pinTag beside the anchor helpers', () => {
+  it('imports createEvBus from ../net/evbus.js and pinTag beside the anchor helpers (no anchorSeed: the pin\'s own seed is solo\'s)', () => {
     expect(game).toMatch(/import \{ createEvBus \} from '\.\.\/net\/evbus\.js'/)
     // depthOf (level.depth): W3's status.js is the one depth helper (both domains; status.test.js pins it equal to evbus.depthOf on 0..4)
     expect(game).toMatch(/import \{[^}]*\bdepthOf\b[^}]*\} from '\.\/status\.js'/)
-    expect(game).toMatch(/import \{ formatAnchor, driftMeters, anchorSeed, pinTag \} from '\.\/anchor\.js'/)
+    expect(game).toMatch(/import \{ formatAnchor, driftMeters, pinTag \} from '\.\/anchor\.js'/)
   })
   it('builds ONE bus, null solo, after the chat is registered and before the loop: the players list\'s sendEv / mergeRemote, a ms clock, the reused roster', () => {
     expect(count(/createEvBus\(/g)).toBe(1)
@@ -35,17 +35,19 @@ describe('game.js: the event bus (I3)', () => {
   })
   it('hereFields() fills ONE object (the bus copies it); the loop says it about once a second beside sendPos, after the bus\'s one tick per frame', () => {
     expect(game).toContain("const hereObj = { lvl: 0, lit: true, st: 'ok', seen: false, o: null, thin: false, status: 'notice-mailed', aseed: myPinTag }")
-    // the pin goes out as its room-salted tag, never the seed (the seed inverts to the place): no raw anchorSeed reaches 'here'
-    expect(game).toContain('const myPinTag = pinTag(anchor ? anchorSeed(anchor.lat, anchor.lng) : null, worldSeed)')
+    // the pin goes out as its neighbourhood's room-salted tag, never a seed (the pin's own inverts to the door): no anchorSeed in game.js
+    expect(game).toContain('const myPinTag = pinTag(anchor, worldSeed)')
     expect(game).not.toMatch(/myAseed/)
-    expect(count(/anchorSeed\(/g)).toBe(1)
-    // lifted and run: what 'here' carries for a pinned player is never the seed a stranger could invert to the place
+    expect(count(/anchorSeed\(/g)).toBe(0)
+    // lifted and run: what 'here' carries for a pinned player is never a seed a stranger could invert, and no finer than the neighbourhood
     const line = game.match(/const myPinTag = [^\n]*/)[0]
-    const tagOf = (anchor, worldSeed) => new Function('anchor', 'worldSeed', 'anchorSeed', 'pinTag', `${line}\nreturn myPinTag`)(anchor, worldSeed, anchorSeed, pinTag)
+    const tagOf = (anchor, worldSeed) => new Function('anchor', 'worldSeed', 'pinTag', `${line}\nreturn myPinTag`)(anchor, worldSeed, pinTag)
     for (const [anchor, worldSeed] of [[{ lat: 51.50135, lng: -0.14189 }, 7], [{ lat: 51.50135, lng: -0.14189 }, null], [{ lat: -33.86, lng: 151.21 }, 3977604621]]) {
       const tag = tagOf(anchor, worldSeed)
       expect(tag).not.toBe(anchorSeed(anchor.lat, anchor.lng))
+      expect(tag).not.toBe(neighbourhoodSeed(anchor))
       expect(tag).toBeLessThan(65536)
+      expect(tagOf({ lat: anchor.lat + 0.003, lng: anchor.lng - 0.002 }, worldSeed)).toBe(tag)   // ~300 m off, the same cell: the same tag
     }
     expect(tagOf(null, 7)).toBe(null)
     const body = game.slice(at('function hereFields() {'), game.indexOf('return hereObj', at('function hereFields() {')))

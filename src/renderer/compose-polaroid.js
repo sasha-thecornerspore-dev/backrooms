@@ -39,10 +39,10 @@ export function developsClaim(rules, mods, index, depth, sanity) {
   return !!(rules.canDevelopClaim && mods.polaroidGlyph(index, depth, sanity))
 }
 
-// the friend's 'here' carries their pin's TAG (anchor.js pinTag, room-salted), so it is your own tag it is held against
+// the friend's 'here' carries their pin's TAG (anchor.js pinTag: its neighbourhood's, room-salted), so it is your own tag it is held against
 function subjectLine(s, tag) {
   if (s.thin === true) return LINES.SUBJECT_THIN
-  if (tag != null && s.aseed != null && s.aseed === tag) return LINES.SUBJECT_PIN   // same pin, never same maze
+  if (tag != null && s.aseed != null && s.aseed === tag) return LINES.SUBJECT_PIN   // the same neighbourhood's pin, never same maze
   if (s.origin === 'processed') return LINES.SUBJECT_PROCESSED
   if (s.origin === 'anchored') return LINES.SUBJECT_ANCHORED
   if (s.origin === 'tenant') return LINES.SUBJECT_TENANT

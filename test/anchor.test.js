@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseAnchor, anchorSeed, pinTag, formatAnchor, driftMeters, bodyUrl } from '../src/renderer/anchor.js'
+import { parseAnchor, anchorSeed, neighbourhoodSeed, pinTag, formatAnchor, driftMeters, bodyUrl } from '../src/renderer/anchor.js'
 
 describe('parseAnchor', () => {
   it('parses bare "lat, lng"', () => {
@@ -65,18 +65,20 @@ describe('anchorSeed', () => {
 })
 
 describe('pinTag', () => {
-  it('is never the seed: 16 bits, salted by the room; the same pin in the same room matches, null stays null', () => {
-    const seed = anchorSeed(51.50135, -0.14189)
+  it('is never a seed: 16 bits of the neighbourhood, salted by the room; the same neighbourhood in the same room matches, no pin is null', () => {
+    const pin = { lat: 51.50135, lng: -0.14189 }
     for (const ws of [0, 7, 3977604621, anchorSeed(40.7, -74)]) {
-      const t = pinTag(seed, ws)
+      const t = pinTag(pin, ws)
       expect(Number.isInteger(t)).toBe(true)
       expect(t).toBeGreaterThanOrEqual(0); expect(t).toBeLessThan(65536)
-      expect(t).not.toBe(seed)
-      expect(pinTag(anchorSeed(51.50135, -0.14189), ws)).toBe(t)
+      expect(t).not.toBe(anchorSeed(pin.lat, pin.lng)); expect(t).not.toBe(neighbourhoodSeed(pin))
+      expect(pinTag({ lat: 51.50135, lng: -0.14189 }, ws)).toBe(t)
+      expect(pinTag({ lat: 51.5014, lng: -0.1420 }, ws)).toBe(t)              // another door, the same neighbourhood: the same mark
     }
-    expect(pinTag(seed, 7)).not.toBe(pinTag(seed, 8))                       // another room, another tag
-    expect(pinTag(seed, 7)).not.toBe(pinTag(anchorSeed(51.5014, -0.1420), 7))
+    expect(pinTag(pin, 7)).not.toBe(pinTag(pin, 8))                         // another room, another tag
+    expect(pinTag(pin, 7)).not.toBe(pinTag({ lat: 51.4914, lng: -0.1420 }, 7))   // the next neighbourhood south
     expect(pinTag(null, 7)).toBe(null)
+    expect(pinTag(anchorSeed(pin.lat, pin.lng), 7)).toBe(null)               // a seed is not a pin: nothing to tag
   })
 })
 

@@ -11,7 +11,7 @@ import { statusMods, STATUSES, depthOf } from '../src/renderer/status.js'
 import { anchorSeed, pinTag } from '../src/renderer/anchor.js'
 
 const ANCHOR = { lat: 51.5007, lng: -0.1246 }
-const PIN = pinTag(anchorSeed(ANCHOR.lat, ANCHOR.lng), 7)   // what 'here' carries: the room-salted tag, never the seed
+const PIN = pinTag(ANCHOR, 7)   // what 'here' carries: the neighbourhood's room-salted tag, never a seed
 const THIN_NEAR = 'the film shows someone who was not in the room. you can see the wall through them.'
 const FINALIZING = 'the film shows the hall as it will finalize: darker, one door fewer.'
 const HONEST = 'the film shows the hall as it is. nothing that was not in the room.'
@@ -67,7 +67,7 @@ describe('(1) a friend in frame', () => {
       expect(r.emitPhoto).toEqual({ of: 'p7', x: 3.5, y: 4.5, lvl: 0 })
       expect(r.sanity).toBe(8)
     }
-    // without an anchor of your own a pin never matches; nor does the raw seed held against your tag
+    // without an anchor of your own a pin never matches; nor does a raw seed (a 2.0.0 copy's 'here') held against your tag
     expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: anchorSeed(ANCHOR.lat, ANCHOR.lng), origin: 'tenant' }), anchor: ANCHOR, pinTag: PIN, sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here.')
     expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: PIN, origin: 'tenant' }), sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here.')
   })

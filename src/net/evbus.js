@@ -3,7 +3,8 @@
 // One generic relayed message ('ev', see relay/evguard.js) carries every
 // verb: whistle, kneel, woke, cache, take, ward, photo — and 'here', the 3 s
 // heartbeat that says which floor a friend is on and what the file knows
-// about them (origin, thin, status, aseed, light, down, seen). The server
+// about them (origin, thin, status, aseed — their pin's neighbourhood mark,
+// anchor.js pinTag, never a seed — light, down, seen). The server
 // attaches id/name/t and forwards; THIS is where a frame is believed or not:
 //   • registered kind + check(payload)       (the allowlist is one list)
 //   • nonce LRU per id                        (a relay replay cannot double a verb)

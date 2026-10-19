@@ -7,7 +7,7 @@ import {
   NO_DOOR_LINE, NO_PIN_LINE, NO_FIELD_PIN, lanLine, normalizeRoom, readInvite, buildInvite, isOwnSite, recoverBase, lanReachable,
   shortMapsLink, shortLinkQuery, pinFromResolver, resolveShortLink, inviteFor,
 } from '../src/renderer/site.js'
-import { anchorSeed } from '../src/renderer/anchor.js'
+import { anchorSeed, neighbourhoodSeed } from '../src/renderer/anchor.js'
 
 describe('the addresses', () => {
   it('the site, /play/ and the relay are the public ones', () => {
@@ -66,13 +66,19 @@ describe('the invite link: /play/?room=CODE[&anchor=LAT,LNG]', () => {
     expect(readInvite(`?room=${long}`).room).toBe(long.slice(0, 32))
     expect(readInvite(new URL(buildInvite({ room: long })).search).room).toBe(long.slice(0, 32))
   })
-  it('the pin goes in only when it is handed over, at the seed\'s own 4 decimals', () => {
-    const url = buildInvite({ room: 'r', anchor: { lat: 39.28541234, lng: -76.60834 } })
-    expect(url).toContain('anchor=39.2854%2C-76.6083')
+  it('the pin goes in only when it is handed over, and then only its neighbourhood, at the room grid\'s 2 decimals', () => {
+    const pin = { lat: 39.28541234, lng: -76.60834 }
+    const url = buildInvite({ room: 'r', anchor: pin })
+    expect(url).toContain('anchor=39.29%2C-76.61')
+    expect(url).not.toMatch(/39\.285|76\.608/)                                  // never the door
     const read = readInvite(new URL(url).search)
     expect(read.room).toBe('r')
-    // the same world through the link: the friend's seed is the sender's
-    expect(anchorSeed(read.anchor.lat, read.anchor.lng)).toBe(anchorSeed(39.28541234, -76.60834))
+    expect(read.anchor).toEqual({ lat: 39.29, lng: -76.61 })
+    // the same room world through the link: the friend's room seed is the sender's — and a 2.0.1 copy's (it seeds a room from its pin)
+    expect(neighbourhoodSeed(read.anchor)).toBe(neighbourhoodSeed(pin))
+    expect(anchorSeed(read.anchor.lat, read.anchor.lng)).toBe(neighbourhoodSeed(pin))
+    expect(buildInvite({ room: 'r', anchor: { lat: -33.8568, lng: 151.2153 } })).toContain('anchor=-33.86%2C151.22')
+    expect(buildInvite({ room: 'r', anchor: { lat: 91, lng: 0 } })).not.toContain('anchor=')   // not a pin: the room only
   })
   it('a malformed anchor is dropped, never thrown; a maps link in anchor= parses', () => {
     expect(readInvite('?anchor=999,999').anchor).toBe(null)
@@ -190,7 +196,7 @@ describe('/invite: room only, unless you ask for the pin — and the pin is warn
   })
   it('/invite pin once warned carries the pin, and says the warning again as it copies', () => {
     const r = inviteFor({ arg: 'pin', room: online, anchor: pin, warned: true })
-    expect(r.url).toBe('https://backrooms.thecornerspore.dev/play/?room=yellow-lamp-42&anchor=39.2854%2C-76.6083')
+    expect(r.url).toBe('https://backrooms.thecornerspore.dev/play/?room=yellow-lamp-42&anchor=39.29%2C-76.61')   // the neighbourhood, never the door
     expect(r.say).toBe(PIN_WARNING)
     expect(r.warned).toBe(true)
     expect(inviteFor({ arg: ' PIN ', room: online, anchor: pin, warned: true }).url).toContain('anchor=')
