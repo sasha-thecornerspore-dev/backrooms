@@ -1,0 +1,262 @@
+[
+ {
+  "slug": "level-0",
+  "kind": "frame",
+  "file": "/wiki/frames/level-0-hall.jpg",
+  "thumb": "/wiki/frames/level-0-hall-600.jpg",
+  "w": 1200,
+  "h": 675,
+  "caption": "recovered frame · level 0 · drawn by the engine",
+  "alt": "a long hallway of yellow patterned wallpaper and damp brown carpet under ceiling tiles, ending in a paler square far off"
+ },
+ {
+  "slug": "level-0",
+  "kind": "frame",
+  "file": "/wiki/frames/level-0-office.jpg",
+  "thumb": "/wiki/frames/level-0-office-600.jpg",
+  "w": 1200,
+  "h": 675,
+  "caption": "recovered frame · level 0, somebody's office · drawn by the engine",
+  "alt": "a wide yellow room: filing cabinets along the wall, two folding chairs either side of a cardboard box, papers fallen on the carpet"
+ },
+ {
+  "slug": "level-0",
+  "kind": "frame",
+  "file": "/wiki/frames/level-0-tv-wall.jpg",
+  "thumb": "/wiki/frames/level-0-tv-wall-600.jpg",
+  "w": 1200,
+  "h": 675,
+  "caption": "recovered frame · level 0, the wall of televisions · drawn by the engine",
+  "alt": "nine old televisions stacked in a yellow room, every screen static, under the game's line \"a wall of televisions, all on, all static.\""
+ },
+ {
+  "slug": "level-1",
+  "kind": "frame",
+  "file": "/wiki/frames/level-1-storerooms.jpg",
+  "thumb": "/wiki/frames/level-1-storerooms-600.jpg",
+  "w": 1200,
+  "h": 675,
+  "caption": "recovered frame · level 1 · drawn by the engine",
+  "alt": "a concrete-block corridor under green-lit ceiling panels, a water stain overhead, a lone barrel further down"
+ },
+ {
+  "slug": "level-2",
+  "kind": "frame",
+  "file": "/wiki/frames/level-2-pipes.jpg",
+  "thumb": "/wiki/frames/level-2-pipes-600.jpg",
+  "w": 1200,
+  "h": 675,
+  "caption": "recovered frame · level 2 · drawn by the engine",
+  "alt": "a rusted maintenance tunnel with a red valve wheel, floor grates, and a dark oval doorway standing in a shaft of pale light"
+ },
+ {
+  "slug": "level-3",
+  "kind": "frame",
+  "file": "/wiki/frames/level-3-station.jpg",
+  "thumb": "/wiki/frames/level-3-station-600.jpg",
+  "w": 1200,
+  "h": 675,
+  "caption": "recovered frame · level 3 · drawn by the engine",
+  "alt": "a dark blue electrical room: lit panels on the walls, a floor grate, a yellow warning cone nobody came back for"
+ },
+ {
+  "slug": "level-3",
+  "kind": "frame",
+  "file": "/wiki/frames/level-3-the-grin.jpg",
+  "thumb": "/wiki/frames/level-3-the-grin-600.jpg",
+  "w": 1200,
+  "h": 675,
+  "caption": "recovered frame · level 3, the grin · drawn by the engine",
+  "alt": "a dark figure with a wide white grin standing under the ceiling grid of level 3, below the game's line \"it stops when you look. do not look away.\""
+ },
+ {
+  "slug": "level-3",
+  "kind": "frame",
+  "file": "/wiki/frames/level-3-doorway.jpg",
+  "thumb": "/wiki/frames/level-3-doorway-600.jpg",
+  "w": 1200,
+  "h": 675,
+  "caption": "recovered frame · level 3, the thing in the doorway · drawn by the engine",
+  "alt": "a pale-edged figure with a grin standing on the open floor of a dark electrical room, lit panels and a doorway behind it"
+ },
+ {
+  "slug": "procedure-the-pencil-map",
+  "kind": "frame",
+  "file": "/wiki/frames/level-0-pencil-map.jpg",
+  "thumb": "/wiki/frames/level-0-pencil-map-600.jpg",
+  "w": 1200,
+  "h": 675,
+  "caption": "recovered frame · the pencil map, level 0 · drawn by the engine",
+  "alt": "the pencil map held up in a level 0 hallway: a cream card of grey squares, one for every cell walked, a small arrow for you, and the line \"level 0 — the lobby · 133 cells walked\""
+ },
+ {
+  "slug": "thing-smiler",
+  "kind": "evidence",
+  "file": "/wiki/evidence/smiler.png",
+  "thumb": "/wiki/evidence/smiler-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · the smiler",
+  "alt": "the smiler, from the game's own sprite: a thin dark figure with long arms, its wide white grin and eyes the only lit thing, on a faint pool of light"
+ },
+ {
+  "slug": "thing-smiler",
+  "kind": "frame",
+  "file": "/wiki/frames/level-3-the-grin.jpg",
+  "thumb": "/wiki/frames/level-3-the-grin-600.jpg",
+  "w": 1200,
+  "h": 675,
+  "caption": "recovered frame · the smiler, level 3 · drawn by the engine",
+  "alt": "a dark figure with a wide white grin standing under the ceiling grid of level 3, below the game's line \"it stops when you look. do not look away.\""
+ },
+ {
+  "slug": "thing-shade",
+  "kind": "evidence",
+  "file": "/wiki/evidence/shade.png",
+  "thumb": "/wiki/evidence/shade-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · the shade",
+  "alt": "the shade, from the game's own sprite: a hooded, cloaked, hunched figure, nothing inside the hood, the hem torn into strips"
+ },
+ {
+  "slug": "thing-watcher",
+  "kind": "evidence",
+  "file": "/wiki/evidence/watcher.png",
+  "thumb": "/wiki/evidence/watcher-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · the watcher",
+  "alt": "the watcher, from the game's own sprite: gaunt and long-armed in a rag of coat, a too-large head with two pale unblinking eyes"
+ },
+ {
+  "slug": "thing-lurker",
+  "kind": "evidence",
+  "file": "/wiki/evidence/lurker.png",
+  "thumb": "/wiki/evidence/lurker-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · the lurker",
+  "alt": "the lurker, from the game's own sprite: the tallest thing in the game, stooped and thin-limbed, two small pale eyes"
+ },
+ {
+  "slug": "thing-tesla",
+  "kind": "evidence",
+  "file": "/wiki/evidence/tesla.png",
+  "thumb": "/wiki/evidence/tesla-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · the tesla",
+  "alt": "the tesla, from the game's own sprite: a heavy blue figure with a lit slit for a face, current arcing off its limbs"
+ },
+ {
+  "slug": "thing-hound",
+  "kind": "evidence",
+  "file": "/wiki/evidence/hound.png",
+  "thumb": "/wiki/evidence/hound-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · the hound",
+  "alt": "a hound in profile, from the game's own sprite: low, lean and long-legged, head down, tail up"
+ },
+ {
+  "slug": "thing-crawler",
+  "kind": "evidence",
+  "file": "/wiki/evidence/crawler.png",
+  "thumb": "/wiki/evidence/crawler-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · the crawler",
+  "alt": "the crawler in profile, from the game's own sprite: a low, wide body carried on thin, many-jointed legs"
+ },
+ {
+  "slug": "thing-the-thin",
+  "kind": "evidence",
+  "file": "/wiki/evidence/thin.png",
+  "thumb": "/wiki/evidence/thin-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · the thin",
+  "alt": "one of the thin, from the game's own sprite: a faint grey-blue person whose edges drift out of line, fading toward the feet"
+ },
+ {
+  "slug": "thing-m",
+  "kind": "evidence",
+  "file": "/wiki/evidence/note.png",
+  "thumb": "/wiki/evidence/note-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · one of m.'s pages",
+  "alt": "a torn page of ruled paper covered in hand scribble, glowing faintly warm, from the game's own sprite"
+ },
+ {
+  "slug": "wanderers-notes",
+  "kind": "evidence",
+  "file": "/wiki/evidence/note.png",
+  "thumb": "/wiki/evidence/note-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · a page, as found",
+  "alt": "a torn page of ruled paper covered in hand scribble, glowing faintly warm, from the game's own sprite"
+ },
+ {
+  "slug": "item-notes-and-cache-words",
+  "kind": "evidence",
+  "file": "/wiki/evidence/note.png",
+  "thumb": "/wiki/evidence/note-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · a found page",
+  "alt": "a torn page of ruled paper covered in hand scribble, glowing faintly warm, from the game's own sprite"
+ },
+ {
+  "slug": "item-almond-water",
+  "kind": "evidence",
+  "file": "/wiki/evidence/almond-water.png",
+  "thumb": "/wiki/evidence/almond-water-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · almond water",
+  "alt": "almond water, from the game's own sprite: a small pale-blue bottle with a white cap and a cream label, in its own soft glow"
+ },
+ {
+  "slug": "item-glowstick",
+  "kind": "evidence",
+  "file": "/wiki/evidence/glowstick.png",
+  "thumb": "/wiki/evidence/glowstick-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · glowstick",
+  "alt": "a glowstick, from the game's own sprite: a cracked plastic tube leaning, lit green from inside"
+ },
+ {
+  "slug": "item-bandage",
+  "kind": "evidence",
+  "file": "/wiki/evidence/bandage.png",
+  "thumb": "/wiki/evidence/bandage-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · bandage",
+  "alt": "a bandage tin, from the game's own sprite: a white first-aid tin with a red cross and a small handle"
+ },
+ {
+  "slug": "item-polaroid",
+  "kind": "evidence",
+  "file": "/wiki/evidence/polaroid.png",
+  "thumb": "/wiki/evidence/polaroid-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · polaroid camera",
+  "alt": "the polaroid camera, from the game's own sprite: a cream instant camera with a dark lens and a small flash window"
+ },
+ {
+  "slug": "item-radio",
+  "kind": "evidence",
+  "file": "/wiki/evidence/radio.png",
+  "thumb": "/wiki/evidence/radio-320.png",
+  "w": 640,
+  "h": 640,
+  "caption": "evidence · radio",
+  "alt": "a radio, from the game's own sprite: a small orange-brown set with a speaker grille, a dial and a raised antenna"
+ }
+]
