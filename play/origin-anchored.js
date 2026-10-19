@@ -3,8 +3,10 @@
 // You came with a real place. The body stays there; the further you drift from where you came in, the harder it pulls: past
 // LEASH_FREE_M a point of sanity a second per LEASH_PER_M (a pin caption on the film calms it for CALM_S). D is always the
 // drift from this floor's spawn plus the leash debt a death leaves (game.js driftD()); the debt pays itself off at a metre a
-// second. A friend standing on the same pin steadies you more. The pin leaves the machine only through the player's OWN
-// custom beacon webhook.
+// second. A friend from the same neighbourhood steadies you more (the 'here' mark is the ~1 km cell's: anchor.js pinTag).
+// The pin itself leaves the machine only through the player's OWN custom beacon webhook (and a phone's short link, read once
+// at the relay: site.js resolveShortLink); a room is told its neighbourhood (anchor.js neighbourhoodSeed), and so is an
+// invite link that carries it (site.js buildInvite).
 import { formatAnchor, anchorSeed } from './anchor.js'
 import { isValidPin } from './origin-intake.js'
 import { LEGACY, LEGACY_EFFECT, fileBase } from './origin-rules.js'
@@ -35,7 +37,8 @@ export function pinCaption(anchor, D, glyph) {
     (glyph ? ` one letter developed beside it: "${glyph}".` : '')
 }
 
-// the same ~11 m cell anchor.js seeds the maze from (the room's seed still wins: 'same pin', never 'same maze')
+// the same ~11 m cell anchor.js seeds the solo maze from — two pins in hand, on this machine. A friend's is never here: 'here' carries
+// only the neighbourhood's mark (friendBase below)
 export function isSamePin(a, b) {
   return isValidPin(a) && isValidPin(b) && anchorSeed(a.lat, a.lng) === anchorSeed(b.lat, b.lng)
 }
@@ -59,7 +62,7 @@ export const ANCHORED = Object.freeze({
   sweetWater: 35,
   sourWater: () => null,
   itemEffect: () => LEGACY_EFFECT,
-  friendBase: (ctx) => (ctx?.rp?.aseed != null && ctx.rp.aseed === ctx.selfAseed ? FRIEND_SAME_PIN : 3),
+  friendBase: (ctx) => (ctx?.rp?.aseed != null && ctx.rp.aseed === ctx.selfAseed ? FRIEND_SAME_PIN : 3),   // the same neighbourhood's mark
   giverMul: () => 1,
   npcLine: () => null,
   presenceReply: (kind) => (kind === 'wish' ? WISH_LINE : null),

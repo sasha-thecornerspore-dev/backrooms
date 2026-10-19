@@ -717,10 +717,10 @@
   <script type="module">
     import { initGame } from './game.js'
     import { createMultiplayerClient } from './client.js'
-    import { parseAnchor, anchorSeed, formatAnchor, bodyUrl } from './anchor.js'
+    import { parseAnchor, anchorSeed, neighbourhoodSeed, formatAnchor, bodyUrl } from './anchor.js'
     import { getPrefs, setPref } from './prefs.js'
     import { readSave } from './save.js'
-    import { readInvite, buildInvite, normalizeRoom, lanReachable, shortMapsLink, resolveShortLink, ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, PIN_PRESS_AGAIN, NO_FIELD_PIN } from './site.js'
+    import { readInvite, buildInvite, normalizeRoom, lanReachable, shortMapsLink, resolveShortLink, ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, PIN_PRESS_AGAIN, NO_FIELD_PIN, ROOM_PIN_AHEAD } from './site.js'
     const RELAY_URL = 'wss://backrooms-relay.jeff-schatz112.workers.dev'
 
     const startEl = document.getElementById('start')
@@ -827,8 +827,9 @@
     }
 
     // ── an invite: /play/?room=CODE[&anchor=LAT,LNG] (site.js readInvite; the desktop page reads the same query when it has one). The pin
-    //    fills the anchor field; the room fills the PLAY ONLINE field and a plate offers one click in. The code reaches the page as text
-    //    only (textContent), never markup, and the link never picks a name: what is in the name field (or nothing) is the player's.
+    //    (a link made here carries only its neighbourhood's grid point: site.js buildInvite) fills the anchor field; the room fills the
+    //    PLAY ONLINE field and a plate offers one click in. The code reaches the page as text only (textContent), never markup, and the
+    //    link never picks a name: what is in the name field (or nothing) is the player's.
     //    On the site, a line in <head> (tools/build-play.sh) took room and anchor out of the address before the counter could send them,
     //    and kept the query it found as window.__playQuery; the desktop page and the itch copy have no such line and read their own ──
     const invite = readInvite(window.__playQuery ?? location.search)
@@ -892,7 +893,9 @@
       st.textContent = 'connecting...'
       try {
         const anchor = await takeAnchor()
-        const requestedSeed = anchor ? anchorSeed(anchor.lat, anchor.lng) : null
+        // a room is asked for the pin's NEIGHBOURHOOD (anchor.js neighbourhoodSeed), never the pin: host or joiner, relay or LAN. The
+        // pin itself stays here, for the leash and the film; game.js says once what the room has of it
+        const requestedSeed = neighbourhoodSeed(anchor)
         const mpClient = createMultiplayerClient(serverUrl)
         // first joiner's seed wins; later joiners inherit the room's world
         const { worldSeed } = await mpClient.connect(roomId, requestedSeed, getName())
@@ -1006,7 +1009,7 @@
     document.addEventListener('backrooms:invite', (e) => { const d = e.detail || {}; shareInvite(d.url, (t) => d.say?.(t), null) })
 
     // the PLAY ONLINE modal's invite: the room in the field, as a link (site.js buildInvite). The room only, unless 'include my place' is
-    // ticked — off on every load, never remembered — and ticking it says at once what a pin in a link is
+    // ticked — off on every load, never remembered — and ticking it says at once what a pin in a link is (what goes is its neighbourhood)
     const inviteBtn = document.getElementById('online-invite')
     const invitePin = document.getElementById('online-invite-pin')
     const inviteUrlEl = document.getElementById('online-invite-url')
@@ -1017,11 +1020,14 @@
     // ticked, or a pin been pasted), and the first press that would carry one only says what a pin in a link is and sends nothing.
     // warnedFor: the pin that warning was last said for; ticking the box or opening the box again forgets it
     let warnedFor = null
+    // the box at rest: with a pin in the field (or a short link still out with the relay) it says before ENTER what a room keeps of it
+    // (site.js ROOM_PIN_AHEAD) — the relay stores a new room's world the moment it is drawn, so the chat's line would come too late
+    const onlineAtRest = () => (fieldAnchorNow() || shortMapsLink(anchorInput.value) ? ROOM_PIN_AHEAD : '')
     invitePin.addEventListener('change', () => {
       warnedFor = null
-      onlineStatus.textContent = !invitePin.checked ? '' : fieldAnchorNow() ? PIN_WARNING : NO_FIELD_PIN
+      onlineStatus.textContent = !invitePin.checked ? onlineAtRest() : fieldAnchorNow() ? PIN_WARNING : NO_FIELD_PIN
     })
-    document.getElementById('btn-online').addEventListener('click', () => { warnedFor = null })
+    document.getElementById('btn-online').addEventListener('click', () => { warnedFor = null; onlineStatus.textContent = onlineAtRest() })
     inviteBtn.onclick = () => {
       const pin = invitePin.checked ? fieldAnchorNow() : null
       if (pin && warnedFor !== formatAnchor(pin)) {

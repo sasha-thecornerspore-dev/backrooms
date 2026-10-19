@@ -8,6 +8,8 @@
 //   ← ev {id, name, kind, payload, t, replay?}
 // Unknown message types are ignored, so an old client rides a new server and
 // a new client rides an old one (no 'ev', no welcome.first) with no error.
+// join.worldSeed is whatever the caller hands connect(): index.html hands it a
+// pin's neighbourhood seed (anchor.js neighbourhoodSeed), never the pin's own.
 export function createMultiplayerClient(serverUrl) {
   let ws = null
   let connected = false

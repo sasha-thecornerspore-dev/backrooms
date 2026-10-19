@@ -335,15 +335,17 @@
   </div>
 
   <h3 id="anchors">Anchors — falling through a real place</h3>
-  <p>A pin seeds the world from that place. Everyone who pins the same spot falls into the same maze. While anchored, your level plate shows a <b>drift</b> — how far you have wandered from where this floor set you down — and settings gains <b>locate your body</b>. The building speaks of it on every floor: <i>your body remains at …</i>, and later, <i>you are very far from your body now.</i></p>
+  <p>A pin seeds the world from that place. Everyone who pins the same spot falls into the same maze — solo. A room draws its maze from the spot's neighbourhood instead (below). While anchored, your level plate shows a <b>drift</b> — how far you have wandered from where this floor set you down — and settings gains <b>locate your body</b>. The building speaks of it on every floor: <i>your body remains at …</i>, and later, <i>you are very far from your body now.</i></p>
   <p>A phone's share button gives a short link with no place in it, so the game asks the relay where it leads: <i>looking for that place…</i> Only the link is sent, never the words a share sheet puts around it, and only the two numbers come back. A place that cannot be read says <i>that place cannot be found</i>, and the run starts without a pin.</p>
-  <p>Your pin is yours. It is never sent to the people you play with; they receive only a mark, enough to tell whether you came through the same place they did — unless you put it in an <a href="#invite">invite link</a> yourself. Nothing in the game reads your location on its own. You type the pin, or you don't.</p>
+  <p>Your pin is yours. Solo, nothing sends it anywhere on its own — a short link goes to the relay once, to be read, as above, and <b>locate your body</b> opens Google Maps at it, when you press it; that is all. A room — online or LAN, host or joiner — is told only its <b>neighbourhood</b>: the pin rounded to two decimals, a cell about 1.1 km north to south and 0.86 km east to west at Baltimore's latitude. Open a room with a pin and its world is drawn from that neighbourhood, not from your door; the relay keeps a room's world for good and hands it to everyone who enters the code, and the neighbourhood can be read back out of it. The PLAY ONLINE box says so before you press ENTER, and the chat says it once more as you arrive: <i>this room is drawn from your pin's neighbourhood. anyone with the code can see which square kilometre — to someone who already has a few of your addresses, that is the door.</i> A square kilometre is not your door, but it picks your door out of a short list: if anyone with the code might already have a few addresses for you, play that room without a pin. Join a room someone else drew and the others get a mark of your pin's neighbourhood — enough to tell whether you came through the same part of town, and, with marks from two rooms, or a guess at your city, enough to read roughly where. An <a href="#invite">invite link</a> with your place in it carries the same neighbourhood, and the same square kilometre. Beyond the short link's lookup and locate your body, only a <a href="#beacon">beacon</a> aimed at your own https address ever carries the pin itself.</p>
+  <p>A room opened with a pin from 2.0.1 or earlier was drawn from that exact pin, and the relay still keeps it: a room's world always wins, so a newer copy cannot take it back. Give that room up and open a new code; a newer copy that finds itself in one drawn from its own pin says so: <i>this room was drawn from your pin itself, by an older copy. anyone with the code can find the door. leave the code and open a new one.</i> A 2.0.1 copy still sends its exact pin's seed whenever it joins a room (a new room is drawn from it) and still sends its finer mark — update before you bring a pin into a room. A newer copy matches that mark only when the older copy came in through a newer invite; walking and chat are unchanged.</p>
+  <p>Nothing in the game reads your location on its own. You type the pin, or you don't.</p>
 
   <h3>Three kinds of world</h3>
   <div class="cards three">
     <div class="card"><div class="h">solo, no pin</div><p>The building <b>moves</b>. Rooms far behind you are forgotten and grow back different. Your map will notice before you do.</p></div>
     <div class="card"><div class="h">solo, with a pin</div><p>A fixed world, seeded from the place. Come back tomorrow and the halls are where you left them.</p></div>
-    <div class="card"><div class="h">online or lan</div><p>The room's world, fixed. The first person in decides it; everyone after inherits it.</p></div>
+    <div class="card"><div class="h">online or lan</div><p>The room's world, fixed. The first person in decides it — with a pin, from its neighbourhood; everyone after inherits it.</p></div>
   </div>
   <p class="say">anchored worlds hold their shape. unanchored worlds forget you were ever there.</p>
 </section>
@@ -502,7 +504,7 @@
   <div class="tw stack"><table>
     <tr class="hd"><th>you type</th><th>what answers</th></tr>
     <tr><td class="k">/me waves</td><td data-label="what answers">an emote: <code>✦ name waves</code> (online)</td></tr>
-    <tr><td class="k">/invite</td><td data-label="what answers">online, copies a link to your room and prints it. <code>/invite pin</code> puts your pin in it — the second time you ask; see <a href="#invite">invite links</a>. On a LAN it names the address and room; alone, <i>no one can follow you here. play online and leave a door open.</i></td></tr>
+    <tr><td class="k">/invite</td><td data-label="what answers">online, copies a link to your room and prints it. <code>/invite pin</code> puts your pin's neighbourhood in it — the second time you ask; see <a href="#invite">invite links</a>. On a LAN it names the address and room; alone, <i>no one can follow you here. play online and leave a door open.</i></td></tr>
     <tr><td class="k">/status</td><td data-label="what answers">one line: the word you are filed under, how the file has you, and your closing's steps. The same as settings → your file. For instance <code>notice mailed. unanswered. · the file has not written down how you came in.</code></td></tr>
     <tr><td class="k">/intake</td><td data-label="what answers">the intake form again, to read. It cannot be changed: <i>the file does not take amendments. it takes forms.</i></td></tr>
     <tr><td class="k">/recover</td><td data-label="what answers">the open Field Recovery case: its title, how many of its instruments you have read, and where the next one is read. On the level it names, a hint follows a moment later. Also <code>/case</code>.</td></tr>
@@ -1075,7 +1077,7 @@
   <div class="notice">
     <div class="h">play online ⬡</div>
     <p>Type your <b>name</b> on the title screen, press <b>PLAY ONLINE ⬡</b>, choose a <b>room code</b> (up to 32 characters; the box starts with a random <code>room-…</code> you can keep), and press <b>ENTER ▶</b>. Empty the box and you join the one shared room called <code>default</code>, with every stranger who did the same. Share the code. Anyone who enters it falls into the same world — anywhere, no host, no setup.</p>
-    <p>The first person in decides the world, and their pin with it; everyone after inherits it. An online run starts in the lobby and is <b>never saved</b>. How you arrive is written down.</p>
+    <p>The first person in decides the world, and their pin's neighbourhood with it — never the pin itself; everyone after inherits it. An online run starts in the lobby and is <b>never saved</b>. How you arrive is written down.</p>
   </div>
   <h3 id="invite">Invite links</h3>
   <p>A room can be handed over as a link: <code>https://backrooms.thecornerspore.dev/play/?room=CODE</code>. Whoever opens it gets the title with <i>a door was left open · room CODE</i> and one button, <b>JOIN ▶</b>. The name field stays theirs; a link never chooses a name for anyone.</p>
@@ -1085,7 +1087,7 @@
   </div>
   <div class="warn">
     <div class="h">⚠ a pin in a link</div>
-    <p>A link carries the room and nothing else unless you say so. The box's <b>include my place</b> is off every time the page opens and is never remembered; ticking it says at once <i>a pin in a link is a place in a link. don't share your home, and don't paste this on stream.</i> With a pin in the field, the first press of <b>copy invite link</b> says it again and copies nothing; the second puts the pin in. In the console, <code>/invite pin</code> says the same and copies nothing; ask a second time and the pin goes in. A link with a pin fills your friend's anchor field and adds <i>the first one in decides the world.</i> — it shapes the maze only if the room is new.</p>
+    <p>A link carries the room and nothing else unless you say so. The box's <b>include my place</b> is off every time the page opens and is never remembered; ticking it says at once <i>a pin in a link is a place in a link. don't share your home, and don't paste this on stream.</i> With a pin in the field, the first press of <b>copy invite link</b> says it again and copies nothing; the second puts your place in. In the console, <code>/invite pin</code> says the same and copies nothing; ask a second time and your place goes in. What goes is the pin's neighbourhood — two decimals, about a kilometre across — not the door itself, though to someone who already has a few of your addresses that square kilometre is the door. A link with your place fills your friend's anchor field with that point and adds <i>the first one in decides the world.</i> — it shapes the maze only if the room is new, and then exactly as your own pin would.</p>
   </div>
   <div class="cards">
     <div class="card"><div class="h">HOST LAN · desktop app</div><p>Starts a small server inside the app and joins it. A plate on your screen shows the address to give your friend — <code>HOSTING · JOIN LAN → ws://192.168.x.x:8765</code> — and the room, <code>backrooms</code>. The browser and itch.io copies do not show HOST LAN or JOIN LAN: an https page cannot reach your network.</p></div>
@@ -1099,7 +1101,7 @@
   </div>
   <div class="warn">
     <div class="h">⚠ who you are, online</div>
-    <p>Use a made-up name. Type nothing real about yourself. Share a room code only with someone you know. The chat is not moderated. Your pin, if you set one, is never sent to the people you play with.</p>
+    <p>Use a made-up name. Type nothing real about yourself. Share a room code only with someone you know. The chat is not moderated. Your pin, if you set one, never goes to the people you play with — only its neighbourhood does, about a kilometre across: the room's world when you open it, a mark when you join, and an invite link if you put your place in one. To someone who already has a few of your addresses, that kilometre is the door; if anyone you play with might, play without a pin.</p>
   </div>
 </section>
 
@@ -1194,7 +1196,7 @@
     <tr><td class="k">Your file</td><td data-label="choices">lines · request a new notice</td><td data-label="starts as"></td><td data-label="notes">See <a href="#file">the file</a>.</td></tr>
     <tr><td class="k">locate your body ⌖</td><td data-label="choices">button · leash</td><td data-label="starts as"></td><td data-label="notes">anchored runs only. Opens the map at your pin on desktop.</td></tr>
   </table></div>
-  <p>At the foot of the panel on desktop, the version you are running: <code>the backrooms v2.0.1</code>.</p>
+  <p>At the foot of the panel on desktop, the version you are running: <code>the backrooms v2.0.2</code>.</p>
 </section>
 
 <!-- ───────────────────────────── 22 ───────────────────────────── -->
@@ -1232,10 +1234,10 @@
   <h3 id="install">Installing the desktop app</h3>
   <div class="tw stack"><table>
     <tr class="hd"><th>system</th><th>file</th><th>how</th></tr>
-    <tr><td class="k">Windows</td><td data-label="file"><code>The-Backrooms-Setup-2.0.1.exe</code></td><td data-label="how">run it; it installs for you alone and puts a shortcut on the desktop</td></tr>
-    <tr><td class="k">Linux</td><td data-label="file"><code>The-Backrooms-2.0.1-x86_64.AppImage</code></td><td data-label="how"><code>chmod +x</code> it and run it; it updates itself</td></tr>
-    <tr><td class="k">Linux (Debian, Ubuntu)</td><td data-label="file"><code>The-Backrooms-2.0.1-amd64.deb</code></td><td data-label="how"><code>sudo apt install ./The-Backrooms-2.0.1-amd64.deb</code></td></tr>
-    <tr><td class="k">macOS</td><td data-label="file"><code>The-Backrooms-2.0.1-universal.dmg</code> (or .zip)</td><td data-label="how">Intel and Apple silicon. See below.</td></tr>
+    <tr><td class="k">Windows</td><td data-label="file"><code>The-Backrooms-Setup-2.0.2.exe</code></td><td data-label="how">run it; it installs for you alone and puts a shortcut on the desktop</td></tr>
+    <tr><td class="k">Linux</td><td data-label="file"><code>The-Backrooms-2.0.2-x86_64.AppImage</code></td><td data-label="how"><code>chmod +x</code> it and run it; it updates itself</td></tr>
+    <tr><td class="k">Linux (Debian, Ubuntu)</td><td data-label="file"><code>The-Backrooms-2.0.2-amd64.deb</code></td><td data-label="how"><code>sudo apt install ./The-Backrooms-2.0.2-amd64.deb</code></td></tr>
+    <tr><td class="k">macOS</td><td data-label="file"><code>The-Backrooms-2.0.2-universal.dmg</code> (or .zip)</td><td data-label="how">Intel and Apple silicon. See below.</td></tr>
   </table></div>
   <div class="warn">
     <div class="h">⚠ macOS, the first time</div>
