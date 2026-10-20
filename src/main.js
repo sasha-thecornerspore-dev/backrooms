@@ -122,9 +122,13 @@ app.whenReady().then(() => {
     }
     return false
   })
-  // an invite (index.html shareInvite, the console's /invite): only ever our own /play/ address, never arbitrary text from the page
-  ipcMain.handle('copy-invite', (_e, url) => {
-    if (typeof url === 'string' && url.length <= 300 && url.startsWith('https://backrooms.thecornerspore.dev/play/?room=')) { clipboard.writeText(url); return true }
+  // an invite (index.html shareInvite, the console's /invite): only ever our own /play/ address, never arbitrary text from the page.
+  // clipboard.writeText returns a Promise since Electron 44: awaited, so a refused write answers false (the page then shows the link
+  // to copy by hand) instead of "copied" plus a stray rejection
+  ipcMain.handle('copy-invite', async (_e, url) => {
+    if (typeof url === 'string' && url.length <= 300 && url.startsWith('https://backrooms.thecornerspore.dev/play/?room=')) {
+      try { await clipboard.writeText(url); return true } catch { return false }
+    }
     return false
   })
   // beacon (T0 solo): fire the player's OWN registered webhook. All validation

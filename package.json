@@ -17,7 +17,7 @@
     "dist:mac": "electron-builder --mac --publish never"
   },
   "devDependencies": {
-    "electron": "^39.8.10",
+    "electron": "^44.7.0",
     "electron-builder": "^26.15.3",
     "vitest": "^4.1.11"
   },
