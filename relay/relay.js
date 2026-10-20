@@ -66,11 +66,22 @@ export class Room extends DurableObject {
 
   // The keep/drop log (relay/evlog.js) — the only server state the ev
   // substrate adds, behind the owner's opt-in (wrangler var EV_LOG; '0' turns
-  // it off). It lives in this instance's memory: a hibernated or evicted
-  // object forgets it, which is acceptable for a leave-behind log.
-  evLog() {
-    if (!this._evLog) this._evLog = createEvLog({ max: 64, perName: 6 })
+  // it off). It is kept in this object's storage under 'evlog' (one small
+  // value, ≤ 64 frames), so a room that hibernates or is evicted wakes with
+  // the caches that were set down in it: what was left is still there when
+  // the next person comes, hours or weeks later. Loaded once per instance;
+  // written only when a keep or drop changed it (evlog.js dirty()).
+  async evLog() {
+    if (!this._evLog) {
+      this._evLog = createEvLog({ max: 64, perName: 6 })
+      try { this._evLog.import(await this.ctx.storage.get('evlog')) } catch { /* a bad value starts an empty log */ }
+    }
     return this._evLog
+  }
+
+  async saveEvLog(log) {
+    if (!log.dirty()) return
+    try { await this.ctx.storage.put('evlog', log.export()) } catch { /* the in-memory log still serves this instance */ }
   }
 
   async webSocketMessage(ws, raw) {
@@ -95,7 +106,7 @@ export class Room extends DurableObject {
       // already in the list). NOT `stored == null`: the seed is kept forever, which
       // would mint every returning visitor to an empty room thin.
       ws.send(JSON.stringify({ type: 'welcome', playerId: att.id, worldSeed: seed, roomId, first: this.ctx.getWebSockets().length === 1 }))
-      if (LOG) for (const f of this.evLog().replay()) { try { ws.send(JSON.stringify({ ...f, replay: true })) } catch { /* ignore */ } }
+      if (LOG) for (const f of (await this.evLog()).replay()) { try { ws.send(JSON.stringify({ ...f, replay: true })) } catch { /* ignore */ } }
       this.broadcast({ type: 'joined', id: att.id, name: att.name }, att.id)
       this.pushPlayers()
     } else if (msg.type === 'pos') {
@@ -117,8 +128,12 @@ export class Room extends DurableObject {
       ws.serializeAttachment(att)                  // evTok/evT ride the attachment
       if (!ok) return
       const out = { type: 'ev', id: att.id, name: att.name, kind, payload: msg.payload, t: Date.now() }
-      if (LOG && typeof msg.keep === 'string') this.evLog().keep(msg.keep.slice(0, 48), att.name, out)
-      else if (LOG && typeof msg.drop === 'string') this.evLog().drop(msg.drop.slice(0, 48))
+      if (LOG && (typeof msg.keep === 'string' || typeof msg.drop === 'string')) {
+        const log = await this.evLog()
+        if (typeof msg.keep === 'string') log.keep(msg.keep.slice(0, 48), att.name, out)
+        else log.drop(msg.drop.slice(0, 48))
+        await this.saveEvLog(log)
+      }
       this.broadcast(out, att.id)
     }
   }

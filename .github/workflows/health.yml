@@ -1,0 +1,86 @@
+name: Health
+
+# Every half hour: is the building standing? The site, the browser game, the relay's three doors, and GitHub's release
+# feed (the desktop updater and the self-updating LAN server read it). A failure opens — or updates — one issue labelled
+# `ops`, and the next green run closes it. Nothing here needs a secret.
+
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  SITE: https://backrooms.thecornerspore.dev
+  RELAY: https://backrooms-relay.jeff-schatz112.workers.dev
+  REPO: ${{ github.repository }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe
+        id: probe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          fail=""
+          note() { echo "$1"; fail="${fail}"$'\n'"- $1"; }
+          c() { local out; out=$(curl -sS -o "$2" -w '%{http_code}' --max-time 25 "$1" 2>/dev/null); echo "${out:-000}"; }
+          # a websocket 101 leaves curl with no body and a non-zero exit: read the code, never append to it
+          code_only() { local out; out=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 "$@" 2>/dev/null); echo "${out:-000}"; }
+
+          code=$(c "$SITE/" /tmp/site.html);            [ "$code" = 200 ] && grep -qi "backrooms" /tmp/site.html || note "site front page: HTTP $code"
+          code=$(c "$SITE/play/" /tmp/play.html);       [ "$code" = 200 ] && grep -q "sw.js" /tmp/play.html      || note "browser game /play/: HTTP $code"
+          code=$(c "$SITE/play/sw.js" /tmp/sw.js);      [ "$code" = 200 ] && grep -q "backrooms-play-v" /tmp/sw.js || note "/play/sw.js: HTTP $code"
+          code=$(c "$SITE/manual/" /tmp/manual.html);   [ "$code" = 200 ] || note "field manual: HTTP $code"
+          code=$(c "$SITE/atlas/" /tmp/atlas.html);     [ "$code" = 200 ] || note "atlas page: HTTP $code"
+          code=$(c "$RELAY/" /tmp/relay.txt);           [ "$code" = 200 ] && grep -q "relay is running" /tmp/relay.txt || note "relay front page: HTTP $code"
+          code=$(c "$RELAY/atlas/beacons" /tmp/beacons.json); [ "$code" = 200 ] && grep -q '"beacons"' /tmp/beacons.json || note "relay /atlas/beacons: HTTP $code"
+          code=$(code_only -X OPTIONS -H "Origin: $SITE" -H 'Access-Control-Request-Method: POST' "$RELAY/wish")
+          [ "$code" = 204 ] || note "relay /wish preflight from the site: HTTP $code (expected 204)"
+          code=$(code_only -o /tmp/rel.json -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$REPO/releases/latest"); [ "$code" = 200 ] && grep -q '"tag_name"' /tmp/rel.json || note "GitHub latest release: HTTP $code"
+          # the websocket door itself: a 101 means the Room durable object accepted the upgrade
+          code=$(code_only --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: aGVhbHRoLWNoZWNrLWtleQ==' "$RELAY/?room=health")
+          [ "$code" = 101 ] || note "relay websocket upgrade: HTTP $code (expected 101)"
+          # and a real join: the room must answer welcome (the 'health' room is a throwaway seed, never pinned)
+          node -e '
+            const ws = new WebSocket(process.env.RELAY.replace("https://", "wss://") + "/?room=health");
+            const t = setTimeout(() => { console.log("no welcome in 15 s"); process.exit(1) }, 15000);
+            ws.onopen = () => ws.send(JSON.stringify({ type: "join", roomId: "health", name: "health" }));
+            ws.onmessage = (m) => { const j = JSON.parse(m.data); if (j.type === "welcome") { clearTimeout(t); ws.close(); process.exit(0) } };
+            ws.onerror = () => process.exit(1);
+          ' || note "relay room: no welcome to a join"
+
+          if [ -n "$fail" ]; then
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            { echo 'fail<<EOF'; echo "$fail"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+            echo "FAILED:$fail"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "all doors answer"
+          fi
+
+      - name: Open or update the ops issue
+        if: steps.probe.outputs.ok == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FAIL: ${{ steps.probe.outputs.fail }}
+        run: |
+          gh label create ops --color 0052cc --description "operations: the building, the relay, the site" --force >/dev/null 2>&1 || true
+          title="health: something is not answering"
+          num=$(gh issue list --repo "$REPO" --label ops --state open --search "$title in:title" --json number -q '.[0].number')
+          body=$(printf 'The half-hourly probe found:\n%s\n\nRun: %s/%s/actions/runs/%s\nThe next green run closes this.' "$FAIL" "$GITHUB_SERVER_URL" "$REPO" "$GITHUB_RUN_ID")
+          if [ -z "$num" ]; then gh issue create --repo "$REPO" --title "$title" --label ops --body "$body"
+          else gh issue comment "$num" --repo "$REPO" --body "$body"; fi
+
+      - name: Close the ops issue when green
+        if: steps.probe.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          num=$(gh issue list --repo "$REPO" --label ops --state open --search "health: something is not answering in:title" --json number -q '.[0].number')
+          [ -z "$num" ] || gh issue close "$num" --repo "$REPO" --comment "every door answers again ($(date -u +%FT%TZ))."

@@ -1,0 +1,86 @@
+name: Site (gh-pages /play/)
+
+# The browser game on backrooms.thecornerspore.dev/play/ used to be built and committed to gh-pages by hand, with a
+# service-worker cache number that had to be bumped by a person (PLAY_SW_VERSION — tools/build-play.sh refuses to run
+# without it, and the same number twice means installed copies never refetch). This workflow does that:
+#   release published  -> build src/ at the release tag into gh-pages/play/, cache number = the one on gh-pages + 1
+#   manual run         -> the same from any ref (a hotfix to the browser copy without a desktop release)
+# It touches ONLY play/ on gh-pages. The front page, codex, manual, atlas and case board stay hand-authored there.
+#
+# It does not run on every push to main on purpose: a push that is not a release would ship an unreleased build to the
+# browser while the installers lag — the browser and the desktop app must agree on the relay protocol (README: update together).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'ref to build (default: the release tag / this branch)'
+        required: false
+        default: ''
+
+concurrency:
+  group: site-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  play:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the source to build
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+          path: src-tree
+
+      - name: Check out gh-pages
+        uses: actions/checkout@v5
+        with:
+          ref: gh-pages
+          path: site
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Next service-worker number
+        id: sw
+        run: |
+          cur=$(grep -oE "backrooms-play-v[0-9]+" site/play/sw.js | grep -oE '[0-9]+$' || echo 0)
+          echo "current=$cur" >> "$GITHUB_OUTPUT"
+          echo "next=$((cur + 1))" >> "$GITHUB_OUTPUT"
+          echo "sw cache: v$cur -> v$((cur + 1))"
+
+      - name: Build play/
+        working-directory: src-tree
+        env:
+          PLAY_SW_VERSION: ${{ steps.sw.outputs.next }}
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          echo "building $VER"
+          bash tools/build-play.sh src ../site/play
+          test -f ../site/play/index.html && test -f ../site/play/sw.js && test -f ../site/play/world.json
+          grep -q "backrooms-play-v${PLAY_SW_VERSION}'" ../site/play/sw.js
+          echo "version=$VER" >> "$GITHUB_ENV"
+
+      - name: Commit and push gh-pages
+        working-directory: site
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A play
+          if git diff --cached --quiet; then echo "play/ is already current"; exit 0; fi
+          git commit -m "site: play/ ${version} (sw v${{ steps.sw.outputs.next }}) — built by site-deploy from ${{ github.sha }}"
+          git push origin gh-pages
+
+      - name: Prove the site serves the new build
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 20 "https://backrooms.thecornerspore.dev/play/sw.js" | grep -q "backrooms-play-v${{ steps.sw.outputs.next }}'"; then echo "live after ${i} tries"; exit 0; fi
+            sleep 30
+          done
+          echo "::warning title=site::GitHub Pages has not served sw v${{ steps.sw.outputs.next }} after 10 minutes — check the Pages build"

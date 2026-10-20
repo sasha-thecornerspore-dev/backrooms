@@ -509,7 +509,7 @@ bump `<n>` on every site rebuild so installed copies fetch the new one (the site
 
 ## the relay (maintainer notes)
 
-every co-op verb (the whistle, a cache and its taking, the kneel, a friend's ward, a photograph, the `here` heartbeat) rides one relayed message type, `ev`. a release that adds or changes one needs the relay redeployed with it (`cd relay && npx wrangler deploy`), or PLAY ONLINE rooms will not carry it. decide the keep/drop log on purpose: the relay keeps the last caches a room set down for whoever joins later — in the room's memory, so a room that sleeps forgets them — unless its `EV_LOG` var is `'0'`; the standalone node server (`node backrooms-server.js`) keeps them only with `--evlog` or `EV_LOG=1`, and HOST LAN only when the app was started with `EV_LOG=1`.
+every co-op verb (the whistle, a cache and its taking, the kneel, a friend's ward, a photograph, the `here` heartbeat) rides one relayed message type, `ev`. a release that adds or changes one needs the relay redeployed with it (`cd relay && npx wrangler deploy`), or PLAY ONLINE rooms will not carry it. decide the keep/drop log on purpose: the relay keeps the last caches a room set down for whoever joins later — in the room's own storage since 2.0.3, so a room that sleeps wakes with them — unless its `EV_LOG` var is `'0'`; the standalone node server (`node backrooms-server.js`) keeps them only with `--evlog` or `EV_LOG=1`, and HOST LAN only when the app was started with `EV_LOG=1`.
 
 besides the rooms, the relay answers two plain requests:
 
@@ -543,3 +543,7 @@ both are rate-limited per sender by the **Gate** durable object, named by a salt
 ## license
 
 the code is [MIT](LICENSE), copyright (c) 2026 Corner Spore. the lore and text drawn from the backrooms canon — the site's lore pages and the codex, the field manual's prose, the canon-derived lines the game says, and the message pool in `world.json` — are [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), the licence of the [Backrooms Wiki on Wikidot](http://backrooms-wiki.wikidot.com/) they come from. [LICENSE-LORE.md](LICENSE-LORE.md) says exactly which is which, and how to credit it. this game is not affiliated with or endorsed by the wiki or its authors.
+
+## operations
+
+what runs where, every secret and when it expires, how each piece is deployed and rolled back, what the half-hourly health check watches, and what to do when a door stops answering: [docs/operations.md](docs/operations.md).

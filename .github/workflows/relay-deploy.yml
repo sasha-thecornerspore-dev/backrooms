@@ -1,0 +1,102 @@
+name: Relay (Cloudflare Worker)
+
+# The relay used to be deployed by hand (`cd relay && npx wrangler deploy`), so main and the live
+# worker could drift apart without anyone noticing. Now:
+#   pull request touching the relay (or the src files it imports) -> `wrangler deploy --dry-run`: the bundle must build
+#   push to main touching the same                                -> deploy, then prove the live worker answers
+#   manual run                                                     -> deploy from any branch (a hotfix), same proof
+#
+# Secrets (repo settings → Actions): CLOUDFLARE_API_TOKEN (an API token with the "Edit Cloudflare Workers" template,
+# scoped to this account) and CLOUDFLARE_ACCOUNT_ID. Until both exist the deploy step skips with a notice and the dry run
+# still guards every PR. The worker's own secrets (GITHUB_TOKEN for /wish, IP_SALT, ATLAS_ADMIN_KEY) live in Cloudflare and
+# are never touched here: `wrangler deploy` keeps them.
+#
+# Durable Object migrations: wrangler.jsonc's tags (v1 Room, v2 Atlas, v3 Gate) are deployed history. A deploy that
+# renumbers or drops one deletes the data Cloudflare holds for that class — the dry run cannot catch that, a reviewer must.
+
+on:
+  pull_request:
+    paths: ['relay/**', 'src/renderer/anchor.js', 'src/renderer/origin-intake.js', 'src/renderer/status.js', 'src/wish-labels.js', '.github/workflows/relay-deploy.yml']
+  push:
+    branches: [main]
+    paths: ['relay/**', 'src/renderer/anchor.js', 'src/renderer/origin-intake.js', 'src/renderer/status.js', 'src/wish-labels.js', '.github/workflows/relay-deploy.yml']
+  workflow_dispatch: {}
+
+concurrency:
+  group: relay-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RELAY_URL: https://backrooms-relay.jeff-schatz112.workers.dev
+
+jobs:
+  bundle:
+    name: dry run (the bundle must build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm install --no-audit --no-fund
+      - run: npm test -- test/evguard.test.js test/evlog.test.js test/seed.test.js test/atlas.test.js test/wishgate.test.js test/mapslink.test.js
+        continue-on-error: true   # the full suite runs in Build & Release; this is the relay's own slice, named here so a missing file is a notice not a wall
+      - name: wrangler deploy --dry-run
+        working-directory: relay
+        run: npx --yes wrangler@4 deploy --dry-run --outdir /tmp/relay-bundle
+      - name: Bundle size
+        run: ls -la /tmp/relay-bundle && du -sh /tmp/relay-bundle
+
+  deploy:
+    name: deploy to Cloudflare
+    needs: bundle
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: relay
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm install --no-audit --no-fund
+
+      - name: Are the Cloudflare secrets set?
+        id: gate
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice title=relay::deploy skipped: add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to deploy from here (until then: cd relay && npx wrangler deploy)"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: wrangler deploy
+        if: steps.gate.outputs.go == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: relay
+          wranglerVersion: '4'
+          command: deploy
+
+      # the live worker must answer its three doors: the websocket front page, the atlas read, and a CORS preflight on /wish
+      - name: Prove the live worker
+        if: steps.gate.outputs.go == 'true'
+        run: |
+          set -e
+          sleep 5
+          body=$(curl -fsS --max-time 20 "$RELAY_URL/")
+          echo "$body" | grep -q "the backrooms relay is running" || { echo "::error::relay front page did not answer as expected: $body"; exit 1; }
+          curl -fsS --max-time 20 "$RELAY_URL/atlas/beacons" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);if(!Array.isArray(j.beacons))process.exit(1);console.log("atlas beacons:",j.beacons.length)})'
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -X OPTIONS -H 'Origin: https://backrooms.thecornerspore.dev' -H 'Access-Control-Request-Method: POST' "$RELAY_URL/wish")
+          [ "$code" = "204" ] || { echo "::error::/wish preflight from the site answered $code, expected 204"; exit 1; }
+          echo "relay is live"

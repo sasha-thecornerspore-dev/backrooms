@@ -107,6 +107,10 @@ jobs:
       - if: matrix.platform == 'linux'
         run: npm test
 
+      # 2.0.3 brought npm audit to zero; a new advisory warns here (it never blocks a release — a person decides)
+      - if: matrix.platform == 'linux'
+        run: npm audit --audit-level=high || echo "::warning title=npm audit::new high findings — see docs/operations.md §6.1"
+
       # no build config and no secret goes into the app: a wish is filed by the relay (relay/relay.js POST /wish),
       # which holds the only GitHub token as a wrangler secret
 

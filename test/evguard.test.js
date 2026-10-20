@@ -101,6 +101,11 @@ describe('the server copy mirrors relay/evguard.js', () => {
 describe("relay.js carries the mirrored 'ev' branch (source guard: it cannot run in node)", () => {
   const relay = read('../relay/relay.js')
   const server = read('../server/index.js')
+  it("keeps the room's log in durable storage, written only when it changed", () => {
+    expect(relay).toMatch(/storage\.get\('evlog'\)/)
+    expect(relay).toMatch(/storage\.put\('evlog', log\.export\(\)\)/)
+    expect(relay).toMatch(/if \(!log\.dirty\(\)\) return/)
+  })
   it('imports the guards and the log from the pure modules', () => {
     expect(relay).toMatch(/import \{ evKindOk, evFrameOk, evBucket \} from '\.\/evguard\.js'/)
     expect(relay).toMatch(/import \{ createEvLog \} from '\.\/evlog\.js'/)
