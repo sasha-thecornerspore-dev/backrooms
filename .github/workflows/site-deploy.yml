@@ -102,16 +102,15 @@ jobs:
           echo "next=$((top + 1))" >> "$GITHUB_OUTPUT"
           echo "sw cache: on gh-pages v${cur:-none}, highest ever shipped v${hist:-none} -> v$((top + 1))"
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444   # v5.0.0
-        with:
-          node-version: '22'
-
+      # nothing from the requested ref is executed: build-play.sh (from this workflow's own checkout) only copies and edits
+      # files, and the version is read as text, not require()d — no node, no npm, no cache in this job (CodeQL cache poisoning)
       - name: Build play/
         id: build
         env:
           PLAY_SW_VERSION: ${{ steps.sw.outputs.next }}
         run: |
-          VER=$(node -p "require('./src-tree/package.json').version")
+          VER=$(sed -nE 's/^[[:space:]]*"version":[[:space:]]*"([0-9][0-9A-Za-z.+-]*)".*$/\1/p' src-tree/package.json | head -1)
+          [ -n "$VER" ] || { echo "::error title=site::no version in package.json of the requested ref"; exit 1; }
           echo "building $VER"
           bash trusted/tools/build-play.sh src-tree/src "$RUNNER_TEMP/play"
           test -f "$RUNNER_TEMP/play/index.html" && test -f "$RUNNER_TEMP/play/sw.js" && test -f "$RUNNER_TEMP/play/world.json"

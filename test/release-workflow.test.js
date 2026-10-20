@@ -146,3 +146,16 @@ describe('build-release.yml: every run step works in macOS bash 3.2', () => {
     expect(step).toContain('gh release upload "${{ needs.prepare.outputs.tag }}" "${FILES[@]}" --clobber')
   })
 })
+
+describe('site-deploy.yml: the build job runs nothing from the requested ref (CodeQL cache poisoning)', () => {
+  const site = read('.github/workflows/site-deploy.yml')
+  const build = site.slice(site.indexOf('\n  build:\n'), site.indexOf('\n  publish:\n'))
+    .split('\n').filter((l) => !/^\s*#/.test(l)).join('\n')   // the code only, not the comments that explain it
+  it('no node, npm, npx or setup-node in the job that checks out the requested ref', () => {
+    expect(build).not.toMatch(/setup-node|\bnpm\b|\bnpx\b|\bnode\b/)
+  })
+  it('nothing under src-tree is executed or required; the tools come from the workflow\'s own checkout', () => {
+    expect(build).not.toMatch(/require\(|(^|\s)(bash|sh|source|\.) +\.?\/?src-tree\/|\.\/src-tree\/[^ ]*\.(js|sh|mjs|cjs)/m)
+    expect(build).toContain('bash trusted/tools/build-play.sh src-tree/src')
+  })
+})
