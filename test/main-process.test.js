@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   updater: null,
   ready: null,
   clipboard: [],
+  checkCalls: 0,     // how many times the launch check ran, read in beforeAll: Vitest 5 clears mock state between tests
 }))
 
 vi.mock('electron', () => {
@@ -62,7 +63,16 @@ beforeAll(async () => {
   vi.spyOn(console, 'log').mockImplementation(() => {})
   await import('../src/main.js')
   await h.ready
-  await new Promise((r) => setTimeout(r, 50))
+  // the check runs at the end of app.whenReady()'s chain; wait for it (and its rejection to be logged) rather than a fixed
+  // 50 ms, which Vitest 5's slower module graph outran (the check itself still fires once, which the first test pins)
+  const until = Date.now() + 5000
+  while (Date.now() < until) {
+    const logged = existsSync(logFile) && readFileSync(logFile, 'utf8').includes('update check failed')
+    if (h.updater && h.updater.checkForUpdates.mock.calls.length > 0 && logged) break
+    await new Promise((r) => setTimeout(r, 20))
+  }
+  await new Promise((r) => setTimeout(r, 20))
+  h.checkCalls = h.updater.checkForUpdates.mock.calls.length
 })
 
 afterAll(async () => {
@@ -75,7 +85,7 @@ afterAll(async () => {
 
 describe('update check (PKG-1)', () => {
   it('logs "update check failed: <code>" and raises no unhandled rejection', () => {
-    expect(h.updater.checkForUpdates).toHaveBeenCalledTimes(1)
+    expect(h.checkCalls).toBe(1)
     const log = existsSync(logFile) ? readFileSync(logFile, 'utf8') : ''
     expect(log).toContain('update check failed: ENOENT')
     expect(log).not.toContain('unhandledRejection')
