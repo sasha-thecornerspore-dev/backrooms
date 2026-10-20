@@ -2,68 +2,88 @@ name: Relay (Cloudflare Worker)
 
 # The relay used to be deployed by hand (`cd relay && npx wrangler deploy`), so main and the live
 # worker could drift apart without anyone noticing. Now:
-#   pull request touching the relay (or the src files it imports) -> `wrangler deploy --dry-run`: the bundle must build
-#   push to main touching the same                                -> deploy, then prove the live worker answers
-#   manual run                                                     -> deploy from any branch (a hotfix), same proof
+#   pull request touching the relay (or the src files it imports) -> the full test suite, then `wrangler deploy --dry-run`
+#   push to main touching the same                                -> the same, then deploy, then prove the live worker answers
+#                                                                     (and roll it back to the version before if it does not)
+#   manual run                                                     -> the same; it deploys only from main (from any other
+#                                                                     branch it is a dry run)
 #
-# Secrets (repo settings → Actions): CLOUDFLARE_API_TOKEN (an API token with the "Edit Cloudflare Workers" template,
-# scoped to this account) and CLOUDFLARE_ACCOUNT_ID. Until both exist the deploy step skips with a notice and the dry run
-# still guards every PR. The worker's own secrets (GITHUB_TOKEN for /wish, IP_SALT, ATLAS_ADMIN_KEY) live in Cloudflare and
-# are never touched here: `wrangler deploy` keeps them.
+# Secrets: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, as secrets of the `relay` environment (Settings → Environments →
+# relay: set "Deployment branches" to main, optionally a required reviewer, and add both there; repository secrets also work,
+# but then no branch rule guards them). The token: a custom API token for this one account — Account → Workers Scripts → Edit,
+# no zone resources (the relay lives on workers.dev); the "Edit Cloudflare Workers" template also grants Workers Routes on every
+# zone, KV and R2, which the relay does not use. Until both exist the deploy skips with a notice and the dry run still guards
+# every PR. The worker's own secrets (GITHUB_TOKEN for /wish, IP_SALT, ATLAS_ADMIN_KEY) live in Cloudflare and are never
+# touched here — `wrangler deploy` keeps Secrets, but it REPLACES plain-text variables with wrangler.jsonc's `vars`: check in
+# the dashboard (Worker → Settings → Variables) that each of those three has the type Secret before adding the token.
 #
-# Durable Object migrations: wrangler.jsonc's tags (v1 Room, v2 Atlas, v3 Gate) are deployed history. A deploy that
-# renumbers or drops one deletes the data Cloudflare holds for that class — the dry run cannot catch that, a reviewer must.
+# Supply chain: every action is pinned by commit, and the deploy job installs one exact wrangler from relay/package-lock.json
+# with no install scripts — no root `npm install`, no npm cache — before the token is in any step's environment, and then only
+# in the two steps that use it.
+#
+# Durable Object migrations: wrangler.jsonc's tags (v1 Room, v2 Atlas, v3 Gate) are deployed history. The dry run cannot check
+# them against what is deployed; the suite does (test/relay-routes.test.js: the three tags exactly as deployed, and no
+# deleted_classes / renamed_classes / transferred_classes anywhere — that is what would delete a class's data).
 
 on:
   pull_request:
-    paths: ['relay/**', 'src/renderer/anchor.js', 'src/renderer/origin-intake.js', 'src/renderer/status.js', 'src/wish-labels.js', '.github/workflows/relay-deploy.yml']
+    paths: ['relay/**', 'src/renderer/anchor.js', 'src/renderer/origin-intake.js', 'src/renderer/status.js', 'src/renderer/prefs.js', 'src/renderer/scraps.js', 'src/wish-labels.js', '.github/workflows/relay-deploy.yml']
   push:
     branches: [main]
-    paths: ['relay/**', 'src/renderer/anchor.js', 'src/renderer/origin-intake.js', 'src/renderer/status.js', 'src/wish-labels.js', '.github/workflows/relay-deploy.yml']
+    paths: ['relay/**', 'src/renderer/anchor.js', 'src/renderer/origin-intake.js', 'src/renderer/status.js', 'src/renderer/prefs.js', 'src/renderer/scraps.js', 'src/wish-labels.js', '.github/workflows/relay-deploy.yml']
   workflow_dispatch: {}
 
+# a pull request's dry runs queue per pull request and replace each other; deploys have a queue of their own that no pull
+# request can cancel or hold up
 concurrency:
-  group: relay-deploy
-  cancel-in-progress: false
+  group: relay-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 env:
   RELAY_URL: https://backrooms-relay.jeff-schatz112.workers.dev
+  WRANGLER_SEND_METRICS: 'false'
 
 jobs:
   bundle:
-    name: dry run (the bundle must build)
+    name: tests and dry run (the bundle must build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09   # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444   # v5.0.0
         with:
           node-version: '22'
           cache: 'npm'
       - run: npm install --no-audit --no-fund
-      - run: npm test -- test/evguard.test.js test/evlog.test.js test/seed.test.js test/atlas.test.js test/wishgate.test.js test/mapslink.test.js
-        continue-on-error: true   # the full suite runs in Build & Release; this is the relay's own slice, named here so a missing file is a notice not a wall
+      # the whole suite, not a slice: it gates a production deploy, and it carries the relay's own checks (the Room's log, the
+      # migration history, these path filters against the worker's import graph)
+      - run: npm test
+      - name: Install wrangler (relay/package-lock.json, no install scripts)
+        working-directory: relay
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: wrangler deploy --dry-run
         working-directory: relay
-        run: npx --yes wrangler@4 deploy --dry-run --outdir /tmp/relay-bundle
+        run: npx --no-install wrangler deploy --dry-run --outdir "$RUNNER_TEMP/relay-bundle"
       - name: Bundle size
-        run: ls -la /tmp/relay-bundle && du -sh /tmp/relay-bundle
+        run: ls -la "$RUNNER_TEMP/relay-bundle" && du -sh "$RUNNER_TEMP/relay-bundle"
 
   deploy:
     name: deploy to Cloudflare
     needs: bundle
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: relay
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09   # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444   # v5.0.0
         with:
           node-version: '22'
-          cache: 'npm'
-      - run: npm install --no-audit --no-fund
 
       - name: Are the Cloudflare secrets set?
         id: gate
@@ -72,31 +92,51 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::notice title=relay::deploy skipped: add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to deploy from here (until then: cd relay && npx wrangler deploy)"
+            echo "::notice title=relay::deploy skipped: add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to the relay environment to deploy from here (until then: cd relay && npx wrangler deploy)"
             echo "go=false" >> "$GITHUB_OUTPUT"
           else
             echo "go=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: wrangler deploy
+      # the only install in this job, and no token in its environment
+      - name: Install wrangler (relay/package-lock.json, no install scripts)
         if: steps.gate.outputs.go == 'true'
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: relay
-          wranglerVersion: '4'
-          command: deploy
+        working-directory: relay
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: wrangler deploy
+        id: deploy
+        if: steps.gate.outputs.go == 'true'
+        working-directory: relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --no-install wrangler deploy
 
       # the live worker must answer its three doors: the websocket front page, the atlas read, and a CORS preflight on /wish
       - name: Prove the live worker
         if: steps.gate.outputs.go == 'true'
         run: |
           set -e
-          sleep 5
-          body=$(curl -fsS --max-time 20 "$RELAY_URL/")
-          echo "$body" | grep -q "the backrooms relay is running" || { echo "::error::relay front page did not answer as expected: $body"; exit 1; }
+          for i in 1 2 3 4 5 6; do
+            sleep 5
+            body=$(curl -fsS --max-time 20 "$RELAY_URL/" || true)
+            echo "$body" | grep -q "the backrooms relay is running" && break
+            [ "$i" -lt 6 ] || { echo "::error::relay front page did not answer as expected: $body"; exit 1; }
+          done
           curl -fsS --max-time 20 "$RELAY_URL/atlas/beacons" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);if(!Array.isArray(j.beacons))process.exit(1);console.log("atlas beacons:",j.beacons.length)})'
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -X OPTIONS -H 'Origin: https://backrooms.thecornerspore.dev' -H 'Access-Control-Request-Method: POST' "$RELAY_URL/wish")
           [ "$code" = "204" ] || { echo "::error::/wish preflight from the site answered $code, expected 204"; exit 1; }
           echo "relay is live"
+
+      # a worker that deployed but does not answer goes back to the version before it (Cloudflare keeps them); a deploy that
+      # failed changed nothing, so it is not rolled back
+      - name: Roll back a worker that does not answer
+        if: failure() && steps.deploy.outcome == 'success'
+        working-directory: relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --no-install wrangler rollback --message "relay-deploy run $GITHUB_RUN_ID: the new version did not answer" --yes
+          echo "::error title=relay::the deployed version did not answer and was rolled back — look at the run before redeploying"

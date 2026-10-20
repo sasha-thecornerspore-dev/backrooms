@@ -13,7 +13,8 @@ const h = vi.hoisted(() => ({
   updater: null,
   ready: null,
   clipboard: [],
-  checkCalls: 0,     // how many times the launch check ran, read in beforeAll: Vitest 5 clears mock state between tests
+  clipboardRefuses: false,   // Electron 44: writeText returns a promise, which can reject
+  checkCalls: 0,    // how many times the launch check ran, read in beforeAll: Vitest 5 clears mock state between tests
 }))
 
 vi.mock('electron', () => {
@@ -36,7 +37,7 @@ vi.mock('electron', () => {
     app, BrowserWindow,
     ipcMain: { handle: (ch, fn) => h.handlers.set(ch, fn), on: () => {} },
     shell: { openExternal: () => {} },
-    clipboard: { writeText: (t) => { h.clipboard.push(t) } },
+    clipboard: { writeText: (t) => h.clipboardRefuses ? Promise.reject(new Error('clipboard refused')) : (h.clipboard.push(t), Promise.resolve()) },
   }
 })
 
@@ -183,5 +184,14 @@ describe('copy-invite (growth-spec §1.6: the desktop copies an invite through m
       expect(await copy(null, bad), String(bad)).toBe(false)
     }
     expect(h.clipboard).toEqual([])
+  })
+  it('a clipboard that refuses the write answers false, so the page offers the link by hand', async () => {
+    const copy = h.handlers.get('copy-invite')
+    h.clipboard.length = 0
+    h.clipboardRefuses = true
+    try {
+      expect(await copy(null, OK)).toBe(false)
+      expect(h.clipboard).toEqual([])
+    } finally { h.clipboardRefuses = false }
   })
 })

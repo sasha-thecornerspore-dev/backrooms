@@ -75,6 +75,7 @@
       ],
       "icon": "build/icon-512.png",
       "category": "public.app-category.games",
+      "minimumSystemVersion": "13.0",
       "identity": "-",
       "hardenedRuntime": false,
       "artifactName": "The-Backrooms-${version}-${arch}.${ext}"
@@ -87,16 +88,24 @@
     }
   },
   "overrides": {
-    "@xmldom/xmldom": "^0.8.15 || ^0.9.12",
-    "brace-expansion": "^1.1.21 || ^2.1.7 || ^5.0.12",
+    "@xmldom/xmldom": "^0.8.15",
+    "minimatch@3": {
+      "brace-expansion": "^1.1.21"
+    },
+    "minimatch@5": {
+      "brace-expansion": "^2.1.7"
+    },
+    "minimatch@9": {
+      "brace-expansion": "^2.1.7"
+    },
+    "minimatch@10": {
+      "brace-expansion": "^5.0.12"
+    },
     "fast-uri": "^3.1.8",
     "http-cache-semantics": "^4.3.0",
     "js-yaml": "^4.3.2",
     "tar": "^7.5.22",
     "undici": "^6.28.1",
-    "sprintf-js": "^1.1.3",
-    "@electron/get": "^5.1.0",
-    "global-agent": "^4.1.3",
-    "roarr": "^7.21.7"
+    "global-agent": "^4.1.3"
   }
 }

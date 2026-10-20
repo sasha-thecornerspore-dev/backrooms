@@ -3,7 +3,7 @@
 // imports 'cloudflare:workers'), so its branch is checked as source.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
-import { evKindOk, evFrameOk, evBucket, EV_KIND_RE, EV_FRAME_MAX, EV_RATE, EV_BURST } from '../relay/evguard.js'
+import { evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket, EV_KIND_RE, EV_FRAME_MAX, EV_RATE, EV_BURST, EV_KEEP_KINDS, EV_DROP_KINDS, EV_KEEP_RATE, EV_KEEP_BURST } from '../relay/evguard.js'
 import * as serverCopy from '../server/evguard.js'
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
@@ -86,6 +86,28 @@ describe('evBucket', () => {
   })
 })
 
+describe('the keep/drop log holds caches only, at its own pace', () => {
+  it("only a 'cache' keep and a 'take' drop are logged", () => {
+    expect(EV_KEEP_KINDS).toEqual(['cache'])
+    expect(EV_DROP_KINDS).toEqual(['take'])
+    expect(evKeepOk('cache')).toBe(true)
+    for (const k of ['take', 'ward', 'photo', 'here', 'junk', '', undefined]) expect(evKeepOk(k)).toBe(false)
+    expect(evDropOk('take')).toBe(true)
+    for (const k of ['cache', 'ward', 'junk', undefined]) expect(evDropOk(k)).toBe(false)
+  })
+  it('a stored keep: a burst of 4, then one every 2 s, on its own fields of the attachment', () => {
+    expect(EV_KEEP_RATE).toBe(0.5); expect(EV_KEEP_BURST).toBe(4)
+    const att = {}
+    for (let i = 0; i < 4; i++) expect(evKeepBucket(att, 1000)).toBe(true)
+    expect(evKeepBucket(att, 1000)).toBe(false)
+    expect(evKeepBucket(att, 2999)).toBe(false)
+    expect(evKeepBucket(att, 3000)).toBe(true)
+    expect(att.evTok).toBeUndefined()                // the ev bucket is untouched
+    expect(evBucket(att, 3000)).toBe(true)
+    expect(att.kpT).toBe(3000)
+  })
+})
+
 describe('the server copy mirrors relay/evguard.js', () => {
   it('server/evguard.js is byte-identical below its header', () => {
     expect(body(read('../server/evguard.js'))).toBe(body(read('../relay/evguard.js')))
@@ -101,16 +123,22 @@ describe('the server copy mirrors relay/evguard.js', () => {
 describe("relay.js carries the mirrored 'ev' branch (source guard: it cannot run in node)", () => {
   const relay = read('../relay/relay.js')
   const server = read('../server/index.js')
-  it("keeps the room's log in durable storage, written only when it changed", () => {
-    expect(relay).toMatch(/storage\.get\('evlog'\)/)
-    expect(relay).toMatch(/storage\.put\('evlog', log\.export\(\)\)/)
-    expect(relay).toMatch(/if \(!log\.dirty\(\)\) return/)
+  it("keeps the room's log in durable storage through the pure shell (test/relay-room.test.js drives it)", () => {
+    expect(relay).toMatch(/createStoredLog\(this\.ctx\.storage, \{ max: 64, perName: 6, ttlDays: 30 \}\)/)
+    expect(relay).toMatch(/const EV_FLUSH_MS = 10_000/)
   })
   it('imports the guards and the log from the pure modules', () => {
-    expect(relay).toMatch(/import \{ evKindOk, evFrameOk, evBucket \} from '\.\/evguard\.js'/)
-    expect(relay).toMatch(/import \{ createEvLog \} from '\.\/evlog\.js'/)
-    expect(server).toMatch(/import \{ evKindOk, evFrameOk, evBucket \} from '\.\/evguard\.js'/)
+    expect(relay).toMatch(/import \{ evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket \} from '\.\/evguard\.js'/)
+    expect(relay).toMatch(/import \{ createStoredLog \} from '\.\/evlog\.js'/)
+    expect(server).toMatch(/import \{ evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket \} from '\.\/evguard\.js'/)
     expect(server).toMatch(/import \{ createEvLog \} from '\.\/evlog\.js'/)
+  })
+  it('both servers log only the kinds the log holds, a keep within its budget', () => {
+    for (const src of [relay, server]) {
+      const branch = src.slice(src.indexOf("msg.type === 'ev'"))
+      expect(branch).toMatch(/evKeepOk\(kind\) && evKeepBucket\(/)
+      expect(branch).toMatch(/evDropOk\(kind\)/)
+    }
   })
   it("has the 'ev' branch with the three guards in order and the sender excluded", () => {
     for (const src of [relay, server]) {

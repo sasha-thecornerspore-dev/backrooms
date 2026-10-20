@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   beaconIdOk, validateStratum, validateBeacon, authorize,
   parseAtlasPath, readAtlas, upsertBeacon, appendStratum, emptyStore,
-  haversineMeters, checkin, regenBalance, passageCost, dropin,
+  haversineMeters, checkin, regenBalance, passageCost, dropin, capPresenceStrata,
 } from '../relay/atlas.js'
 import SEED from '../relay/atlas-seed.js'
 
@@ -226,6 +226,44 @@ describe('presence strata cap', () => {
       store = r.store; dedup = r.dedup
     }
     expect(store.beacons[0].strata.filter(s => s.src === 'presence').length).toBe(50)
+  })
+
+  // the leak a2a276d set out to close: at the cap, today's hidden mark must not push a visible past-day mark out
+  it("at the cap, a same-day check-in or drop-in leaves the public view exactly as it was; it moves when the day turns", () => {
+    const day = (d) => `2026-10-${String(d).padStart(2, '0')}T00:00:00Z`
+    const past = []
+    for (let i = 0; i < 50; i++) past.push({ tier: 'faint', ts: day(1 + (i % 19)), fragment: 'someone stood at the door.', src: 'presence' })
+    past.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+    let store = openBeacon()
+    store.beacons[0].strata.push(...past)
+    const at = (iso) => Date.parse(iso)
+    const view = (now) => readAtlas(store, { resource: 'beacons' }, now).json.beacons[0].strata
+    const before = view(at('2026-10-20T08:00:00Z'))
+    expect(before.filter(s => s.src === 'presence').length).toBe(50)
+    let dedup = {}
+    for (let i = 0; i < 5; i++) {
+      const r = checkin(store, dedup, 'open', near, 'k' + i, at('2026-10-20T09:17:00Z') + i)
+      store = r.store; dedup = r.dedup
+    }
+    store = dropin(store, null, 'open', from, at('2026-10-20T11:02:00Z')).store
+    expect(view(at('2026-10-20T23:59:00Z'))).toEqual(before)
+    // storage holds both: the 50 past-day marks and today's 6 (each kind capped at 50)
+    expect(store.beacons[0].strata.filter(s => s.src === 'presence').length).toBe(56)
+    // the next UTC day: today's marks come into view, the oldest past ones leave, and the view is still 50 marks
+    const next = view(at('2026-10-21T00:00:01Z'))
+    expect(next.filter(s => s.src === 'presence').length).toBe(50)
+    expect(next.filter(s => s.ts === day(20)).length).toBe(6)
+    expect(next.filter(s => s.src !== 'presence').map(s => s.fragment)).toEqual(['authored lore'])
+  })
+
+  it('today\'s marks have their own bound: the 51st of the day evicts the day\'s oldest, never a past-day mark', () => {
+    const strata = [{ tier: 'deep', ts: '2020-01-01T00:00:00Z', fragment: 'authored lore' }]
+    for (let i = 0; i < 3; i++) strata.push({ tier: 'faint', ts: '2026-10-19T00:00:00Z', fragment: 'p' + i, src: 'presence' })
+    for (let i = 0; i < 51; i++) strata.push({ tier: 'faint', ts: '2026-10-20T00:00:00Z', fragment: 't' + i, src: 'presence' })
+    const out = capPresenceStrata(strata, 50, '2026-10-20T00:00:00Z')
+    expect(out.map(s => s.fragment).slice(0, 4)).toEqual(['authored lore', 'p0', 'p1', 'p2'])
+    expect(out.filter(s => s.ts === '2026-10-20T00:00:00Z').length).toBe(50)
+    expect(out.find(s => s.fragment === 't0')).toBeUndefined()
   })
 })
 

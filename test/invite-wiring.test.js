@@ -224,7 +224,8 @@ describe('the offline shells and the desktop bridge', () => {
   it('the desktop copies an invite through main, and main copies only our own /play/ link', () => {
     expect(preload).toContain("copyInvite: (url) => ipcRenderer.invoke('copy-invite', url),")
     expect(main).toMatch(/import \{ app, BrowserWindow, ipcMain, shell, clipboard \} from 'electron'/)
-    expect(main).toContain("ipcMain.handle('copy-invite', (_e, url) => {")
+    expect(main).toContain("ipcMain.handle('copy-invite', async (_e, url) => {")
+    expect(main).toContain('try { await clipboard.writeText(url); return true } catch { return false }')   // Electron 44: a promise
     expect(main).toContain("url.startsWith('https://backrooms.thecornerspore.dev/play/?room=')")
   })
 })

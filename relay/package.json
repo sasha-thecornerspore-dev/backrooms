@@ -1,0 +1,9 @@
+{
+  "name": "backrooms-relay",
+  "private": true,
+  "type": "module",
+  "description": "The relay's deploy tool, pinned. The worker itself imports nothing from npm (only its own files, six from src/, and cloudflare:workers); this file exists so CI installs one exact wrangler from a lockfile, with no install scripts, before the Cloudflare token is in the environment.",
+  "devDependencies": {
+    "wrangler": "4.149.0"
+  }
+}

@@ -278,4 +278,17 @@ describe('the keep/drop log (--evlog opt-in)', () => {
     expect(c.evs.map(m => m.payload.cx)).toEqual([9])
     a.ws.close(); c.ws.close()
   })
+
+  it("logs only a 'cache' keep and a 'take' drop, a burst of 4 keeps, and replays the day, not the millisecond (relay rules)", async () => {
+    const a = await ljoin('logroom3', 'ada')
+    a.ws.send(JSON.stringify({ type: 'ev', kind: 'ward', payload: { cx: 1 }, keep: 'w:1' }))
+    for (let i = 2; i <= 7; i++) a.ws.send(JSON.stringify({ type: 'ev', kind: 'cache', payload: { cx: i }, keep: 'c:1:' + i + ',0' }))
+    a.ws.send(JSON.stringify({ type: 'ev', kind: 'cache', payload: { cx: 8 }, drop: 'c:1:2,0' }))
+    await sleep(50)
+    const c = await ljoin('logroom3', 'cy')
+    await sleep(100)
+    expect(c.evs.map(m => m.payload.cx)).toEqual([2, 3, 4, 5])
+    for (const m of c.evs) expect(m.t % 86_400_000).toBe(0)
+    a.ws.close(); c.ws.close()
+  })
 })

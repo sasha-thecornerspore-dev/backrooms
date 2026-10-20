@@ -275,13 +275,50 @@ describe('relay.js and its config', () => {
   it('wrangler.jsonc keeps the deployed history (v1 Room, v2 Atlas) and adds GATE in v3, names the repo, and turns invocation logs off', () => {
     const cfg = JSON.parse(read('../relay/wrangler.jsonc'))
     expect(cfg.durable_objects.bindings).toEqual([{ name: 'ROOM', class_name: 'Room' }, { name: 'ATLAS', class_name: 'Atlas' }, { name: 'GATE', class_name: 'Gate' }])
-    // the live worker already holds Atlas data under tag v2 (deployed from the atlas branch): renumbering or dropping it deletes that data
-    expect(cfg.migrations).toEqual([{ tag: 'v1', new_sqlite_classes: ['Room'] }, { tag: 'v2', new_sqlite_classes: ['Atlas'] }, { tag: 'v3', new_sqlite_classes: ['Gate'] }])
+    // the live worker already holds Atlas data under tag v2 (deployed from the atlas branch): the deployed tags stay exactly as they
+    // are, and no later migration may delete, rename or transfer a class — that is what deletes a class's data. (The relay workflow
+    // runs this before every deploy.)
+    expect(cfg.migrations.slice(0, 3)).toEqual([{ tag: 'v1', new_sqlite_classes: ['Room'] }, { tag: 'v2', new_sqlite_classes: ['Atlas'] }, { tag: 'v3', new_sqlite_classes: ['Gate'] }])
+    for (const m of cfg.migrations) for (const k of ['deleted_classes', 'renamed_classes', 'transferred_classes']) expect([m.tag, k, k in m]).toEqual([m.tag, k, false])
+    expect(new Set(cfg.migrations.map(m => m.tag)).size).toBe(cfg.migrations.length)
+    // the keep/drop log's switch lives here and only here: `wrangler deploy` replaces dashboard vars with these
+    expect(cfg.vars.EV_LOG).toBe('1')
+    expect(cfg.keep_vars).toBeUndefined()
     const src = read('../relay/relay.js')
     expect(src).toMatch(/export class Atlas extends DurableObject/)
     expect(src).toMatch(/url\.pathname\.startsWith\('\/atlas'\)/)
     expect(cfg.vars.GITHUB_REPO).toBe('sasha-thecornerspore-dev/backrooms')
     expect(cfg.observability.logs.invocation_logs).toBe(false)
     expect(JSON.stringify(cfg)).not.toMatch(/GITHUB_TOKEN|IP_SALT/)    // secrets, set with `wrangler secret put`, never in the file
+  })
+
+  // the relay workflow dry-runs and deploys on a change to relay/ or to any file the bundle pulls in from src/: walk the worker's
+  // import graph and hold the workflow's two path filters to it, so a new import cannot change the bundle unseen
+  it("relay-deploy.yml's path filters cover every file the worker imports from outside relay/", () => {
+    const seen = new Set(), outside = new Set(), ROOT = new URL('../', import.meta.url).pathname
+    const walk = (rel) => {
+      if (seen.has(rel)) return
+      seen.add(rel)
+      const src = read('../' + rel)
+      for (const m of src.matchAll(/^\s*(?:import|export)\s[^'"`]*?from\s+'([^']+)'/gm)) {
+        const spec = m[1]
+        if (spec.startsWith('cloudflare:')) continue
+        expect([rel, spec, spec.startsWith('.')]).toEqual([rel, spec, true])          // the worker imports nothing from npm
+        const at = new URL(spec, new URL('../' + rel, import.meta.url)).pathname
+        expect(at.startsWith(ROOT)).toBe(true)
+        const next = at.slice(ROOT.length)
+        if (!next.startsWith('relay/')) outside.add(next)
+        walk(next)
+      }
+    }
+    walk('relay/relay.js')
+    expect([...outside].sort()).toEqual(['src/renderer/anchor.js', 'src/renderer/origin-intake.js', 'src/renderer/prefs.js', 'src/renderer/scraps.js', 'src/renderer/status.js', 'src/wish-labels.js'])
+    const wf = read('../.github/workflows/relay-deploy.yml')
+    const filters = [...wf.matchAll(/^\s*paths:\s*\[([^\]]*)\]/gm)].map(m => m[1].split(',').map(s => s.trim().replace(/^'|'$/g, '')))
+    expect(filters.length).toBe(2)
+    for (const f of filters) {
+      expect(f).toContain('relay/**')
+      for (const file of outside) expect([file, f.includes(file)]).toEqual([file, true])
+    }
   })
 })

@@ -23,19 +23,24 @@
 // Both are rate-limited per sender through the Gate durable object, keyed by
 // a salted hash of CF-Connecting-IP (an IPv6 address by its /64), and /wish
 // also by one Gate every sender shares. Nothing here logs; wrangler.jsonc turns
-// the invocation log off, so not even the URL of a /maps call is kept.
+// the invocation log off, so not even the URL of a /maps call is kept. What the
+// relay does keep: each room's seed (forever), its keep/drop log (the name a
+// player chose, a cache's place in the maze and its day, 30 days at most; see
+// Room.storedLog), the Gate's recent take times per salted address (wiped a
+// day after the last), and the atlas.
 //
 // /atlas/* is the atlas's live data layer (the Atlas durable object, logic in
 // atlas.js): open reads, a presence-proved check-in, the passage economy, and
 // admin writes behind env.ATLAS_ADMIN_KEY. It was deployed from the atlas branch
 // before 2.0.0 and lives here unchanged so a deploy never drops its stored data.
 // wrangler.jsonc's migration tags are that deployed history — v1 Room, v2 Atlas
-// (from the atlas branch), v3 Gate — never renumber or drop one: a deploy that
-// leaves out a class Cloudflare already holds data for deletes that data.
+// (from the atlas branch), v3 Gate — never renumber or edit one, and never add
+// a deleted_classes (or renamed / transferred) migration for Room, Atlas or
+// Gate: that is what deletes their data. test/relay-routes.test.js holds it.
 import { DurableObject } from 'cloudflare:workers'
 import { roomSeed } from './seed.js'
-import { evKindOk, evFrameOk, evBucket } from './evguard.js'
-import { createEvLog } from './evlog.js'
+import { evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket } from './evguard.js'
+import { createStoredLog } from './evlog.js'
 import { BODY_MAX, DAY_MS, GATE_RULES, GLOBAL_GATE, ALLOWED_ORIGINS, WISH_ORIGINS, originOk, corsHeaders, validateWish, filterWish, buildIssue, issueRequest, gateTake, gateKey, hashIp } from './wishgate.js'
 import { shortLink, resolveShortLink } from './mapslink.js'
 import SEED from './atlas-seed.js'
@@ -47,6 +52,9 @@ async function sha256Hex(s) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s))
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('')
 }
+
+// the keep/drop log's write pace: at most one write of a room's log per this many ms (see Room.storedLog)
+const EV_FLUSH_MS = 10_000
 
 export class Room extends DurableObject {
   async fetch(request) {
@@ -65,23 +73,46 @@ export class Room extends DurableObject {
   }
 
   // The keep/drop log (relay/evlog.js) — the only server state the ev
-  // substrate adds, behind the owner's opt-in (wrangler var EV_LOG; '0' turns
-  // it off). It is kept in this object's storage under 'evlog' (one small
-  // value, ≤ 64 frames), so a room that hibernates or is evicted wakes with
-  // the caches that were set down in it: what was left is still there when
-  // the next person comes, hours or weeks later. Loaded once per instance;
-  // written only when a keep or drop changed it (evlog.js dirty()).
-  async evLog() {
-    if (!this._evLog) {
-      this._evLog = createEvLog({ max: 64, perName: 6 })
-      try { this._evLog.import(await this.ctx.storage.get('evlog')) } catch { /* a bad value starts an empty log */ }
-    }
-    return this._evLog
+  // substrate adds. It is ON unless the EV_LOG var is '0' (wrangler.jsonc
+  // vars, the one place it is set: a dashboard value is wiped by the next
+  // deploy). It is kept in this object's storage under 'evlog' (one value,
+  // ≤ 64 frames), so a room that hibernates or is evicted wakes with the
+  // caches that were set down in it. What a frame holds: the name the player
+  // chose, the cache's place in the maze, and the UTC day it was set down —
+  // for 30 days at most (the alarm below forgets the rest), replayed to
+  // anyone who enters the room code. With EV_LOG '0' nothing is replayed or
+  // kept, and a stored log is deleted on the next join.
+  //
+  // Writes are what the Workers free plan runs out of first (rows written per
+  // day, shared by the whole account: the seed put, the Gate, the atlas), so
+  // they are paced three ways: only a 'cache' keep or a 'take' drop is
+  // stored (evguard.js EV_KEEP_KINDS / EV_DROP_KINDS); one socket may store
+  // a keep every 2 s (evKeepBucket); and the room writes the whole log at
+  // most once per EV_FLUSH_MS, plus once when the last socket leaves.
+  storedLog() {
+    if (!this._stored) this._stored = createStoredLog(this.ctx.storage, { max: 64, perName: 6, ttlDays: 30 })
+    return this._stored
   }
 
-  async saveEvLog(log) {
-    if (!log.dirty()) return
-    try { await this.ctx.storage.put('evlog', log.export()) } catch { /* the in-memory log still serves this instance */ }
+  // one write per EV_FLUSH_MS at most. A pending timer keeps the object from
+  // hibernating, so a change waiting here is not lost to a sleep (an eviction
+  // for a deploy can lose up to EV_FLUSH_MS of it).
+  flushSoon() {
+    if (this._flushTimer) return
+    this._flushTimer = setTimeout(() => { this._flushTimer = null; this.flushNow() }, EV_FLUSH_MS)
+  }
+
+  async flushNow() {
+    if (this._flushTimer) { clearTimeout(this._flushTimer); this._flushTimer = null }
+    const stored = this.storedLog()
+    if (await stored.flush()) await stored.schedule()
+    else if (stored.dirty()) this.flushSoon()      // the write failed: try again in a while, never in a loop
+  }
+
+  // the log's own alarm (evlog.js schedule): forget what is past 30 days and delete what is left of it
+  async alarm() {
+    if ((this.env || {}).EV_LOG === '0') await this.storedLog().erase()
+    else await this.storedLog().expire()
   }
 
   async webSocketMessage(ws, raw) {
@@ -106,7 +137,14 @@ export class Room extends DurableObject {
       // already in the list). NOT `stored == null`: the seed is kept forever, which
       // would mint every returning visitor to an empty room thin.
       ws.send(JSON.stringify({ type: 'welcome', playerId: att.id, worldSeed: seed, roomId, first: this.ctx.getWebSockets().length === 1 }))
-      if (LOG) for (const f of (await this.evLog()).replay()) { try { ws.send(JSON.stringify({ ...f, replay: true })) } catch { /* ignore */ } }
+      if (LOG) {
+        const log = await this.storedLog().load()       // null when the read failed: no replay this time, and nothing overwritten
+        if (log) for (const f of log.replay()) { try { ws.send(JSON.stringify({ ...f, replay: true })) } catch { /* ignore */ } }
+        if (log && log.dirty()) this.flushSoon()        // replay forgot something past its 30 days
+      } else if (!this._evErased) {
+        this._evErased = true
+        await this.storedLog().erase()
+      }
       this.broadcast({ type: 'joined', id: att.id, name: att.name }, att.id)
       this.pushPlayers()
     } else if (msg.type === 'pos') {
@@ -120,19 +158,25 @@ export class Room extends DurableObject {
       this.broadcast({ type: 'typing', id: att.id, name: att.name, on: !!msg.on }, att.id)
     } else if (msg.type === 'ev') {
       // one generic relayed event — mirrored textually in server/index.js. The relay
-      // never inspects kind semantics or payload: size, spelling, rate, attach, forward.
+      // never inspects payload: size, spelling, rate, attach, forward. Of kinds it
+      // knows only which ones the keep/drop log holds (evguard.js).
       if (!evFrameOk(raw)) return
       const kind = typeof msg.kind === 'string' ? msg.kind : ''
       if (!evKindOk(kind)) return
       const ok = evBucket(att, Date.now())
-      ws.serializeAttachment(att)                  // evTok/evT ride the attachment
+      // a keep the log will store: a kind it holds, and within the socket's own keep budget (over it, relayed live, never stored)
+      const keep = ok && LOG && typeof msg.keep === 'string' && evKeepOk(kind) && evKeepBucket(att, Date.now())
+      const drop = ok && LOG && typeof msg.keep !== 'string' && typeof msg.drop === 'string' && evDropOk(kind)
+      ws.serializeAttachment(att)                  // evTok/evT and kpTok/kpT ride the attachment
       if (!ok) return
       const out = { type: 'ev', id: att.id, name: att.name, kind, payload: msg.payload, t: Date.now() }
-      if (LOG && (typeof msg.keep === 'string' || typeof msg.drop === 'string')) {
-        const log = await this.evLog()
-        if (typeof msg.keep === 'string') log.keep(msg.keep.slice(0, 48), att.name, out)
-        else log.drop(msg.drop.slice(0, 48))
-        await this.saveEvLog(log)
+      if (keep || drop) {
+        const log = await this.storedLog().load()  // null when the read failed: nothing kept this time, nothing overwritten
+        if (log) {
+          if (keep) log.keep(msg.keep.slice(0, 48), att.name, out)
+          else log.drop(msg.drop.slice(0, 48))
+          if (log.dirty()) this.flushSoon()
+        }
       }
       this.broadcast(out, att.id)
     }
@@ -141,6 +185,8 @@ export class Room extends DurableObject {
   async webSocketClose(ws) {
     const att = ws.deserializeAttachment() || {}
     this.broadcast({ type: 'left', id: att.id, name: att.name }, att.id)
+    // the last one out writes what is waiting, rather than leave it to the timer
+    if (this._flushTimer && !this.ctx.getWebSockets().some(s => s !== ws)) await this.flushNow()
     // The world is NEVER forgotten. A room is a persistent place.
     // This used to delete the seed once the last player left, so the same room
     // code produced a different maze tomorrow — and nothing persistent (least

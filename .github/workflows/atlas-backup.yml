@@ -1,14 +1,30 @@
 name: Atlas backup
 
-# The atlas's live data (beacons and their strata, presence marks at day resolution) lives in one Durable Object on the
-# relay and nowhere else. Once a week this reads the public view and keeps a copy on gh-pages under atlas/backup/, so a
-# lost or re-created worker can be re-seeded from the last snapshot (relay/atlas-seed.js is the genesis; this is the
-# archive since). The public read is exactly what anyone can GET, so nothing private is written anywhere.
+# The atlas's live data lives in one Durable Object on the relay and nowhere else. This keeps a copy of the part of it that
+# cannot be made again — the beacons and their AUTHORED strata — on gh-pages under atlas/backup/, so a lost or re-created
+# worker can be re-seeded from the last snapshot (relay/atlas-seed.js is the genesis; this is the archive since).
+#
+# It never writes a presence mark. The live atlas keeps only the newest 50 per beacon and shows none of them one by one; a
+# public, dated, permanent copy of which days someone stood at a real door would undo both (gh-pages history keeps every
+# snapshot forever — deleting an old file does not take it back). So every stratum with src 'presence' is dropped before
+# anything is written, every key is checked against an allowlist, and an unexpected one stops the run before the copy.
+#
+# OFF by default (owner decision, docs/operations.md §4): the weekly run does nothing until the repository variable
+# ATLAS_BACKUP is set to 'public'. A manual run writes one snapshot either way.
+#
+# What a restore brings back: beacons and authored strata. What it does not: presence marks (regenerable game state: losing
+# them resets the 14-day door rings), the check-in dedup keys and the passage balances (dedup:*, passage:* — never in the
+# public read).
 
 on:
   schedule:
     - cron: '41 4 * * 1'
   workflow_dispatch: {}
+
+# one queue for everything that pushes gh-pages (site-deploy.yml shares it), never cancelled
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -18,25 +34,60 @@ env:
 
 jobs:
   snapshot:
+    if: github.event_name == 'workflow_dispatch' || vars.ATLAS_BACKUP == 'public'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09   # v5.1.0
         with:
           ref: gh-pages
-      - name: Fetch the atlas
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444   # v5.0.0
+        with:
+          node-version: '22'
+
+      - name: Fetch the atlas, keep only what is authored
+        run: |
+          curl -fsS --max-time 30 "$RELAY/atlas/beacons" -o "$RUNNER_TEMP/beacons.json"
+          node -e '
+            const fs = require("fs")
+            const stop = (m) => { console.log("::error title=atlas backup::" + m + " — nothing written"); process.exit(1) }
+            const TOP = ["version", "beacons"]
+            const BEACON = ["id", "kind", "name", "subtitle", "blurb", "lat", "lng", "sealed", "strata"]
+            const STRATUM = ["tier", "ts", "fragment"]
+            const j = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/beacons.json", "utf8"))
+            if (!j || !Array.isArray(j.beacons) || !j.beacons.length) stop("the public read has no beacons")
+            for (const k of Object.keys(j)) if (!TOP.includes(k)) stop("unexpected top-level key " + k)
+            let presence = 0, authored = 0
+            const beacons = j.beacons.map((b) => {
+              for (const k of Object.keys(b)) if (!BEACON.includes(k)) stop("beacon " + b.id + ": unexpected key " + k)
+              const strata = (b.strata || []).filter((s) => !(s && s.src === "presence") || (presence++, false))
+              for (const s of strata) for (const k of Object.keys(s || {})) if (!STRATUM.includes(k)) stop("beacon " + b.id + ": a stratum carries " + k)
+              authored += strata.length
+              return { ...b, strata }
+            })
+            const out = JSON.stringify({ version: j.version ?? 1, beacons }, null, 1) + "\n"
+            if (/"src"\s*:|someone stood at the door\.|someone reached the door from far off\./.test(out)) stop("a presence mark survived the filter")
+            fs.writeFileSync(process.env.RUNNER_TEMP + "/authored.json", out)
+            console.log("beacons:", beacons.length, "authored strata:", authored, "presence marks left out:", presence)
+          '
+
+      - name: Write and push
         run: |
           mkdir -p atlas/backup
-          curl -fsS --max-time 30 "$RELAY/atlas/beacons" -o /tmp/beacons.json
-          node -e 'const j=JSON.parse(require("fs").readFileSync("/tmp/beacons.json","utf8")); if(!Array.isArray(j.beacons)||!j.beacons.length) process.exit(1); console.log("beacons:", j.beacons.length, "strata:", j.beacons.reduce((n,b)=>n+(b.strata||[]).length,0))'
-          cp /tmp/beacons.json atlas/backup/beacons-latest.json
-          cp /tmp/beacons.json "atlas/backup/beacons-$(date -u +%F).json"
-          # keep the last 12 dated snapshots
+          if [ -f atlas/backup/beacons-latest.json ] && cmp -s "$RUNNER_TEMP/authored.json" atlas/backup/beacons-latest.json; then
+            echo "atlas unchanged since the last snapshot"; exit 0
+          fi
+          cp "$RUNNER_TEMP/authored.json" atlas/backup/beacons-latest.json
+          cp "$RUNNER_TEMP/authored.json" "atlas/backup/beacons-$(date -u +%F).json"
+          # the last 12 dated snapshots stay in the tree (history keeps the rest: authored data only, so that is fine)
           ls -1 atlas/backup/beacons-20*.json 2>/dev/null | sort | head -n -12 | xargs -r git rm -q --
-      - name: Commit
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A atlas/backup
           git diff --cached --quiet && { echo "atlas unchanged"; exit 0; }
-          git commit -m "atlas: weekly backup $(date -u +%F)"
-          git push origin gh-pages
+          git commit -q -m "atlas: backup $(date -u +%F) (authored beacons and strata only)"
+          for i in 1 2 3 4 5; do
+            git push origin HEAD:gh-pages && exit 0
+            sleep $((i * 5))
+            git pull -q --rebase origin gh-pages
+          done
+          echo "::error title=atlas backup::gh-pages would not take the push after 5 tries"; exit 1

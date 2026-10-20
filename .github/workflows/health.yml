@@ -1,8 +1,15 @@
 name: Health
 
-# Every half hour: is the building standing? The site, the browser game, the relay's three doors, and GitHub's release
-# feed (the desktop updater and the self-updating LAN server read it). A failure opens — or updates — one issue labelled
-# `ops`, and the next green run closes it. Nothing here needs a secret.
+# Every half hour: is the building standing? The site, the browser game, the relay's doors, and GitHub's release feed (the
+# desktop updater and the self-updating LAN server read it). A door that fails is probed again two minutes later, and only
+# a failure both times counts. Then one issue labelled `ops` is opened, its body holds what is failing now, and it is
+# commented on only when that list changes — not every half hour; the next green run closes it. Nothing here needs a secret
+# beyond the run's own token.
+#
+# What it writes on the relay: nothing anyone else sees. The room join uses a code no player can type (it starts with a
+# control character, which the game strips from every room code: src/renderer/site.js normalizeRoom), so the one seed it
+# fixes there forever is in a room nobody else can enter. The other relay probes write nothing: GET /, GET /atlas/beacons,
+# and the OPTIONS preflight on /wish, which answers before the rate gate is reached.
 
 on:
   schedule:
@@ -17,70 +24,106 @@ env:
   SITE: https://backrooms.thecornerspore.dev
   RELAY: https://backrooms-relay.jeff-schatz112.workers.dev
   REPO: ${{ github.repository }}
+  TITLE: 'health: something is not answering'
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
+      # the room join below needs a global WebSocket: Node 22 has one, whatever the runner's default becomes
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444   # v5.0.0
+        with:
+          node-version: '22'
+
       - name: Probe
         id: probe
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          fail=""
-          note() { echo "$1"; fail="${fail}"$'\n'"- $1"; }
-          c() { local out; out=$(curl -sS -o "$2" -w '%{http_code}' --max-time 25 "$1" 2>/dev/null); echo "${out:-000}"; }
-          # a websocket 101 leaves curl with no body and a non-zero exit: read the code, never append to it
-          code_only() { local out; out=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 "$@" 2>/dev/null); echo "${out:-000}"; }
+          probe() {
+            fail=""
+            note() { echo "  $1"; fail="${fail}- $1"$'\n'; }
+            # a GET whose body is kept for a check: the code, or 000 when nothing answered
+            get() { local out; out=$(curl -sS -o "$2" -w '%{http_code}' --max-time 25 "${@:3}" "$1" 2>/dev/null || true); echo "${out:-000}"; }
+            # a request whose body is never read (a preflight, a websocket upgrade): only the code
+            code_only() { local out; out=$(curl -s -o /dev/null -w '%{http_code}' "$@" 2>/dev/null || true); echo "${out:-000}"; }
+            # HTTP 200 but the wrong body is its own failure, never reported as "HTTP 200"
+            want() { # what, code, file, pattern
+              if [ "$2" != 200 ]; then note "$1: HTTP $2"
+              elif [ -n "$4" ] && ! grep -qi -- "$4" "$3"; then note "$1: HTTP 200 but the page is not the one expected (no '$4')"; fi
+            }
 
-          code=$(c "$SITE/" /tmp/site.html);            [ "$code" = 200 ] && grep -qi "backrooms" /tmp/site.html || note "site front page: HTTP $code"
-          code=$(c "$SITE/play/" /tmp/play.html);       [ "$code" = 200 ] && grep -q "sw.js" /tmp/play.html      || note "browser game /play/: HTTP $code"
-          code=$(c "$SITE/play/sw.js" /tmp/sw.js);      [ "$code" = 200 ] && grep -q "backrooms-play-v" /tmp/sw.js || note "/play/sw.js: HTTP $code"
-          code=$(c "$SITE/manual/" /tmp/manual.html);   [ "$code" = 200 ] || note "field manual: HTTP $code"
-          code=$(c "$SITE/atlas/" /tmp/atlas.html);     [ "$code" = 200 ] || note "atlas page: HTTP $code"
-          code=$(c "$RELAY/" /tmp/relay.txt);           [ "$code" = 200 ] && grep -q "relay is running" /tmp/relay.txt || note "relay front page: HTTP $code"
-          code=$(c "$RELAY/atlas/beacons" /tmp/beacons.json); [ "$code" = 200 ] && grep -q '"beacons"' /tmp/beacons.json || note "relay /atlas/beacons: HTTP $code"
-          code=$(code_only -X OPTIONS -H "Origin: $SITE" -H 'Access-Control-Request-Method: POST' "$RELAY/wish")
-          [ "$code" = 204 ] || note "relay /wish preflight from the site: HTTP $code (expected 204)"
-          code=$(code_only -o /tmp/rel.json -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/$REPO/releases/latest"); [ "$code" = 200 ] && grep -q '"tag_name"' /tmp/rel.json || note "GitHub latest release: HTTP $code"
-          # the websocket door itself: a 101 means the Room durable object accepted the upgrade
-          code=$(code_only --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: aGVhbHRoLWNoZWNrLWtleQ==' "$RELAY/?room=health")
-          [ "$code" = 101 ] || note "relay websocket upgrade: HTTP $code (expected 101)"
-          # and a real join: the room must answer welcome (the 'health' room is a throwaway seed, never pinned)
-          node -e '
-            const ws = new WebSocket(process.env.RELAY.replace("https://", "wss://") + "/?room=health");
-            const t = setTimeout(() => { console.log("no welcome in 15 s"); process.exit(1) }, 15000);
-            ws.onopen = () => ws.send(JSON.stringify({ type: "join", roomId: "health", name: "health" }));
-            ws.onmessage = (m) => { const j = JSON.parse(m.data); if (j.type === "welcome") { clearTimeout(t); ws.close(); process.exit(0) } };
-            ws.onerror = () => process.exit(1);
-          ' || note "relay room: no welcome to a join"
+            want "site front page"      "$(get "$SITE/" /tmp/site.html)"            /tmp/site.html   backrooms
+            want "browser game /play/"  "$(get "$SITE/play/" /tmp/play.html)"       /tmp/play.html   sw.js
+            want "/play/sw.js"          "$(get "$SITE/play/sw.js" /tmp/sw.js)"      /tmp/sw.js       backrooms-play-v
+            want "field manual"         "$(get "$SITE/manual/" /tmp/manual.html)"   /tmp/manual.html ''
+            want "atlas page"           "$(get "$SITE/atlas/" /tmp/atlas.html)"     /tmp/atlas.html  ''
+            want "relay front page"     "$(get "$RELAY/" /tmp/relay.txt)"           /tmp/relay.txt   'relay is running'
+            want "relay /atlas/beacons" "$(get "$RELAY/atlas/beacons" /tmp/beacons.json)" /tmp/beacons.json '"beacons"'
+            want "GitHub latest release" "$(get "https://api.github.com/repos/$REPO/releases/latest" /tmp/rel.json -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json')" /tmp/rel.json '"tag_name"'
+
+            code=$(code_only --max-time 25 -X OPTIONS -H "Origin: $SITE" -H 'Access-Control-Request-Method: POST' "$RELAY/wish")
+            [ "$code" = 204 ] || note "relay /wish preflight from the site: HTTP $code (expected 204)"
+            # the websocket door itself: a 101 means the Room durable object accepted the upgrade. curl then holds the socket
+            # open until --max-time, so the time is short: the code is all it needs
+            code=$(code_only --max-time 5 --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: aGVhbHRoLWNoZWNrLWtleQ==' "$RELAY/?room=%01health")
+            [ "$code" = 101 ] || note "relay websocket upgrade: HTTP $code (expected 101)"
+            # and a real join: the room must answer welcome
+            node -e '
+              const room = "\u0001health"
+              const ws = new WebSocket(process.env.RELAY.replace("https://", "wss://") + "/?room=" + encodeURIComponent(room));
+              const t = setTimeout(() => { console.log("no welcome in 15 s"); process.exit(1) }, 15000);
+              ws.onopen = () => ws.send(JSON.stringify({ type: "join", roomId: room, name: "health" }));
+              ws.onmessage = (m) => { const j = JSON.parse(m.data); if (j.type === "welcome") { clearTimeout(t); ws.close(); process.exit(0) } };
+              ws.onerror = () => process.exit(1);
+            ' || note "relay room: no welcome to a join"
+          }
+
+          echo "first look:"
+          probe
+          if [ -n "$fail" ]; then
+            echo "something did not answer; looking again in two minutes"
+            sleep 120
+            echo "second look:"
+            probe
+          fi
 
           if [ -n "$fail" ]; then
             echo "ok=false" >> "$GITHUB_OUTPUT"
-            { echo 'fail<<EOF'; echo "$fail"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
-            echo "FAILED:$fail"
+            { echo 'fail<<EOF'; printf '%s' "$fail"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
+            echo "FAILED (twice):"; printf '%s' "$fail"
           else
             echo "ok=true" >> "$GITHUB_OUTPUT"
             echo "all doors answer"
           fi
 
-      - name: Open or update the ops issue
+      - name: Open the ops issue, or update it when the list changes
         if: steps.probe.outputs.ok == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FAIL: ${{ steps.probe.outputs.fail }}
         run: |
           gh label create ops --color 0052cc --description "operations: the building, the relay, the site" --force >/dev/null 2>&1 || true
-          title="health: something is not answering"
-          num=$(gh issue list --repo "$REPO" --label ops --state open --search "$title in:title" --json number -q '.[0].number')
-          body=$(printf 'The half-hourly probe found:\n%s\n\nRun: %s/%s/actions/runs/%s\nThe next green run closes this.' "$FAIL" "$GITHUB_SERVER_URL" "$REPO" "$GITHUB_RUN_ID")
-          if [ -z "$num" ]; then gh issue create --repo "$REPO" --title "$title" --label ops --body "$body"
-          else gh issue comment "$num" --repo "$REPO" --body "$body"; fi
+          # by exact title among open `ops` issues: no search index, which lags and reads `health:` as a qualifier
+          num=$(gh issue list --repo "$REPO" --label ops --state open --limit 100 --json number,title -q ".[] | select(.title == \"$TITLE\") | .number" | head -1)
+          run="$GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID"
+          body=$(printf 'Failing now (each one twice, two minutes apart):\n%s\nLast checked by %s\nThe next green run closes this.' "$FAIL" "$run")
+          if [ -z "$num" ]; then
+            gh issue create --repo "$REPO" --title "$TITLE" --label ops --body "$body"
+            exit 0
+          fi
+          before=$(gh issue view "$num" --repo "$REPO" --json body -q .body | tr -d '\r' | sed -n '/^Failing now/,/^Last checked/p' | sed '1d;$d' | sed '/^$/d')
+          if [ "$before" = "$(printf '%s' "$FAIL" | sed '/^$/d')" ]; then
+            echo "issue #$num already says this; nothing new to tell anyone"
+          else
+            gh issue edit "$num" --repo "$REPO" --body "$body"
+            gh issue comment "$num" --repo "$REPO" --body "$(printf 'What is failing has changed:\n%s\n%s' "$FAIL" "$run")"
+          fi
 
       - name: Close the ops issue when green
         if: steps.probe.outputs.ok == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          num=$(gh issue list --repo "$REPO" --label ops --state open --search "health: something is not answering in:title" --json number -q '.[0].number')
+          num=$(gh issue list --repo "$REPO" --label ops --state open --limit 100 --json number,title -q ".[] | select(.title == \"$TITLE\") | .number" | head -1)
           [ -z "$num" ] || gh issue close "$num" --repo "$REPO" --comment "every door answers again ($(date -u +%FT%TZ))."

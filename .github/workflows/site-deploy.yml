@@ -3,9 +3,19 @@ name: Site (gh-pages /play/)
 # The browser game on backrooms.thecornerspore.dev/play/ used to be built and committed to gh-pages by hand, with a
 # service-worker cache number that had to be bumped by a person (PLAY_SW_VERSION — tools/build-play.sh refuses to run
 # without it, and the same number twice means installed copies never refetch). This workflow does that:
-#   release published  -> build src/ at the release tag into gh-pages/play/, cache number = the one on gh-pages + 1
-#   manual run         -> the same from any ref (a hotfix to the browser copy without a desktop release)
-# It touches ONLY play/ on gh-pages. The front page, codex, manual, atlas and case board stay hand-authored there.
+#   Build & Release publishes a release -> its publish job dispatches this workflow on the release tag (GitHub starts no
+#                                          workflow for a release that GITHUB_TOKEN publishes, so `release: published`
+#                                          alone would never fire for those; a dispatch is the one thing it may start)
+#   a release published by hand         -> `release: published`
+#   manual run                          -> any tag or branch of this repository (a hotfix to the browser copy without a
+#                                          desktop release)
+# The cache number is one more than the highest that gh-pages has ever shipped (its whole history, so a revert on gh-pages
+# can never make a number repeat). It touches ONLY play/ on gh-pages. The front page, codex, manual, atlas and case board
+# stay hand-authored there.
+#
+# Two jobs, so the job that can push runs none of the repository's code: `build` (contents: read) runs tools/build-play.sh
+# from this workflow's own checkout over src/ of the requested ref and uploads the bundle; `publish` (contents: write)
+# copies that bundle into gh-pages and pushes. Neither checkout keeps a token in .git/config except publish's gh-pages one.
 #
 # It does not run on every push to main on purpose: a push that is not a release would ship an unreleased build to the
 # browser while the installers lag — the browser and the desktop app must agree on the relay protocol (README: update together).
@@ -16,71 +26,156 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'ref to build (default: the release tag / this branch)'
+        description: 'tag or branch of this repository to build (default: the ref this runs on; Build & Release runs it on the release tag)'
         required: false
         default: ''
 
+# one queue for everything that pushes gh-pages (atlas-backup.yml shares it), never cancelled
 concurrency:
-  group: site-deploy
+  group: gh-pages
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  play:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      next: ${{ steps.sw.outputs.next }}
+      version: ${{ steps.build.outputs.version }}
+      sha: ${{ steps.build.outputs.sha }}
     steps:
-      - name: Check out the source to build
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
-          path: src-tree
+      # a tag or a branch that exists in this repository, by its full name: never a pull request's head, a fork's commit or a raw SHA
+      - name: Which ref
+        id: ref
+        env:
+          INPUT_REF: ${{ github.event.inputs.ref }}
+          EVENT_REF: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REF="${INPUT_REF:-$EVENT_REF}"
+          if ! printf '%s' "$REF" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$' || printf '%s' "$REF" | grep -Eq '(^|/)\.|\.\.|^refs/|^pull/'; then
+            echo "::error title=site::refusing ref '$REF': give a tag (v2.0.3) or a branch name of this repository"; exit 1
+          fi
+          full=""
+          for kind in tags heads; do
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/$kind/$REF" --jq .ref >/dev/null 2>&1; then full="refs/$kind/$REF"; break; fi
+          done
+          [ -n "$full" ] || { echo "::error title=site::'$REF' is neither a tag nor a branch of this repository"; exit 1; }
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          echo "building $full"
 
-      - name: Check out gh-pages
-        uses: actions/checkout@v5
+      - name: Check out this workflow's own tools
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09   # v5.1.0
+        with:
+          path: trusted
+          persist-credentials: false
+
+      - name: Check out the source to build (src/ and the top-level files only)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09   # v5.1.0
+        with:
+          ref: ${{ steps.ref.outputs.full }}
+          path: src-tree
+          sparse-checkout: src
+          persist-credentials: false
+
+      - name: Check out gh-pages, all of its history (the cache number must never repeat)
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09   # v5.1.0
         with:
           ref: gh-pages
           path: site
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '22'
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Next service-worker number
         id: sw
         run: |
-          cur=$(grep -oE "backrooms-play-v[0-9]+" site/play/sw.js | grep -oE '[0-9]+$' || echo 0)
-          echo "current=$cur" >> "$GITHUB_OUTPUT"
-          echo "next=$((cur + 1))" >> "$GITHUB_OUTPUT"
-          echo "sw cache: v$cur -> v$((cur + 1))"
+          cur=$(grep -oE 'backrooms-play-v[0-9]+' site/play/sw.js 2>/dev/null | grep -oE '[0-9]+$' | sort -n | tail -1 || true)
+          hist=$(git -C site log -p --format= -- play/sw.js | grep -oE 'backrooms-play-v[0-9]+' | grep -oE '[0-9]+$' | sort -n | tail -1 || true)
+          if [ -z "$cur" ] && [ -z "$hist" ]; then
+            echo "::error title=site::no backrooms-play-v<n> on gh-pages or in its history: refusing to guess a cache number"; exit 1
+          fi
+          top=$(( ${cur:-0} > ${hist:-0} ? ${cur:-0} : ${hist:-0} ))
+          echo "next=$((top + 1))" >> "$GITHUB_OUTPUT"
+          echo "sw cache: on gh-pages v${cur:-none}, highest ever shipped v${hist:-none} -> v$((top + 1))"
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444   # v5.0.0
+        with:
+          node-version: '22'
 
       - name: Build play/
-        working-directory: src-tree
+        id: build
         env:
           PLAY_SW_VERSION: ${{ steps.sw.outputs.next }}
         run: |
-          VER=$(node -p "require('./package.json').version")
+          VER=$(node -p "require('./src-tree/package.json').version")
           echo "building $VER"
-          bash tools/build-play.sh src ../site/play
-          test -f ../site/play/index.html && test -f ../site/play/sw.js && test -f ../site/play/world.json
-          grep -q "backrooms-play-v${PLAY_SW_VERSION}'" ../site/play/sw.js
-          echo "version=$VER" >> "$GITHUB_ENV"
+          bash trusted/tools/build-play.sh src-tree/src "$RUNNER_TEMP/play"
+          test -f "$RUNNER_TEMP/play/index.html" && test -f "$RUNNER_TEMP/play/sw.js" && test -f "$RUNNER_TEMP/play/world.json"
+          grep -q "backrooms-play-v${PLAY_SW_VERSION}'" "$RUNNER_TEMP/play/sw.js"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git -C src-tree rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4.6.2
+        with:
+          name: play
+          path: ${{ runner.temp }}/play
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out gh-pages
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09   # v5.1.0
+        with:
+          ref: gh-pages
+          path: site
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093   # v4.3.0
+        with:
+          name: play
+          path: ${{ runner.temp }}/play
 
       - name: Commit and push gh-pages
+        id: push
         working-directory: site
+        env:
+          NEXT: ${{ needs.build.outputs.next }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA: ${{ needs.build.outputs.sha }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -rf play && mkdir play && cp -R "$RUNNER_TEMP/play/." play/
           git add -A play
-          if git diff --cached --quiet; then echo "play/ is already current"; exit 0; fi
-          git commit -m "site: play/ ${version} (sw v${{ steps.sw.outputs.next }}) — built by site-deploy from ${{ github.sha }}"
-          git push origin gh-pages
+          if git diff --cached --quiet; then echo "play/ is already current"; echo "pushed=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git commit -q -m "site: play/ ${VERSION} (sw v${NEXT}) — built by site-deploy from ${SHA}"
+          # someone may push gh-pages meanwhile (by hand, or a workflow outside this queue): rebase onto it and try again — never
+          # force, and never ship a cache number that history has already reached
+          for i in 1 2 3 4 5; do
+            h=$(git log -p --format= HEAD~1 -- play/sw.js | grep -oE 'backrooms-play-v[0-9]+' | grep -oE '[0-9]+$' | sort -n | tail -1 || true)
+            if [ -n "$h" ] && [ "$h" -ge "$NEXT" ]; then echo "::error title=site::gh-pages already shipped sw v$h: run this again for a fresh number"; exit 1; fi
+            if git push origin HEAD:gh-pages; then echo "pushed=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+            sleep $((i * 5))
+            git pull -q --rebase origin gh-pages
+          done
+          echo "::error title=site::gh-pages would not take the push after 5 tries"; exit 1
 
       - name: Prove the site serves the new build
+        if: steps.push.outputs.pushed == 'true'
+        env:
+          NEXT: ${{ needs.build.outputs.next }}
         run: |
           for i in $(seq 1 20); do
-            if curl -fsS --max-time 20 "https://backrooms.thecornerspore.dev/play/sw.js" | grep -q "backrooms-play-v${{ steps.sw.outputs.next }}'"; then echo "live after ${i} tries"; exit 0; fi
+            if curl -fsS --max-time 20 "https://backrooms.thecornerspore.dev/play/sw.js" | grep -q "backrooms-play-v${NEXT}'"; then echo "live after ${i} tries"; exit 0; fi
             sleep 30
           done
-          echo "::warning title=site::GitHub Pages has not served sw v${{ steps.sw.outputs.next }} after 10 minutes — check the Pages build"
+          echo "::warning title=site::GitHub Pages has not served sw v${NEXT} after 10 minutes — check the Pages build"

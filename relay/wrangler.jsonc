@@ -3,7 +3,7 @@
   "main": "relay.js",
   "compatibility_date": "2025-06-01",
   "observability": { "enabled": true, "logs": { "invocation_logs": false } },
-  "vars": { "GITHUB_REPO": "sasha-thecornerspore-dev/backrooms" },
+  "vars": { "GITHUB_REPO": "sasha-thecornerspore-dev/backrooms", "EV_LOG": "1" },
   "durable_objects": {
     "bindings": [
       { "name": "ROOM", "class_name": "Room" },

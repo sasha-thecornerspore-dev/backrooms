@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 import { createServer as createHttpServer } from 'http'
 import { randomBytes } from 'crypto'
 import { startUpdater } from './updater.js'
-import { evKindOk, evFrameOk, evBucket } from './evguard.js'
+import { evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket } from './evguard.js'
 import { createEvLog } from './evlog.js'
 
 // the release's version, stamped into the bundle by esbuild (build-release.yml: --define:__BACKROOMS_VERSION__); a checkout
@@ -115,7 +115,8 @@ export function createServer(port = PORT, host, opts = {}) {
       }
 
       // one generic relayed event — mirrored textually in relay/relay.js. The server
-      // never inspects kind semantics or payload: size, spelling, rate, attach, forward.
+      // never inspects payload: size, spelling, rate, attach, forward. Of kinds it
+      // knows only which ones the keep/drop log holds (evguard.js).
       if (msg.type === 'ev' && playerId && room) {
         if (!evFrameOk(raw)) return
         const kind = typeof msg.kind === 'string' ? msg.kind : ''
@@ -123,8 +124,9 @@ export function createServer(port = PORT, host, opts = {}) {
         const p = room.players.get(playerId)
         if (!p || !evBucket(p, Date.now())) return
         const out = { type: 'ev', id: playerId, name: p.name, kind, payload: msg.payload, t: Date.now() }
-        if (room.log && typeof msg.keep === 'string') room.log.keep(msg.keep.slice(0, 48), p.name, out)
-        else if (room.log && typeof msg.drop === 'string') room.log.drop(msg.drop.slice(0, 48))
+        // the same rules as the relay: only a 'cache' keep or a 'take' drop is logged, a keep within the player's keep budget
+        if (room.log && typeof msg.keep === 'string') { if (evKeepOk(kind) && evKeepBucket(p, Date.now())) room.log.keep(msg.keep.slice(0, 48), p.name, out) }
+        else if (room.log && typeof msg.drop === 'string' && evDropOk(kind)) room.log.drop(msg.drop.slice(0, 48))
         broadcast(room, out, playerId)
       }
     })

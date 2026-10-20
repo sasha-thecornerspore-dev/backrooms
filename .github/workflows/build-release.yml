@@ -188,11 +188,27 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write     # only to dispatch Site (gh-pages /play/) below
     steps:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release edit "${{ needs.prepare.outputs.tag }}" --draft=false --latest --repo "${{ github.repository }}"
+
+      # /play/ ships with the release. GitHub starts no workflow for an event GITHUB_TOKEN causes, so the release just published
+      # never fires site-deploy's `release: published`; a workflow_dispatch is the exception it allows. --ref is the tag (which
+      # publishing has just created), so the site builds exactly the released source. It never fails the release: if it does
+      # not start, run Site (gh-pages /play/) from the Actions tab.
+      - name: Ship the browser copy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          for i in 1 2 3 4 5; do
+            if gh workflow run site-deploy.yml --repo "${{ github.repository }}" --ref "$TAG"; then echo "site-deploy dispatched on $TAG"; exit 0; fi
+            sleep $((i * 10))
+          done
+          echo "::warning title=site::could not dispatch Site (gh-pages /play/) on $TAG — run it from the Actions tab"
 
   # The itch.io mirror (growth-spec §3): once the GitHub release is public, push the same files to itch with butler
   # (itch.io/docs/butler). It runs only behind the publish job's own gate, never blocks or changes the GitHub release, and skips

@@ -125,25 +125,40 @@ const isPresence = s => s != null && s.src === 'presence'
 export const presenceDay = now => new Date(now).toISOString().slice(0, 10) + 'T00:00:00Z'
 const dayOnly = s => (isPresence(s) && typeof s.ts === 'string' ? { ...s, ts: s.ts.slice(0, 10) + 'T00:00:00Z' } : s)
 // Day resolution alone is not enough while the day is still running: a poller watching the count rise
-// would learn the minute. So today's presence marks stay out of every public view until the day is over.
+// would learn the minute. So today's presence marks stay out of every public view until the day is over —
+// and they must not move the view either: past days' marks are capped apart from today's (capPresenceStrata),
+// and the view shows the newest MAX_PRESENCE_STRATA past-day marks, so what anyone can see changes only when
+// the UTC day turns, never at the minute of a check-in or a drop-in.
 export const publicBeacon = (b, now = Date.now()) => {
   if (!b || !Array.isArray(b.strata)) return b
   const today = presenceDay(now)
-  return { ...b, strata: b.strata.map(dayOnly).filter(s => !(isPresence(s) && s.ts >= today)) }
+  const past = b.strata.map(dayOnly).filter(s => !(isPresence(s) && s.ts >= today))
+  return { ...b, strata: dropOldestPresence(past, past.filter(isPresence).length - MAX_PRESENCE_STRATA, () => true) }
 }
 
-// Keep every authored stratum plus the most-recent `max` presence strata, in
-// original order (presence layers are appended at the end, so this drops the
-// oldest presence layers first). Pure; returns the same array if within cap.
-export function capPresenceStrata(strata, max = MAX_PRESENCE_STRATA) {
-  let over = strata.filter(isPresence).length - max
+// drop the first `over` strata that are presence marks and match `which` (presence layers are appended in
+// time order, so the first are the oldest); authored strata are never dropped. Same array when nothing goes.
+function dropOldestPresence(strata, over, which) {
   if (over <= 0) return strata
   const out = []
   for (const s of strata) {
-    if (over > 0 && isPresence(s)) { over--; continue }
+    if (over > 0 && isPresence(s) && which(s)) { over--; continue }
     out.push(s)
   }
   return out
+}
+
+// Keep every authored stratum plus the most-recent `max` presence strata, in original order. With `today`
+// (presenceDay(now)) the two kinds of mark are capped apart: the newest `max` from past days and the newest
+// `max` from today, so a mark set down today evicts only another of today's — never a past-day mark the public
+// view is showing. Pure; returns the same array if within cap.
+export function capPresenceStrata(strata, max = MAX_PRESENCE_STRATA, today = null) {
+  if (today == null) return dropOldestPresence(strata, strata.filter(isPresence).length - max, () => true)
+  const isToday = (s) => dayOnly(s).ts >= today
+  const todays = strata.filter(s => isPresence(s) && isToday(s)).length
+  const pasts = strata.filter(s => isPresence(s) && !isToday(s)).length
+  const out = dropOldestPresence(strata, todays - max, isToday)
+  return dropOldestPresence(out, pasts - max, (s) => !isToday(s))
 }
 
 // A presence-proved check-in. Verifies proximity to a non-sealed beacon, dedups
@@ -175,7 +190,7 @@ export function checkin(store, dedup, id, coords, visitorHash, now, opts = {}) {
     )
   }
   const layer = { tier: 'faint', ts: presenceDay(now), fragment: 'someone stood at the door.', src: 'presence' }
-  const nb = { ...b, strata: capPresenceStrata([...(b.strata ?? []), layer]) }
+  const nb = { ...b, strata: capPresenceStrata([...(b.strata ?? []), layer], MAX_PRESENCE_STRATA, presenceDay(now)) }
   const beacons = store.beacons.map(x => (x.id === id ? nb : x))
   return { status: 201, json: publicBeacon(nb, now), store: { ...store, beacons }, dedup: dedupOut }
 }
@@ -211,7 +226,7 @@ export function dropin(store, passageRec, id, coords, now, opts = {}) {
   const balance = regenBalance(passageRec, now, opts)
   if (balance < cost) return { status: 402, json: { error: 'not enough passage', passage: Math.floor(balance), cost } }
   const layer = { tier: 'faint', ts: presenceDay(now), fragment: 'someone reached the door from far off.', src: 'presence' }
-  const nb = { ...b, strata: capPresenceStrata([...(b.strata ?? []), layer]) }
+  const nb = { ...b, strata: capPresenceStrata([...(b.strata ?? []), layer], MAX_PRESENCE_STRATA, presenceDay(now)) }
   const beacons = store.beacons.map(x => (x.id === id ? nb : x))
   return { status: 201, json: { beacon: publicBeacon(nb, now), passage: Math.floor(balance - cost), cost },
            store: { ...store, beacons }, passage: { balance: balance - cost, ts: now } }
