@@ -681,10 +681,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const chunkUnder = () => ({ cx: Math.floor(player.x / CHUNK_SIZE), cy: Math.floor(player.y / CHUNK_SIZE) })
   // the arrival's delayed lines belong to that arrival: a travel or a death in between (arrivalGen moved on) drops them, so the old way's
   // line never reads on the next floor; and they are its plates (plates.js): past the window's two, they wait for the arrival to settle,
-  // or, when keep is false (a line whose moment passes with the arrival: the way you came, the arrival summary), are let go. The kind is
-  // the plate's, an arrival's unless said: the wake's own lines are 'wake', free (plates.js: never held, never counted)
+  // or, when keep is false (a line whose moment passes with the arrival: the way you came, the arrival summary), are let go. A wake's
+  // lines are its arrival's too, and spend its window as a travel's do
   let arrivalGen = 0
-  function later(ms, text, prio, keep = true, kind = 'arrival') { const g = arrivalGen; setTimeout(() => { if (g === arrivalGen) plate(kind, text, prio, keep) }, ms) }
+  function later(ms, text, prio, keep = true) { const g = arrivalGen; setTimeout(() => { if (g === arrivalGen) plate('arrival', text, prio, keep) }, ms) }
   // a visit begins (a travel, the wake, the start, a resume): its clock and its hint start over, the faint pull takes a new lean, the
   // once-a-visit lines are unsaid, and the plate budget opens its window. The floor's own plate follows at each caller (arrivalPlate; the
   // wake's only on a floor new to you)
@@ -767,10 +767,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if (level.cfg.exit?.hint && !followed) { if (freshLobby()) hintHeld = true; else later(filing ? 7600 : 3800, level.cfg.exit.hint, PRIO.discovery) }
         if (wm) later(7500, wm, PRIO.discovery, false)
       } else {
-        // a floor you come back to says so first, the arrival's second plate, with the ways down on your map; the way line is let go
+        // a floor you come back to says so first, the arrival's second plate, with the ways down on your map; the way line is let go. The
+        // ring's own line is the lobby saying so ('the carpet remembers you.', said only where you last stood: topology.js), so climbing
+        // out it goes first and the summary is let go (the manual's ways table quotes it)
         const s = arrivalSummary(fog.countWays(way.target), rec.visits)
-        if (s) later(3800, s, PRIO.discovery, false)
-        if (wm) later(7500, wm, PRIO.discovery, false)
+        const ringBack = way.kind === 'ring' && !!wm
+        if (s) later(ringBack ? 7500 : 3800, s, PRIO.discovery, false)
+        if (wm) later(ringBack ? 3800 : 7500, wm, PRIO.discovery, false)
       }
       if (player.maxHp > hp0) later(11000, 'the floor remembers you less.', PRIO.discovery)
       // a new floor sets you down beside the pin's drift origin again (buildLevel resets spawnX / spawnY): a mercy, said once per descent
@@ -827,13 +830,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       renderHotbar()
       persist(true)
       startVisit()
-      // the wake's own lines answer your death ('wake', a free kind: plates.js), each at its moment, none left waiting out the window for a
-      // travel to wipe; the floor's plate goes up only on a floor new to you (its own line), else the HUD carries the name and a wake never
-      // stacks four plates. The block's wake keeps its name, as 2.0.3 did (the hold)
+      // the wake's own lines are its arrival's plates (plates.js: two in the window, no murmur joins them): the floor's plate goes up only
+      // on a floor new to you (its own line; else the HUD carries the name), so where you woke and the next line say themselves at their
+      // moments, and a third waits out the window, kept (it is still true when read late). The block's wake keeps its name and every
+      // line at its moment, as 2.0.3 did (the hold)
       if (first || level.cfg.map) plate('floor', arrivalPlate(level.cfg, first), PRIO.combat)
-      later(2600, r.message, PRIO.discovery, true, 'wake')
-      if (r.dropped) later(5200, r.droppedLine, PRIO.discovery, true, 'wake')
-      if (d?.line) later(7800, d.line, PRIO.discovery, true, 'wake')   // the column's word on it ('nobody came.' first when nobody did); LEGACY has none
+      later(2600, r.message, PRIO.discovery)
+      if (r.dropped) later(5200, r.droppedLine, PRIO.discovery)
+      if (d?.line) later(7800, d.line, PRIO.discovery)   // the column's word on it ('nobody came.' first when nobody did); LEGACY has none
       bus?.here(hereFields())           // woken a floor above: the room learns it at once
     })
   }

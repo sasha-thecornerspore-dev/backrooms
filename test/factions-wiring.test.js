@@ -942,9 +942,9 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     expect(go(true, 1, 'ok', 'down')).toEqual({ down: 0, died: [legacyDeath], hp: 0 })   // the only friend here is down too: nobody can come
     expect(go(true, 2, 'ok', 'kneel')).toEqual({ down: 1, died: [], hp: 0 })        // kneeling by someone is still on their feet
   })
-  it('die(d): the reset right after the core\'s invuln line, then the decision (its regenDelay wins), the veil cleared; its line third, at 7800 ms, the wake\'s own', () => {
+  it('die(d): the reset right after the core\'s invuln line, then the decision (its regenDelay wins), the veil cleared; its line third, at 7800 ms', () => {
     expect(dieBody).toMatch(/invuln = 1\.6; regenDelay = 0; hurt = 0\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(down\.st === 'down'\) flashlight = savedLight\r?\n\s*down\.reset\(\); if \(kneel\.st\) \{ kneel\.stop\(\); flashlight = savedLight \}\r?\n\s*if \(d\) \{ if \(d\.mintThin && filed\) \{ thin = true; rules = rulesFor\(origin, thin\); thinFirstShot = true \} if \(d\.leashDebt > 0\) leashDebt = d\.leashDebt; if \(d\.sanity\) sanity = Math\.max\(0, Math\.min\(100, sanity \+ d\.sanity\)\); if \(d\.regenDelay\) regenDelay = d\.regenDelay \}\r?\n\s*if \(downEl\) downEl\.style\.opacity = '0'\r?\n\s*document\.body\.classList\.remove\('down'\)/)
-    expect(dieBody).toMatch(/if \(r\.dropped\) later\(5200, r\.droppedLine, PRIO\.discovery, true, 'wake'\)\r?\n\s*if \(d\?\.line\) later\(7800, d\.line, PRIO\.discovery, true, 'wake'\)/)
+    expect(dieBody).toMatch(/if \(r\.dropped\) later\(5200, r\.droppedLine, PRIO\.discovery\)\r?\n\s*if \(d\?\.line\) later\(7800, d\.line, PRIO\.discovery\)/)
     expect(game).not.toContain('you wake where you fell in.')
   })
   it('die(d)\'s block, lifted and replayed: LEGACY\'s d changes nothing; a filed timeout mints the layer, costs 20 and 12 s, gives the light back; the pin\'s debt', () => {

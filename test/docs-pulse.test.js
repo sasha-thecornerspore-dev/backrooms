@@ -9,6 +9,7 @@ import { NOT_NOW_LINE, SEARCHED_HINT, TRACE_LINES, searchingHint } from '../src/
 import { FAINT, SEEN_ON, SEEN_OFF, arrivalSummary } from '../src/renderer/compass.js'
 import { EVENTS } from '../src/renderer/events.js'
 import { LOST_LINE } from '../src/renderer/levels.js'
+import { wayMessage } from '../src/renderer/topology.js'
 
 const root = path.resolve(import.meta.dirname, '..')
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8').replace(/\r\n/g, '\n')
@@ -144,6 +145,14 @@ describe('the compass, the first minute and the lines the budget lets go', () =>
     expect(manual).toContain('a few breaths after the floor has had its say, a line arrives: <i>the file has you now.</i>')
     expect(readme.match(/a few seconds after you land/g)).toHaveLength(2)
     for (const [k, d] of Object.entries(docs)) expect(d, k).not.toContain('within your first minute there')
+  })
+  // (review batch five follow-up) the ways table quotes the ring's own line as what climbing out does. It is a return's only, and the
+  // summary had taken its plate; travel says it again on that return, at 3.8 s, the summary let go (pulse-wiring replays it). If the
+  // budget loses it again, take it out of the table and turn this guard round
+  it('the manual\'s ways table quotes the ring\'s own line, which climbing out to the lobby says', () => {
+    const ring = wayMessage({ kind: 'ring', target: 0 }, { mem: { x: 0, y: 0 } })
+    expect(ring).toBe('the carpet remembers you.')
+    expect(manual).toContain(`<tr><td class="k">f · climb out — level 0</td><td data-label="from">3</td><td data-label="what it does">back to the lobby — <i>${ring}</i></td></tr>`)
   })
   it('the manual says the flashlight speaks once a run below the block, the presence keeps quiet while hunted or by an unread page, and a floor plan marks the map', () => {
     expect(manual).toContain('On the four floors below the block it says so once a run; after that only the light changes.')
