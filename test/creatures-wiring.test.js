@@ -67,7 +67,8 @@ describe('game.js: one aiCtx object, mutated per frame, handed to one update', (
     expect(game).toMatch(/if \(!transitioning && creaturesLive && getPref\('damage'\) && invuln <= 0 && th\.dmg > 0 && down\.st !== 'down'\) \{\r?\n\s*player\.hp -= th\.dmg \* rules\.damageMul; invuln = 0\.7; hurt = 1; regenDelay = 6; shake = 1[^\n]*\r?\n\s*showMessage\(th\.dmgKind === 'arc' \? 'the current finds you\.' : 'it has you\.', PRIO\.urgent\)[^\n]*\r?\n\s*lastHitT = playT\r?\n\s*if \(mapOpen\) closeMap\(\); if \(noteOpen\) closeNoteCard\(\)\r?\n\s*cancelCommit\('the bandage slips\.'\)/)
     // the heartbeat block became tension.tick (fight-verbs; pinned in fight-wiring.test.js): the threat record still feeds it
     expect(game).not.toMatch(/const prox = 1 - th\.nearest \/ 12/)
-    expect(game).toMatch(/const tn = tension\.tick\(dt, creaturesLive && !transitioning \? th : null, player\.hp\)/)
+    // (pulse T1-8: dread, behind the same gate, is its fourth argument)
+    expect(game).toMatch(/const tn = tension\.tick\(dt, creaturesLive && !transitioning \? th : null, player\.hp, creaturesLive && !transitioning \? dreadOut\.dread : 0\)/)
     expect(game).not.toMatch(/if \(nearD < 10\) sdelta -= 4/)
     // the threat record's hunt and gaze reach the one sanity step (compose-sanity.js: -3 hunted, -gazeRate under a gaze — I7)
     expect(game).toMatch(/sanCtx\.hunted = th\.hunted; sanCtx\.gaze = th\.gaze; sanCtx\.gazeRate = th\.gazeRate/)

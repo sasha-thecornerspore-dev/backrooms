@@ -5,7 +5,7 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem, KEPT } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, step, pickup, paper, panelsOut, call, STEP_MATERIAL, STEP_GAIN, drawerSlide, whistle, bump } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, step, pickup, paper, panelsOut, call, STEP_MATERIAL, STEP_GAIN, CALL_LEN, drawerSlide, whistle, bump } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
 import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
@@ -13,7 +13,7 @@ import { writeSave } from './save.js'
 import { formatAnchor, driftMeters, pinTag } from './anchor.js'
 import { initTouchControls, isTouchDevice } from './touch.js'
 import { SCRAPS } from './scraps.js'
-import { createEventScheduler, EVENTS, FOOTSTEPS_ECHO } from './events.js'
+import { createEventScheduler, EVENTS, FOOTSTEPS_ECHO, FX_PLAY, eventFx, createBag } from './events.js'
 import { createMessageQueue, PRIO } from './messages.js'
 import { takeKey } from './input.js'
 import { createSolidWorld, createColliderIndex, movePoint, PLAYER_R } from './collide.js'
@@ -31,12 +31,13 @@ import { createFogMap, revealRadius } from './fogmap.js'
 import { visibleWays, SIGHT_LINES, PROX_PIN } from './sightpins.js'
 import { createMapCard } from './mapcard.js'
 import { compassLines, compassText, arrivalSummary, seenLine, pullVisible, pullWobble, lostDue, PULL_REDRAW_S } from './compass.js'
-import { TELL, SEEN_TELL } from './dread.js'
+import { TELL, SEEN_TELL, DREAD_CLOCK, dreadFrom, dreadNear, createTeller } from './dread.js'
+import { createPathField } from './pathfield.js'
 import { PRESENCE_HUSH_S, FIRST_NOTE, createFirstRun, noteRecord } from './firstrun.js'
 import { createPlateBudget, arrivalPlate } from './plates.js'
 import { lineOfSight, inViewCone } from './raycaster.js'
 import { dressPass } from './dress.js'
-import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog, searchingHint } from './containers.js'
+import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog, searchingHint, NOT_NOW_LINE, SEARCHED_HINT } from './containers.js'
 import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
 import { createCard, CARD_KEYS, readText, REDACTED_FOOT } from './papercard.js'
 import { createEvBus } from '../net/evbus.js'
@@ -334,6 +335,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function cancelCommit(msg) { if (commit.active) { commit.cancel(); if (msg) showMessage(msg) } }
   const tension   = createTension()
   let huntMood    = false  // tension's mood last frame: a track cycled mid-chase keeps the hunt's delta
+  // ── dread (dread.js / pathfield.js): what you hear before you see it. The one path field, the teller and the one record dreadFrom
+  //    refills (tension reads its dread), on their own clock; fieldOn is whether the last read flooded the field (a visit clears it,
+  //    so the first read on a floor floods afresh) ──
+  const pathField = createPathField(), teller = createTeller()
+  const dreadOut = { dread: 0, x: 0, y: 0, variant: null, d: -1, los: false }
+  let dreadT = 0, fieldT = -Infinity, fieldOn = false
 
   // ── the numbers station + the counter-claim (the reality-tunneling arc) ──
   let stationIdx  = 0     // which group of the ledger-count the radio reads next
@@ -416,12 +423,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const searchLog = createSearchLog()
   let searchT = 0, searchTarget = null, drawerCostSaid = false, searchHint = ''   // searchHint: what the item hint says while you search
   const unsearchedBox = (p) => CONTAINER_TYPES[p.type] !== undefined && !searchLog.isSearched(p.key)   // hoisted: no closure per frame
+  const searchedBox = (p) => CONTAINER_TYPES[p.type] !== undefined && searchLog.isSearched(p.key)      // (the hint's 'searched.')
   const hauntTrackers = new Map()   // level index -> its tracker (buildLevel picks this floor's)
   let haunts = null
   let dreadQuietT = 0, lightToggles = 0, lightSaid = false   // lightSaid: the flashlight's plain lines are said once a run
   let waterT = 0, waterStepT = 0   // running water: footfall(8) now and every ~3 s while its 12 s timer runs
   // the footsteps event (events.js FOOTSTEPS_ECHO): how many of your steps are still echoed, the echo's countdown, how long you have stood
   let echoSteps = 0, echoT = 0, echoStill = 0
+  // an event that carries its effect as data (fireEvent's last branch): the sound still to repeat, from which side, how many more,
+  // start to start, and the countdown to the next — on the play clock, so a pause holds them and a new floor drops them
+  let fxSound = '', fxPan = 0, fxLeft = 0, fxEvery = 0, fxT = 0
 
   // vending machines dispense once; the keys still spent on this floor at this visit (levelmem.vendedFor: a key expires only after
   // VEND_RESTOCK_S away from the floor, so a machine never refills while you watch). Replaced per buildLevel; noteVended writes mem.
@@ -622,6 +633,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       cfg.exit?.hint,
       ...(anchor ? [`your body remains at ${formatAnchor(anchor)}.`, 'you are very far from your body now.'] : []),
     ].filter(Boolean)
+    murmurBag = createBag(messages.length)   // a bag, not a coin: no line again before the rest, never one twice running (events.js)
 
     // Assign `level` BEFORE warming up subsystems — itemSys reads level.cache
     // through a proxy, so the object must exist first.
@@ -675,6 +687,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function startVisit() {
     floorT0 = playT; floorHinted = false; pullPhase = Math.random() * Math.PI * 2; lostSaid = false; hintHeld = false
     plates.arrive(playT)
+    // the floor's events start over (events.js arrive: more often than not the first comes early, and is heard, not read) and no quiet
+    // a haunt or an event left on the floor before swallows it; the block has none. Dread and its tells begin again with the floor,
+    // and an event's repeats stay behind
+    dreadQuietT = 0
+    if (level.index >= 0 && level.index <= 3) eventSched.arrive(level.index, sanity)
+    teller.reset(); fieldOn = false; dreadOut.dread = 0; fxLeft = 0
   }
   // the nearest record of a list (die: the holes loaded), or null
   function nearestOf(list, x, y) {
@@ -1705,14 +1723,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const msgEl  = document.getElementById('msg')
   let msgTimer = 0
   let msgNext  = base.messageInterval[0] + Math.random() * (base.messageInterval[1] - base.messageInterval[0])
+  let murmurBag = createBag(0)    // the floor's murmurs, drawn each once before any comes again (buildLevel fills it with the floor's)
   const msgQ = createMessageQueue()
   function showMessage(text, prio = PRIO.interaction) { if (text) msgQ.push(String(text), prio) }
   // the plate budget (plates.js) over showMessage, for the arrival and the unprompted kinds only (everything you do, and every warning,
   // calls showMessage itself): -> whether it showed. A line held back waits for the frame's drain when kept, and is let go otherwise —
-  // a murmur, an event's or a haunt's line: its moment passed with its sound
+  // a murmur, an event's or a haunt's line: its moment passed with its sound. No kind is a line not said at all, and never counted:
+  // the arrival's event, heard and not read
   const plates = createPlateBudget()
   function plate(kind, text, prio, keep = true) {
-    if (!text || plates.admit(kind, playT, keep ? text : null) !== 'show') return false
+    if (!kind || !text || plates.admit(kind, playT, keep ? text : null) !== 'show') return false
     showMessage(text, prio)
     return true
   }
@@ -1908,7 +1928,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
   // fireEvent(id, prio, kind): the scheduled events murmur at ambient (dropped unless the line is idle) and are unprompted ('event'): the
   // plate budget may hold the line back, and then lets it go — its sound has played. A drawer's haunt is the result of a search ('search'),
-  // so containers.js fires it at interaction and it always shows (door-slam / crosser keep their interaction priority)
+  // so containers.js fires it at interaction and it always shows (door-slam / crosser keep their interaction priority). No kind (the
+  // arrival's event) plays the effect and says nothing
   function fireEvent(id, prio = PRIO.ambient, kind = 'event') {
     if (id === 'lights-cascade') {
       flickTgt = 0.14; flickTimer = 0.7                        // a wave of dark, held, then the loop recovers it
@@ -1929,6 +1950,17 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     } else if (id === 'crosser') {
       spawnCrosser(); footfall(3); heartbeat(0.7)
       plate(kind, 'far down the hall, something crosses the intersection. the hall is empty when you look again.', PRIO.interaction, false)
+    } else {
+      // an event that carries its effect as data (events.js fx): its sound now from one side, the rest from the same side on the play
+      // clock, each after the one before has sounded (CALL_LEN) and its quiet (gap) has passed; a dip in the light; its line
+      const fx = eventFx(id, evConfig.events)
+      if (fx?.sound) {
+        fxSound = fx.sound; fxPan = (Math.random() < 0.5 ? -1 : 1) * fx.pan
+        fxEvery = (CALL_LEN[fx.sound] ?? 0) + fx.gap; fxLeft = fx.count - 1; fxT = fxEvery
+        call(fxSound, FX_PLAY.gain, fxPan)
+        if (fx.flick) { flickTgt = fx.flick; flickTimer = FX_PLAY.flickS }
+        plate(kind, fx.line, prio, false)
+      }
     }
   }
 
@@ -1936,20 +1968,48 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    lands after SEARCH_HOLD_S in resolveSearch. What a drawer holds is a pure roll of its key and chunk, so a save and a reload agree;
   //    a completed search is remembered by the floor (levelmem) and heard by the things (noise 4, sharedConventions #5). ──
   function startSearch(p, th) {
-    if (th.hunted || th.nearest <= 4) { showMessage('not now.', PRIO.interaction); return }
+    if (th.hunted || th.nearest <= 4) { showMessage(NOT_NOW_LINE, PRIO.interaction); return }
     searchTarget = p; searchT = SEARCH_HOLD_S; searchHint = searchingHint(p.type)
     drawerSlide()                   // the hold is the scrape's to say, and the hint's ('searching the cabinet'): no plate
   }
   const clampSanity = (d) => { sanity = Math.max(0, Math.min(100, sanity + d)) }
+  let opening = null                // the drawer resolveSearch is opening: where its runners squeal
   const searchApi = {
     grant: itemSys.grant, message: showMessage, sanity: clampSanity, fire: (id) => fireEvent(id, PRIO.interaction, 'search'),
     // 'behind-you': the still figure on the trail you just walked; a cold spot when no open trail cell is behind you (hauntEffects -> null)
     behindYou: () => { const fx = hauntEffects('standing-figure', hauntCtx()); if (fx) applyHaunt(fx, 'search'); else fireEvent('cold-spot', PRIO.interaction, 'search') },
+    // the runners squeal (containers.js SQUEAL_LINE): the things hear that drawer; a floor plan pins one thing on your map (traceOne)
+    noise: (n) => level.entitySys.noise(opening.x, opening.y, n), trace: traceOne,
+  }
+  // a floor plan in a drawer (containers.js trace): one thing pinned on your map, and which. What the floor holds comes first — the
+  // nearest landmark or unread page not on your map and not walked by — then the nearest way on not drawn yet (never a stair up);
+  // null when nothing is left, and the plan is read as its own note. It is a hint like a page, so the faint pull is freed. A roll's
+  // work, never the frame's: the lists it reads are fresh copies
+  function traceOne() {
+    const L = level.index, pins = fog.pins(L)
+    let best = null, bestKey = null, bestType = null, bd = Infinity, got = null
+    const consider = (r, key, type) => {
+      if (pins.has(key)) return
+      const d = (r.x - player.x) ** 2 + (r.y - player.y) ** 2
+      if (d < bd) { bd = d; best = r; bestKey = key; bestType = type }
+    }
+    for (const s of level.decor.getSights()) if (!fog.has(L, s.x, s.y)) consider(s, 's:' + s.key, 'sight')
+    for (const sc of level.decor.getScraps()) if (sc.frag >= 0 && !readSet.has(sc.frag) && !fog.has(L, sc.x, sc.y)) consider(sc, 'n:' + sc.key, 'note')
+    if (best) { fog.pinThing(L, bestKey, bestType, best.x, best.y, bestType === 'note' ? false : null); got = 'content' }
+    else {
+      for (const w of level.decor.getExits()) if (w.kind !== 'up') consider(w, w.key, w.kind)
+      for (const w of level.decor.getStairs()) if (w.kind !== 'up') consider(w, w.key, w.kind)
+      if (best) { fog.pinWay(L, best, epochOf(Math.floor(best.x / CHUNK_SIZE), Math.floor(best.y / CHUNK_SIZE))); got = 'way' }
+    }
+    if (got) floorHinted = true
+    return got
   }
   function resolveSearch(p) {
     const [cx, cy] = p.key.split(':')[0].split(',').map(Number)     // keys are `${cx},${cy}:${i}` (scatter) or `${cx},${cy}:d${n}` (dressed)
-    const roll = rollContainer(p.key, cx, cy, level.index, worldSeed | 0, level.cfg.maze?.salt | 0)
-    if (!applyRoll(roll, searchApi)) return                           // an item with no hand free: the key stays unsearched
+    // a roll your hands were too full for is held for this visit and given now, never rolled again (a drawer that had something has it)
+    const roll = searchLog.held(p.key) ?? rollContainer(p.key, cx, cy, level.index, worldSeed | 0, level.cfg.maze?.salt | 0)
+    opening = p
+    if (!applyRoll(roll, searchApi)) { searchLog.hold(p.key, roll); return }   // an item with no hand free: the key stays unsearched
     searchLog.markSearched(p.key); mem.noteSearched(level.index, p.key)
     level.entitySys.noise(p.x, p.y, 4)
     if (level.index >= DRAWER_COST.minLevel) {                        // the deep floors count the drawers you open
@@ -2433,7 +2493,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (msgTimer >= msgNext) {
       msgTimer = 0
       msgNext  = base.messageInterval[0] + Math.random() * (base.messageInterval[1] - base.messageInterval[0])
-      const murmur = level.messages[Math.floor(Math.random() * level.messages.length)]
+      const murmur = level.messages[murmurBag.next()]
       if (!hintHeld || murmur !== cfg.exit?.hint) plate('murmur', murmur, PRIO.ambient, false)
     }
     // a plate the budget held back, once the arrival has settled (plates.js drain: the oldest, one a while; it allocates nothing)
@@ -2444,8 +2504,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     //    (not while a drawer is being searched, and not inside the quiet a haunt or an earlier event left behind)
     const evCanFire = !transitioning && !dialogOpen && !chatOpen && !noteOpen && level.index >= 0 && level.index <= 3 && searchT <= 0 && dreadQuietT <= 0
     const evId = eventSched.tick(dt, { level: level.index, sanity, canFire: evCanFire })
-    if (evId) { fireEvent(evId); dreadQuietT = 12 }
+    // the arrival's event (events.js soundOnly, true only in the frame it fires) is heard, not read: no kind, so no line
+    if (evId) { fireEvent(evId, PRIO.ambient, eventSched.soundOnly ? null : 'event'); dreadQuietT = 12 }
     dreadQuietT = Math.max(0, dreadQuietT - dt)
+    // an event's repeats (fireEvent's data branch): the next from the same side once the last has sounded and its quiet passed
+    if (fxLeft > 0 && (fxT -= dt) <= 0) { fxLeft--; fxT += fxEvery; call(fxSound, FX_PLAY.gain, fxPan) }
     // running water (a haunt): the footfalls keep your pace for as long as its timer runs
     if (waterT > 0) { waterT -= dt; waterStepT -= dt; if (waterStepT <= 0 && waterT > 0) { waterStepT = 3; footfall(8) } }
 
@@ -2543,6 +2606,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.style.opacity = '1'
       } else if (nearNpc) {
         itemHintEl.textContent = 'e · speak to the lost soul'
+        itemHintEl.style.opacity = '1'
+      } else if (!cfg.map && level.decor.nearestProp(player.x, player.y, 1.5, searchedBox)) {
+        itemHintEl.textContent = SEARCHED_HINT                     // a drawer you have opened says so (asked only when nothing else is near)
         itemHintEl.style.opacity = '1'
       } else {
         itemHintEl.style.opacity = '0'
@@ -2703,6 +2769,21 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       }
       if (mapOpen) mapCard.angleDirty(player.angle)
     }
+    // ── dread (dread.js): on its own 4 Hz clock, so it stays live while you stand still. While something that could count stands within
+    //    reach in a straight line, the field is flooded from your cell (only the chunks preload just held; at once when the gate opens,
+    //    then at most every DREAD_CLOCK.build) and dreadFrom reads it: walls between you and a thing make it weigh nothing. Otherwise
+    //    there is no dread and no flood. The teller may then hand back a tell, played from where the thing is. Creatures off, a fade, the
+    //    block: none of it ──
+    if ((dreadT -= dt) <= 0) {
+      dreadT += DREAD_CLOCK.tick
+      const ents = level.entitySys.getEntities()
+      const near = creaturesLive && !transitioning && !cfg.map && dreadNear(ents, player)
+      if (near && (!fieldOn || playT - fieldT >= DREAD_CLOCK.build)) { pathField.build(player.x, player.y, level.cache); fieldT = playT }
+      fieldOn = near
+      dreadFrom(ents, near ? pathField : null, player, dreadOut)
+      const tell = teller.tick(DREAD_CLOCK.tick, dreadOut, player)
+      if (tell) call(tell.sound, tell.gain, tell.pan)
+    }
     // ── the faint pull (compass.js pullVisible): free after this visit's floor time or once the floor has given you a hint; on the
     //    first run's lobby the thread's step decides instead. The one record, refilled. The block keeps its pull as it was (the hold).
     //    The lobby's exit hint, held for the first run, follows the same rule: said the moment the pull frees ──
@@ -2811,9 +2892,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (player.hp <= 0) { player.hp = 0; const d = deathDecision({ mp: !!mpClient, peers: friendsUp(), downSt: down.st, rules, filed, thin, D: driftD(), timeout: false }); if (d === 'down') goDown(); else if (d !== 'wait') die(d) }
 
     // ── tension (tension.js): the hunted state as heartbeat and music. The hunt's report drives it (Level 0 / ∅, a fade and creatures
-    //    off read as calm — null); the heart comes into your ears as the level rises, the floor's own song thickens on 'enter' and takes
+    //    off read as calm — null), and dread (the 4 Hz read above) lifts it to a slow beat before anything hunts you, never into the
+    //    hunt; the heart comes into your ears as the level rises, the floor's own song thickens on 'enter' and takes
     //    its long breath back on 'exit' (setMood patches the live mood in place: no restart, no seam), one 'it is close.' per crossing ──
-    const tn = tension.tick(dt, creaturesLive && !transitioning ? th : null, player.hp)
+    const tn = tension.tick(dt, creaturesLive && !transitioning ? th : null, player.hp, creaturesLive && !transitioning ? dreadOut.dread : 0)
     heartT -= dt
     if (down.st === 'down') { if (heartT <= 0) { heartbeat(DOWN_BEAT.intensity); heartT = DOWN_BEAT.everyS } }   // lying down: slow and faint (the music may still thicken: they ARE on you)
     else if (tn.beat < Infinity && heartT <= 0) { heartbeat(0.5 + tn.level); heartT = tn.beat }

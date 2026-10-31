@@ -161,7 +161,8 @@ describe('game.js: the bandage commit, the quiet water, the sour noise', () => {
 describe('game.js: tension replaces the heartbeat block', () => {
   const block = game.slice(game.indexOf('const tn = tension.tick('), game.indexOf('// ── sanity —'))
   it('the hunt\'s report (null for a fade / creatures off / a floor without creatures) and hp feed it; the heartbeat follows its beat and level', () => {
-    expect(block).toContain('const tn = tension.tick(dt, creaturesLive && !transitioning ? th : null, player.hp)')
+    // (pulse T1-8: and dread, behind the same gate, as its fourth argument; 0 is the old tick exactly)
+    expect(block).toContain('const tn = tension.tick(dt, creaturesLive && !transitioning ? th : null, player.hp, creaturesLive && !transitioning ? dreadOut.dread : 0)')
     // (I9: lying down the beat is the slow, faint one — DOWN_BEAT — and tension's otherwise, its line as it was)
     expect(block).toMatch(/heartT -= dt\r?\n\s*if \(down\.st === 'down'\) \{ if \(heartT <= 0\) \{ heartbeat\(DOWN_BEAT\.intensity\); heartT = DOWN_BEAT\.everyS \} \}[^\n]*\r?\n\s*else if \(tn\.beat < Infinity && heartT <= 0\) \{ heartbeat\(0\.5 \+ tn\.level\); heartT = tn\.beat \}/)
     expect(game).not.toMatch(/heartT = 1\.15 - prox \* 0\.8/)

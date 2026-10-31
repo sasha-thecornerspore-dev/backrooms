@@ -63,10 +63,10 @@ describe('game.js: the search (containers.js)', () => {
     for (let i = 1; i < order.length; i++) expect(order[i], order.join()).toBeGreaterThan(order[i - 1])
     expect(game).toMatch(/\} else if \(boxFirst\) \{\r?\n\s*itemHintEl\.textContent = `f · search \$\{CONTAINER_TYPES\[nearBox\.type\]\}`/)
   })
-  it('F starts the search before the way and after the machine; it refuses while hunted or with a thing within 4 ("not now."), else holds SEARCH_HOLD_S with the scrape', () => {
+  it('F starts the search before the way and after the machine; it refuses while hunted or with a thing within 4 ("not now. something is close."), else holds SEARCH_HOLD_S with the scrape', () => {
     expect(game).toMatch(/dispenseFromMachine\(nearMachine\)\r?\n\s*\} else if \(boxFirst\) \{\r?\n\s*startSearch\(nearBox, thA\)[^\n]*\r?\n\s*\} else if \(nearExit\) \{\r?\n\s*travel\(nearExit\)/)
-    // (pulse T1-4: 'you rummage.' is no plate any more — the hint says what you search while the hold runs)
-    expect(game).toMatch(/function startSearch\(p, th\) \{\r?\n\s*if \(th\.hunted \|\| th\.nearest <= 4\) \{ showMessage\('not now\.', PRIO\.interaction\); return \}\r?\n\s*searchTarget = p; searchT = SEARCH_HOLD_S; searchHint = searchingHint\(p\.type\)\r?\n\s*drawerSlide\(\)/)
+    // (pulse T1-4: 'you rummage.' is no plate any more — the hint says what you search while the hold runs; T1-9: the refusal says why)
+    expect(game).toMatch(/function startSearch\(p, th\) \{\r?\n\s*if \(th\.hunted \|\| th\.nearest <= 4\) \{ showMessage\(NOT_NOW_LINE, PRIO\.interaction\); return \}\r?\n\s*searchTarget = p; searchT = SEARCH_HOLD_S; searchHint = searchingHint\(p\.type\)\r?\n\s*drawerSlide\(\)/)
   })
   it('any step leaves the drawer; the hold ticks down and resolves once', () => {
     expect(game).toMatch(/if \(searchT > 0 && stepped\) \{ searchT = 0; searchTarget = null; showMessage\('you leave the drawer\.', PRIO\.interaction\) \}\r?\n\s*if \(searchT > 0\) \{ searchT -= dt; if \(searchT <= 0 && searchTarget\) \{ resolveSearch\(searchTarget\); searchTarget = null \} \}/)
@@ -74,8 +74,9 @@ describe('game.js: the search (containers.js)', () => {
   })
   it('resolveSearch rolls on the key\'s chunk with the world seed and the floor\'s salt, remembers the key only on success, makes a noise of 4 and charges the deep floors once-said', () => {
     expect(game).toMatch(/const \[cx, cy\] = p\.key\.split\(':'\)\[0\]\.split\(','\)\.map\(Number\)/)
-    expect(game).toMatch(/const roll = rollContainer\(p\.key, cx, cy, level\.index, worldSeed \| 0, level\.cfg\.maze\?\.salt \| 0\)/)
-    expect(game).toMatch(/if \(!applyRoll\(roll, searchApi\)\) return/)
+    // (pulse T1-9: a roll your hands were too full for is held for the visit and replayed before any new roll)
+    expect(game).toMatch(/const roll = searchLog\.held\(p\.key\) \?\? rollContainer\(p\.key, cx, cy, level\.index, worldSeed \| 0, level\.cfg\.maze\?\.salt \| 0\)/)
+    expect(game).toMatch(/if \(!applyRoll\(roll, searchApi\)\) \{ searchLog\.hold\(p\.key, roll\); return \}/)
     expect(game).toMatch(/searchLog\.markSearched\(p\.key\); mem\.noteSearched\(level\.index, p\.key\)\r?\n\s*level\.entitySys\.noise\(p\.x, p\.y, 4\)/)
     expect(game).toMatch(/if \(level\.index >= DRAWER_COST\.minLevel\) \{[^\n]*\r?\n\s*sanity = Math\.max\(0, sanity - DRAWER_COST\.sanity\)\r?\n\s*if \(!drawerCostSaid\) \{ drawerCostSaid = true; showMessage\(DRAWER_COST\.line, PRIO\.discovery\) \}/)
     expect(game).toMatch(/if \(roll\.kind === 'item'\) renderHotbar\(\)/)
@@ -96,15 +97,15 @@ describe('game.js: the search (containers.js)', () => {
     expect(body).not.toContain(', PRIO.ambient)')                                     // no line in fireEvent pins ambient any more
     expect(body).toContain("plate(kind, 'somewhere behind you, a door slams shut.', PRIO.interaction, false)")
     expect(body).toContain("plate(kind, 'far down the hall, something crosses the intersection. the hall is empty when you look again.', PRIO.interaction, false)")
-    // the scheduled path still murmurs: no priority passed, so the default (ambient) applies, and no kind: an unprompted 'event'
-    expect(game).toMatch(/if \(evId\) \{ fireEvent\(evId\); dreadQuietT = 12 \}/)
+    // the scheduled path still murmurs: at ambient, an unprompted 'event' (pulse T1-5: no kind for the arrival's, heard and not read)
+    expect(game).toMatch(/if \(evId\) \{ fireEvent\(evId, PRIO\.ambient, eventSched\.soundOnly \? null : 'event'\); dreadQuietT = 12 \}/)
   })
 })
 
 describe('game.js: the hauntings (haunts.js) and the shared quiet', () => {
   it('evCanFire gains the search and the quiet; a scheduled event sets 12 s, a haunt 20 s; the quiet decays every frame', () => {
     expect(game).toMatch(/const evCanFire = !transitioning && !dialogOpen && !chatOpen && !noteOpen && level\.index >= 0 && level\.index <= 3 && searchT <= 0 && dreadQuietT <= 0/)
-    expect(game).toMatch(/if \(evId\) \{ fireEvent\(evId\); dreadQuietT = 12 \}\r?\n\s*dreadQuietT = Math\.max\(0, dreadQuietT - dt\)/)
+    expect(game).toMatch(/if \(evId\) \{ fireEvent\(evId, PRIO\.ambient, eventSched\.soundOnly \? null : 'event'\); dreadQuietT = 12 \}\r?\n\s*dreadQuietT = Math\.max\(0, dreadQuietT - dt\)/)
     once('dreadQuietT = 20')
   })
   it('the calm gate and the check: nothing hunting, nothing within 14, no hit for 20 s, the map folded, not the block; a boolean, decor\'s reused list', () => {

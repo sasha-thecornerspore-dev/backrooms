@@ -10,6 +10,8 @@
 // numbers copied onto the ONE fifteen-key aiCtx before the things read it, the one sanity step after them and the stand's tick last —
 // for a filed player (anchored, thin over it, filed under extension), so the rule blocks run their real code, not LEGACY's constants.
 // Each composer hands back its one reused record every frame, and the aiCtx never gains a key.
+// The pulse's dread rides it too (S6a w3): read on its 4 Hz clock with the twenty always in reach, so the path field is flooded at
+// its most (twice a second) into the one record dreadFrom refills.
 import { describe, it, expect } from 'vitest'
 import { DEFAULT_CONFIG, CHUNK_SIZE, createChunkCache, createGridReader } from '../src/renderer/world.js'
 import { levelConfig } from '../src/renderer/levels.js'
@@ -33,6 +35,8 @@ import { createCompany } from '../src/renderer/rollcall.js'
 import { rulesFor } from '../src/renderer/origin-rules.js'
 import { statusMods, depthOf } from '../src/renderer/status.js'
 import { closingOverlay, standConditions, standTick } from '../src/renderer/closings.js'
+import { createPathField } from '../src/renderer/pathfield.js'
+import { DREAD_CLOCK, dreadFrom, dreadNear, createTeller } from '../src/renderer/dread.js'
 
 const FRAMES = 600, DT = 1 / 60, CREATURES = 20, BUDGET_MS = 150
 const SPEED = 0.05                      // game.js: const SPEED = 0.05; sp = SPEED * dt * 60 * mult
@@ -74,6 +78,8 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
   const compassState = { player, known: null, fallback: null, arrived: null, stale: (p) => fog.isStale(1, p.chunkKey, epochOf), pull: false, wobble: 0, skip: null }
   const pullAsk = { floorT: 0, hinted: false, fresh: false, step: 0 }   // game.js's one record for the faint pull's rule
   const compassOut = [], seenWays = [], seenSights = [], entEvents = []
+  const pathField = createPathField(), teller = createTeller({ rng: () => 0.5 })   // game.js's one field, teller and record
+  const dreadOut = { dread: 0, x: 0, y: 0, variant: null, d: -1, los: false }
   // game.js's aiCtx: the eleven the things always read, then the file's four trailing at their defaults (perceptionFor writes them per frame)
   const aiCtx = { flashlight: true, sprinting: false, dark: !cfg.lights, fog: cfg.fogDistance, radioOn: false, lures: [], t: 0, hf: HF, playerAngle: 0, player, damage: cfg.entities?.damage ?? 16, sightMul: 1, hidden: false, loseTrackMul: 1, noiseMul: 1 }
   // the file, as game.js holds it: the rules (anchored, thin over it), the status's mods and the closing's overlay, the stillness clocks on
@@ -97,7 +103,8 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
 
   // the walker's state across runs: the play clock, the cell / compass memos, the last hit, the identities seen so far
   const S = { playT: 0, lureT: 0, stepT: 0, hits: -Infinity, frame: 0, lastCellIx: NaN, lastCellIy: NaN, lastCompassAngle: -Infinity, lastWayCount: -1, lastCompassText: '', lastCompassT: -Infinity, pcx: NaN, pcy: NaN, threat: null, report: null, sameThreat: true, sameReport: true, maxEntities: 0, crossings: 0,
-    sanity: 100, standHeld: 0, pf: null, san: null, stand: null, samePf: true, sameSan: true, sameStand: true, hiddenFrames: 0 }
+    sanity: 100, standHeld: 0, pf: null, san: null, stand: null, samePf: true, sameSan: true, sameStand: true, hiddenFrames: 0,
+    dreadT: 0, fieldT: -Infinity, fieldOn: false, builds: 0, reads: 0, sameDread: true }
 
   // ONE frame of game.js's loop below the renderer, in its order
   function frame(dt) {
@@ -145,6 +152,18 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
       const sc = decor.nearestScrap(player.x, player.y, PROX_PIN); if (sc) fog.pinThing(1, sc.key, 'note', sc.x, sc.y, false)
       const np = decor.nearestNpc(player.x, player.y, PROX_PIN); if (np) fog.pinThing(1, np.key, 'npc', np.x, np.y)
       fog.checkStale(1, player, nearestWayFn, epochOf)
+    }
+    // ── dread on its 4 Hz clock: the field flooded from the player's cell (the chunks preload just held) at most every
+    //    DREAD_CLOCK.build while something stands within reach in a straight line, read into the one record, the teller asked ──
+    if ((S.dreadT -= dt) <= 0) {
+      S.dreadT += DREAD_CLOCK.tick
+      const ents = entitySys.getEntities()
+      const near = dreadNear(ents, player)
+      if (near && (!S.fieldOn || S.playT - S.fieldT >= DREAD_CLOCK.build)) { pathField.build(player.x, player.y, cache); S.fieldT = S.playT; S.builds++ }
+      S.fieldOn = near
+      if (dreadFrom(ents, near ? pathField : null, player, dreadOut) !== dreadOut) S.sameDread = false
+      S.reads++
+      teller.tick(DREAD_CLOCK.tick, dreadOut, player)
     }
     // ── the faint pull's rule from the one refilled record (the visit began at 0, no hint, no first run below the lobby); the compass:
     //    recomputed on a cell / heading / known-ways / pull change, and on the slow clock for the pull's lean ──
@@ -226,6 +245,10 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
     expect(S.samePf, 'perceptionFor returns the one record every frame').toBe(true)
     expect(S.sameSan, 'sanityStep returns the one record every frame').toBe(true)
     expect(S.sameStand, 'standTick returns the one record every frame').toBe(true)
+    expect(S.sameDread, 'dreadFrom refills the one record every read').toBe(true)
+    // 4 Hz reads over both runs; the field flooded at most twice a second, and flooded at all (the twenty are in reach)
+    expect(Math.abs(S.reads - (2 * FRAMES * DT) / DREAD_CLOCK.tick)).toBeLessThanOrEqual(1)
+    expect(S.builds).toBeGreaterThan(0); expect(S.builds).toBeLessThanOrEqual((2 * FRAMES * DT) / DREAD_CLOCK.build + 1)
     expect(Object.keys(aiCtx), 'the hot path never adds a key to the aiCtx').toEqual([...AI_CTX_KEYS])
     for (const k of ['sightMul', 'loseTrackMul', 'noiseMul']) expect(Number.isFinite(aiCtx[k]), k).toBe(true)
     expect(typeof aiCtx.hidden).toBe('boolean')

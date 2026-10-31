@@ -9,6 +9,7 @@
 // DREAD_R                                  the reach, in path cells
 // DREAD_W, TELL                            each kind's weight, each kind's sound (audio.call names)
 // SEEN_TELL                                the gain and the widest pan of the tell game.js plays for a sighting off your screen
+// DREAD_CLOCK                              the 4 Hz read and the at-most-2 Hz flood game.js runs all of this on
 // dreadFrom(entities, field, player, out) -> out
 //   out = { dread 0..1, x, y, variant, d, los }: the sum over everything that counts within DREAD_R, and the nearest of it
 //   (d -1 and variant null when nothing counts). field null (none built) is no dread. Reused: read it, do not keep it
@@ -34,6 +35,9 @@ const SCRAPE = 0.2                // a chair moves somewhere instead
 const PAN = 0.85
 // a thing that has seen you from off your screen: its tell, from where it is (game.js, on the hunt's 'seen')
 export const SEEN_TELL = Object.freeze({ gain: 0.6, pan: PAN })
+// game.js's clock for all of it: read every `tick` s (4 Hz, so it stays live while you stand still), the field flooded at most every
+// `build` s while dreadNear holds
+export const DREAD_CLOCK = Object.freeze({ tick: 0.25, build: 0.5 })
 
 // still arriving, reeling (hunt.deriveState's stagger) or on your heels: none of these is dread
 function counts(e) {

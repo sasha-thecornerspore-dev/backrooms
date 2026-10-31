@@ -1046,7 +1046,8 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     expect(loop).toContain("else if (player.hp < player.maxHp && down.st !== 'down') player.hp = Math.min(player.maxHp, player.hp + 3.5 * dt)")
     expect(travelBody).toMatch(/^function travel\(way\) \{\r?\n\s*if \(transitioning \|\| down\.st === 'down'\) return/)
     expect(travelBody).toMatch(/if \(closing && closing\.key === way\.key && playT < closing\.until\) return/)
-    expect(loop).toContain('const tn = tension.tick(dt, creaturesLive && !transitioning ? th : null, player.hp)')
+    // (pulse T1-8: dread, behind the same gate, is tension's fourth argument; 0 is the old tick exactly)
+    expect(loop).toContain('const tn = tension.tick(dt, creaturesLive && !transitioning ? th : null, player.hp, creaturesLive && !transitioning ? dreadOut.dread : 0)')
     expect(loop).toMatch(/if \(down\.st === 'down'\) \{ if \(heartT <= 0\) \{ heartbeat\(DOWN_BEAT\.intensity\); heartT = DOWN_BEAT\.everyS \} \}/)
     expect(DOWN_BEAT).toEqual({ intensity: 0.3, everyS: 2 })
     // Space while kneeling is your hands on them (the latch was dropped by modal), after the charger and its recoil

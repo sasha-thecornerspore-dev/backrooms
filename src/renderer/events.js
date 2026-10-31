@@ -45,6 +45,9 @@ export const ARRIVAL = Object.freeze({ p: 0.55, min: 16, max: 60 })
 // the footsteps event keeps your pace for real: your next `steps` steps are each echoed `delay` s behind, until `still` s without one
 export const FOOTSTEPS_ECHO = Object.freeze({ steps: 8, delay: 0.14, still: 0.8 })
 
+// a data event as game.js plays it (fireEvent's generic branch): its sound at `gain`, and a `flick` holds the light down `flickS` s
+export const FX_PLAY = Object.freeze({ gain: 0.5, flickS: 0.6 })
+
 // A shuffle bag over `items`, never handing out the same item twice running, a refill included (when only that item is left
 // in the bag, the rest is dropped and the bag refilled: a lone item is the one case that must repeat). swap(items) changes
 // what goes in at the next refill and empties the bag, keeping the last item so the swap cannot repeat it either.

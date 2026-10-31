@@ -785,6 +785,9 @@ const CALLS = {
   scrape(d, t, k) { scrapeInto(d, t, cap(0.07 * k)) },
 }
 export const CALL_SOUNDS = Object.freeze(Object.keys(CALLS))
+// how long a call sounds before its quiet can begin, for a caller that repeats one (game.js fireEvent: an event's fx.gap is the quiet
+// between): the bell's 2 s and the receiver's 2 s of tone; the rest are short enough to read as over at once
+export const CALL_LEN = Object.freeze({ ring: 2, offhook: 2 })
 
 // Play a call at `gain` 0..1 (soundscape.js's falloff, dread.js's tell gain), panned -1..1 toward where it comes from. An unknown
 // sound, or no gain to give it, plays nothing.
