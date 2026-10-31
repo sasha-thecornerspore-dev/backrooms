@@ -116,7 +116,9 @@ for (const index of FLOORS) {
       const st = r.events.filter((e) => e.kind === 'creature-sighted' || e.kind === 'creature-again').map((e) => e.t)
       const cues = r.events.filter((e) => TELL_KINDS.has(e.kind)).map((e) => e.t)
       const tellsOnly = r.events.filter((e) => e.kind === 'tell' || e.kind === 'tell:seen').map((e) => e.t)
-      sightings.push(st.length); cued.push([preceded(st, cues), preceded(st, tellsOnly)])
+      // the first 5 s of a visit: nothing can come 5 s before those, so they are also counted apart
+      const late = st.filter((t) => t >= 5)
+      sightings.push(st.length); cued.push([preceded(st, cues), preceded(st, tellsOnly), late.length, preceded(late, cues)])
     }
     lv[mode] = {
       walks: rs.length, secondsTotal: r1(totalS), cellsWalked: dist(rs.map((r) => r.cellsWalked)), distinctCells: dist(rs.map((r) => r.distinctCells)),
@@ -141,6 +143,7 @@ for (const index of FLOORS) {
         happeningGapP90: tierStats.A.gapSeconds.p90, happeningGapP50: tierStats.A.gapSeconds.p50,
         linesFirst45s: dist(first45),
         sightings: sightings.reduce((s, v) => s + v, 0), sightingsCued: cued.reduce((s, v) => s + v[0], 0), sightingsTold: cued.reduce((s, v) => s + v[1], 0),
+        sightingsAfter5s: cued.reduce((s, v) => s + v[2], 0), sightingsAfter5sCued: cued.reduce((s, v) => s + v[3], 0),
         heartbeats: beats.length, heartbeatsDread: beats.filter(dreadBeat).length,
         heartbeatsFar: far.length, heartbeatsFarDread: far.filter(dreadBeat).length,
         // a dread beat no creature is within 24 path cells of: the field saw one (dr > 0) the walker's own BFS does not, or the beat came

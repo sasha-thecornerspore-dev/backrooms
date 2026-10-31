@@ -47,7 +47,12 @@ const ROWS = [
     },
     met: ({ W }) => [1, 2, 3].every((i) => W.drawers[i].sweep.item >= 8 && W.drawers[i].sweep.item <= 10 && W.drawers[i].sweep.empty <= 35) },
   { metric: 'L1–L2 sightings preceded by a tell or the heartbeat 5–25 s earlier (walker, both walkers)', target: '≥ 80%',
-    get: ({ W }) => { if (!deep(W)) return '—'; const c = sum(W, 1, 'sightingsCued') + sum(W, 2, 'sightingsCued'), n = sum(W, 1, 'sightings') + sum(W, 2, 'sightings'); return `${pc(c / n)} (${c}/${n})` },
+    get: ({ W }) => {
+      if (!deep(W)) return '—'
+      const c = sum(W, 1, 'sightingsCued') + sum(W, 2, 'sightingsCued'), n = sum(W, 1, 'sightings') + sum(W, 2, 'sightings')
+      const c5 = sum(W, 1, 'sightingsAfter5sCued') + sum(W, 2, 'sightingsAfter5sCued'), n5 = sum(W, 1, 'sightingsAfter5s') + sum(W, 2, 'sightingsAfter5s')
+      return `${pc(c / n)} (${c}/${n}); ${pc(c5 / n5)} (${c5}/${n5}) leaving out a visit's first 5 s`
+    },
     met: ({ W }) => deep(W) && (sum(W, 1, 'sightingsCued') + sum(W, 2, 'sightingsCued')) / (sum(W, 1, 'sightings') + sum(W, 2, 'sightings')) >= 0.8 },
   { metric: 'heartbeats with no creature within 24 path cells (walker, dread\'s own beats, L1 · L2 · L3; of all dread beats)', target: '0',
     get: ({ W }) => (deep(W) ? [1, 2, 3].map((i) => sum(W, i, 'heartbeatsFarDread')).join(' · ') + ` (of ${[1, 2, 3].reduce((s, i) => s + sum(W, i, 'heartbeatsDread'), 0)})` : '—'),
