@@ -27,7 +27,7 @@ const inFront = (over = {}) => ent(11.5, 10, 'shade', { ai: 'hunt', lastSeenX: 1
 describe('createEntitySystem shape', () => {
   it('exposes the hunt-path API and returns the one threat record from update', () => {
     const sys = createEntitySystem(quiet, () => false)
-    for (const k of ['update', 'getEntities', 'ward', 'flash', 'noise', 'snapshotChasers', 'inject', 'takeWakeEvent', 'drainEvents', 'getThreat', 'getDispelled', 'restoreDispelled']) expect(typeof sys[k], k).toBe('function')
+    for (const k of ['update', 'getEntities', 'ward', 'flash', 'noise', 'snapshotChasers', 'inject', 'takeWakeEvent', 'drainEvents', 'getThreat', 'getDispelled', 'restoreDispelled', 'isSpawnChunk']) expect(typeof sys[k], k).toBe('function')
     const th = sys.getThreat()
     const player = { x: 10, y: 10, angle: 0 }
     expect(sys.update(DT, player, 0, 0, mkCtx(player))).toBe(th)
