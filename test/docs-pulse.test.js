@@ -6,13 +6,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { LEVELS } from '../src/renderer/levels.js'
 import { NOT_NOW_LINE, SEARCHED_HINT, TRACE_LINES, searchingHint } from '../src/renderer/containers.js'
-import { FAINT, SEEN_ON, SEEN_OFF } from '../src/renderer/compass.js'
+import { FAINT, SEEN_ON, SEEN_OFF, arrivalSummary } from '../src/renderer/compass.js'
 import { EVENTS } from '../src/renderer/events.js'
+import { LOST_LINE } from '../src/renderer/levels.js'
 
 const root = path.resolve(import.meta.dirname, '..')
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8').replace(/\r\n/g, '\n')
 const readme = read('README.md'), manual = read('docs/manual.html'), index = read('src/renderer/index.html')
 const docs = { readme, manual }
+const pkg = JSON.parse(read('package.json'))
 
 describe('the lobby\'s arrival line', () => {
   it('the manual quotes the lobby\'s sub-line as the game shows it, without the old "no exit."', () => {
@@ -83,5 +85,84 @@ describe('the ambience setting', () => {
     expect(hint).not.toMatch(/[0-9!]/)
     expect(manual).toMatch(/<td class="k">Ambience<\/td>.*<td data-label="notes">[^<]*your own steps[^<]*<\/td>/)
     expect(readme).toMatch(/^\| ambience \| [^\n]*your own steps[^\n]*\|$/m)
+  })
+})
+
+// ── release prep: the rest of what the docs said that 2.0.4 no longer does ─────────────────────────────────────────────────────
+describe('the things on the floors, and hearing them first', () => {
+  const floorName = (i) => LEVELS[i].name.split(' — ')[1]
+  it('every creature card names exactly the floors it is laid out on, in order, and whether it hunts or wanders (the watcher roams the pipes)', () => {
+    const where = {}
+    for (let i = 1; i <= 3; i++) {
+      const e = LEVELS[i].config.entities
+      for (const v of e.stalkerVariants || []) (where[v] ||= { floors: [], role: 'hunts' }).floors.push(floorName(i))
+      for (const v of e.wandererVariants || []) (where[v] ||= { floors: [], role: 'wanders' }).floors.push(floorName(i))
+    }
+    expect(where.watcher.floors).toContain('pipe dreams')
+    for (const [v, { floors, role }] of Object.entries(where)) {
+      const m = manual.match(new RegExp(`<div class="name">${v}</div><div class="where">([^<]*)</div>`))
+      expect(m, v).not.toBeNull()
+      expect(m[1].split(' · '), v).toEqual([...floors, role])
+    }
+  })
+  it('both docs say a thing near you that has not found you yet is heard, and brings a slow heartbeat, before anything hunts you', () => {
+    expect(manual).toMatch(/<h3>Your heart<\/h3>\n  <p>[^\n]*slow[^\n]*has not found you yet/)
+    expect(manual).toMatch(/<li><b>You hear them first\.<\/b>[^\n]*its own sound[^\n]*from where it is/)
+    expect(readme).not.toContain('when your heart comes into your ears, something has you.')
+    expect(readme).toMatch(/when your heart comes into your ears, something is near: slow, it has not found you yet/)
+    expect(readme).toMatch(/\*\*listen to your heart\.\*\* [^\n]*has not found you yet[^\n]*its own sound[^\n]*slowly/)
+  })
+  it('quiet water is told by what the things hear, now that you hear your own steps (they do not go quieter to you)', () => {
+    expect(manual).not.toContain('your footsteps are softer for a while')
+    expect(manual).not.toContain('and softens your footsteps.')
+    expect(readme).not.toContain('softens your steps for a while')
+    expect(readme).not.toContain('your steps go soft for a while')
+    expect(manual).toContain('the things hear your footsteps less for a while')
+  })
+})
+
+describe('the compass, the first minute and the lines the budget lets go', () => {
+  it('the faint pull waits longer only on the lobby of a solo run without a pin, and the block keeps its distance', () => {
+    expect(manual).not.toContain('longer on your first run')
+    expect(manual).toContain('On the lobby of a solo run without a pin it waits longer')
+    expect(manual).toContain('On the block it points at the gap at once, with its distance.')
+    expect(manual).toContain('A presence waits close to where you arrive, and on a solo run without a pin someone has left a note a little way off.')
+  })
+  it('a floor speaks its own line the first time and its name after, and says little while you arrive', () => {
+    expect(manual).not.toContain('and the floor below says its name.')
+    expect(manual).toContain('the first time, a line of its own; after that, its name')
+    expect(manual).toContain('When you reach a floor it says little for the first while')
+  })
+  // the way line takes an arrival's second plate on a floor you come back to, and the summary after it is let go (plates.js, game.js
+  // travel keep=false); the filing line waits out the arrival window. If the game says either on time again, put it back in the docs and
+  // drop this guard
+  it('no doc promises the summary on coming back, or the filing line a few seconds in', () => {
+    const summary = arrivalSummary({ down: 0 }, 2)
+    for (const [k, d] of Object.entries(docs)) expect(d, k).not.toContain(summary)
+    expect(manual).not.toContain('a few breaths after the floor says its name')
+    expect(readme).not.toContain('a few seconds after you land')
+  })
+  it('the manual says the flashlight speaks once a run below the block, the presence keeps quiet while hunted or by an unread page, and a floor plan marks the map', () => {
+    expect(manual).toContain('On the four floors below the block it says so once a run; after that only the light changes.')
+    expect(manual).toContain('It keeps quiet while something is hunting you, and while an unread page lies within reach')
+    expect(manual).toContain('A floor plan from a <a href="#drawers">drawer</a> can mark one thing you have not seen yet.')
+  })
+})
+
+describe('the release notes for this version', () => {
+  const file = `docs/release-notes/v${pkg.version}.md`
+  it('exist for the version in package.json, at 2.0.4, marked a draft for the owner', () => {
+    expect(pkg.version).toBe('2.0.4')
+    expect(fs.existsSync(path.join(root, file))).toBe(true)
+    expect(read(file)).toMatch(/^<!--[^]*DRAFT[^]*-->\n/)
+  })
+  it('quote the game\'s lines as the game says them, and say what a mixed room and an old save see', () => {
+    const notes = read(file)
+    for (const s of [FAINT, SEEN_OFF, SEARCHED_HINT, NOT_NOW_LINE, LOST_LINE, searchingHint('cabinet')]) expect(notes, s).toContain(`*${s}*`)
+    expect(notes).toContain('## the backrooms 2.0.4')
+    expect(notes).toContain('### update together')
+    expect(notes).toMatch(/2\.0\.3 copy and a 2\.0\.4 copy in the same room/)
+    expect(notes).toContain('nothing new goes over the wire')
+    expect(notes).toMatch(/saved on 2\.0\.3[^\n]*levels one to three[^\n]*somewhere new/)
   })
 })

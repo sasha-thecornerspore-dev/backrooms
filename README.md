@@ -123,8 +123,8 @@ what follows is what is known. the rest is in the pages m. left lying around.
 1. **the title.** type a name, or leave it blank — the office writes down what you give it. above the buttons, the anchor field takes a place if you want one ([anchors](#anchors--no-clip-from-a-real-place)); leave it empty and the maze is nobody's. **SOLO ▶** starts a fresh run in the lobby. **CONTINUE ▶** appears once a solo run is saved; starting SOLO (or the front door) over it replaces it, and there is no second slot. the gear ⚙ opens settings — creatures, damage and flicker can all be switched off there.
 2. **grab the mouse.** click the view. the mouse turns you left and right; there is no looking up or down. a page, the chat or the wish box lets the mouse go — click again to take it back. while it is loose, **←** and **→** turn you.
 3. **the lobby.** walk with **wasd**; **shift** runs. safe; nothing hunts here. learn it. pick things up (**f**), draw from a vending machine (**f**), search a cabinet (**f**, then keep still), read a page lying on the floor (**e**), open the map (**tab**). the plate above your items always says what **f** and **e** will do where you stand. before long, `• • •  e · speak  • • •` will appear over your items though there is nothing to see. that is a presence. [say something to it](#the-wish-system).
-4. **the way down.** a torn doorway with a cold blue rim and a beam that carries through the fog. the compass under your gauges points at the nearest one you have seen. **f** takes it — and this is when the file writes you in. a line, a few seconds after you land, says how it has you.
-5. **level 1.** things live here now. read the lines that fade in mid-screen: the building talks, and the important lines push in front. when your heart comes into your ears, something has you. **space** pushes it back. a still body in the dark is hard to see. and if it catches you anyway, you wake a floor up, a little lighter.
+4. **the way down.** a torn doorway with a cold blue rim and a beam that carries through the fog. the compass under your gauges points at the nearest one you have seen. **f** takes it — and this is when the file writes you in. a line, within your first minute there, says how it has you.
+5. **level 1.** things live here now. read the lines that fade in mid-screen: the building talks, and the important lines push in front. when your heart comes into your ears, something is near: slow, it has not found you yet; quick, it has. **space** pushes it back. a still body in the dark is hard to see. and if it catches you anyway, you wake a floor up, a little lighter.
 6. **the front door, when you mean it.** the line under the title's buttons starts a solo run on **the block**, level ∅ — the one real place in the game. find the form near the stoops and press **e** to read it. then find the gap: `f · no-clip out — level 0`. press **f**. nothing leads back up to the block.
 
 **the game never pauses.** settings, the map, a page, the chat and the wish box all leave the world running behind them, and the things keep moving. there is no quit menu: close the window. a solo run saves as it goes.
@@ -183,7 +183,7 @@ descend and the world changes around you: the palette, the fog, the clutter, the
 
 **one building.** the floors are stacked: fall through a hole and you land a few rooms over from where you fell, on the floor below. under some holes there is a **stairwell up**, back to the floor you fell from. the **lift** on level 1 *only goes one place*, and it does not come back for you. the humming door at the bottom climbs out to the lobby, where you last stood in it. the way you just came through is *still closing* for a moment after you arrive. and anything that was hunting you when you went down may come after you: *it followed you down.*
 
-**the floors remember.** what you took stays taken, the drawers you searched stay searched, what you set down lies where you left it, and an emptied machine clunks again only after you have been away a while — never while you watch. *the machine has been refilled. by whom.* come back and the floor says so: *you have been on this floor before.*
+**the floors remember.** what you took stays taken, the drawers you searched stay searched, what you set down lies where you left it, and an emptied machine clunks again only after you have been away a while — never while you watch. *the machine has been refilled. by whom.*
 
 **when something finally has you,** you do not wake where you fell in: you wake a floor above, beside the hole you fell through, lighter — whatever was in your hand is gone, your body's ceiling a little lower — the hp bar never quite fills again — the trays empty until you move on. on the lobby you wake where you are. every floor you reach for the first time gives a little of the ceiling back. online, with a friend on your floor, you may go [down instead](#multiplayer).
 
@@ -247,13 +247,13 @@ the rest of the fight is what you carry and where you stand:
 
 - **the flash.** a polaroid blinds whatever is in front of you for a moment. some things turn and run from it.
 - **the lure.** turn a radio on (**q**), then set it down (**x**). it keeps talking, and the things go to it instead of you.
-- **quiet water.** sweet almond water softens your steps for a while.
+- **quiet water.** sweet almond water makes your steps harder for the things to hear, for a while.
 - **the line.** corners, doors and furnished rooms break sight. a cornered thing turns on you: *it has nowhere to go. it turns.*
 - **stillness.** once the file has you, stand still and dark and silent, and you are hard to find.
 - **your light.** some things stop for it. some things hunt by it.
 - **a still moment.** where things hunt, a bandage takes a moment of standing still to wrap. a hit makes it slip — and you keep the bandage.
 
-**listen to your heart.** while something hunts you, your heartbeat comes into your ears, faster the closer it gets, and the floor's own song thickens around it. *it is close.* when you lose it, the music takes a long breath before it sounds like itself again.
+**listen to your heart.** a thing near you through the halls that has not found you yet makes its own sound now and then, from where it is, and close by your heart starts to beat, slowly. while something hunts you, your heartbeat comes into your ears, faster the closer it gets, and the floor's own song thickens around it. *it is close.* when you lose it, the music takes a long breath before it sounds like itself again.
 
 if you want the dread and not the danger, settings ⚙ → **can take damage** off.
 
@@ -265,7 +265,7 @@ the backrooms restocks itself. things are left lying around; walk close and pres
 
 | item | use (q) |
 |------|---------|
-| almond water | the main mend: your legs, your mind, the lights hold steady and your steps go soft for a while. from the pipes down, some of what the machines and drawers give is sour, and sour water takes instead of gives. *don't trust the almond water on the deeper floors.* |
+| almond water | the main mend: your legs, your mind, the lights hold steady and the things hear your steps less for a while. from the pipes down, some of what the machines and drawers give is sour, and sour water takes instead of gives. *don't trust the almond water on the deeper floors.* |
 | glowstick | pushes the fog back — less the deeper you go. set one down and it is a breadcrumb until *the green light gutters out.* |
 | bandage | patches you up — restores hit points. where things hunt, wrapping it takes a still moment, and a hit makes it slip; you keep it. deeper down it holds better. carry a few before you go deep. |
 | polaroid camera | one shot each. the flash blinds what is in front of you, and the picture steadies you. the caption develops what the frame holds — sometimes more than you aimed at. photograph a lost soul and, faintly, there is a door behind them. point it at a friend and the film develops what the file wrote on them, and they will know. the desktop app keeps every shot in `Pictures/backrooms/`. |
@@ -318,7 +318,7 @@ the spirits decide. or rather, i do.
 
 somewhere above the drop ceiling there is an office, and it keeps a file on everyone who falls through. you never fill it in. it fills itself in — and the backrooms reads it.
 
-**the column.** nobody chooses one. the first way you take down, the file writes you in by how you came in — whether you gave it a name, a place, nothing at all, or opened a room yourself. a line tells you which, a few seconds after you land:
+**the column.** nobody chooses one. the first way you take down, the file writes you in by how you came in — whether you gave it a name, a place, nothing at all, or opened a room yourself. a line tells you which, within your first minute there:
 
 | column | the file says | what it feels like down here |
 |------|---------|---------|
