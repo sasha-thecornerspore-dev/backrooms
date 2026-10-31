@@ -45,6 +45,8 @@ export const WIRING = Object.freeze({
   firstRun: /createFirstRun\(/,                             // T1-3 the first run's thread
   entitySeed: /now: \(\) => playT, seed: worldSeed/,        // T1-11 the world seed moves the creatures
   searchHold: /searchLog\.hold\(/,                          // T1-9 a full-handed roll is held
+  lostWait: /lostDue\(compassOut, lostSaid, pullAsk\.floorT/, // review W2: the setting's line waits LOST_AFTER_S into a visit, none after a lead
+  ambientIdle: /PRIO\.ambient && !msgQ\.idle\(\)/,          // review W4: an ambient line the queue would drop is no plate and no count
 })
 
 export async function loadTree(src = DEFAULT_SRC) {
@@ -71,6 +73,8 @@ export async function loadTree(src = DEFAULT_SRC) {
   if (!T.FR) T.has.firstRun = T.has.hintHold = false
   if (!T.DRD || !T.PF) T.has.dread = false
   if (!T.CMP.pullVisible) T.has.pull = false
+  if (!T.CMP.LOST_AFTER_S) T.has.lostWait = false
+  if (typeof T.MSG.createMessageQueue().idle !== 'function') T.has.ambientIdle = false
   T.CHUNK = T.W.CHUNK_SIZE
   T.version = (() => { try { return JSON.parse(readFileSync(path.join(dir, '..', '..', 'package.json'), 'utf8')).version } catch { return '?' } })()
 

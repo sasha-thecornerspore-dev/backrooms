@@ -49,6 +49,12 @@ describe('pacing tools: the bot instruments a copy, and every anchor is still wh
     for (const h of ['expose', 'travel', 'die', 'fireEvent', 'showMessage', 'startSearch', 'machine', 'use', 'haunt']) expect(applied).toContain(h)
     expect(text).toContain('globalThis.__pt = { player,')
   })
+  it('game.js: a tree with the plate budget and the teller gets their hooks too (an optional anchor must not slip away unseen)', () => {
+    const g = read('game.js')
+    const { applied } = patchGame(g)
+    if (/createPlateBudget\(\)/.test(g)) expect(applied).toContain('plate')
+    if (/dreadFrom\(ents/.test(g)) expect(applied).toContain('tell')
+  })
   it('audio.js, wish-post.js, containers.js', () => {
     expect(patchAudio(read('audio.js')).wrapped).toBeGreaterThan(10)
     expect(patchWish(read('wish-post.js'))).toContain("return { ok: false, reason: 'playtest' }")

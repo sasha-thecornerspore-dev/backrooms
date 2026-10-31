@@ -116,6 +116,7 @@ function runWalk(index, seed, mode) {
   const plates = has.plates ? T.PLT.createPlateBudget() : null
   const plate = (kind, text, prio, keep, cls) => {
     if (!plates) { show(text, prio, cls); return true }
+    if (has.ambientIdle && prio === PRIO.ambient && !msgQ.idle()) return false
     if (!kind || !text || plates.admit(kind, playT, keep ? text : null) !== 'show') return false
     show(text, prio, cls); return true
   }
@@ -479,7 +480,8 @@ function runWalk(index, seed, mode) {
     if (distantT >= distantNext) { distantT = 0; distantNext = DI[0] + rnd() * (DI[1] - DI[0]); ev('distant-swell', 'C') }
     // ── the held exit hint and the setting's line (2.0.4), read off the compass the HUD would show ──
     if (hintHeld && cState.pullShown) { hintHeld = false; plate('arrival', cfg.exit.hint, PRIO.discovery, true, 'arrival'); heldCls.set(cfg.exit.hint, 'arrival') }
-    if (has.lostLine && index === 0 && !lostSaid && !cState.known && !(cState.pullShown && cState.fb)) {
+    const lostWaits = has.lostWait && (playT < T.CMP.LOST_AFTER_S || floorHinted || (!!firstRun && firstRun.step() > 0))
+    if (has.lostLine && index === 0 && !lostSaid && !lostWaits && !cState.known && !(cState.pullShown && cState.fb)) {
       if (plate('murmur', T.LV.LOST_LINE, PRIO.discovery, false, 'lost')) lostSaid = true
     }
     // ── the message line ──

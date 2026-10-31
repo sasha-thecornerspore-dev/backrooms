@@ -43,8 +43,9 @@ export function patchGame(g) {
   step('  function applyItemEffect(eff) {\n', '  function applyItemEffect(eff) { globalThis.__ptEv?.(\'use\', eff ? (eff.type || eff.kind || JSON.stringify(eff).slice(0, 60)) : null);\n', 'use')
   step(/^ {2}function applyHaunt\(fx(, kind = 'haunt')?\) \{\n/m, (m, k) => `  function applyHaunt(fx${k ?? ''}) { globalThis.__ptEv?.('haunt', fx ? JSON.stringify(fx).slice(0, 120) : null);\n`, 'haunt')
   // 2.0.4: every plate decision (kind, line, show / queue / none), and every tell the teller plays
-  step("    if (!kind || !text || plates.admit(kind, playT, keep ? text : null) !== 'show') return false\n",
-    "    const __adm = (!kind || !text) ? 'none' : plates.admit(kind, playT, keep ? text : null); globalThis.__ptEv?.('plate', [kind, String(text).slice(0, 80), __adm]); if (__adm !== 'show') return false\n", 'plate', true)
+  // (the review's plate() checks kind and text a few lines earlier, and refuses an ambient line the queue would drop before it asks)
+  step(/^ {4}if \((!kind \|\| !text \|\| )?plates\.admit\(kind, playT, keep \? text : null\) !== 'show'\) return false\n/m,
+    (m, pre) => `    const __adm = ${pre ? "(!kind || !text) ? 'none' : " : ''}plates.admit(kind, playT, keep ? text : null); globalThis.__ptEv?.('plate', [kind, String(text).slice(0, 80), __adm]); if (__adm !== 'show') return false\n`, 'plate', true)
   step('      if (tell) call(tell.sound, tell.gain, tell.pan)\n', "      if (tell) { globalThis.__ptEv?.('tell', tell.variant + '/' + tell.sound); call(tell.sound, tell.gain, tell.pan) }\n", 'tell', true)
   return { text: g, applied }
 }
