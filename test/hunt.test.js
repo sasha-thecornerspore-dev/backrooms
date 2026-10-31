@@ -341,6 +341,52 @@ describe('the shared machine on a fake grid', () => {
   })
 })
 
+// ── the threat events say which thing it was ────────────────────────────────────────────────────────────────────────
+describe('pooled threat events carry the variant', () => {
+  // every event this frame as kind:variant
+  function driveV(sys, player, ctx, seconds, dt = DT) {
+    const got = [], out = []
+    for (let i = 0, n = Math.round(seconds / dt); i < n; i++) {
+      sys.update(dt, player, Math.floor(player.x / N), Math.floor(player.y / N), ctx)
+      const m = sys.drainEvents(out)
+      for (let k = 0; k < m; k++) got.push(out[k].kind + ':' + out[k].variant)
+    }
+    return got
+  }
+
+  it('an event is { kind, id, x, y, d, variant }: the old fields as they were, the variant after them', () => {
+    const th = createThreat()
+    const ev = th.emit('seen', { id: 7, x: 1, y: 2, variant: 'hound' }, 3)
+    expect(ev).toEqual({ kind: 'seen', id: 7, x: 1, y: 2, d: 3, variant: 'hound' })
+    expect(Object.keys(ev)).toEqual(['kind', 'id', 'x', 'y', 'd', 'variant'])
+    expect(th.events[0]).toBe(ev)
+  })
+
+  it('a creature without one is a shade (as specFor reads it), and a reused slot never keeps the last variant', () => {
+    const th = createThreat()
+    for (let i = 0; i < 32; i++) th.emit('alert', { id: i, x: 0, y: 0, variant: 'smiler' }, 0)
+    th.reset()
+    expect(th.emit('alert', { id: 40, x: 0, y: 0, variant: 'tesla' }, 0).variant).toBe('tesla')
+    expect(th.emit('alert', { id: 41, x: 0, y: 0 }, 0).variant).toBe('shade')
+    expect(th.emit('alert', { id: 42, x: 0, y: 0, variant: '' }, 0).variant).toBe('shade')
+  })
+
+  it('every way an event is made stamps it: the machine, a variant hook, the ward\'s dispel', () => {
+    const player = { x: 10.5, y: 5.5, angle: Math.PI }
+    const ctx = mkCtx(player)
+    const sys = createEntitySystem(config, wallOf(open), { grid: mkGrid(open), obstacles: null })
+    sys.getEntities().push(ent(5.5, 5.5, 'hound'))
+    const got = driveV(sys, player, ctx, 2 * DT)
+    expect(got).toEqual(['seen:hound', 'hound-windup:hound'])                 // the shared machine, then the hound's own hook
+    const w = createEntitySystem(config, wallOf(open), { grid: mkGrid(open), obstacles: null })
+    w.getEntities().push(ent(11.5, 10, 'watcher', { id: 3 }))
+    expect(w.ward({ x: 10, y: 10, angle: 0 }).dispelled).toBe(1)
+    const out = []
+    expect(w.drainEvents(out)).toBe(1)
+    expect(out[0]).toMatchObject({ kind: 'watcher-dispelled', id: 3, variant: 'watcher' })
+  })
+})
+
 // ── deriveState / hostile / solidCreature ───────────────────────────────────────────────────────────────────────────
 describe('deriveState maps every phase into the sprite STATES', () => {
   it('covers VARIANT_PHASES, the hold and the alert flinch', () => {
