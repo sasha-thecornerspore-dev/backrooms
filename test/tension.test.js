@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createTension, huntDelta, calmDelta, heartbeatPeriod, TENSION_ENTER, TENSION_EXIT } from '../src/renderer/tension.js'
+import { createTension, huntDelta, calmDelta, heartbeatPeriod, TENSION_ENTER, TENSION_EXIT, DREAD_CAP, DREAD_K } from '../src/renderer/tension.js'
 
 const calm = { hunted: false, nearest: Infinity, gaze: false, arcPending: false }
 const hunted = (nearest) => ({ hunted: true, nearest, gaze: false, arcPending: false })
@@ -47,7 +47,7 @@ describe('createTension level', () => {
     const a = t.tick(0.05, null, 100)
     const b = t.tick(0.05, calm, 100)
     expect(b).toBe(a)
-    expect(a).toEqual({ level: 0, beat: Infinity, mood: 'calm', just: null, close: false })
+    expect(a).toEqual({ level: 0, beat: Infinity, mood: 'calm', just: null, close: false, huntLevel: 0 })
   })
 })
 
@@ -91,7 +91,7 @@ describe('mood hysteresis', () => {
     run(t, 3, hunted(0))
     t.reset()
     const r = t.tick(0.05, calm, 100)
-    expect(r).toEqual({ level: 0, beat: Infinity, mood: 'calm', just: null, close: false })
+    expect(r).toEqual({ level: 0, beat: Infinity, mood: 'calm', just: null, close: false, huntLevel: 0 })
   })
 
   it('exposes the thresholds', () => {
@@ -161,3 +161,142 @@ describe('huntDelta / calmDelta', () => {
     expect(huntDelta({})).toEqual({ groove: 1, leadChance: 0.05, brightness: 1200 * 0.7, volume: 0.06 * 1.15 })
   })
 })
+
+// ── dread (dread.js, T1-8): a creature near you through the maze, not hunting you, raises the floor of the level to at most DREAD_CAP —
+//    above the heartbeat's floor, below the hunt's line. The pre-dread tick is kept here verbatim: with dread 0 (or no fourth argument)
+//    every frame of a long scripted run matches it number for number, and huntLevel is that same level whatever dread does. ──
+function legacyTension() {
+  const res = { level: 0, beat: Infinity, mood: 'calm', just: null, close: false }
+  let level = 0, mood = 'calm', above = 0, below = 0, was85 = false, closeCd = 0
+  function tick(dt, threat, hp) {
+    const th = threat || {}
+    let target = 0
+    if (th.hunted) target = 0.6 + 0.4 * (1 - Math.min(th.nearest ?? 12, 12) / 12)
+    if (th.gaze && target < 0.35) target = 0.35
+    if (th.arcPending && target < 0.8) target = 0.8
+    if (hp < 25 && target < 0.4) target = 0.4
+    level = level < target ? Math.min(target, level + 0.9 * dt) : Math.max(target, level - 0.12 * dt)
+    let just = null
+    if (mood === 'calm') {
+      above = level > 0.55 ? above + dt : 0
+      if (above >= 1.5) { mood = 'hunt'; just = 'enter'; above = 0; below = 0 }
+    } else {
+      below = level < 0.25 ? below + dt : 0
+      if (below >= 6) { mood = 'calm'; just = 'exit'; above = 0; below = 0 }
+    }
+    if (closeCd > 0) closeCd = Math.max(0, closeCd - dt)
+    const is85 = level >= 0.85
+    let close = false
+    if (is85 && !was85 && closeCd <= 0) { close = true; closeCd = 12 }
+    was85 = is85
+    res.level = level; res.beat = level < 0.15 ? Infinity : 1.3 - 0.95 * level; res.mood = mood; res.just = just; res.close = close
+    return res
+  }
+  return { tick }
+}
+
+// a long varied script: hunts at every distance, gazes, arcs, low hp, null threats, ragged frame times
+function script(frames, seed = 7) {
+  let s = seed >>> 0
+  const r = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296 }
+  const out = []
+  let th = calm, hp = 100
+  for (let i = 0; i < frames; i++) {
+    if (i % 40 === 0) {
+      const k = r()
+      th = k < 0.3 ? hunted(r() * 14) : k < 0.4 ? { ...calm, gaze: true } : k < 0.48 ? { ...calm, arcPending: true } : k < 0.55 ? null : calm
+      hp = r() < 0.15 ? 10 + r() * 20 : 100
+    }
+    out.push([0.004 + r() * 0.06, th, hp])
+  }
+  return out
+}
+
+describe('dread: the fourth argument', () => {
+  const same = (a, b) => ['level', 'beat', 'mood', 'just', 'close'].every((k) => Object.is(a[k], b[k]))
+
+  it('exposes the cap and the gain: above the heartbeat floor, below the hunt line', () => {
+    expect(DREAD_CAP).toBe(0.35)
+    expect(DREAD_K).toBe(0.6)
+    expect(DREAD_CAP).toBeLessThan(TENSION_ENTER)
+    expect(heartbeatPeriod(DREAD_CAP)).toBeLessThan(Infinity)
+    expect(heartbeatPeriod(0.15)).toBeLessThan(Infinity)
+  })
+
+  it('dread 0, or no fourth argument, gives the pre-dread sequence number for number, and huntLevel is the level', () => {
+    const frames = script(6000)
+    const ref = legacyTension(), three = createTension(), four = createTension()
+    let enters = 0, closes = 0
+    for (const [dt, th, hp] of frames) {
+      const a = ref.tick(dt, th, hp)
+      const b = three.tick(dt, th, hp)
+      expect(same(a, b)).toBe(true)
+      expect(Object.is(b.huntLevel, b.level)).toBe(true)
+      const c = four.tick(dt, th, hp, 0)
+      expect(same(a, c)).toBe(true)
+      expect(Object.is(c.huntLevel, c.level)).toBe(true)
+      if (a.just === 'enter') enters++
+      if (a.close) closes++
+    }
+    expect(enters).toBeGreaterThan(0)                  // the script really ran the hunt's own transitions
+    expect(closes).toBeGreaterThan(0)
+  })
+
+  it('raises the target to dread x DREAD_K, capped at DREAD_CAP', () => {
+    expect(run4(createTension(), 4, calm, 100, 0.5).level).toBeCloseTo(0.3, 9)
+    expect(run4(createTension(), 4, calm, 100, 1).level).toBe(DREAD_CAP)
+    const r = run4(createTension(), 4, calm, 100, 0.25)
+    expect(r.level).toBeCloseTo(0.15, 9)
+    expect(r.beat).toBeLessThan(Infinity)               // a slow heartbeat before anything hunts you
+  })
+
+  it('never lifts a target that is already higher', () => {
+    const a = run(createTension(), 3, hunted(0))
+    const b = run4(createTension(), 3, hunted(0), 100, 1)
+    expect(b.level).toBe(a.level)
+    expect(run4(createTension(), 2, { ...calm, arcPending: true }, 100, 1).level).toBeCloseTo(0.8, 6)
+  })
+
+  it('dread alone never enters the hunt mood and never says it is close', () => {
+    const t = createTension()
+    let r
+    for (let i = 0; i < 1200; i++) {
+      r = t.tick(0.05, calm, 100, 1)
+      expect(r.just).toBeNull()
+      expect(r.close).toBe(false)
+    }
+    expect(r.mood).toBe('calm')
+    expect(r.level).toBe(DREAD_CAP)
+  })
+
+  it('huntLevel ignores dread: zero under dread alone, the dread-free level under a hunt', () => {
+    const t = createTension()
+    const r = run4(t, 5, calm, 100, 1)
+    expect(r.level).toBe(DREAD_CAP)
+    expect(r.huntLevel).toBe(0)
+    // the same hunt with and without dread: huntLevel tracks the dread-free run frame by frame
+    const plain = createTension(), dread = createTension()
+    for (const [dt, th, hp] of script(3000, 11)) {
+      const a = plain.tick(dt, th, hp)
+      const b = dread.tick(dt, th, hp, 0.9)
+      expect(Object.is(b.huntLevel, a.level)).toBe(true)
+      expect(b.level).toBeGreaterThanOrEqual(b.huntLevel)
+    }
+  })
+
+  it('as dread lifts the level falls back at the decay rate, and reset() clears huntLevel', () => {
+    const t = createTension()
+    run4(t, 4, calm, 100, 1)
+    const r = run4(t, 1, calm, 100, 0)
+    expect(r.level).toBeCloseTo(DREAD_CAP - 0.12, 6)
+    t.reset()
+    expect(t.tick(0.05, calm, 100, 0)).toEqual({ level: 0, beat: Infinity, mood: 'calm', just: null, close: false, huntLevel: 0 })
+  })
+})
+
+function run4(t, seconds, threat, hp, dread, dt = 0.05) {
+  let out = null
+  const n = Math.round(seconds / dt)
+  for (let i = 0; i < n; i++) out = t.tick(dt, threat, hp, dread)
+  return out
+}
