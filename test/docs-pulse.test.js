@@ -149,15 +149,24 @@ describe('the compass, the first minute and the lines the budget lets go', () =>
   })
 })
 
+// The draft comment at the top of a version's notes is the owner's to delete when they are ready to publish, so nothing here asks for
+// it: the guard holds with it or without it, and asks only that nothing of it is left half-deleted (a stray DRAFT, <!-- or --> outside
+// a closed comment would show in the release, or hide the notes after it). The notes are found through package.json and no version is
+// pinned; the lines below are 2.0.4's own, so they read 2.0.4's notes by name, as docs-launch reads 2.0.0's.
+const draftLeftOpen = (s) => /DRAFT|<!--|-->/.test(s.replace(/<!--[^]*?-->/g, ''))
 describe('the release notes for this version', () => {
   const file = `docs/release-notes/v${pkg.version}.md`
-  it('exist for the version in package.json, at 2.0.4, marked a draft for the owner', () => {
-    expect(pkg.version).toBe('2.0.4')
+  it('exist for the version in package.json, and leave no draft marker open, with the draft comment or without it', () => {
     expect(fs.existsSync(path.join(root, file))).toBe(true)
-    expect(read(file)).toMatch(/^<!--[^]*DRAFT[^]*-->\n/)
-  })
-  it('quote the game\'s lines as the game says them, and say what a mixed room and an old save see', () => {
     const notes = read(file)
+    expect(draftLeftOpen(notes)).toBe(false)
+    expect(draftLeftOpen(notes.replace(/^<!--[^]*?-->\n/, ''))).toBe(false)
+    for (const half of ['DRAFT for the owner. -->\nnotes', '<!-- DRAFT for the owner.\nnotes', 'ready to publish. -->\nnotes']) {
+      expect(draftLeftOpen(half), half).toBe(true)
+    }
+  })
+  it('quote the game\'s lines as the game says them, and say what a mixed room and an old save see (2.0.4\'s notes)', () => {
+    const notes = read('docs/release-notes/v2.0.4.md')
     for (const s of [FAINT, SEEN_OFF, SEARCHED_HINT, NOT_NOW_LINE, LOST_LINE, searchingHint('cabinet')]) expect(notes, s).toContain(`*${s}*`)
     expect(notes).toContain('## the backrooms 2.0.4')
     expect(notes).toContain('### update together')
