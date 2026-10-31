@@ -23,7 +23,7 @@ import { solidCreature } from '../src/renderer/hunt.js'
 import { createItemSystem } from '../src/renderer/items.js'
 import { createFogMap, revealRadius } from '../src/renderer/fogmap.js'
 import { visibleWays, PROX_PIN } from '../src/renderer/sightpins.js'
-import { compassLines, compassText } from '../src/renderer/compass.js'
+import { compassLines, compassText, pullVisible, pullWobble, PULL_REDRAW_S } from '../src/renderer/compass.js'
 import { quiet } from '../src/renderer/tactics.js'
 import { HF } from '../src/renderer/gfx-frame.js'
 import { perceptionFor, AI_CTX_KEYS } from '../src/renderer/compose-perception.js'
@@ -71,7 +71,8 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
   const fog = createFogMap()
   const haunts = createHauntTracker({ now: () => clock.playT })
   const nearestWayFn = (x, y) => decor.nearestWay(x, y, 2)
-  const compassState = { player, known: null, fallback: null, arrived: null, stale: (p) => fog.isStale(1, p.chunkKey, epochOf) }
+  const compassState = { player, known: null, fallback: null, arrived: null, stale: (p) => fog.isStale(1, p.chunkKey, epochOf), pull: false, wobble: 0, skip: null }
+  const pullAsk = { floorT: 0, hinted: false, fresh: false, step: 0 }   // game.js's one record for the faint pull's rule
   const compassOut = [], seenWays = [], seenSights = [], entEvents = []
   // game.js's aiCtx: the eleven the things always read, then the file's four trailing at their defaults (perceptionFor writes them per frame)
   const aiCtx = { flashlight: true, sprinting: false, dark: !cfg.lights, fog: cfg.fogDistance, radioOn: false, lures: [], t: 0, hf: HF, playerAngle: 0, player, damage: cfg.entities?.damage ?? 16, sightMul: 1, hidden: false, loseTrackMul: 1, noiseMul: 1 }
@@ -95,7 +96,7 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
   const placed = entitySys.inject(followers, player.x, player.y, 5, 10, 0, (x, y) => solid.forEntities.blocked(x, y, 0.2))
 
   // the walker's state across runs: the play clock, the cell / compass memos, the last hit, the identities seen so far
-  const S = { playT: 0, lureT: 0, stepT: 0, hits: -Infinity, frame: 0, lastCellIx: NaN, lastCellIy: NaN, lastCompassAngle: -Infinity, lastWayCount: -1, lastCompassText: '', pcx: NaN, pcy: NaN, threat: null, report: null, sameThreat: true, sameReport: true, maxEntities: 0, crossings: 0,
+  const S = { playT: 0, lureT: 0, stepT: 0, hits: -Infinity, frame: 0, lastCellIx: NaN, lastCellIy: NaN, lastCompassAngle: -Infinity, lastWayCount: -1, lastCompassText: '', lastCompassT: -Infinity, pcx: NaN, pcy: NaN, threat: null, report: null, sameThreat: true, sameReport: true, maxEntities: 0, crossings: 0,
     sanity: 100, standHeld: 0, pf: null, san: null, stand: null, samePf: true, sameSan: true, sameStand: true, hiddenFrames: 0 }
 
   // ONE frame of game.js's loop below the renderer, in its order
@@ -145,12 +146,16 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
       const np = decor.nearestNpc(player.x, player.y, PROX_PIN); if (np) fog.pinThing(1, np.key, 'npc', np.x, np.y)
       fog.checkStale(1, player, nearestWayFn, epochOf)
     }
-    // ── the compass: recomputed on a cell / heading / known-ways change only ──
+    // ── the faint pull's rule from the one refilled record (the visit began at 0, no hint, no first run below the lobby); the compass:
+    //    recomputed on a cell / heading / known-ways / pull change, and on the slow clock for the pull's lean ──
+    pullAsk.floorT = S.playT; pullAsk.hinted = false; pullAsk.fresh = false; pullAsk.step = 0
+    const pull = pullVisible(pullAsk)
     const known = fog.ways(1)
-    if (cellChanged || Math.abs(player.angle - S.lastCompassAngle) > 0.05 || known.length !== S.lastWayCount) {
-      S.lastCompassAngle = player.angle; S.lastWayCount = known.length
+    if (cellChanged || Math.abs(player.angle - S.lastCompassAngle) > 0.05 || known.length !== S.lastWayCount || pull !== compassState.pull || S.playT - S.lastCompassT >= PULL_REDRAW_S) {
+      S.lastCompassAngle = player.angle; S.lastWayCount = known.length; S.lastCompassT = S.playT
       compassState.known = known
-      compassState.fallback = decor.nearestWayAny(player.x, player.y)
+      compassState.fallback = decor.nearestWayOn(player.x, player.y, compassState.skip)
+      compassState.pull = pull; compassState.wobble = pullWobble(pullAsk.floorT, 0)
       compassState.arrived = fog.arrivedPin(1)
       compassLines(compassState, compassOut)
       const s = compassText(compassOut)

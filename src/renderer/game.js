@@ -1,6 +1,6 @@
 import { loadConfig, CHUNK_SIZE, createChunkCache, createGridReader } from './world.js'
 import { createFixedMap } from './fixedmap.js'
-import { levelConfig, TRACKS } from './levels.js'
+import { levelConfig, TRACKS, LOST_LINE } from './levels.js'
 import { createEntitySystem } from './entities.js'
 import { createItemSystem, KEPT } from './items.js'
 import { createDecorSystem } from './decor.js'
@@ -30,12 +30,13 @@ import { resolveDeath, onArrive, wakeSpot } from './death.js'
 import { createFogMap, revealRadius } from './fogmap.js'
 import { visibleWays, SIGHT_LINES, PROX_PIN } from './sightpins.js'
 import { createMapCard } from './mapcard.js'
-import { compassLines, compassText, arrivalSummary, seenLine } from './compass.js'
+import { compassLines, compassText, arrivalSummary, seenLine, pullVisible, pullWobble, lostDue, PULL_REDRAW_S } from './compass.js'
 import { TELL, SEEN_TELL } from './dread.js'
-import { PRESENCE_HUSH_S } from './firstrun.js'
+import { PRESENCE_HUSH_S, FIRST_NOTE, createFirstRun, noteRecord } from './firstrun.js'
+import { createPlateBudget, arrivalPlate } from './plates.js'
 import { lineOfSight, inViewCone } from './raycaster.js'
 import { dressPass } from './dress.js'
-import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog } from './containers.js'
+import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog, searchingHint } from './containers.js'
 import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
 import { createCard, CARD_KEYS, readText, REDACTED_FOOT } from './papercard.js'
 import { createEvBus } from '../net/evbus.js'
@@ -298,11 +299,23 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let deaths     = 0
   let vendLocked = false  // after a death: 'the tray is empty.' until the next travel()
   let lobbyFirst = false  // this is your first time in the lobby this run (buildLevel writes it; the presence hush reads it)
+  // ── the first run, authored (firstrun.js): on a fresh solo run of the fixed first world a note by the spawn names a soul, the soul
+  //    names a room, and the room holds the way down. Off in a seeded world, in a room and on the block; a resume takes it up at the
+  //    step its save kept (a save from before the thread has none: off) ──
+  const firstRun = createFirstRun({ fresh: resume ? Number.isInteger(resume.firstRun) : true, step: resume?.firstRun ?? 0, worldSeed, room: !!mpClient })
+  const freshLobby = () => level.index === 0 && firstRun.on()   // the lobby while the thread can still advance: the pull and the exit hint wait on it
   // ── the map (fogmap.js / sightpins.js / mapcard.js / compass.js): the pencil sheet of what you walked and saw, held not modal ──
   const fog = createFogMap()
   let mapOpen = false, mapEverOpened = false, lastLostMsg = -Infinity
   const compassOut = []                       // compassLines' reused two-slot output (its line objects live on compassOut.slots)
   let lastCompassAngle = NaN, lastWayCount = -1, lastCompassText = null, lastCellIx = NaN, lastCellIy = NaN
+  // the faint pull, per visit (compass.js pullVisible / pullWobble): when the visit began, whether the floor has given you a hint (a page
+  // read, a soul's word, a trace pinned), the lean it takes, the last slow redraw; the setting's line said (levels.js LOST_LINE, once a
+  // visit); the lobby's exit hint held back for the first run. The one record pullVisible reads (refilled, never rebuilt), and the one
+  // the pull leans on while the thread waits on its room
+  let floorT0 = 0, floorHinted = false, pullPhase = 0, lastCompassT = -Infinity, lostSaid = false, hintHeld = false
+  const pullAsk = { floorT: 0, hinted: false, fresh: false, step: 0 }
+  const roomPull = { rec: null, dist: null }
   const seenWays = [], seenSights = []        // visibleWays' reused out arrays
   const sightSaid = new Set()                 // 'level:key' of the sights whose first-sight line was said
   let arcWas     = false // the tesla's charge last frame (the lights drop once per charge, not every frame of it)
@@ -401,11 +414,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    (levelmem keeps them across visits and saves), the haunt cooldowns on the play clock, and dreadQuietT — the ONE quiet shared by
   //    the scheduled events and the haunts (20 s after a haunt, 12 s after an event), so the two dread layers never stack ──
   const searchLog = createSearchLog()
-  let searchT = 0, searchTarget = null, drawerCostSaid = false
+  let searchT = 0, searchTarget = null, drawerCostSaid = false, searchHint = ''   // searchHint: what the item hint says while you search
   const unsearchedBox = (p) => CONTAINER_TYPES[p.type] !== undefined && !searchLog.isSearched(p.key)   // hoisted: no closure per frame
   const hauntTrackers = new Map()   // level index -> its tracker (buildLevel picks this floor's)
   let haunts = null
-  let dreadQuietT = 0, lightToggles = 0
+  let dreadQuietT = 0, lightToggles = 0, lightSaid = false   // lightSaid: the flashlight's plain lines are said once a run
   let waterT = 0, waterStepT = 0   // running water: footfall(8) now and every ~3 s while its 12 s timer runs
   // the footsteps event (events.js FOOTSTEPS_ECHO): how many of your steps are still echoed, the echo's countdown, how long you have stood
   let echoSteps = 0, echoT = 0, echoStill = 0
@@ -423,10 +436,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── the things' events (hunt.js / variants.js), drained once per frame into one reused array; the event objects are pooled
   //    (32), so each is read in the frame it arrives and never kept. The lines that must not repeat keep their own gates here:
   //    'it has seen you.' 8 s, the far line 30 s, the cornered turn once per level, the turning cue once per creature per hunt
-  //    (a new sighting clears it), the hound's two tells once per run. ──
+  //    (a new sighting clears it), the hound's two tells and the smiler's lesson once per run. ──
   const entEvents = []
   let lastSeenLine = -Infinity, lastFarLine = -Infinity, lastDuck = -Infinity
-  let turnSaid = false, houndTold = false, passTold = false
+  let turnSaid = false, houndTold = false, passTold = false, smilerTold = false
   const turningSaid = new Set()
   function onEntityEvent(ev) {
     const fog = level.cfg.fogDistance
@@ -448,7 +461,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       case 'alert': if (ev.d <= fog) footfall(1); break
       case 'turn': if (!turnSaid) { turnSaid = true; showMessage('it has nowhere to go. it turns.', PRIO.interaction) } break
       case 'turning': if (ev.d <= fog && !turningSaid.has(ev.id)) { turningSaid.add(ev.id); showMessage('it stops. it turns.', PRIO.interaction) } break
-      case 'smiler-freeze': whisper(); showMessage('it stops when you look. do not look away.', PRIO.discovery); break
+      case 'smiler-freeze': whisper(); if (!smilerTold) { smilerTold = true; showMessage('it stops when you look. do not look away.', PRIO.discovery) } break
       // the one teaching beat for the ward's timing: urgent, so it replaces 'it has seen you.' (said a frame before) instead of waiting out its dwell
       case 'hound-windup': footfall(2); if (!houndTold) { houndTold = true; showMessage('it gathers itself. push now.', PRIO.urgent) } break
       case 'hound-pass': if (!passTold) { passTold = true; showMessage('it skids past.', PRIO.interaction) } break
@@ -535,6 +548,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     return g
   }
 
+  // the first run's note (firstrun.js), laid with its chunk on the lobby while the thread can still advance: a record of its own (frag -1,
+  // kept by its own key beside the chunk's page), never a page and never the block's form
+  const NOTE_CHUNK = `${Math.floor(FIRST_NOTE.x / CHUNK_SIZE)},${Math.floor(FIRST_NOTE.y / CHUNK_SIZE)}`
+  const firstNotePass = (ctx) => { if (ctx.key === NOTE_CHUNK) ctx.add('scrap', noteRecord()) }
+
   // buildLevel(index, at): the level, streamed around chunk `at` (the chunk you arrive in; the origin when none). cfg.ways is the level's
   // graph (topology.waysFor): [0] is today's exit (decor reads its kind / label), the rest the stairs up / the lift stairsPass places.
   function buildLevel(index, at = null) {
@@ -549,6 +567,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     cfg.ways    = waysFor(index)
     spawnChunk  = at ?? { cx: 0, cy: 0 }
     lobbyFirst  = index === 0 && !mem.get(0)?.visits   // read before mem.arrive counts this arrival (a resume imports the memory first)
+    firstRun.onLevel(index)         // the thread listens on the lobby, waits on the block, and lapses for good on any floor below
     // HUD theme hook: index.html restyles body[data-level] ('0'..'3' | '∅') — light ink on dark plates below the lobby
     if (typeof document !== 'undefined' && document.body) document.body.dataset.level = String(cfg.levelIndex)
     // Level ∅ is a hand-authored fixed grid; the rest are procedural chunk worlds.
@@ -566,8 +585,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const bodies    = createColliderIndex()
     const decor     = createDecorSystem(cfg, isWall, worldSeed, {
       // the passes after the sights block, in the fixed order: the stairs up / the lift (topology.js; null on L0 and the block), the
-      // room dressing (dress.js; null on the block), then the hauntings (haunts.js; AFTER the dressing, so its ctx.props sees the cabinets)
-      passes: cfg.map ? [] : [stairsPass(cfg, cfg.ways), dressPass(cfg), hauntsPass(cfg)].filter(Boolean),
+      // room dressing (dress.js; null on the block), then the hauntings (haunts.js; AFTER the dressing, so its ctx.props sees the cabinets),
+      // and on the first run's lobby its note (placing nothing else, drawing on no stream)
+      passes: cfg.map ? [] : [stairsPass(cfg, cfg.ways), dressPass(cfg), hauntsPass(cfg), index === 0 && firstRun.on() ? firstNotePass : null].filter(Boolean),
       onChunk: (k, bundle) => bodies.setChunk(k, bundle.colliders),
       onEvict: (k) => bodies.dropChunk(k),
     })
@@ -647,9 +667,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // the chunk under the player (travel / die run outside the loop, where its pcx / pcy are not in scope)
   const chunkUnder = () => ({ cx: Math.floor(player.x / CHUNK_SIZE), cy: Math.floor(player.y / CHUNK_SIZE) })
   // the arrival's delayed lines belong to that arrival: a travel or a death in between (arrivalGen moved on) drops them, so the old way's
-  // line never reads on the next floor
+  // line never reads on the next floor; and they are its plates (plates.js): past the window's two, they wait for the arrival to settle
   let arrivalGen = 0
-  function later(ms, text, prio) { const g = arrivalGen; setTimeout(() => { if (g === arrivalGen) showMessage(text, prio) }, ms) }
+  function later(ms, text, prio) { const g = arrivalGen; setTimeout(() => { if (g === arrivalGen) plate('arrival', text, prio) }, ms) }
+  // a visit begins (a travel, the wake, the start, a resume): its clock and its hint start over, the faint pull takes a new lean, the
+  // once-a-visit lines are unsaid, and the plate budget opens its window. The floor's own plate follows at each caller (arrivalPlate)
+  function startVisit() {
+    floorT0 = playT; floorHinted = false; pullPhase = Math.random() * Math.PI * 2; lostSaid = false; hintHeld = false
+    plates.arrive(playT)
+  }
   // the nearest record of a list (die: the holes loaded), or null
   function nearestOf(list, x, y) {
     let best = null, bd = Infinity
@@ -705,14 +731,16 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       const followed = followers.length ? level.entitySys.inject(followers, player.x, player.y, 7, 10, 3 + Math.random() * 2, (x, y) => level.solid.forEntities.blocked(x, y, 0.2)) : 0
       if (!level.cfg.map) fog.pinThing(way.target, 'arrived:' + (playT | 0), 'arrived', player.x, player.y)
       persist(true)                     // save on every travel, with the map
+      startVisit()
       // the lift's line is said under the veil, past buildLevel's msgQ.clear() (which would drop it before the fade): at combat it is never
-      // queued behind a prompt result, and combat queues FIFO, so it reads before the level name
-      if (way.kind === 'lift') showMessage(wayMessage(way, { before: true }), PRIO.combat)
-      showMessage(level.cfg.levelName, PRIO.combat)
+      // queued behind a prompt result, and combat queues FIFO, so it reads before the floor's plate (the sub-line the first time, the name after)
+      if (way.kind === 'lift') plate('arrival', wayMessage(way, { before: true }), PRIO.combat)
+      plate('floor', arrivalPlate(level.cfg, first), PRIO.combat)
       const wm = wayMessage(way, { partner, mem: mem.get(way.target) })
       if (first) {
-        // with followers on the way, the hint gives its slot to 'it followed you down.' (it is still a floor murmur in level.messages)
-        if (level.cfg.exit?.hint && !followed) later(3800, level.cfg.exit.hint, PRIO.discovery)
+        // with followers on the way, the hint gives its slot to 'it followed you down.' (it is still a floor murmur in level.messages);
+        // on the first run's lobby (the front door's way in) it waits with the faint pull, and the frame says it then
+        if (level.cfg.exit?.hint && !followed) { if (freshLobby()) hintHeld = true; else later(3800, level.cfg.exit.hint, PRIO.discovery) }
         if (wm) later(7500, wm, PRIO.discovery)
       } else {
         if (wm) later(3800, wm, PRIO.discovery)
@@ -769,11 +797,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       level.grid.setPlayerChunk(spawnChunk.cx, spawnChunk.cy); level.cache.preload(spawnChunk.cx, spawnChunk.cy)
       level.decor.update(spawnChunk.cx, spawnChunk.cy); itemSys.update(spawnChunk.cx, spawnChunk.cy)
       level.solid.settlePlayer(player)
-      mem.arrive(level.index, spawnChunk, playT)
+      const first = mem.arrive(level.index, spawnChunk, playT).visits === 1
       vendedSet = mem.vendedFor(level.index, filedFloors.has(floorKey(worldSeed, level.index)) ? -Infinity : playT)   // the visit is counted (the trays stay locked through vendLocked anyway)
       renderHotbar()
       persist(true)
-      showMessage(level.cfg.levelName, PRIO.combat)
+      startVisit()
+      plate('floor', arrivalPlate(level.cfg, first), PRIO.combat)
       later(2600, r.message, PRIO.discovery)
       if (r.dropped) later(5200, r.droppedLine, PRIO.discovery)
       if (d?.line) later(7800, d.line, PRIO.discovery)   // the column's word on it ('nobody came.' first when nobody did); LEGACY has none
@@ -1025,6 +1054,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const scrap = cardScrap
     if (!scrap || !card.state) return
     if (!readSet.has(scrap.frag)) { readSet.add(scrap.frag); sanity = Math.min(100, sanity + rules.scrapSanity) }   // not alone, for a moment (+6; the file's column changes it)
+    floorHinted = true                                                                                    // a page read is the floor's hint: the faint pull comes free
     if (!level.cfg.map) fog.pinThing(level.index, 'n:' + scrap.key, 'note', scrap.x, scrap.y, true)       // on the map, filled in: read
     renderCard(card.setFoot(card.state, `${readSet.size} of ${SCRAPS.length} pages found`))
   }
@@ -1046,6 +1076,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // under compliance a page you have not read comes sealed (mods.sealedCards): read it (E) or leave it unread (X) for the file. One you
   // already gave up opens as the blocks it is now
   function openSealed(scrap) { openCard('sealed', { text: SCRAPS[scrap.frag] ?? '', foot: '', redacted: file.redacted.includes(scrap.frag) }, scrap) }
+  // E at the first run's note (firstrun.js): read on a page's card, but it is no page — no count, no sanity, no pin; the thread takes its
+  // first step, and the paper is in your hands
+  function openFirstNote(scrap) {
+    if (!openCard('page', { text: FIRST_NOTE.text }, scrap)) return
+    firstRun.onRead(scrap.key)
+    if (ownSounds()) paper('page')
+  }
   // E at ∅'s form on the counter (decor's authored note, frag -1), and /intake: the file's view of you, read-only — no page count, no
   // sanity, no pin; it closes on any close key like a page
   function openForm() { openCard('form', { text: formText(intakeCtx, file.status).join('\n'), foot: FORM_FOOT }) }
@@ -1670,6 +1707,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let msgNext  = base.messageInterval[0] + Math.random() * (base.messageInterval[1] - base.messageInterval[0])
   const msgQ = createMessageQueue()
   function showMessage(text, prio = PRIO.interaction) { if (text) msgQ.push(String(text), prio) }
+  // the plate budget (plates.js) over showMessage, for the arrival and the unprompted kinds only (everything you do, and every warning,
+  // calls showMessage itself): -> whether it showed. A line held back waits for the frame's drain when kept, and is let go otherwise —
+  // a murmur, an event's or a haunt's line: its moment passed with its sound
+  const plates = createPlateBudget()
+  function plate(kind, text, prio, keep = true) {
+    if (!text || plates.admit(kind, playT, keep ? text : null) !== 'show') return false
+    showMessage(text, prio)
+    return true
+  }
 
   // ── polaroid ──
   const flashEl = document.getElementById('flash')
@@ -1860,28 +1906,29 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (faint && rules.crosserPause()) { a.pauseAtTtl = a.ttl / 2; a.pauseT = 0; a.paused = false }
     ephemera.push(a)
   }
-  // fireEvent(id, prio): the scheduled events murmur at ambient (dropped unless the line is idle); a drawer's haunt is the result of a search,
-  // so containers.js fires it at interaction and the line shows behind 'you rummage.' (door-slam / crosser keep their interaction default)
-  function fireEvent(id, prio = PRIO.ambient) {
+  // fireEvent(id, prio, kind): the scheduled events murmur at ambient (dropped unless the line is idle) and are unprompted ('event'): the
+  // plate budget may hold the line back, and then lets it go — its sound has played. A drawer's haunt is the result of a search ('search'),
+  // so containers.js fires it at interaction and it always shows (door-slam / crosser keep their interaction priority)
+  function fireEvent(id, prio = PRIO.ambient, kind = 'event') {
     if (id === 'lights-cascade') {
       flickTgt = 0.14; flickTimer = 0.7                        // a wave of dark, held, then the loop recovers it
       panelsOut()                                              // and you hear the panels go, one after another
-      showMessage('the lights go out ahead of you, one by one. then, slowly, they come back.', prio)
+      plate(kind, 'the lights go out ahead of you, one by one. then, slowly, they come back.', prio, false)
     } else if (id === 'door-slam') {
       doorSlam(); shake = Math.max(shake, 0.35)
-      showMessage('somewhere behind you, a door slams shut.')
+      plate(kind, 'somewhere behind you, a door slams shut.', PRIO.interaction, false)
     } else if (id === 'hum-stops') {
       humDuck(2.6)
-      showMessage('the hum stops. the silence has a shape. then it resumes, as if something had been listening.', prio)
+      plate(kind, 'the hum stops. the silence has a shape. then it resumes, as if something had been listening.', prio, false)
     } else if (id === 'cold-spot') {
       sanity = Math.max(0, sanity - 4); whisper()
-      showMessage('a cold spot. your breath fogs where there is nothing cold enough to fog it.', prio)
+      plate(kind, 'a cold spot. your breath fogs where there is nothing cold enough to fog it.', prio, false)
     } else if (id === 'footsteps') {
       footfall(); echoSteps = FOOTSTEPS_ECHO.steps; echoStill = 0   // and then they do keep your pace (the step block echoes yours)
-      showMessage('footsteps. not yours. they keep your pace, and stop when you stop.', prio)
+      plate(kind, 'footsteps. not yours. they keep your pace, and stop when you stop.', prio, false)
     } else if (id === 'crosser') {
       spawnCrosser(); footfall(3); heartbeat(0.7)
-      showMessage('far down the hall, something crosses the intersection. the hall is empty when you look again.')
+      plate(kind, 'far down the hall, something crosses the intersection. the hall is empty when you look again.', PRIO.interaction, false)
     }
   }
 
@@ -1890,15 +1937,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    a completed search is remembered by the floor (levelmem) and heard by the things (noise 4, sharedConventions #5). ──
   function startSearch(p, th) {
     if (th.hunted || th.nearest <= 4) { showMessage('not now.', PRIO.interaction); return }
-    searchTarget = p; searchT = SEARCH_HOLD_S
-    showMessage('you rummage.', PRIO.interaction)
-    drawerSlide()
+    searchTarget = p; searchT = SEARCH_HOLD_S; searchHint = searchingHint(p.type)
+    drawerSlide()                   // the hold is the scrape's to say, and the hint's ('searching the cabinet'): no plate
   }
   const clampSanity = (d) => { sanity = Math.max(0, Math.min(100, sanity + d)) }
   const searchApi = {
-    grant: itemSys.grant, message: showMessage, sanity: clampSanity, fire: (id) => fireEvent(id, PRIO.interaction),
+    grant: itemSys.grant, message: showMessage, sanity: clampSanity, fire: (id) => fireEvent(id, PRIO.interaction, 'search'),
     // 'behind-you': the still figure on the trail you just walked; a cold spot when no open trail cell is behind you (hauntEffects -> null)
-    behindYou: () => { const fx = hauntEffects('standing-figure', hauntCtx()); if (fx) applyHaunt(fx); else fireEvent('cold-spot', PRIO.interaction) },
+    behindYou: () => { const fx = hauntEffects('standing-figure', hauntCtx()); if (fx) applyHaunt(fx, 'search'); else fireEvent('cold-spot', PRIO.interaction, 'search') },
   }
   function resolveSearch(p) {
     const [cx, cy] = p.key.split(':')[0].split(',').map(Number)     // keys are `${cx},${cy}:${i}` (scatter) or `${cx},${cy}:d${n}` (dressed)
@@ -1918,7 +1964,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    on a haunt, never per frame. A null effect (no trail cell behind you, no chair to turn) consumes no cooldown. ──
   const hauntCtxObj = { player, props: null, isOpen: (x, y) => level.grid.floor(Math.floor(x), Math.floor(y)), trail: null }
   function hauntCtx() { hauntCtxObj.props = level.decor.getProps(); hauntCtxObj.trail = fog.lastTrail(6); return hauntCtxObj }
-  function applyHaunt(fx) {
+  // a placed haunt's line is unprompted ('haunt'): held back by the plate budget it is let go, its moment past; a drawer's behind-you is
+  // what you did ('search')
+  function applyHaunt(fx, kind = 'haunt') {
     if (fx.ephemera) ephemera.push(fx.ephemera)                     // the figure carries vanishAt: the loop drops it when you come within three
     if (fx.audio === 'whisper') whisper()
     else if (fx.audio === 'doorSlam') doorSlam()
@@ -1930,7 +1978,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       const tog = lightToggles                                      // restored only if L was not touched meanwhile
       setTimeout(() => { if (lightToggles === tog) flashlight = true }, fx.flashlightOff * 1000)
     }
-    showMessage(fx.message, PRIO.discovery)
+    plate(kind, fx.message, PRIO.discovery, false)
     clampSanity(fx.sanity)
   }
 
@@ -2022,6 +2070,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     Object.assign(s, identityOut({ origin, thin, filed, intakeCtx, filedFloors }))
     // the caches' index (caches.js): whose each one is, for the caps (where they lie is the floors' memory, above)
     s.caches = ledger.snapshot()
+    // the first run's thread while it can still advance (firstrun.js): a resume takes it up at its step
+    if (firstRun.on()) s.firstRun = firstRun.step()
     return s
   }
   let saveTimer = 0, persistN = 0
@@ -2105,10 +2155,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   } else {
     buildLevel(entryLevel({ online: !!mpClient, frontDoor })); mem.arrive(level.index, spawnChunk, playT)   // the lobby; the block by the front door
     if (getPref('solidBodies')) level.solid.settlePlayer(player)               // out of a prop the spawn cell may hug (the lobby)
-    // a first visit, as travel() says it: how to leave this floor, a few seconds in (the lobby's torn corner; the block's gap)
-    if (level.cfg.exit?.hint) later(3800, level.cfg.exit.hint, PRIO.discovery)
   }
-  showMessage(level.cfg.levelName, PRIO.combat)
+  // the run's first visit begins: a resume's is not a first visit, so its plate is the floor's name
+  startVisit()
+  plate('floor', arrivalPlate(level.cfg, !resume), PRIO.combat)
+  // a fresh run's first visit, as travel() says it: how to leave this floor, a few seconds in (the lobby's torn corner; the block's gap);
+  // on the first run's lobby it waits with the faint pull, and the frame says it then
+  if (!resume && level.cfg.exit?.hint) { if (freshLobby()) hintHeld = true; else later(3800, level.cfg.exit.hint, PRIO.discovery) }
   // the room's frames reach the bus only now, with a floor to lay a cache on: what came before (the relay's kept caches, replayed straight
   // after welcome while the world was still loading) the client held, and hands over on the next tick
   if (bus) mpClient.onEv(bus.receive)
@@ -2147,10 +2200,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }) : null
 
   // ── the map's helpers, built once (nothing allocated per frame): the cache's epoch per chunk (0 where there is none), the decor's
-  //    nearest-way probe for the stale check, the compass's one state object (its stale predicate inside), and the compass element ──
+  //    nearest-way probe for the stale check, the compass's one state object (its stale predicate inside; the faint pull's rule, lean and
+  //    skip, which passes over nothing in this release), and the compass element ──
   const epochOf = (cx, cy) => level.cache.epochOf?.(cx, cy) ?? 0
   const nearestWayFn = (x, y) => level.decor.nearestWay(x, y, 2)
-  const compassState = { player, known: null, fallback: null, arrived: null, stale: (p) => fog.isStale(level.index, p.chunkKey, epochOf) }
+  const compassState = { player, known: null, fallback: null, arrived: null, stale: (p) => fog.isStale(level.index, p.chunkKey, epochOf), pull: false, wobble: 0, skip: null }
   const compassEl = document.getElementById('exit-compass')
   // what goes on the map because you SAW it (sightpins.js), on the cell-change tick only: the ways at 1.35x the fog (the beam shows that
   // far), the sights at the fog (their first-sight line once, within 9 u), and by proximity (PROX_PIN) the machine, the note and the soul
@@ -2373,13 +2427,18 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (fogTimer > 0) fogTimer -= dt
     const fogMul = fogTimer > 0 ? 1.6 : 1
 
-    // ── atmospheric messages ──
+    // ── atmospheric messages: a floor murmur through the plate budget, let go when it is held back (the next comes soon enough); the
+    //    lobby's exit hint is not drawn while the first run holds it ──
     msgTimer += dt
     if (msgTimer >= msgNext) {
       msgTimer = 0
       msgNext  = base.messageInterval[0] + Math.random() * (base.messageInterval[1] - base.messageInterval[0])
-      showMessage(level.messages[Math.floor(Math.random() * level.messages.length)], PRIO.ambient)
+      const murmur = level.messages[Math.floor(Math.random() * level.messages.length)]
+      if (!hintHeld || murmur !== cfg.exit?.hint) plate('murmur', murmur, PRIO.ambient, false)
     }
+    // a plate the budget held back, once the arrival has settled (plates.js drain: the oldest, one a while; it allocates nothing)
+    const held = plates.drain(playT)
+    if (held) showMessage(held, PRIO.discovery)
 
     // ── Living Atmosphere: occasional ambient dread events (procedural floors only) ──
     //    (not while a drawer is being searched, and not inside the quiet a haunt or an earlier event left behind)
@@ -2468,6 +2527,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.style.opacity = '1'
       } else if (nearMachine && !vendedSet.has(nearMachine.key)) {
         itemHintEl.textContent = 'f · draw from the machine'
+        itemHintEl.style.opacity = '1'
+      } else if (searchT > 0 && searchTarget) {
+        itemHintEl.textContent = searchHint                         // the hold says itself here, not on a plate (startSearch made the line)
         itemHintEl.style.opacity = '1'
       } else if (boxFirst) {
         itemHintEl.textContent = `f · search ${CONTAINER_TYPES[nearBox.type]}`
@@ -2558,7 +2620,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (K['KeyL']) {
         K['KeyL'] = false
         if (kneel.st) showMessage(LIGHT_STAYS_LINE)        // kneeling, the light is theirs
-        else { flashlight = !flashlight; lightToggles++; showMessage(flashlight ? 'flashlight on.' : litOffLine(litRec ? litRec.name : null)) }   // the counter: a haunt only restores a light you did not touch; dark in a friend's light, the line names them
+        // the counter: a haunt only restores a light you did not touch. The plain lines are said on a run's first toggle, then the light
+        // alone; dark in a friend's light, the line names them, always
+        else { flashlight = !flashlight; lightToggles++; if (!lightSaid || (!flashlight && litRec)) { lightSaid = true; showMessage(flashlight ? 'flashlight on.' : litOffLine(litRec ? litRec.name : null)) } }
       }
       if (K['KeyB']) {
         K['KeyB'] = false
@@ -2587,21 +2651,28 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         const code = `Digit${i + 1}`
         if (K[code]) { K[code] = false; cancelCommit(); itemSys.select(i); renderHotbar() }   // a slot change ends a wrap (consume takes the SELECTED item)
       }
-      // E — the presence (a page you have not read first), else the form or the scrap (sealed, under compliance, until you read it or give
-      // it up), else (∅, a tenant-to-be) the sealed door ahead, else the lost soul
+      // E — the presence (a page you have not read first), else the first run's note, else the form or the scrap (sealed, under
+      // compliance, until you read it or give it up), else (∅, a tenant-to-be) the sealed door ahead, else the lost soul
       if (K['KeyE']) {
         K['KeyE'] = false
         const door = cfg.map && !nearPresence && !nearScrap && provisionalOrigin() === 'tenant' ? doorAhead() : null
         if (nearPresence && !scrapFirst) openDialog()
+        else if (nearScrap?.firstrun) openFirstNote(nearScrap)
         else if (nearScrap) nearScrap.form ? openForm() : mods.sealedCards && !readSet.has(nearScrap.frag) ? openSealed(nearScrap) : openNoteCard(nearScrap)
         else if (door) knockDoor(door)
         else if (nearNpc) {
           const r = rules.npcLine()                       // processed: the soul sees the stamp and will not talk
           if (r) { showMessage(r.text); sanity = Math.max(0, Math.min(100, sanity + r.sanity)) }
           else {
-            // the souls know the word you are under: its line joins their pool (a notice nobody answered adds none — today's twelve)
-            const pool = NPC_LINES.concat(npcLines(file.status))
-            showMessage(pool[Math.floor(Math.random() * pool.length)])
+            // a soul's word is the floor's hint (the faint pull comes free); the first run's soul knows the room once the note has named it
+            floorHinted = true
+            const fl = firstRun.onSoul(nearNpc.key)
+            if (fl) showMessage(fl)
+            else {
+              // the souls know the word you are under: its line joins their pool (a notice nobody answered adds none — today's twelve)
+              const pool = NPC_LINES.concat(npcLines(file.status))
+              showMessage(pool[Math.floor(Math.random() * pool.length)])
+            }
           }
         }
       }
@@ -2619,6 +2690,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const cix = Math.floor(player.x), ciy = Math.floor(player.y)
     const cellChanged = cix !== lastCellIx || ciy !== lastCellIy
     lastCellIx = cix; lastCellIy = ciy
+    // the first run (firstrun.js): its lobby clock, and the room's line the moment you step into the room the soul named
+    firstRun.tick(dt)
+    if (cellChanged) { const rl = firstRun.onEnter(cix, ciy); if (rl) showMessage(rl, PRIO.discovery) }
     if (!cfg.map) {
       const st = fog.step(level.index, player.x, player.y, revealRadius(level.index), level.grid.floor, epochOf)
       if (st) {
@@ -2629,20 +2703,31 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       }
       if (mapOpen) mapCard.angleDirty(player.angle)
     }
-    // ── the compass (compass.js): the nearest way you have SEEN that leads on (a '~' when its chunk moved), else the faint pull of the
-    //    nearest loaded way, and the way you came; recomputed only when the cell, the heading (> 0.05 rad) or the known ways changed;
-    //    hidden under the prompt ──
+    // ── the faint pull (compass.js pullVisible): free after this visit's floor time or once the floor has given you a hint; on the
+    //    first run's lobby the thread's step decides instead. The one record, refilled. The block keeps its pull as it was (the hold).
+    //    The lobby's exit hint, held for the first run, follows the same rule: said the moment the pull frees ──
+    pullAsk.floorT = playT - floorT0; pullAsk.hinted = floorHinted; pullAsk.fresh = freshLobby(); pullAsk.step = firstRun.step()
+    const pull = !!cfg.map || pullVisible(pullAsk)
+    if (hintHeld && pull) { hintHeld = false; plate('arrival', cfg.exit?.hint, PRIO.discovery) }
+    // ── the compass (compass.js): the nearest way you have SEEN that leads on (a '~' when its chunk moved), else, once the pull is free,
+    //    the faint pull of the nearest loaded way on (never a stair up; while the first run waits on its room, that room's way), a little
+    //    off true, and the way you came; recomputed when the cell, the heading (> 0.05 rad), the known ways or the pull changed, and on a
+    //    slow clock for the lean; hidden under the prompt. On the lobby with no way shown, the setting's line, once a visit ──
     if (compassEl) {
       const known = fog.ways(level.index)
-      if (cellChanged || Math.abs(player.angle - lastCompassAngle) > 0.05 || known.length !== lastWayCount) {
-        lastCompassAngle = player.angle; lastWayCount = known.length
+      if (cellChanged || Math.abs(player.angle - lastCompassAngle) > 0.05 || known.length !== lastWayCount || pull !== compassState.pull || playT - lastCompassT >= PULL_REDRAW_S) {
+        lastCompassAngle = player.angle; lastWayCount = known.length; lastCompassT = playT
         compassState.known = known
-        compassState.fallback = level.decor.nearestWayAny(player.x, player.y)     // one reused { rec, dist }: read now, never kept
+        const room = firstRun.toward()
+        if (room) { roomPull.rec = room; compassState.fallback = roomPull }
+        else compassState.fallback = level.decor.nearestWayOn(player.x, player.y, compassState.skip)     // one reused { rec, dist }: read now, never kept
+        compassState.pull = pull; compassState.wobble = cfg.map ? 0 : pullWobble(pullAsk.floorT, pullPhase)
         compassState.arrived = fog.arrivedPin(level.index)
         compassLines(compassState, compassOut)
         const s = compassText(compassOut)
         if (s !== lastCompassText) { compassEl.textContent = s; lastCompassText = s }
       }
+      if (level.index === 0 && lostDue(compassOut, lostSaid) && plate('murmur', LOST_LINE, PRIO.discovery, false)) lostSaid = true
       compassEl.style.opacity = (compassOut.length === 0 || nearExit) ? '0' : '1'
     }
     netTimer += dt

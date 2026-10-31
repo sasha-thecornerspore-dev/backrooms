@@ -39,7 +39,7 @@ describe('game.js: buildLevel order (cache -> grid -> bodies -> decor(hooks) -> 
     const build = game.slice(game.indexOf('function buildLevel(index, at = null) {'), game.indexOf('const fader = createFader('))
     expect(build).toMatch(/\n\s*bumpSaid\.clear\(\); clutterSeen\.clear\(\)/)
     expect(build.indexOf('bumpSaid.clear(); clutterSeen.clear()')).toBeLessThan(build.indexOf('vendedSet = mem.vendedFor(index, filedFloors.has(floorKey(worldSeed, index)) ? -Infinity : playT)'))
-    expect(game).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\)\]\.filter\(Boolean\),/)   // stairs -> dress -> haunts
+    expect(game).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\), index === 0 && firstRun\.on\(\) \? firstNotePass : null\]\.filter\(Boolean\),/)   // stairs -> dress -> haunts (-> the first run's note)
     expect(game).not.toMatch(/TODO\(integrate:dress\)/)
     // the creatures step: hunt.js is the one creature-solidity / hostility rule (the placeholders are gone)
     expect(game).toMatch(/import \{ hostile, solidCreature \} from '\.\/hunt\.js'/)
@@ -111,7 +111,7 @@ describe('game.js: the ways and the stairs', () => {
     expect(game).not.toMatch(/nearestExitAny\(/)
     expect(game).toMatch(/'f · the way is still closing\.' : `f · \$\{wayLabel\(nearExit\)\}`/)
     expect(game).toMatch(/else if \(nearExit\) \{\r?\n\s*travel\(nearExit\)/)
-    expect(game).toMatch(/compassState\.fallback = level\.decor\.nearestWayAny\(player\.x, player\.y\)/)
+    expect(game).toMatch(/compassState\.fallback = level\.decor\.nearestWayOn\(player\.x, player\.y, compassState\.skip\)/)   // (pulse T1-2: the ways that lead on)
     expect(game).not.toMatch(/anyExit/)
   })
   it('the stairs are a separate pooled category drawn with the exit fill, right after the exits', () => {

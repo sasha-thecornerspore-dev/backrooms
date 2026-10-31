@@ -217,16 +217,17 @@ describe('FEEL-1 / FEEL-4: an arrival\'s delayed lines belong to that arrival', 
   it('later() drops a line when a newer arrival has begun (replayed from game.js\'s own source)', () => {
     const src = game.match(/function later\(ms, text, prio\) \{[^\n]*\}/)[0]
     const timers = [], said = []
-    const mk = new Function('setTimeout', 'showMessage', `let arrivalGen = 0; ${src}; return { later, next: () => arrivalGen++ }`)
-    const g = mk((f, ms) => timers.push({ f, ms }), (t, p) => said.push([t, p]))
+    // (pulse T1-4: the line it keeps goes to the arrival's plate budget, as an 'arrival' plate)
+    const mk = new Function('setTimeout', 'plate', `let arrivalGen = 0; ${src}; return { later, next: () => arrivalGen++ }`)
+    const g = mk((f, ms) => timers.push({ f, ms }), (k, t, p) => said.push([k, t, p]))
     g.next(); g.later(7500, 'you land a few rooms over. there is no way back up here.', 1)
     g.next(); g.later(2600, 'you wake beside the hole you fell through. something of you stayed down there.', 1)    // a death in between
     for (const t of timers.sort((a, b) => a.ms - b.ms)) t.f()
-    expect(said).toEqual([['you wake beside the hole you fell through. something of you stayed down there.', 1]])
+    expect(said).toEqual([['arrival', 'you wake beside the hole you fell through. something of you stayed down there.', 1]])
   })
   it('with followers placed, the first-visit hint gives its discovery slot to \'it followed you down.\'', () => {
     expect(travelBody).toContain('const followed = followers.length ? level.entitySys.inject(')
-    expect(travelBody).toContain('if (level.cfg.exit?.hint && !followed) later(3800, level.cfg.exit.hint, PRIO.discovery)')
+    expect(travelBody).toContain('if (level.cfg.exit?.hint && !followed) { if (freshLobby()) hintHeld = true; else later(3800, level.cfg.exit.hint, PRIO.discovery) }')
   })
 })
 

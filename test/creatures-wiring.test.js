@@ -103,7 +103,7 @@ describe('game.js: the events, drained once per frame into one reused array', ()
     expect(body).toMatch(/case 'turning': if \(ev\.d <= fog && !turningSaid\.has\(ev\.id\)\) \{ turningSaid\.add\(ev\.id\); showMessage\('it stops\. it turns\.', PRIO\.interaction\) \} break/)
   })
   it('the variant events carry theirs: the smiler, the hound (twice, once per run), the lurker, the crawler, the watcher', () => {
-    expect(body).toContain("case 'smiler-freeze': whisper(); showMessage('it stops when you look. do not look away.', PRIO.discovery); break")
+    expect(body).toContain("case 'smiler-freeze': whisper(); if (!smilerTold) { smilerTold = true; showMessage('it stops when you look. do not look away.', PRIO.discovery) } break")   // (pulse T1-4: the lesson once a run)
     expect(body).toMatch(/case 'hound-windup': footfall\(2\); if \(!houndTold\) \{ houndTold = true; showMessage\('it gathers itself\. push now\.', PRIO\.urgent\) \} break/)
     expect(body).toMatch(/case 'hound-pass': if \(!passTold\) \{ passTold = true; showMessage\('it skids past\.', PRIO\.interaction\) \} break/)
     expect(body).toMatch(/case 'lurker-hunt': if \(playT - lastDuck > 1\.4\) \{ lastDuck = playT; humDuck\(1\.4\) \} break/)

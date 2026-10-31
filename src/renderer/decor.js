@@ -166,6 +166,8 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
             sl.push(record)
           }
           else if (kind === 'haunt') haunts.set(key, record)
+          // an authored note (the first run's, firstrun.js): kept by its own key, never the chunk's, so the chunk's own page stays
+          else if (kind === 'scrap') scraps.set(record.key, record)
         },
       }
       for (let i = 0; i < passes.length; i++) passes[i](ctx)

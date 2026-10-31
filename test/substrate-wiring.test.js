@@ -28,7 +28,7 @@ describe('game.js: the event bus (I3)', () => {
     expect(game).toMatch(/peerPos, peerIds: \(\) => peerIdSet, selfId: \(\) => mpClient\.id, mergeRemote: mpClient\.mergeRemote,/)
     // the room's frames reach the bus only after the boot floor is built (the client holds what came early: the relay's replay)
     expect(count(/mpClient\.onEv\(/g)).toBe(1)
-    expect(at('if (bus) mpClient.onEv(bus.receive)')).toBeGreaterThan(at('showMessage(level.cfg.levelName, PRIO.combat)'))
+    expect(at('if (bus) mpClient.onEv(bus.receive)')).toBeGreaterThan(at('plate(\'floor\', arrivalPlate(level.cfg, !resume), PRIO.combat)'))   // (pulse T1-4: the boot's floor plate)
     expect(at('if (bus) mpClient.onEv(bus.receive)')).toBeLessThan(loopAt)
     expect(game).toMatch(/bus\.onFloorChange\(\(id, name, from, to, line\) => \{ if \(line\) addChatLine\(name \|\| 'someone', line, true\) \}\)/)
     for (const s of ['const selfPos = { x: 0, y: 0, lvl: 0 }', 'const peerIdSet = new Set(), peerRec = new Map()', 'const peerPos = (id) => peerRec.get(id) ?? null']) expect(at(s)).toBeLessThan(loopAt)

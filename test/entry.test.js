@@ -48,8 +48,9 @@ describe('game.js: the boot goes through entryLevel; nothing else about ∅ chan
     expect((game.match(/buildLevel\(entryLevel\(/g) || []).length).toBe(1)
   })
   it('a fresh run says how to leave its first floor, as a first visit through travel() does (review LR-3)', () => {
-    const boot = slice(game, 'buildLevel(entryLevel(', 'showMessage(level.cfg.levelName, PRIO.combat)')
-    expect(boot).toMatch(/if \(getPref\('solidBodies'\)\) level\.solid\.settlePlayer\(player\)[^\n]*\r?\n\s*\/\/[^\n]*\r?\n\s*if \(level\.cfg\.exit\?\.hint\) later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\)\r?\n\s*\}/)
+    // (pulse: after the boot's floor plate, for a fresh run only; on the first run's lobby it is held for the faint pull)
+    const boot = slice(game, 'buildLevel(entryLevel(', 'if (bus) mpClient.onEv(bus.receive)')
+    expect(boot).toMatch(/plate\('floor', arrivalPlate\(level\.cfg, !resume\), PRIO\.combat\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(!resume && level\.cfg\.exit\?\.hint\) \{ if \(freshLobby\(\)\) hintHeld = true; else later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\) \}/)
     const resume = slice(game, 'if (resume) {', 'buildLevel(entryLevel(')
     expect(resume).not.toContain('exit?.hint')                    // a resumed run is not a first visit
     expect(levelConfig(DEFAULT_CONFIG, LOBBY).exit.hint).toBe('the walls are thin here — no-clip through a torn corner and you fall out of the lobby.')

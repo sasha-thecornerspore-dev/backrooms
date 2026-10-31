@@ -34,6 +34,8 @@ export function pullVisible({ floorT = 0, hinted = false, fresh = false, step = 
 // tier 2a passes a wider `amp` below sanity 25
 export const PULL_WOBBLE = Math.PI / 6
 export function pullWobble(floorT, phase = 0, amp = PULL_WOBBLE) { return amp * Math.sin(floorT / 7 + phase) }
+// the caller redraws the compass this often even when you stand still: the lean moves with floor time, not with your cell
+export const PULL_REDRAW_S = 0.5
 // a pin imported without its label still reads by kind
 const KIND_LABEL = { down: 'descend', lift: 'the lift', ring: 'climb out', up: 'stairwell up' }
 

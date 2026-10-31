@@ -1066,7 +1066,8 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     expect(loop).toMatch(/if \(!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen\) \{\r?\n(\s*\/\/[^\n]*\r?\n)+\s*if \(K\['KeyF'\] && \(kneel\.st \|\| dnFront\)\) \{ K\['KeyF'\] = false; if \(kneel\.st\) stopKneel\(null\); else startKneel\(dnFront\) \}\r?\n\s*if \(K\['KeyF'\]\) \{/)
     expect(loop).toMatch(/if \(kneel\.st && K\['Escape'\]\) \{ K\['Escape'\] = false; stopKneel\(null\) \}[^\n]*\r?\n(\s*\r?\n)?(\s*\/\/[^\n]*\r?\n)*\s*if \(mapOpen && \(K\['Escape'\] \|\| K\['Tab'\]\)\)/)
     // (the off line is lightshare.js litOffLine since I12: today's 'flashlight off — the dark leans in.' when nobody's light reaches you)
-    expect(loop).toMatch(/if \(K\['KeyL'\]\) \{\r?\n\s*K\['KeyL'\] = false\r?\n\s*if \(kneel\.st\) showMessage\(LIGHT_STAYS_LINE\)[^\n]*\r?\n\s*else \{ flashlight = !flashlight; lightToggles\+\+; showMessage\(flashlight \? 'flashlight on\.' : litOffLine\(litRec \? litRec\.name : null\)\) \}/)
+    // (pulse T1-4: the plain lines once a run, the friend's always)
+    expect(loop).toMatch(/if \(K\['KeyL'\]\) \{\r?\n\s*K\['KeyL'\] = false\r?\n\s*if \(kneel\.st\) showMessage\(LIGHT_STAYS_LINE\)[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*else \{ flashlight = !flashlight; lightToggles\+\+; if \(!lightSaid \|\| \(!flashlight && litRec\)\) \{ lightSaid = true; showMessage\(flashlight \? 'flashlight on\.' : litOffLine\(litRec \? litRec\.name : null\)\) \} \}/)
     expect(LIGHT_STAYS_LINE).toBe('your light stays on them.')
   })
   it('the prompt: who is down in front (the hoisted options, last frame\'s fill) heads the ladder, dimming as you count; the kneel ticks after the remote fill', () => {
@@ -1683,19 +1684,24 @@ describe('I12 (W7): a friend\'s light, a friend\'s ward, a friend\'s photograph 
     run({ freshPeersOnFloor: () => [{ ...rec, lit: false }] }, litFriendNear, player, opts, st)
     expect(st).toEqual({ litRec: null, litNear: false })                                         // their light off: no shelter
   })
-  it('L: going dark in a friend\'s light names them; in nobody\'s it is today\'s line; kneeling, the light stays on them', () => {
+  it('L: going dark in a friend\'s light names them, always; in nobody\'s it is today\'s line, once a run (pulse T1-4); kneeling, the light stays on them', () => {
     const L = lift(/if \(K\['KeyL'\]\) \{[\s\S]*?\r?\n {6}\}/)
-    const run = new Function('K', 'kneel', 'litOffLine', 'showMessage', 'LIGHT_STAYS_LINE', 'st', `let { flashlight, lightToggles, litRec } = st\n${L}\nObject.assign(st, { flashlight, lightToggles })`)
+    const run = new Function('K', 'kneel', 'litOffLine', 'showMessage', 'LIGHT_STAYS_LINE', 'st', `let { flashlight, lightToggles, litRec, lightSaid } = st\n${L}\nObject.assign(st, { flashlight, lightToggles, lightSaid })`)
     const said = [], press = (st, kneel = { st: null }) => run({ KeyL: true }, kneel, litOffLine, (m) => said.push(m), LIGHT_STAYS_LINE, st)
-    let st = { flashlight: true, lightToggles: 0, litRec: { name: 'maddie' } }
+    let st = { flashlight: true, lightToggles: 0, litRec: { name: 'maddie' }, lightSaid: false }
     press(st)
     expect([st.flashlight, st.lightToggles, said.at(-1)]).toEqual([false, 1, "flashlight off — you stand in maddie's light."])
     press(st)
+    expect(said).toHaveLength(1)                                                   // on again: the run's first line was said; the light alone
+    press(st)
+    expect(said).toEqual(["flashlight off — you stand in maddie's light.", "flashlight off — you stand in maddie's light."])   // a friend's light, always
+    st = { flashlight: false, lightToggles: 0, litRec: null, lightSaid: false }
+    press(st)
     expect(said.at(-1)).toBe('flashlight on.')
-    st = { flashlight: true, lightToggles: 0, litRec: null }
+    st = { flashlight: true, lightToggles: 0, litRec: null, lightSaid: false }
     press(st)
     expect(said.at(-1)).toBe('flashlight off — the dark leans in.')
-    st = { flashlight: true, lightToggles: 0, litRec: { name: 'maddie' } }
+    st = { flashlight: true, lightToggles: 0, litRec: { name: 'maddie' }, lightSaid: false }
     press(st, { st: { id: 'f' } })
     expect([st.flashlight, said.at(-1)]).toEqual([true, LIGHT_STAYS_LINE])
   })

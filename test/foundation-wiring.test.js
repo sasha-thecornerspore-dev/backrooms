@@ -28,25 +28,26 @@ describe('game.js: one voice (messages.js)', () => {
   })
   it('every line that must win or must yield carries its priority', () => {
     expect(game).toMatch(/showMessage\(th\.dmgKind === 'arc' \? 'the current finds you\.' : 'it has you\.', PRIO\.urgent\)/)   // the creatures step: the jolt has its own line; urgent, so it lands with the hit (FEEL-2)
-    // travel: the level name wins at once; on a first visit the way hint is a discovery line that follows it
-    expect(game).toMatch(/showMessage\(level\.cfg\.levelName, PRIO\.combat\)\r?\n\s+const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)\r?\n\s+if \(first\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s+if \(level\.cfg\.exit\?\.hint && !followed\) later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\)/)
+    // travel: the floor's plate wins at once (pulse T1-4: through the plate budget, the sub-line the first time); on a first visit the
+    // way hint is a discovery line that follows it (held for the faint pull on the first run's lobby)
+    expect(game).toMatch(/plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s+const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)\r?\n\s+if \(first\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s+if \(level\.cfg\.exit\?\.hint && !followed\) \{ if \(freshLobby\(\)\) hintHeld = true; else later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\) \}/)
     // dying: 'everything goes dark.' is combat; the wake line (death.js) follows as discovery
     expect(game).toMatch(/showMessage\('everything goes dark\.', PRIO\.combat\)/)
     expect(game).toMatch(/later\(2600, r\.message, PRIO\.discovery\)/)
-    expect(game).toMatch(/buildLevel\(entryLevel\(\{ online: !!mpClient, frontDoor \}\)\)[^\n]*\r?\n\s*if \(getPref\('solidBodies'\)\) level\.solid\.settlePlayer\(player\)[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)?\s*if \(level\.cfg\.exit\?\.hint\) later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\)\r?\n\s*\}\r?\n\s*showMessage\(level\.cfg\.levelName, PRIO\.combat\)/)
-    expect(game).toMatch(/showMessage\(level\.messages\[Math\.floor\(Math\.random\(\) \* level\.messages\.length\)\], PRIO\.ambient\)/)
+    expect(game).toMatch(/buildLevel\(entryLevel\(\{ online: !!mpClient, frontDoor \}\)\)[^\n]*\r?\n\s*if \(getPref\('solidBodies'\)\) level\.solid\.settlePlayer\(player\)[^\n]*\r?\n\s*\}\r?\n(\s*\/\/[^\n]*\r?\n)*\s*startVisit\(\)\r?\n\s*plate\('floor', arrivalPlate\(level\.cfg, !resume\), PRIO\.combat\)/)
+    expect(game).toMatch(/const murmur = level\.messages\[Math\.floor\(Math\.random\(\) \* level\.messages\.length\)\]\r?\n\s*if \(!hintHeld \|\| murmur !== cfg\.exit\?\.hint\) plate\('murmur', murmur, PRIO\.ambient, false\)/)
     // event lines: fireEvent's prio — ambient by default (the scheduler passes none), interaction when a drawer fires them — except the two
-    // that answer to you, which stay on the interaction default
-    expect(game).toContain('function fireEvent(id, prio = PRIO.ambient) {')
+    // that answer to you, which stay at interaction; all through the plate budget (pulse T1-4)
+    expect(game).toContain("function fireEvent(id, prio = PRIO.ambient, kind = 'event') {")
     expect(game).toMatch(/if \(evId\) \{ fireEvent\(evId\); dreadQuietT = 12 \}/)
     for (const line of [
       'the lights go out ahead of you, one by one. then, slowly, they come back.',
       'the hum stops. the silence has a shape. then it resumes, as if something had been listening.',
       'a cold spot. your breath fogs where there is nothing cold enough to fog it.',
       'footsteps. not yours. they keep your pace, and stop when you stop.',
-    ]) expect(game).toContain(`showMessage('${line}', prio)`)
-    expect(game).toContain("showMessage('somewhere behind you, a door slams shut.')")
-    expect(game).toContain("showMessage('far down the hall, something crosses the intersection. the hall is empty when you look again.')")
+    ]) expect(game).toContain(`plate(kind, '${line}', prio, false)`)
+    expect(game).toContain("plate(kind, 'somewhere behind you, a door slams shut.', PRIO.interaction, false)")
+    expect(game).toContain("plate(kind, 'far down the hall, something crosses the intersection. the hall is empty when you look again.', PRIO.interaction, false)")
     // ward results stay on the default (interaction)
     expect(game).toContain("showMessage('you push at the dark. it gives nothing back.')")
   })

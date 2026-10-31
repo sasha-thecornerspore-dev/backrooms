@@ -27,13 +27,14 @@ const once = (s) => expect((game.match(new RegExp(s.replace(/[.*+?^${}()|[\]\\]/
 describe('game.js: the real exported names, the passes, the state', () => {
   it('imports dress / containers / haunts by their real names and the drawer scrape from audio.js', () => {
     expect(game).toMatch(/import \{ dressPass \} from '\.\/dress\.js'/)
-    expect(game).toMatch(/import \{ CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog \} from '\.\/containers\.js'/)
+    expect(game).toMatch(/import \{ CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog(, [A-Za-z_, ]+)? \} from '\.\/containers\.js'/)   // (pulse: searchingHint)
     expect(game).toMatch(/import \{ hauntsPass, createHauntTracker, hauntEffects \} from '\.\/haunts\.js'/)
     // (I10: the whistle sits between the drawer scrape and the bump — solid-wiring pins the `, bump } from './audio.js'` tail)
     expect(game).toMatch(/import \{ initAudio, [^\n]*, drawerSlide, whistle, bump \} from '\.\/audio\.js'/)
   })
   it('buildLevel runs the passes in the fixed order stairs -> dress -> haunts (none on the block); no TODO(integrate:dress|between) is left', () => {
-    expect(game).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\)\]\.filter\(Boolean\),/)
+    // (pulse T1-3: the first run's note, last, on its lobby only)
+    expect(game).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\), index === 0 && firstRun\.on\(\) \? firstNotePass : null\]\.filter\(Boolean\),/)
     expect(game).not.toMatch(/TODO\(integrate:dress/)
     expect(game).not.toMatch(/TODO\(integrate:between/)
   })
@@ -64,7 +65,8 @@ describe('game.js: the search (containers.js)', () => {
   })
   it('F starts the search before the way and after the machine; it refuses while hunted or with a thing within 4 ("not now."), else holds SEARCH_HOLD_S with the scrape', () => {
     expect(game).toMatch(/dispenseFromMachine\(nearMachine\)\r?\n\s*\} else if \(boxFirst\) \{\r?\n\s*startSearch\(nearBox, thA\)[^\n]*\r?\n\s*\} else if \(nearExit\) \{\r?\n\s*travel\(nearExit\)/)
-    expect(game).toMatch(/function startSearch\(p, th\) \{\r?\n\s*if \(th\.hunted \|\| th\.nearest <= 4\) \{ showMessage\('not now\.', PRIO\.interaction\); return \}\r?\n\s*searchTarget = p; searchT = SEARCH_HOLD_S\r?\n\s*showMessage\('you rummage\.', PRIO\.interaction\)\r?\n\s*drawerSlide\(\)/)
+    // (pulse T1-4: 'you rummage.' is no plate any more — the hint says what you search while the hold runs)
+    expect(game).toMatch(/function startSearch\(p, th\) \{\r?\n\s*if \(th\.hunted \|\| th\.nearest <= 4\) \{ showMessage\('not now\.', PRIO\.interaction\); return \}\r?\n\s*searchTarget = p; searchT = SEARCH_HOLD_S; searchHint = searchingHint\(p\.type\)\r?\n\s*drawerSlide\(\)/)
   })
   it('any step leaves the drawer; the hold ticks down and resolves once', () => {
     expect(game).toMatch(/if \(searchT > 0 && stepped\) \{ searchT = 0; searchTarget = null; showMessage\('you leave the drawer\.', PRIO\.interaction\) \}\r?\n\s*if \(searchT > 0\) \{ searchT -= dt; if \(searchT <= 0 && searchTarget\) \{ resolveSearch\(searchTarget\); searchTarget = null \} \}/)
@@ -78,22 +80,23 @@ describe('game.js: the search (containers.js)', () => {
     expect(game).toMatch(/if \(level\.index >= DRAWER_COST\.minLevel\) \{[^\n]*\r?\n\s*sanity = Math\.max\(0, sanity - DRAWER_COST\.sanity\)\r?\n\s*if \(!drawerCostSaid\) \{ drawerCostSaid = true; showMessage\(DRAWER_COST\.line, PRIO\.discovery\) \}/)
     expect(game).toMatch(/if \(roll\.kind === 'item'\) renderHotbar\(\)/)
     // the api: the inventory's grant, the queue, a clamped sanity, the event ids through fireEvent AT INTERACTION (a search result is 'what you
-    // did': at ambient the line was dropped behind 'you rummage.'), behind-you through the figure with the cold spot as fallback, also at interaction
-    expect(game).toMatch(/grant: itemSys\.grant, message: showMessage, sanity: clampSanity, fire: \(id\) => fireEvent\(id, PRIO\.interaction\),/)
-    expect(game).toMatch(/behindYou: \(\) => \{ const fx = hauntEffects\('standing-figure', hauntCtx\(\)\); if \(fx\) applyHaunt\(fx\); else fireEvent\('cold-spot', PRIO\.interaction\) \}/)
+    // did': at ambient the line was dropped behind the line that showed), behind-you through the figure with the cold spot as fallback, also at
+    // interaction; and both as 'search' (pulse T1-4: what you did is never held back by the plate budget)
+    expect(game).toMatch(/grant: itemSys\.grant, message: showMessage, sanity: clampSanity, fire: \(id\) => fireEvent\(id, PRIO\.interaction, 'search'\),/)
+    expect(game).toMatch(/behindYou: \(\) => \{ const fx = hauntEffects\('standing-figure', hauntCtx\(\)\); if \(fx\) applyHaunt\(fx, 'search'\); else fireEvent\('cold-spot', PRIO\.interaction, 'search'\) \}/)
     expect(game).not.toMatch(/fire: fireEvent,/)
   })
-  it('fireEvent(id, prio = PRIO.ambient): the four murmurs take the caller\'s priority; door-slam and the crosser keep their interaction default', () => {
-    once('function fireEvent(id, prio = PRIO.ambient) {')
-    const body = game.slice(at('function fireEvent(id, prio = PRIO.ambient) {'), at('function startSearch(p, th) {'))
+  it('fireEvent(id, prio = PRIO.ambient, kind): the four murmurs take the caller\'s priority; door-slam and the crosser keep interaction; every line through the plate budget', () => {
+    once("function fireEvent(id, prio = PRIO.ambient, kind = 'event') {")
+    const body = game.slice(at("function fireEvent(id, prio = PRIO.ambient, kind = 'event') {"), at('function startSearch(p, th) {'))
     for (const line of ['the lights go out ahead of you, one by one. then, slowly, they come back.',
       'the hum stops. the silence has a shape. then it resumes, as if something had been listening.',
       'a cold spot. your breath fogs where there is nothing cold enough to fog it.',
-      'footsteps. not yours. they keep your pace, and stop when you stop.']) expect(body).toContain(`showMessage('${line}', prio)`)
+      'footsteps. not yours. they keep your pace, and stop when you stop.']) expect(body).toContain(`plate(kind, '${line}', prio, false)`)
     expect(body).not.toContain(', PRIO.ambient)')                                     // no line in fireEvent pins ambient any more
-    expect(body).toContain("showMessage('somewhere behind you, a door slams shut.')")
-    expect(body).toContain("showMessage('far down the hall, something crosses the intersection. the hall is empty when you look again.')")
-    // the scheduled path still murmurs: no priority passed, so the default (ambient) applies
+    expect(body).toContain("plate(kind, 'somewhere behind you, a door slams shut.', PRIO.interaction, false)")
+    expect(body).toContain("plate(kind, 'far down the hall, something crosses the intersection. the hall is empty when you look again.', PRIO.interaction, false)")
+    // the scheduled path still murmurs: no priority passed, so the default (ambient) applies, and no kind: an unprompted 'event'
     expect(game).toMatch(/if \(evId\) \{ fireEvent\(evId\); dreadQuietT = 12 \}/)
   })
 })
@@ -116,7 +119,7 @@ describe('game.js: the hauntings (haunts.js) and the shared quiet', () => {
     expect(game).toMatch(/if \(fx\.audio === 'whisper'\) whisper\(\)\r?\n\s*else if \(fx\.audio === 'doorSlam'\) doorSlam\(\)\r?\n\s*else if \(fx\.audio === 'footfall:8'\) \{ footfall\(8\); waterT = fx\.timerS \?\? 12; waterStepT = 3 \}/)
     expect(game).toMatch(/if \(fx\.shake\) shake = Math\.max\(shake, fx\.shake\)/)
     expect(game).toMatch(/flashlight = false\r?\n\s*const tog = lightToggles[^\n]*\r?\n\s*setTimeout\(\(\) => \{ if \(lightToggles === tog\) flashlight = true \}, fx\.flashlightOff \* 1000\)/)
-    expect(game).toMatch(/showMessage\(fx\.message, PRIO\.discovery\)\r?\n\s*clampSanity\(fx\.sanity\)/)
+    expect(game).toMatch(/plate\(kind, fx\.message, PRIO\.discovery, false\)\r?\n\s*clampSanity\(fx\.sanity\)/)   // (pulse T1-4: an unprompted 'haunt' through the plate budget)
     expect(game).toMatch(/flashlight = !flashlight; lightToggles\+\+;/)
     // running water keeps pace for its timer
     expect(game).toMatch(/if \(waterT > 0\) \{ waterT -= dt; waterStepT -= dt; if \(waterStepT <= 0 && waterT > 0\) \{ waterStepT = 3; footfall\(8\) \} \}/)

@@ -59,7 +59,7 @@ describe('game.js: buildLevel(index, at)', () => {
     expect(body.indexOf('cfg.ways    = waysFor(index)')).toBeLessThan(body.indexOf('const decor     = createDecorSystem('))
     expect(body).toContain('cache.preload(spawnChunk.cx, spawnChunk.cy)')
     expect(body).toContain('grid.setPlayerChunk(spawnChunk.cx, spawnChunk.cy)')
-    expect(body).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\)\]\.filter\(Boolean\),/)
+    expect(body).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\), index === 0 && firstRun\.on\(\) \? firstNotePass : null\]\.filter\(Boolean\),/)   // (pulse T1-3: the first run's note, last)
     expect(body).not.toMatch(/TODO\(integrate:dress\)/)
     expect(body).toMatch(/else \{ const mid = chunkMid\(spawnChunk\.cx, spawnChunk\.cy\), m = findOpenNear\(mid\.x, mid\.y, grid\.floor\) \?\? mid; player\.x = m\.x; player\.y = m\.y \}/)
     expect(body).not.toMatch(/player\.x = HALF \+ 0\.5/)
@@ -81,9 +81,10 @@ describe('game.js: travel(way) replaces descend', () => {
     expect(body).toMatch(/const followers = \(creaturesOn && way\.kind !== 'lift'\) \? level\.entitySys\.snapshotChasers\(player, 10, 3\) : \[\]/)
     expect(body).toMatch(/mem\.leave\(level\.index, player, fromC, playT\)\r?\n\s*mem\.setDropped\(level\.index, itemSys\.getDropped\(\)\)\r?\n\s*fadeThen\(/)
     // the lift's 'before' line is pushed UNDER the veil, after buildLevel's msgQ.clear() (which dropped it when said before the fade), at combat
-    // (never queued behind a prompt result) and right before the level name (combat queues FIFO: both read)
+    // (never queued behind a prompt result) and right before the floor's plate (combat queues FIFO: both read); both are the arrival's
+    // plates (pulse T1-4), once the visit has begun
     expect(body).not.toMatch(/before: true \}\), PRIO\.discovery\)/)
-    expect(body).toMatch(/persist\(true\)[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(way\.kind === 'lift'\) showMessage\(wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*showMessage\(level\.cfg\.levelName, PRIO\.combat\)/)
+    expect(body).toMatch(/persist\(true\)[^\n]*\r?\n\s*startVisit\(\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(way\.kind === 'lift'\) plate\('arrival', wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)/)
     expect(body.indexOf('buildLevel(way.target, fromC)')).toBeLessThan(body.indexOf("{ before: true }"))
     expect(body.indexOf('if (mapOpen) closeMap()')).toBeLessThan(body.indexOf('fadeThen('))
   })
@@ -102,8 +103,8 @@ describe('game.js: travel(way) replaces descend', () => {
     expect(place).toBeLessThan(dec); expect(dec).toBeLessThan(settle); expect(settle).toBeLessThan(arr)
   })
   it('the message ladder: the level name (combat) at once; first visit: hint 3.8 s, way line 7.5 s; later: way line 3.8 s, the arrival summary 7.5 s; the raised ceiling at 11 s', () => {
-    expect(body).toMatch(/showMessage\(level\.cfg\.levelName, PRIO\.combat\)\r?\n\s*const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)/)
-    expect(body).toMatch(/if \(first\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(level\.cfg\.exit\?\.hint && !followed\) later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\)\r?\n\s*if \(wm\) later\(7500, wm, PRIO\.discovery\)/)
+    expect(body).toMatch(/plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)/)
+    expect(body).toMatch(/if \(first\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(level\.cfg\.exit\?\.hint && !followed\) \{ if \(freshLobby\(\)\) hintHeld = true; else later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\) \}\r?\n\s*if \(wm\) later\(7500, wm, PRIO\.discovery\)/)
     expect(body).toMatch(/\} else \{\r?\n\s*if \(wm\) later\(3800, wm, PRIO\.discovery\)\r?\n\s*const s = arrivalSummary\(fog\.countWays\(way\.target\), rec\.visits\)\r?\n\s*if \(s\) later\(7500, s, PRIO\.discovery\)/)
     expect(body).toMatch(/if \(player\.maxHp > hp0\) later\(11000, 'the floor remembers you less\.', PRIO\.discovery\)/)
   })
@@ -211,7 +212,7 @@ describe('game.js: the map, held not modal', () => {
     expect(game).toMatch(/if \(!cfg\.map\) \{\r?\n\s*const st = fog\.step\(level\.index, player\.x, player\.y, revealRadius\(level\.index\), level\.grid\.floor, epochOf\)\r?\n\s*if \(st\) \{\r?\n\s*pinSeen\(cfg\.fogDistance \* fogMul\)\r?\n\s*const lost = fog\.checkStale\(level\.index, player, nearestWayFn, epochOf\)\r?\n\s*if \(lost && playT - lastLostMsg > 90\) \{ lastLostMsg = playT; showMessage\('the hole is not where you drew it\.', PRIO\.discovery\); whisper\(\) \}\r?\n\s*if \(mapOpen\) mapCard\.cellsDirty\(\)\r?\n\s*\}\r?\n\s*if \(mapOpen\) mapCard\.angleDirty\(player\.angle\)\r?\n\s*\}/)
     // the helpers are built once, outside the loop: nothing allocated per frame
     for (const s of ['const epochOf = (cx, cy) => level.cache.epochOf?.(cx, cy) ?? 0', 'const nearestWayFn = (x, y) => level.decor.nearestWay(x, y, 2)',
-      'const compassState = { player, known: null, fallback: null, arrived: null, stale: (p) => fog.isStale(level.index, p.chunkKey, epochOf) }',
+      'const compassState = { player, known: null, fallback: null, arrived: null, stale: (p) => fog.isStale(level.index, p.chunkKey, epochOf), pull: false, wobble: 0, skip: null }',
       "const compassEl = document.getElementById('exit-compass')", 'function pinSeen(reach) {']) expect(at(s)).toBeLessThan(loopAt)
     expect((game.match(/getElementById\('exit-compass'\)/g) || []).length).toBe(1)
   })
@@ -230,9 +231,10 @@ describe('game.js: the map, held not modal', () => {
     expect(game).toMatch(/cancelCommit\('the bandage slips\.'\)\r?\n\s*fog\.pinThing\(level\.index, 'hurt:' \+ frameCount, 'hurt', player\.x, player\.y\)/)
     expect(game).toMatch(/if \(!level\.cfg\.map\) fog\.pinThing\(level\.index, 'n:' \+ scrap\.key, 'note', scrap\.x, scrap\.y, true\)/)
   })
-  it('the compass recomputes only on a cell, heading or known-ways change, writes the text only when it changed, and hides under the prompt; the old block is gone', () => {
-    expect(game).toMatch(/const known = fog\.ways\(level\.index\)\r?\n\s*if \(cellChanged \|\| Math\.abs\(player\.angle - lastCompassAngle\) > 0\.05 \|\| known\.length !== lastWayCount\) \{\r?\n\s*lastCompassAngle = player\.angle; lastWayCount = known\.length\r?\n\s*compassState\.known = known\r?\n\s*compassState\.fallback = level\.decor\.nearestWayAny\(player\.x, player\.y\)/)
-    expect(game).toMatch(/compassState\.arrived = fog\.arrivedPin\(level\.index\)\r?\n\s*compassLines\(compassState, compassOut\)\r?\n\s*const s = compassText\(compassOut\)\r?\n\s*if \(s !== lastCompassText\) \{ compassEl\.textContent = s; lastCompassText = s \}/)
+  it('the compass recomputes only on a cell, heading or known-ways change (and, pulse T1-2, a change of the pull or its slow clock), writes the text only when it changed, and hides under the prompt; the old block is gone', () => {
+    // (pulse T1-2: the faint pull reads the ways that lead on, the thread's room while it waits on it, the pull's rule and its lean)
+    expect(game).toMatch(/const known = fog\.ways\(level\.index\)\r?\n\s*if \(cellChanged \|\| Math\.abs\(player\.angle - lastCompassAngle\) > 0\.05 \|\| known\.length !== lastWayCount \|\| pull !== compassState\.pull \|\| playT - lastCompassT >= PULL_REDRAW_S\) \{\r?\n\s*lastCompassAngle = player\.angle; lastWayCount = known\.length; lastCompassT = playT\r?\n\s*compassState\.known = known\r?\n\s*const room = firstRun\.toward\(\)\r?\n\s*if \(room\) \{ roomPull\.rec = room; compassState\.fallback = roomPull \}\r?\n\s*else compassState\.fallback = level\.decor\.nearestWayOn\(player\.x, player\.y, compassState\.skip\)/)
+    expect(game).toMatch(/compassState\.pull = pull; compassState\.wobble = cfg\.map \? 0 : pullWobble\(pullAsk\.floorT, pullPhase\)\r?\n\s*compassState\.arrived = fog\.arrivedPin\(level\.index\)\r?\n\s*compassLines\(compassState, compassOut\)\r?\n\s*const s = compassText\(compassOut\)\r?\n\s*if \(s !== lastCompassText\) \{ compassEl\.textContent = s; lastCompassText = s \}/)
     expect(game).toMatch(/compassEl\.style\.opacity = \(compassOut\.length === 0 \|\| nearExit\) \? '0' : '1'/)
     expect(game).not.toMatch(/cfg\.exit\?\.label \?\? 'descent'/)
     expect(game).not.toMatch(/exitArrow\(rel\)/)
