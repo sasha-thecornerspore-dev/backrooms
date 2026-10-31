@@ -214,3 +214,41 @@ export function preceded(targets, cues, lo = 5, hi = 25) {
   for (const t of targets) if (cues.some((c) => c >= t - hi && c <= t - lo)) n++
   return n
 }
+
+// ── the bot's plates and the says that put them up (bot/stats.mjs) ──
+// queueWaitS(MSG): the longest a line can wait in a tree's message queue between its showMessage and its plate, read off the queue
+// itself (MSG is that tree's messages.js; the queue built as game.js builds it, with no options), so every tree is measured by its own:
+// the discovery gap (two discovery lines pushed together: the second goes up this long after the first) plus the hold (one line alone,
+// from up to fading). A discovery line pushed just after another went up waits out the gap; and the line it finds on screen when the
+// gap runs out keeps it no longer than its hold (the queue promotes past that one at its dwell, sooner: the hold is the safe side). The
+// case that wants it: a search's result goes up over the exit hint, and the deep floor's drawer line, pushed with it, waits for the gap
+// the hint started: up 6.05 s after its say, past the flat 6 s the matcher used to allow (RESULTS.md miss 2)
+export function queueWaitS(MSG, dt = 0.001, capS = 120) {
+  const ups = (lines, prio, until) => {
+    const q = MSG.createMessageQueue(), seen = []
+    for (const l of lines) q.push(l, prio)
+    for (let n = 0; n * dt < capS; n++) { const r = q.tick(dt); if (r) { seen.push([n, r.text, r.show]); if (until(seen)) return seen } }
+    throw new Error(`queueWaitS: the queue never ${prio === MSG.PRIO.discovery ? 'put up a second discovery line' : 'let its line fade'} in ${capS} s`)
+  }
+  const hold = ups(['a'], MSG.PRIO.combat, (s) => s.some((x) => !x[2]))
+  const gap = ups(['a', 'b'], MSG.PRIO.discovery, (s) => s.some((x) => x[1] === 'b' && x[2]))
+  const at = (s, text, show) => s.find((x) => x[1] === text && x[2] === show)[0]
+  return r2((at(hold, 'a', false) - at(hold, 'a', true) + at(gap, 'b', true) - at(gap, 'a', true)) * dt)
+}
+// matchSays(plates, says, windowS): plates [{ t, text }] in time order (text as #msg shows it), says [{ t, text }] (showMessage's, any
+// order) -> for each plate the say that put it up, or null: the latest say of its text that no earlier plate took, said no longer than
+// windowS before the plate and no later than the log's frame (0.05 s) after it
+export function matchSays(plates, says, windowS) {
+  const norm = (s) => String(s).replace(/\s+/g, ' ').trim().slice(0, 400)
+  const byT = says.map((s) => ({ s, key: norm(s.text) })).sort((a, b) => a.s.t - b.s.t)
+  const used = new Set()
+  return plates.map((p) => {
+    for (let i = byT.length - 1; i >= 0; i--) {
+      const { s, key } = byT[i]
+      if (s.t > p.t + 0.05) continue
+      if (p.t - s.t > windowS) break
+      if (key === p.text && !used.has(i)) { used.add(i); return s }
+    }
+    return null
+  })
+}

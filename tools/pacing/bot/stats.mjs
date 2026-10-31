@@ -6,6 +6,8 @@
 // How lines are told apart (the same rules on every tree, so 2.0.3 and 2.0.4 are measured alike):
 //   a plate          a new text on #msg once it is visible (the HUD, not the queue; bot.js dims it by the travel's or a death's
 //                    black veil, so a line put up while the screen is black is none)
+//   its say          the showMessage that put it up: the latest of its text no earlier plate took, within the queue's longest wait
+//                    before it (lib.queueWaitS, read off the measured tree's own messages.js: its discovery gap plus its hold)
 //   player-caused    its showMessage came within 2.5 s after a key the bot pressed to act (E, F, Q, L, Space, C): a search's result,
 //                    a soul's word, the light, an item; the plate budget never counts these
 //   a warning        a hunt line ('it has seen you.', 'it has you.', ...): never budgeted either
@@ -13,7 +15,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { parseArgs, repeats, quietStretches, preceded, gaps, moments, dist, r1, r2 } from '../lib.mjs'
+import { parseArgs, repeats, quietStretches, preceded, gaps, moments, dist, r1, r2, queueWaitS, matchSays } from '../lib.mjs'
 
 const { val } = parseArgs(process.argv.slice(2), ['dir'])
 const DIR = path.resolve(val.dir)
@@ -33,8 +35,12 @@ const UNPROMPTED = new Set()
 // and its bump lines (feedback.js BUMP_LINES), the lines for edging through clutter (placement.js CLUTTER_LINES) and landmarks'
 // first-sight lines (sightpins.js SIGHT_LINES): walking into furniture, through it or up to a landmark is yours, key or no key
 const BUMPS = new Set()
+// and how long a line can wait in its queue between its say and its plate (lib.queueWaitS): a plate is matched to its say within this
+let QUEUE_WAIT_S = null
 {
   const R = path.join(DIR, 'src', 'renderer')
+  if (!existsSync(path.join(R, 'messages.js'))) throw new Error(`stats.mjs: no ${path.join(R, 'messages.js')} (run.mjs leaves the measured tree's copy beside the sessions)`)
+  QUEUE_WAIT_S = queueWaitS(await import(pathToFileURL(path.join(R, 'messages.js')).href))
   const lv = path.join(R, 'levels.js'), wd = path.join(R, 'world.js'), fb = path.join(R, 'feedback.js'), sp = path.join(R, 'sightpins.js'), pl = path.join(R, 'placement.js')
   if (existsSync(sp)) { const SP = await import(pathToFileURL(sp).href); for (const v of Object.values(SP.SIGHT_LINES ?? {})) if (v?.line) BUMPS.add(v.line) }
   if (existsSync(pl)) { const PL = await import(pathToFileURL(pl).href); for (const v of Object.values(PL.CLUTTER_LINES ?? {})) BUMPS.add(v) }
@@ -73,18 +79,18 @@ function measure(S) {
   const hid = (d) => d === '(hidden)' || d === '(veiled)'
   const goesOn = (i) => i >= 2 && msgRows[i - 1].d === '(veiled)' && msgRows[i - 2].d === msgRows[i].d
   const moves = rows.filter((r) => r.k === 'travel' || r.k === 'die').map((r) => r.t)
-  // the plates, each classified
+  // the plates, each with the say that put it up (a line that waited in the queue behind a held result still has its cause), each classified
+  const plates = msgRows.filter((r, i) => !hid(r.d) && !goesOn(i)).map((r) => ({ t: r.t, text: r.d }))
+  const causes = matchSays(plates, says, QUEUE_WAIT_S)
   const shows = []
-  for (let i = 0; i < msgRows.length; i++) {
-    const r = msgRows[i]
-    if (hid(r.d) || goesOn(i)) continue
-    const say = [...says].reverse().find((s) => s.t <= r.t + 0.05 && r.t - s.t < 6 && s.text.replace(/\s+/g, ' ').trim().slice(0, 400) === r.d)
+  for (let k = 0; k < plates.length; k++) {
+    const r = plates[k], say = causes[k]
     // whichever came last decides: a key you pressed after you arrived (the map's first opening) is yours; the travel your F started is not
     const before = (list) => { let b = -Infinity; if (say) for (const x of list) if (x <= say.t + 0.05 && x > b) b = x; return b }
     const lastKey = before(keys), lastMove = before(moves)
     const arrival = !!say && lastMove >= lastKey && say.t - lastMove <= ARRIVAL_S
     const player = !!say && (BUMPS.has(say.text) || (!arrival && !say.happening && !UNPROMPTED.has(say.text) && say.t - lastKey <= 2.5))
-    shows.push({ t: r.t, text: r.d, cls: WARNINGS.has(r.d) ? 'warning' : player ? 'player' : 'budgeted' })
+    shows.push({ t: r.t, text: r.text, cls: WARNINGS.has(r.text) ? 'warning' : player ? 'player' : 'budgeted' })
   }
   // on screen: from each shown text to the next text, '(hidden)' or '(veiled)', and whose time it was
   let onS = 0, since = null, cur = null, si = 0
@@ -179,7 +185,7 @@ function digest(S, M) {
 }
 
 const per = {}
-const all = []
+const all = [`plates matched to their say within ${QUEUE_WAIT_S} s (the measured tree's queue: its discovery gap plus its hold)`]
 const lineCount = new Map()
 for (const name of SESSIONS) {
   const S = readSession(name)

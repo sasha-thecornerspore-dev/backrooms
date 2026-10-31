@@ -290,7 +290,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let bobPulse   = 0    // seconds left of the clutter step: a 0.35 s rise-and-settle on the bob
   let playT      = 0    // seconds of play this run (the clamped simulation step): saved in snapshot(), restored on resume
   let lastHitT   = -Infinity // when a thing last reached you (stamped by the hit block; the haunts' calm gate reads it)
-  let quietTimer = 0    // sweet almond water sets it (QUIET_SECONDS): footsteps at half loudness while it runs (tactics.quiet)
+  let quietTimer = 0    // sweet almond water sets it (QUIET_SECONDS): footsteps at half loudness while it runs, to them and to you (tactics.quiet)
   // ── the floors (topology.js / levelmem.js / death.js): the one memory of what every floor keeps of you (what you took, emptied,
   //    searched, set down; where you stood), the chunk you arrived in, the way you came by (still closing behind you for 5 s), the
   //    deaths, and the trays locked after one until the next travel ──
@@ -2484,10 +2484,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const footstep = moved && stepN !== lastStepN
     lastStepN = stepN
     // your own step (audio.js), on the edge of a step you actually took: a key held into a wall makes none, and the block has none (the
-    // hold). After a 'footsteps' event your next few are each echoed just behind you (events.js FOOTSTEPS_ECHO) until you stand still
+    // hold). After a 'footsteps' event your next few are each echoed just behind you (events.js FOOTSTEPS_ECHO) until you stand still.
+    // Sweet water softens it by the factor it softens the noise the things hear (tactics.quiet, below): you hear what they hear
     if (echoT > 0 && (echoT -= dt) <= 0) footfall(1)
     if (footstep && stepped && ownSounds()) {
-      step(STEP_MATERIAL[level.index], wantSprint ? STEP_GAIN.sprint : STEP_GAIN.walk)
+      step(STEP_MATERIAL[level.index], (wantSprint ? STEP_GAIN.sprint : STEP_GAIN.walk) * quiet(quietTimer))
       if (echoSteps > 0) { echoSteps--; echoT = FOOTSTEPS_ECHO.delay }
     }
     if (stepped) echoStill = 0

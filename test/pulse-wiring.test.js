@@ -36,6 +36,7 @@ import { PRIO, createMessageQueue } from '../src/renderer/messages.js'
 import { BLOCK, LOBBY, waysFor, stairsPass, chunkMid, findOpenNear } from '../src/renderer/topology.js'
 import { SCRAPS } from '../src/renderer/scraps.js'
 import { litOffLine } from '../src/renderer/lightshare.js'
+import { quiet, QUIET_SECONDS } from '../src/renderer/tactics.js'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const game = read('../src/renderer/game.js')
@@ -94,7 +95,7 @@ describe('game.js: the imports and the one predicate for the small sounds', () =
 describe('T1-1: your own steps, and the small sounds', () => {
   const stepSrc = slice('if (echoT > 0 && (echoT -= dt) <= 0) footfall(1)', '// the walk\'s bob, plus the clutter step')
   it('the creatures still hear the held key (moved); your own step is on the stepped edge, right after the edge is read', () => {
-    expect(game).toMatch(/const stepN = Math\.floor\(player\.bob \/ Math\.PI\)\r?\n\s*const footstep = moved && stepN !== lastStepN\r?\n\s*lastStepN = stepN\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(echoT > 0 && \(echoT -= dt\) <= 0\) footfall\(1\)\r?\n\s*if \(footstep && stepped && ownSounds\(\)\) \{\r?\n\s*step\(STEP_MATERIAL\[level\.index\], wantSprint \? STEP_GAIN\.sprint : STEP_GAIN\.walk\)\r?\n\s*if \(echoSteps > 0\) \{ echoSteps--; echoT = FOOTSTEPS_ECHO\.delay \}\r?\n\s*\}\r?\n\s*if \(stepped\) echoStill = 0\r?\n\s*else if \(echoSteps > 0 && \(echoStill \+= dt\) >= FOOTSTEPS_ECHO\.still\) echoSteps = 0/)
+    expect(game).toMatch(/const stepN = Math\.floor\(player\.bob \/ Math\.PI\)\r?\n\s*const footstep = moved && stepN !== lastStepN\r?\n\s*lastStepN = stepN\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(echoT > 0 && \(echoT -= dt\) <= 0\) footfall\(1\)\r?\n\s*if \(footstep && stepped && ownSounds\(\)\) \{\r?\n\s*step\(STEP_MATERIAL\[level\.index\], \(wantSprint \? STEP_GAIN\.sprint : STEP_GAIN\.walk\) \* quiet\(quietTimer\)\)\r?\n\s*if \(echoSteps > 0\) \{ echoSteps--; echoT = FOOTSTEPS_ECHO\.delay \}\r?\n\s*\}\r?\n\s*if \(stepped\) echoStill = 0\r?\n\s*else if \(echoSteps > 0 && \(echoStill \+= dt\) >= FOOTSTEPS_ECHO\.still\) echoSteps = 0/)
     expect(game).toMatch(/if \(footstep && creaturesLive\) level\.entitySys\.noise\(player\.x, player\.y, \(aiCtx\.sprinting \? 7 : 3\) \* quiet\(quietTimer\)\)/)
   })
   it('the echo state is declared once, outside the loop; the footsteps event sets it', () => {
@@ -103,14 +104,15 @@ describe('T1-1: your own steps, and the small sounds', () => {
     const fe = slice("function fireEvent(id, prio = PRIO.ambient, kind = 'event') {", 'function startSearch(p, th) {')   // (w2: the line through the plate budget)
     expect(fe).toMatch(/\} else if \(id === 'footsteps'\) \{\r?\n\s*footfall\(\); echoSteps = FOOTSTEPS_ECHO\.steps; echoStill = 0[^\n]*\r?\n\s*plate\(kind, 'footsteps\. not yours\. they keep your pace, and stop when you stop\.', prio, false\)/)
   })
-  // the step block lifted and run frame by frame with the real tables: steps every 0.44 s at 60 Hz
+  // the step block lifted and run frame by frame with the real tables: steps every 0.44 s at 60 Hz (and the real tactics.quiet: no sweet
+  // water unless a case pours it, quietTimer above 0)
   const run = (frames, st) => {
-    const fn = new Function('st', 'step', 'footfall', 'STEP_MATERIAL', 'STEP_GAIN', 'FOOTSTEPS_ECHO',
-      `let { footstep, stepped, wantSprint, dt, echoSteps, echoT, echoStill, level } = st\n${OWN}\n${stepSrc}\nObject.assign(st, { echoSteps, echoT, echoStill })`)
+    const fn = new Function('st', 'step', 'footfall', 'STEP_MATERIAL', 'STEP_GAIN', 'FOOTSTEPS_ECHO', 'quiet',
+      `let { footstep, stepped, wantSprint, dt, echoSteps, echoT, echoStill, level, quietTimer = 0 } = st\n${OWN}\n${stepSrc}\nObject.assign(st, { echoSteps, echoT, echoStill })`)
     const out = { steps: [], falls: [] }
     for (let f = 0; f < frames.length; f++) {
       Object.assign(st, frames[f])
-      fn(st, (m, g) => out.steps.push([f, m, g]), (n) => out.falls.push([f, n]), STEP_MATERIAL, STEP_GAIN, FOOTSTEPS_ECHO)
+      fn(st, (m, g) => out.steps.push([f, m, g]), (n) => out.falls.push([f, n]), STEP_MATERIAL, STEP_GAIN, FOOTSTEPS_ECHO, quiet)
     }
     return out
   }
@@ -126,6 +128,20 @@ describe('T1-1: your own steps, and the small sounds', () => {
     expect(run(walk(30, { sprint: true }), { level: { index: 2 }, echoSteps: 0, echoT: 0, echoStill: 0 }).steps[0]).toEqual([0, 'grate', 0.9])
     expect(run(walk(60, { stepped: false }), { level: { index: 1 }, echoSteps: 0, echoT: 0, echoStill: 0 }).steps).toEqual([])
     expect(run(walk(60), { level: { index: BLOCK }, echoSteps: 0, echoT: 0, echoStill: 0 }).steps).toEqual([])
+  })
+  it('sweet water quiets the step you hear as it quiets the one they hear: the same quiet(quietTimer), until it runs out', () => {
+    const k = quiet(QUIET_SECONDS)
+    expect(k).toBeLessThan(1)
+    for (const i of [0, 1, 2, 3]) {
+      const o = run(walk(60), { level: { index: i }, echoSteps: 0, echoT: 0, echoStill: 0, quietTimer: QUIET_SECONDS })
+      expect(o.steps.map((s) => s[0])).toEqual([0, 26, 52])
+      for (const s of o.steps) expect([s[1], s[2]]).toEqual([STEP_MATERIAL[i], STEP_GAIN.walk * k])
+    }
+    expect(run(walk(30, { sprint: true }), { level: { index: 1 }, echoSteps: 0, echoT: 0, echoStill: 0, quietTimer: 0.01 }).steps[0]).toEqual([0, 'concrete', STEP_GAIN.sprint * k])
+    expect(run(walk(30), { level: { index: 1 }, echoSteps: 0, echoT: 0, echoStill: 0, quietTimer: 0 }).steps[0]).toEqual([0, 'concrete', STEP_GAIN.walk])
+    expect(run(walk(60), { level: { index: BLOCK }, echoSteps: 0, echoT: 0, echoStill: 0, quietTimer: QUIET_SECONDS }).steps).toEqual([])   // the block: still none
+    // the things' noise and your step read the one factor off the one timer
+    expect(count(/\* quiet\(quietTimer\)/g)).toBe(2)
   })
   it('after the event, each of your next eight steps is echoed by one footfall 140 ms later, and no more', () => {
     const st = { level: { index: 1 }, echoSteps: FOOTSTEPS_ECHO.steps, echoT: 0, echoStill: 0 }
