@@ -1,7 +1,8 @@
 // containers.js — the searchable drawers. Walk up to a cabinet, hold F for three quarters of a second, and the drawer gives up what it
-// holds: most often words, sometimes nothing, sometimes a thing you can carry, rarely a door two rooms over or a figure in the corridor
-// you just walked. What a drawer holds is a pure function of its key and its chunk, so a save and a reload agree; whether you have
-// already opened it rides the save through createSearchLog (levelmem.searchedFor / noteSearched).
+// holds: most often words, sometimes nothing, sometimes a thing you can carry, sometimes a floor plan that marks your map, rarely a
+// door two rooms over or a figure in the corridor you just walked. What a drawer holds is a pure function of its key, its chunk and a
+// bonus (0 unless tier 2a pays for danger), so a save and a reload agree; whether you have already opened it rides the save through
+// createSearchLog (levelmem.searchedFor / noteSearched).
 //
 // Pure: no DOM, no game state. game.js runs the hold, the cancel, the noise and the per-level cost; applyRoll does the one roll's
 // side effects through a tiny api so the module never touches the inventory or the message queue itself.
@@ -15,14 +16,32 @@ export const CONTAINER_TYPES = Object.freeze({
   cart: 'the cart', drum: 'the drum', couch: 'the couch cushions',
 })
 export const SEARCH_HOLD_S = 0.75
+// the longer hold in the dark, for tier 2a (exported now, unused here)
+export const SEARCH_HOLD_DARK_S = 1.1
 export const HANDS_FULL_LINE = 'there is something here, but your hands are full.'
+// the search's own words: the hint while the hold runs (never a plate), over a searched one, and the refusal with something close
+export const NOT_NOW_LINE = 'not now. something is close.'
+export const SEARCHED_HINT = 'searched.'
+export function searchingHint(type) { return CONTAINER_TYPES[type] ? `searching ${CONTAINER_TYPES[type]}` : 'searching' }
 // the deep floors charge for every completed search (game.js applies it: applyRoll does not know the level); the line is said once a level
 export const DRAWER_COST = Object.freeze({ minLevel: 2, sanity: 2, line: 'something counts the drawers you open.' })
+// the one empty that is heard: applyRoll makes a real noise of 3 at the drawer with it
+export const SQUEAL_LINE = 'empty. the runners squeal.'
 export const EMPTY_LINES = Object.freeze([
   'empty. someone has been through here.',
   'empty. the drawer sticks on the way back.',
   'nothing. a smell of warm paper.',
+  'empty. the bottom of the drawer is cleaner than the rest.',
+  'nothing but a paperclip, bent straight.',
+  'empty. dust, and the outline of something that was here.',
+  'nothing. you check again anyway.',
+  SQUEAL_LINE,
 ])
+// a trace pins something on your map (api.trace, content first, a way on last) and says which
+export const TRACE_LINES = Object.freeze({
+  content: 'a floor plan with one room shaded in. you mark it on yours.',
+  way: 'a floor plan. someone has circled a corner and written down.',
+})
 export const DRAWER_NOTES = Object.freeze([
   'a memo: DO NOT DRINK FROM THE FOUNTAIN ON 2. it is dated the day you fell in.',
   'a name badge. the name has been scratched out and written again, smaller.',
@@ -44,6 +63,26 @@ export const DRAWER_NOTES = Object.freeze([
   'a key with no teeth. the tag says SPARE.',
   'a page of the phone list. every extension is the same four digits.',
   'a card of condolence, signed by the whole office. nobody has filled in the name.',
+  'a coffee mug, stained in rings, one above another.',
+  'a lanyard with no badge on it. the clip is bent, as if pulled.',
+  'a performance review. under strengths: stays.',
+  'a sticky note: do not answer it. the writing gets smaller toward the end.',
+  'a box of pens. every pen has been chewed in the same place.',
+  'a calendar with every day crossed out, including the ones not yet come.',
+  'a memo about the carpet. the carpet is to be left damp.',
+  'a photograph of the office party. everyone is facing the wall.',
+  'a hand-drawn map of this floor. it runs off the page and carries on across the desk.',
+  "a visitor badge. the photo is of the back of someone's head.",
+  'a list of exits, all crossed out, then one written in, then crossed out.',
+  'a tape measure, pulled out and locked, as if someone meant to come back to it.',
+  'a request for a window. denied. reason: there is no outside.',
+  'a key ring heavy with keys. none of them open anything here.',
+  'a glove, the left one. the drawer beside it is empty in the shape of the right.',
+  "a cardigan folded in the drawer, still holding the shape of someone's shoulders.",
+  'reading glasses, folded, on top of a letter that was never started.',
+  'a birthday card signed by everyone. the name on the front has been left blank.',
+  'a packed lunch, the lid still on, the name on the lid rubbed away.',
+  "a set of house keys, the fob worn smooth by someone's thumb.",
 ])
 const FOUND_LABEL = Object.freeze({
   'almond-water': 'almond water', glowstick: 'a glowstick', bandage: 'a bandage', polaroid: 'a polaroid camera', radio: 'a radio',
@@ -86,22 +125,28 @@ function itemPool(levelIndex) {
   return types
 }
 
-// rollContainer(key, cx, cy, levelIndex, seed, salt) -> { kind: 'empty' } | { kind: 'item', type, extra } | { kind: 'note', text } |
-// { kind: 'haunt', id }. Eligible (the chunk's item slot): 50 item / 40 note / 10 haunt; otherwise 60 empty / 30 note / 10 haunt;
-// level 0 folds the haunt share into notes. Almond water is sour 30% of the time from level 2 down.
-export function rollContainer(key, cx, cy, levelIndex, seed = 0, salt = 0) {
+// rollContainer(key, cx, cy, levelIndex, seed, salt, bonus = 0) -> { kind: 'empty' } | { kind: 'item', type, extra } |
+// { kind: 'note', text } | { kind: 'trace', fallback } | { kind: 'haunt', id }. Eligible (the chunk's item slot): 50 item / 30 note /
+// 10 trace / 10 haunt; otherwise 38 empty / 39 note / 10 trace / 3 item / 10 haunt: one key in eight is eligible, so a floor's drawers
+// give an item about one time in eleven and are empty about one time in three. The haunt band is where it always was, so the same
+// drawers haunt. Level 0 folds the haunt share into notes. `bonus` (points out of a hundred, from a second draw on the same hash)
+// only ever turns an empty or a note into an item; at 0 the table is exact. Almond water is sour 30% of the time from level 2 down.
+export function rollContainer(key, cx, cy, levelIndex, seed = 0, salt = 0, bonus = 0) {
   seed |= 0; salt |= 0
   const fk = foldKey(key)
   const eligible = isItemEligible(key, cx, cy, seed, salt)
   const a = cx + ROLL_A + salt + fk, b = cy + ROLL_B + salt
-  const roll = hash(a, b, seed) % 100
+  const h = hash(a, b, seed)
+  const roll = h % 100
   const rng = rngFrom(a, b, seed)                     // the picks within a kind: which words, which thing, sour or not
   let kind
-  if (eligible) kind = roll < 50 ? 'item' : roll < 90 ? 'note' : 'haunt'
-  else kind = roll < 60 ? 'empty' : roll < 90 ? 'note' : 'haunt'
+  if (eligible) kind = roll < 50 ? 'item' : roll < 80 ? 'note' : roll < 90 ? 'trace' : 'haunt'
+  else kind = roll < 38 ? 'empty' : roll < 77 ? 'note' : roll < 87 ? 'trace' : roll < 90 ? 'item' : 'haunt'
   if (kind === 'haunt' && levelIndex === 0) kind = 'note'
+  if (bonus > 0 && (kind === 'empty' || kind === 'note') && Math.floor(h / 100) % 100 < bonus) kind = 'item'
   if (kind === 'empty') return { kind }
   if (kind === 'note') return { kind, text: DRAWER_NOTES[(rng() * DRAWER_NOTES.length) | 0] }
+  if (kind === 'trace') return { kind, fallback: DRAWER_NOTES[(rng() * DRAWER_NOTES.length) | 0] }
   if (kind === 'haunt') return { kind, id: HAUNT_IDS[(rng() * HAUNT_IDS.length) | 0] }
   const pool = itemPool(levelIndex)
   const type = pool[(rng() * pool.length) | 0]
@@ -110,19 +155,32 @@ export function rollContainer(key, cx, cy, levelIndex, seed = 0, salt = 0) {
   return { kind, type, extra }
 }
 
-// applyRoll(roll, api) -> boolean: false when the drawer could not be emptied (an item with no hand free), so the key stays unsearched.
-// api = { grant(type, extra) -> { ok }, message(text, prio), sanity(delta), fire(id), behindYou() }
+// applyRoll(roll, api) -> boolean: false when the drawer could not be emptied (an item with no hand free), so the key stays unsearched
+// and the caller holds the roll (createSearchLog hold) to replay it at the next search.
+// api = { grant(type, extra) -> { ok }, message(text, prio), sanity(delta), fire(id), behindYou(), noise?(n), trace?() }
+//   trace() pins one thing on the map and names it: 'content' (a landmark, a sight, a cache, a page's chunk) before 'way' (a way
+//   on), or null when there is nothing left to pin; absent or null, the trace reads as its own fallback note
 let emptyN = 0
 export function applyRoll(roll, api) {
   if (!roll) return false
   switch (roll.kind) {
-    case 'empty':
-      api.message(EMPTY_LINES[emptyN++ % EMPTY_LINES.length], PRIO.interaction)
+    case 'empty': {
+      const line = EMPTY_LINES[emptyN++ % EMPTY_LINES.length]
+      api.message(line, PRIO.interaction)
+      if (line === SQUEAL_LINE) api.noise?.(3)
       return true
+    }
     case 'note':
       api.message(roll.text, PRIO.interaction)
       api.sanity(3)
       return true
+    case 'trace': {
+      const got = api.trace?.() ?? null
+      if (typeof got === 'string' && Object.hasOwn(TRACE_LINES, got)) { api.message(TRACE_LINES[got], PRIO.interaction); return true }
+      api.message(roll.fallback, PRIO.interaction)                     // nothing to pin: the plan was only paper, read as a note
+      api.sanity(3)
+      return true
+    }
     case 'haunt':
       if (roll.id === 'behind-you') api.behindYou()
       else api.fire(roll.id)
@@ -138,15 +196,20 @@ export function applyRoll(roll, api) {
   }
 }
 
-// createSearchLog() -> { isSearched(key), markSearched(key), keys(), clear(), seed(keys) }: the keys opened on this floor. seed() takes
-// whatever levelmem.searchedFor hands over (a Set, an array, a parsed JSON array); keys() is JSON-ready.
+// createSearchLog() -> { isSearched(key), markSearched(key), keys(), clear(), seed(keys), hold(key, roll), held(key) }: the keys opened
+// on this floor. seed() takes whatever levelmem.searchedFor hands over (a Set, an array, a parsed JSON array); keys() is JSON-ready.
+// hold() keeps a roll your hands were too full for, for this visit only (never saved): the next search there replays held(key)
+// instead of rolling again, so a drawer that said it had something never says empty after; a completed search or clear() drops it.
 export function createSearchLog() {
   const set = new Set()
+  const holds = new Map()
   return {
     isSearched: (key) => set.has(String(key)),
-    markSearched: (key) => { set.add(String(key)) },
+    markSearched: (key) => { set.add(String(key)); holds.delete(String(key)) },
     keys: () => [...set],
-    clear: () => { set.clear() },
+    clear: () => { set.clear(); holds.clear() },
     seed: (keys) => { if (keys) for (const k of keys) if (k != null) set.add(String(k)) },
+    hold: (key, roll) => { holds.set(String(key), roll) },
+    held: (key) => holds.get(String(key)) ?? null,
   }
 }
