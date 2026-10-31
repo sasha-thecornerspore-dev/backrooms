@@ -226,7 +226,8 @@ describe('game.js: the map, held not modal', () => {
     expect(body).toMatch(/fog\.pinThing\(L, 's:' \+ s\.key, 'sight', s\.x, s\.y\)\r?\n\s*if \(\(s\.x - player\.x\) \*\* 2 \+ \(s\.y - player\.y\) \*\* 2 <= 81\) \{/)
     expect(body).toMatch(/showMessage\(SIGHT_LINES\[s\.type\]\?\.line, PRIO\.discovery\)/)
     expect(body).toMatch(/nearestMachine\(player\.x, player\.y, PROX_PIN\)\r?\n\s*if \(m\) fog\.pinThing\(L, 'm:' \+ m\.key, 'machine', m\.x, m\.y, vendedSet\.has\(m\.key\)\)/)
-    expect(body).toMatch(/nearestScrap\(player\.x, player\.y, PROX_PIN\)\r?\n\s*if \(sc\) fog\.pinThing\(L, 'n:' \+ sc\.key, 'note', sc\.x, sc\.y, readSet\.has\(sc\.frag\)\)/)
+    // (pulse review W9: never the first run's note, which is no page)
+    expect(body).toMatch(/nearestScrap\(player\.x, player\.y, PROX_PIN\)\r?\n\s*if \(sc && !sc\.firstrun\) fog\.pinThing\(L, 'n:' \+ sc\.key, 'note', sc\.x, sc\.y, readSet\.has\(sc\.frag\)\)/)
     expect(body).toMatch(/nearestNpc\(player\.x, player\.y, PROX_PIN\)\r?\n\s*if \(np\) fog\.pinThing\(L, 'p:' \+ np\.key, 'npc', np\.x, np\.y\)/)
     // the other pins: where it hurt you (after the hit block's lines), the note read, the machine emptied
     expect(game).toMatch(/cancelCommit\('the bandage slips\.'\)\r?\n\s*fog\.pinThing\(level\.index, 'hurt:' \+ frameCount, 'hurt', player\.x, player\.y\)/)

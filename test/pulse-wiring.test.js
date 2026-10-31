@@ -46,6 +46,9 @@ const count = (re) => (game.match(re) || []).length
 const lift = (re) => { const m = game.match(re); expect(m, String(re)).not.toBeNull(); return m[0] }
 const loopAt = game.indexOf('function loop(ts) {')
 const OWN = 'const ownSounds = () => level.index >= 0 && level.index <= 3'
+// the start's exit hint: held on the first run's lobby while the thread still holds it (a fresh start, or a resume before the soul), else a
+// fresh start says it at 3.8 s
+const BOOT_HINT = 'if (level.cfg.exit?.hint) { if (freshLobby() && !firstRun.unlocked()) hintHeld = true; else if (!resume) later(3800, level.cfg.exit.hint, PRIO.discovery) }'
 
 describe('the tables the wiring reads', () => {
   it('a walk steps at 0.5, a sprint at 0.9; the four floors have a material and the block none', () => {
@@ -224,7 +227,7 @@ describe('T1-10: frictions', () => {
   })
   it('hunted, the presence keeps quiet; a fresh run\'s first lobby visit hushes it for PRESENCE_HUSH_S; both before the hint and E', () => {
     const k = at('if (thA.hunted || huntMood) nearPresence = false', loopAt)
-    const h = at('if (lobbyFirst && deaths === 0 && playT < PRESENCE_HUSH_S) nearPresence = false', loopAt)
+    const h = at('if (lobbyFirst && deaths === 0 && playT - floorT0 < PRESENCE_HUSH_S) nearPresence = false', loopAt)
     expect(k).toBeGreaterThan(at('if (!isWishOpen(file.closing)) nearPresence = false', loopAt))
     for (const x of [k, h]) { expect(x).toBeLessThan(at("const hintEl = document.getElementById('presence-hint')", loopAt)); expect(x).toBeLessThan(at("if (K['KeyE']) {", loopAt)) }
     expect(at('const thA = level.entitySys.getThreat()', loopAt)).toBeLessThan(k)              // last frame's record: this frame's update is below
@@ -242,9 +245,9 @@ describe('T1-10: frictions', () => {
   })
   // the gates lifted and run
   const gates = slice('if (!isWishOpen(file.closing)) nearPresence = false', "const hintEl = document.getElementById('presence-hint')")
-  const gate = (o) => new Function('o', 'isWishOpen', 'PRESENCE_HUSH_S', `let nearPresence = true\nconst { file, thA, huntMood, lobbyFirst, deaths, playT } = o\n${gates.slice(0, gates.indexOf('// ── items: pickup prompt'))}\nreturn nearPresence`)(
-    { file: { closing: null }, thA: { hunted: false }, huntMood: false, lobbyFirst: false, deaths: 0, playT: 100, ...o }, (c) => c !== 'compliance', PRESENCE_HUSH_S)
-  it('replayed: the hunt and the mood silence it, the hush holds only a first lobby visit with no deaths, under 40 s', () => {
+  const gate = (o) => new Function('o', 'isWishOpen', 'PRESENCE_HUSH_S', `let nearPresence = true\nconst { file, thA, huntMood, lobbyFirst, deaths, playT, floorT0 } = o\n${gates.slice(0, gates.indexOf('// ── items: pickup prompt'))}\nreturn nearPresence`)(
+    { file: { closing: null }, thA: { hunted: false }, huntMood: false, lobbyFirst: false, deaths: 0, playT: 100, floorT0: 0, ...o }, (c) => c !== 'compliance', PRESENCE_HUSH_S)
+  it('replayed: the hunt and the mood silence it, the hush holds only a first lobby visit with no deaths, its first 40 s', () => {
     expect(gate({})).toBe(true)
     expect(gate({ file: { closing: 'compliance' } })).toBe(false)
     expect(gate({ thA: { hunted: true } })).toBe(false)
@@ -253,6 +256,13 @@ describe('T1-10: frictions', () => {
     expect(gate({ lobbyFirst: true, playT: 40 })).toBe(true)
     expect(gate({ lobbyFirst: true, playT: 10, deaths: 1 })).toBe(true)
     expect(gate({ lobbyFirst: false, playT: 10 })).toBe(true)
+  })
+  it('replayed: the hush runs on the visit\'s clock, so the front door\'s lobby has its 40 s too, whatever the block took (review W8)', () => {
+    expect(gate({ lobbyFirst: true, floorT0: 45, playT: 50 })).toBe(false)         // 45 s on the block, 5 s in the lobby: hushed
+    expect(gate({ lobbyFirst: true, floorT0: 45, playT: 84.9 })).toBe(false)
+    expect(gate({ lobbyFirst: true, floorT0: 45, playT: 85 })).toBe(true)
+    expect(gate({ lobbyFirst: true, floorT0: 25, playT: 50 })).toBe(false)         // 25 s on the block: still the whole 40 s, not 15
+    expect(gate({ lobbyFirst: true, floorT0: 45, playT: 50, deaths: 1 })).toBe(true)
   })
   const ITEM_NAMES = new Function(`return ${lift(/const ITEM_NAMES = \{[\s\S]*?\n\}/).replace(/^const ITEM_NAMES = /, '')}`)()
   const TRAY_NAMES = new Function(`return ${lift(/const TRAY_NAMES = \{[\s\S]*?\n\}/).replace(/^const TRAY_NAMES = /, '')}`)()
@@ -333,7 +343,7 @@ describe('w2: the imports, the state, the shell', () => {
       'let floorT0 = 0, floorHinted = false, pullPhase = 0, lastCompassT = -Infinity, lostSaid = false, hintHeld = false',
       'const pullAsk = { floorT: 0, hinted: false, fresh: false, step: 0 }',
       'const roomPull = { rec: null, dist: null }',
-      'const firstRun = createFirstRun({ fresh: resume ? Number.isInteger(resume.firstRun) : true, step: resume?.firstRun ?? 0, worldSeed, room: !!mpClient })',
+      'const firstRun = createFirstRun({ fresh: resume ? Number.isInteger(resume.firstRun) : true, step: resume?.firstRun ?? 0, worldSeed, room: !!mpClient, docket: base.docket })',
       'const freshLobby = () => level.index === 0 && firstRun.on()',
       'const plates = createPlateBudget()',
       'let turnSaid = false, houndTold = false, passTold = false, smilerTold = false',
@@ -530,9 +540,29 @@ describe('T1-2: the compass earns its pull', () => {
     expect(t).toContain('if (level.cfg.exit?.hint && !followed) { if (freshLobby()) hintHeld = true; else later(3800, level.cfg.exit.hint, PRIO.discovery) }')
     expect(t.indexOf('startVisit()')).toBeLessThan(t.indexOf('if (level.cfg.exit?.hint && !followed)'))
     const boot = slice('if (resume) {', 'if (bus) mpClient.onEv(bus.receive)')
-    expect(boot).toContain('if (!resume && level.cfg.exit?.hint) { if (freshLobby()) hintHeld = true; else later(3800, level.cfg.exit.hint, PRIO.discovery) }')
-    expect(boot.indexOf('startVisit()')).toBeLessThan(boot.indexOf('if (!resume && level.cfg.exit?.hint)'))
+    // (review D2: a resume mid-thread holds it too; only a fresh start says it at 3.8 s)
+    expect(boot).toContain(BOOT_HINT)
+    expect(boot.indexOf('startVisit()')).toBeLessThan(boot.indexOf(BOOT_HINT))
     expect(game).toMatch(/const murmur = [^\n]*level\.messages\[murmurBag\.next\(\)\]\r?\n\s*if \(!hintHeld \|\| murmur !== cfg\.exit\?\.hint\) plate\('murmur', murmur, PRIO\.ambient, false\)/)
+  })
+  it('replayed: the start holds the hint on the first run\'s lobby, a resume before the soul too; a fresh start elsewhere says it at 3.8 s; a resume past the soul or elsewhere never (review D2)', () => {
+    const hint = 'the hint.'
+    expect(slice('if (resume) {', 'if (bus) mpClient.onEv(bus.receive)')).toContain(BOOT_HINT)                 // the line replayed is the start's own
+    const boot = ({ resume = null, index = LOBBY, fr = createFirstRun({ fresh: true }) } = {}) => {
+      fr.onLevel(index)
+      const later = []
+      const held = new Function('level', 'freshLobby', 'firstRun', 'resume', 'later', 'PRIO', `let hintHeld = false\n${BOOT_HINT}\nreturn hintHeld`)(
+        { index, cfg: { exit: { hint } } }, () => index === LOBBY && fr.on(), fr, resume, (ms, t, p) => later.push([ms, t, p]), PRIO)
+      return { held, later }
+    }
+    expect(boot()).toEqual({ held: true, later: [] })                                                        // a fresh run's lobby
+    for (const step of [0, 1]) {                                                                             // a resume mid-thread: held as at the start
+      expect(boot({ resume: { firstRun: step }, fr: createFirstRun({ fresh: true, step }) }), String(step)).toEqual({ held: true, later: [] })
+    }
+    expect(boot({ resume: { firstRun: 2 }, fr: createFirstRun({ fresh: true, step: 2 }) })).toEqual({ held: false, later: [] })   // the soul has spoken
+    expect(boot({ index: BLOCK })).toEqual({ held: false, later: [[3800, hint, PRIO.discovery]] })                 // the front door: the gap, at 3.8 s
+    expect(boot({ resume: { level: 0 }, fr: createFirstRun({ fresh: false }) })).toEqual({ held: false, later: [] }) // an old save: no thread, no hint
+    expect(boot({ resume: { level: 1 }, index: 1 })).toEqual({ held: false, later: [] })
   })
   it('what frees the pull: a page read, a soul\'s word and a pinned trace (w3: the drawers\' pass); the visit clears it', () => {
     expect(slice('function revealScrap() {', 'function redactScrap() {')).toContain('floorHinted = true')
@@ -583,6 +613,7 @@ describe('T1-3: the first run, authored', () => {
   const eBranch = () => slice("if (K['KeyE']) {", "if (K['Escape'] && dialogOpen)")
   it('one thread a run, built before the first floor from the run itself', () => {
     expect(at('const firstRun = createFirstRun(')).toBeLessThan(at('function buildLevel(index, at = null) {'))
+    expect(at('const base = await loadConfig()')).toBeLessThan(at('const firstRun = createFirstRun('))   // the shipped docket it reads (review D1/C10)
     expect(count(/createFirstRun\(/g)).toBe(1)
   })
   it('buildLevel tells the thread the floor before the decor is built, and lays the note on the lobby while the thread can still advance', () => {
@@ -650,12 +681,17 @@ describe('T1-3: the first run, authored', () => {
   it('the save keeps the step while the thread can still advance; a resume takes it up there; an old save, a seed or a room run without', () => {
     expect(slice('function snapshot(full = false) {', 'let saveTimer = 0')).toContain('if (firstRun.on()) s.firstRun = firstRun.step()')
     const args = lift(/createFirstRun\(\{ fresh: resume[^\n]*?\}\)/)
-    const mk = (resume, worldSeed = null, mpClient = null) => new Function('createFirstRun', 'resume', 'worldSeed', 'mpClient', `return ${args}`)(createFirstRun, resume, worldSeed, mpClient)
+    const mk = (resume, worldSeed = null, mpClient = null, docket = null) => new Function('createFirstRun', 'resume', 'worldSeed', 'mpClient', 'base', `return ${args}`)(createFirstRun, resume, worldSeed, mpClient, { docket })
     expect(mk(null).on()).toBe(true)
     const r1 = mk({ firstRun: 1 }); expect([r1.on(), r1.step()]).toEqual([true, 1])
     expect(mk({ level: 0 }).on()).toBe(false)                                 // a save from before the thread
     expect(mk(null, 1234).on()).toBe(false)                                    // a seeded world
     expect(mk(null, null, {}).on()).toBe(false)                                // a room
+    // (review D1/C10) the shipped docket's lean: one that re-lays the lobby's souls turns the thread off, a fresh run and a resume alike
+    const leaned = { '0': { extension: 0, compliance: 2, litigation: 0 } }
+    expect(mk(null, null, null, leaned).on()).toBe(false)
+    expect(mk({ firstRun: 1 }, null, null, leaned).on()).toBe(false)
+    expect(mk(null, null, null, { '0': { extension: 2, compliance: 0, litigation: 0 } }).on()).toBe(true)
   })
 })
 
@@ -1035,6 +1071,22 @@ describe('T1-9: drawers that pay a little more', () => {
     r.fog.pinWay(1, { key: '0,0', x: 5.5, y: 0.5, kind: 'down' })
     expect(r.trace()).toBeNull(); expect(r.st.floorHinted).toBe(false)
     expect(r.fog.pins(1).has('n:firstrun')).toBe(false)
+  })
+  it('replayed: walking by, the map pins a page with its read flag, and never the first run\'s note (no pin, as its card and the plan say; review W9)', () => {
+    expect(slice('function pinSeen(reach) {', 'const entityAsm = createEntityAssembler()'))
+      .toContain("if (sc && !sc.firstrun) fog.pinThing(L, 'n:' + sc.key, 'note', sc.x, sc.y, readSet.has(sc.frag))")
+    const PIN = /const sc = level\.decor\.nearestScrap\(player\.x, player\.y, PROX_PIN\)\r?\n[^\n]*/
+    const pin = (rec, read = []) => {
+      const fog = createFogMap()
+      new Function('level', 'player', 'PROX_PIN', 'fog', 'L', 'readSet', lift(PIN))(
+        { decor: { nearestScrap: () => rec } }, { x: 33.5, y: 11.5 }, 4.5, fog, 0, new Set(read))
+      return fog.pins(0)
+    }
+    expect(pin(noteRecord()).has('n:firstrun')).toBe(false)
+    expect(pin(noteRecord()).size).toBe(0)
+    expect(pin({ key: '1,0', x: 28.5, y: 11.5, frag: 3 }).get('n:1,0')).toMatchObject({ type: 'note', flag: false })
+    expect(pin({ key: '1,0', x: 28.5, y: 11.5, frag: 3 }, [3]).get('n:1,0')).toMatchObject({ type: 'note', flag: true })
+    expect(pin(null).size).toBe(0)
   })
   it('an opened drawer says so on the hint line, last in the ladder (never a plate, never over a prompt); not on the block', () => {
     expect(game).toMatch(/\} else if \(nearNpc\) \{\r?\n\s*itemHintEl\.textContent = 'e · speak to the lost soul'\r?\n\s*itemHintEl\.style\.opacity = '1'\r?\n\s*\} else if \(!cfg\.map && level\.decor\.nearestProp\(player\.x, player\.y, 1\.5, searchedBox\)\) \{\r?\n\s*itemHintEl\.textContent = SEARCHED_HINT[^\n]*\r?\n\s*itemHintEl\.style\.opacity = '1'\r?\n\s*\} else \{\r?\n\s*itemHintEl\.style\.opacity = '0'/)

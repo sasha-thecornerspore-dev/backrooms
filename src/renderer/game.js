@@ -302,8 +302,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let lobbyFirst = false  // this is your first time in the lobby this run (buildLevel writes it; the presence hush reads it)
   // ── the first run, authored (firstrun.js): on a fresh solo run of the fixed first world a note by the spawn names a soul, the soul
   //    names a room, and the room holds the way down. Off in a seeded world, in a room and on the block; a resume takes it up at the
-  //    step its save kept (a save from before the thread has none: off) ──
-  const firstRun = createFirstRun({ fresh: resume ? Number.isInteger(resume.firstRun) : true, step: resume?.firstRun ?? 0, worldSeed, room: !!mpClient })
+  //    step its save kept (a save from before the thread has none: off); and off when the shipped docket's lean re-lays the lobby's
+  //    souls (firstrun.js threadHolds) ──
+  const firstRun = createFirstRun({ fresh: resume ? Number.isInteger(resume.firstRun) : true, step: resume?.firstRun ?? 0, worldSeed, room: !!mpClient, docket: base.docket })
   const freshLobby = () => level.index === 0 && firstRun.on()   // the lobby while the thread can still advance: the pull and the exit hint wait on it
   // ── the map (fogmap.js / sightpins.js / mapcard.js / compass.js): the pencil sheet of what you walked and saw, held not modal ──
   const fog = createFogMap()
@@ -2225,8 +2226,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   startVisit()
   plate('floor', arrivalPlate(level.cfg, !resume), PRIO.combat)
   // a fresh run's first visit, as travel() says it: how to leave this floor, a few seconds in (the lobby's torn corner; the block's gap);
-  // on the first run's lobby it waits with the faint pull, and the frame says it then
-  if (!resume && level.cfg.exit?.hint) { if (freshLobby()) hintHeld = true; else later(3800, level.cfg.exit.hint, PRIO.discovery) }
+  // on the first run's lobby it waits with the faint pull, and the frame says it then; a resume before the soul has spoken waits the same
+  // (the murmurs leave it out meanwhile), and a resume otherwise is not a first visit: nothing
+  if (level.cfg.exit?.hint) { if (freshLobby() && !firstRun.unlocked()) hintHeld = true; else if (!resume) later(3800, level.cfg.exit.hint, PRIO.discovery) }
   // the room's frames reach the bus only now, with a floor to lay a cache on: what came before (the relay's kept caches, replayed straight
   // after welcome while the world was still loading) the client held, and hands over on the next tick
   if (bus) mpClient.onEv(bus.receive)
@@ -2297,7 +2299,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const m = level.decor.nearestMachine(player.x, player.y, PROX_PIN)
     if (m) fog.pinThing(L, 'm:' + m.key, 'machine', m.x, m.y, vendedSet.has(m.key))
     const sc = level.decor.nearestScrap(player.x, player.y, PROX_PIN)
-    if (sc) fog.pinThing(L, 'n:' + sc.key, 'note', sc.x, sc.y, readSet.has(sc.frag))
+    if (sc && !sc.firstrun) fog.pinThing(L, 'n:' + sc.key, 'note', sc.x, sc.y, readSet.has(sc.frag))   // the first run's note: no pin (no page)
     const np = level.decor.nearestNpc(player.x, player.y, PROX_PIN)
     if (np) fog.pinThing(L, 'p:' + np.key, 'npc', np.x, np.y)
   }
@@ -2562,9 +2564,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // a file closed in compliance: the shimmer is gone from the walls (closings.js isWishOpen; the overlay's presence: false)
     if (!isWishOpen(file.closing)) nearPresence = false
     // hunted (last frame's threat record, or the hunt's mood not yet let go) it keeps quiet; and on a run's first lobby visit, before any
-    // death, it leaves you the floor for PRESENCE_HUSH_S before it offers to speak (firstrun.js)
+    // death, it leaves you the floor for PRESENCE_HUSH_S of that visit before it offers to speak (firstrun.js; the visit's clock, so the
+    // front door's lobby has its hush whatever the block took)
     if (thA.hunted || huntMood) nearPresence = false
-    if (lobbyFirst && deaths === 0 && playT < PRESENCE_HUSH_S) nearPresence = false
+    if (lobbyFirst && deaths === 0 && playT - floorT0 < PRESENCE_HUSH_S) nearPresence = false
 
     // ── items: pickup prompt ──
     const nearItem = itemSys.nearestItem(player.x, player.y, 1.4)

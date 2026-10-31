@@ -12,10 +12,11 @@
 //           slow heartbeat comes before anything hunts you and dread alone never enters the hunt mood. 0 is exactly the tick before it
 //   level   0..1, chasing a target with attack 0.9/s and decay 0.12/s
 //   beat    seconds until the next heartbeat (heartbeatPeriod), Infinity when calm
-//   mood    'calm' | 'hunt' with hysteresis: enter after 1.5 s above TENSION_ENTER, exit after 6 s below TENSION_EXIT
+//   mood    'calm' | 'hunt' with hysteresis: enter after 1.5 s above TENSION_ENTER, exit after 6 s with huntLevel below TENSION_EXIT
+//           (dread never holds the hunt mood)
 //   just    'enter' | 'exit' on the transition frame, else null
 //   close   true once when level crosses 0.85 upward, at most once per 12 s
-//   huntLevel  the same chase without the dread term (the pulse reads it, so dread can never hold the pulse up)
+//   huntLevel  the same chase without the dread term (the mood's exit and the pulse read it, so dread can never hold either up)
 // huntDelta(mood) / calmDelta(mood): the four mood keys setMood may patch live. Tempo is never one of them.
 export const TENSION_ENTER = 0.55
 export const TENSION_EXIT  = 0.25
@@ -60,7 +61,7 @@ export function createTension() {
       above = level > TENSION_ENTER ? above + dt : 0
       if (above >= ENTER_S) { mood = 'hunt'; just = 'enter'; above = 0; below = 0 }
     } else {
-      below = level < TENSION_EXIT ? below + dt : 0
+      below = huntLevel < TENSION_EXIT ? below + dt : 0   // the hunt's own level: dread never holds the mood up
       if (below >= EXIT_S) { mood = 'calm'; just = 'exit'; above = 0; below = 0 }
     }
 

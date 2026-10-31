@@ -9,7 +9,10 @@
 // pins every one of them on a real chunk cache. Nothing that exists moves: the note is a record of its own (frag -1, never in SCRAPS,
 // never a page's key), and the soul keeps its pool for everyone else and for every other time.
 //
-// createFirstRun({ fresh, worldSeed, room, step, level }) -> {
+// threadHolds(docket) -> true while the docket's lean leaves the lobby's souls where the thread found them (no lean, an extension lead):
+//   a compliance or litigation lead on the lobby's row re-lays them (docket.js npc.denom), and the soul the note names may be gone
+//
+// createFirstRun({ fresh, worldSeed, room, step, level, docket }) -> {
 //   onLevel(index)  a floor arrived on: the thread listens on the lobby, waits on the block, and lapses for good on any floor below
 //   tick(dt)        lobby time, while it listens
 //   onRead(id)      a note read (its record's key) -> true when it was the thread's note: step 1
@@ -19,9 +22,11 @@
 //   unlocked()      the pull and the exit hint come free: step >= 2, 120 s of lobby time, or the thread holds nothing here
 //   toward()        the room's way while the thread waits on the room (where the pull should lean), else null
 // }
-// Off: anything but a fresh solo run of the fixed first world (fresh !== true, any worldSeed, an online room), a resume past the room
-// (step >= 3), and the block and every floor below. Off, it holds nothing and says nothing.
+// Off: anything but a fresh solo run of the fixed first world (fresh !== true, any worldSeed, an online room), a docket whose lean moves
+// the lobby's souls (!threadHolds(docket)), a resume past the room (step >= 3), and the block and every floor below. Off, it holds nothing
+// and says nothing.
 import { LOBBY, BLOCK } from './topology.js'
+import { standing, placementMods } from './docket.js'
 
 export const FIRST_RUN_UNLOCK_S = 120
 // the presence hush: on a run's first lobby visit, before any death, the presence waits this long before it offers to speak
@@ -62,9 +67,13 @@ export function noteRecord() {
   return { key: FIRST_NOTE.key, x: FIRST_NOTE.x, y: FIRST_NOTE.y, frag: -1, firstrun: true }
 }
 
-export function createFirstRun({ fresh = false, worldSeed = null, room = false, step = 0, level = LOBBY } = {}) {
+export function threadHolds(docket) {
+  return placementMods(standing(docket, LOBBY))['npc.denom'] === undefined
+}
+
+export function createFirstRun({ fresh = false, worldSeed = null, room = false, step = 0, level = LOBBY, docket = null } = {}) {
   let at = Number.isInteger(step) && step > 0 ? Math.min(step, DONE) : 0
-  const off = fresh !== true || (worldSeed !== null && worldSeed !== undefined) || !!room
+  const off = fresh !== true || (worldSeed !== null && worldSeed !== undefined) || !!room || !threadHolds(docket)
   let here = false        // on the lobby now
   let lapsed = false      // gone below: the loop may bring you back, the thread does not come with it
   let lobbyT = 0

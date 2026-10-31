@@ -4,7 +4,7 @@
 // the wall back where the paper was. This pins that all of it is really there, and that nothing the thread names moved anything.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { FIRST_NOTE, FIRST_SOUL, FIRST_ROOM, inRoom } from '../src/renderer/firstrun.js'
+import { FIRST_NOTE, FIRST_SOUL, FIRST_ROOM, inRoom, threadHolds, createFirstRun } from '../src/renderer/firstrun.js'
 import { DEFAULT_CONFIG, CHUNK_SIZE, createChunkCache, createGridReader } from '../src/renderer/world.js'
 import { levelConfig } from '../src/renderer/levels.js'
 import { createDecorSystem } from '../src/renderer/decor.js'
@@ -12,7 +12,7 @@ import { createItemSystem } from '../src/renderer/items.js'
 import { waysFor, stairsPass, chunkMid, findOpenNear, LOBBY } from '../src/renderer/topology.js'
 import { dressPass } from '../src/renderer/dress.js'
 import { hauntsPass } from '../src/renderer/haunts.js'
-import { standing, placementMods, applyPlacement } from '../src/renderer/docket.js'
+import { standing, placementMods, applyPlacement, EMPTY_DOCKET } from '../src/renderer/docket.js'
 import { CONTAINER_TYPES } from '../src/renderer/containers.js'
 import { SCRAPS } from '../src/renderer/scraps.js'
 import { lineOfSight } from '../src/renderer/raycaster.js'
@@ -23,10 +23,11 @@ const cellOf = (o) => ({ x: Math.floor(o.x), y: Math.floor(o.y) })
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y)
 
 // the lobby as a fresh solo run builds it: loadConfig's merge, levelConfig, the docket's placement lean, the ways, then the cache and
-// decor game.js makes (createChunkCache(cfg, worldSeed) and createDecorSystem(cfg, isWall, worldSeed, passes) with worldSeed null)
-function fixedLobby() {
-  const shipped = JSON.parse(readFileSync(new URL('../src/renderer/world.json', import.meta.url), 'utf8'))
-  const base = { ...DEFAULT_CONFIG, ...shipped }
+// decor game.js makes (createChunkCache(cfg, worldSeed) and createDecorSystem(cfg, isWall, worldSeed, passes) with worldSeed null);
+// `docket` stands in for the shipped one (a recount's lean)
+const SHIPPED = JSON.parse(readFileSync(new URL('../src/renderer/world.json', import.meta.url), 'utf8'))
+function fixedLobby(docket = SHIPPED.docket) {
+  const base = { ...DEFAULT_CONFIG, ...SHIPPED, docket }
   const cfg = levelConfig(base, LOBBY)
   applyPlacement(cfg, placementMods(standing(base.docket, 0)))
   cfg.ways = waysFor(LOBBY)
@@ -51,8 +52,45 @@ function fixedLobby() {
 const W = fixedLobby()
 // one flood over the spawn's block of the floor (spawn chunk, the note's, the soul's, the room's), the real bodies standing in it
 const REACH = walkable(W.grid.floor, W.colliders, W.spawn.x, W.spawn.y, { x0: -1, y0: -1, x1: 3 * CS + 1, y1: 2 * CS + 1 })
+// the thread's places are pinned while the shipped docket keeps the lobby's souls where the thread found them; a recount that leans the
+// lobby compliance or litigation re-lays them, and then the thread is off (firstrun.js threadHolds) and there is nothing here to pin
+const HOLDS = threadHolds(SHIPPED.docket)
 
-describe('the fixed lobby a fresh run arrives in', () => {
+describe('the thread and the docket\'s lean (review D1/C10)', () => {
+  const row0 = (r) => ({ ...EMPTY_DOCKET, '0': { extension: 0, compliance: 0, litigation: 0, ...r } })
+  const soulOf = (L) => L.decor.getNpcs().find((n) => n.key === FIRST_SOUL.key)
+
+  it('the shipped docket: the thread is on exactly when it holds', () => {
+    const fr = createFirstRun({ fresh: true, docket: SHIPPED.docket }); fr.onLevel(LOBBY)
+    expect(fr.on()).toBe(HOLDS)
+  })
+
+  it('a compliance or litigation lead on the lobby\'s row really takes the soul the note names away: the guard is not idle', () => {
+    for (const r of [{ compliance: 2 }, { litigation: 2 }]) {
+      const docket = row0(r)
+      expect(threadHolds(docket)).toBe(false)
+      expect(soulOf(fixedLobby(docket)), JSON.stringify(r)).toBeUndefined()
+      const fr = createFirstRun({ fresh: true, docket }); fr.onLevel(LOBBY)
+      expect(fr.on()).toBe(false)
+    }
+  })
+
+  it('an extension lead leaves the soul and the radio\'s page where the thread found them: the thread holds', () => {
+    const zero = soulOf(fixedLobby(EMPTY_DOCKET))
+    expect(zero).toBeDefined()
+    for (const r of [{ extension: 2 }, { extension: 5, compliance: 2, litigation: 2 }]) {
+      const docket = row0(r), L = fixedLobby(docket)
+      expect(threadHolds(docket)).toBe(true)
+      const soul = soulOf(L)
+      expect(soul, JSON.stringify(r)).toBeDefined()
+      expect([soul.x, soul.y]).toEqual([zero.x, zero.y])
+      const page = L.decor.getScraps().find((s) => s.key === '1,0')
+      expect([page?.x, page?.y], JSON.stringify(r)).toEqual([28.5, 11.5])
+    }
+  })
+})
+
+describe.runIf(HOLDS)('the fixed lobby a fresh run arrives in', () => {
   it('spawns at the origin chunk\'s hall crossing, facing down the long east hall', () => {
     expect(W.spawn).toEqual({ x: 11.5, y: 11.5 })
     for (let x = 11; x < 3 * CS; x++) expect(W.grid.floor(x, 11), `hall cell ${x},11`).toBe(true)
@@ -67,7 +105,7 @@ describe('the fixed lobby a fresh run arrives in', () => {
   })
 })
 
-describe('the note', () => {
+describe.runIf(HOLDS)('the note', () => {
   it('lies on an open cell, near the spawn, beside the hall line the fresh player walks', () => {
     const c = cellOf(FIRST_NOTE)
     expect(W.grid.floor(c.x, c.y)).toBe(true)
@@ -105,7 +143,7 @@ describe('the note', () => {
   })
 })
 
-describe('the soul', () => {
+describe.runIf(HOLDS)('the soul', () => {
   const soul = W.decor.getNpcs().find((n) => n.key === FIRST_SOUL.key)
 
   it('really stands in the fixed lobby, by its chunk key, further down the hall than the note', () => {
@@ -134,7 +172,7 @@ describe('the soul', () => {
   })
 })
 
-describe('the room', () => {
+describe.runIf(HOLDS)('the room', () => {
   const way = W.decor.getExits().find((e) => e.key === FIRST_ROOM.way.key)
 
   it('holds the fixed world\'s nearest down way, the one the compass names from the spawn', () => {

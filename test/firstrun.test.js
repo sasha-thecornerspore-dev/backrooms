@@ -4,8 +4,9 @@
 // are in the fixed world: test/firstrun-world.test.js.)
 import { describe, it, expect } from 'vitest'
 import {
-  createFirstRun, noteRecord, FIRST_NOTE, FIRST_SOUL, FIRST_ROOM, STEPS, DONE, FIRST_RUN_UNLOCK_S, inRoom,
+  createFirstRun, noteRecord, FIRST_NOTE, FIRST_SOUL, FIRST_ROOM, STEPS, DONE, FIRST_RUN_UNLOCK_S, inRoom, threadHolds,
 } from '../src/renderer/firstrun.js'
+import { EMPTY_DOCKET } from '../src/renderer/docket.js'
 import { SCRAPS } from '../src/renderer/scraps.js'
 import { LOBBY, BLOCK } from '../src/renderer/topology.js'
 
@@ -234,5 +235,32 @@ describe('createFirstRun: off', () => {
   it('a chunk key from a floor below never matches: the thread listens on the lobby only', () => {
     const fr = toStep(fresh({ level: 2 }), 0)
     offChecks(fr)
+  })
+
+  // review D1/C10: a recount that gives the lobby's row a compliance or litigation lead re-lays the lobby's souls (docket.js npc.denom),
+  // and the soul the note names is gone; the thread is off then, so a leaned docket never sends a fresh player to a cone with nobody there
+  const row0 = (r) => ({ ...EMPTY_DOCKET, '0': { extension: 0, compliance: 0, litigation: 0, ...r } })
+  const KEEPS = [undefined, null, 'drifted', EMPTY_DOCKET, row0({ extension: 2 }), row0({ extension: 5, compliance: 2, litigation: 2 }),
+    row0({ compliance: 1 }), row0({ compliance: 2, litigation: 2 }), { ...EMPTY_DOCKET, '1': { compliance: 5, extension: 0, litigation: 0 } }]
+  const MOVES = [row0({ compliance: 2 }), row0({ litigation: 2 }), row0({ compliance: 3, litigation: 1 }), row0({ litigation: 5, extension: 1 }),
+    row0({ compliance: 4, extension: 1, litigation: 1 })]
+
+  it('threadHolds: no lean, an extension lead, a tie or another floor\'s lean keeps the lobby\'s souls; a compliance or litigation lead moves them', () => {
+    for (const d of KEEPS) expect(threadHolds(d), JSON.stringify(d)).toBe(true)
+    for (const d of MOVES) expect(threadHolds(d), JSON.stringify(d)).toBe(false)
+  })
+
+  it('under a lean that moves the souls: off, the pull and the hint free as on any floor; a resume mid-thread too', () => {
+    for (const docket of MOVES) {
+      const fr = fresh({ docket }); fr.onLevel(LOBBY)
+      offChecks(fr)
+      offChecks(fresh({ docket, step: 1 }))
+    }
+    for (const docket of KEEPS) {
+      const fr = fresh({ docket }); fr.onLevel(LOBBY)
+      expect(fr.on(), JSON.stringify(docket)).toBe(true)
+      expect(fr.unlocked()).toBe(false)
+      expect(fr.onRead(FIRST_NOTE.key)).toBe(true)
+    }
   })
 })

@@ -284,6 +284,22 @@ describe('dread: the fourth argument', () => {
     }
   })
 
+  it('dread never holds the hunt mood up: once the hunt lets go the mood exits on the frame it would with no dread (review W3)', () => {
+    // a creature that has lost you searches beside you (dread over 0.42 puts dread x DREAD_K above TENSION_EXIT): the hunt's own level
+    // decides the exit, so the music and the presence let go on time
+    const exitAt = (dread) => {
+      const t = createTension()
+      run(t, 5, hunted(4))
+      expect(t.tick(0.05, hunted(4), 100).mood).toBe('hunt')
+      for (let i = 1; i <= 1200; i++) if (t.tick(0.05, calm, 100, dread).just === 'exit') return i
+      return null
+    }
+    const plain = exitAt(0)
+    expect(plain).not.toBeNull()
+    expect(plain * 0.05).toBeLessThan(15)
+    for (const d of [0.42, 0.6, 1]) expect(exitAt(d), String(d)).toBe(plain)
+  })
+
   it('as dread lifts the level falls back at the decay rate, and reset() clears huntLevel', () => {
     const t = createTension()
     run4(t, 4, calm, 100, 1)
