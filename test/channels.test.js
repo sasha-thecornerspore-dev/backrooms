@@ -8,7 +8,25 @@ const entries = Object.entries(CHANNELS)
 describe('CHANNELS', () => {
   it('names every channel the release plan places by', () => {
     expect(Object.keys(CHANNELS).sort()).toEqual(
-      ['props', 'exits', 'npcs', 'scraps', 'machines', 'sights', 'upStair', 'lift', 'dress', 'containerSlot', 'containerRoll', 'haunts'].sort())
+      ['props', 'exits', 'npcs', 'scraps', 'machines', 'sights', 'upStair', 'lift', 'dress', 'containerSlot', 'containerRoll', 'haunts',
+        'firstrun'].sort())
+  })
+
+  it('is append-only: the older channels keep their order and the first-run thread comes after them', () => {
+    expect(Object.keys(CHANNELS).slice(0, 13)).toEqual(
+      ['props', 'exits', 'npcs', 'scraps', 'machines', 'sights', 'upStair', 'lift', 'dress', 'containerSlot', 'containerRoll', 'haunts',
+        'firstrun'])
+  })
+
+  it('firstrun is a gate and an rng of its own, shared with no other channel', () => {
+    const fr = CHANNELS.firstrun
+    expect(fr.gate).toHaveLength(2)
+    expect(fr.rng).toHaveLength(4)
+    for (const [k, c] of entries) {
+      if (k === 'firstrun') continue
+      for (const g of [c.gate, c.type, c.pick]) if (g) { expect(g[0]).not.toBe(fr.gate[0]); expect(g.join(',')).not.toBe(fr.gate.join(',')) }
+      if (c.rng) expect(`${c.rng[0]},${c.rng[1]}`).not.toBe(`${fr.rng[0]},${fr.rng[1]}`)
+    }
   })
 
   it('every hash gate a-constant is distinct across entries (type/pick gates included)', () => {
