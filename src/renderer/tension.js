@@ -8,22 +8,25 @@
 //
 // createTension() -> { tick(dt, threat, hp, dread = 0) -> { level, beat, mood, just, close, huntLevel }, reset() }
 //   threat: { hunted, nearest, gaze, arcPending } (hunt.createThreat); null is calm
-//   dread   0..1 from dread.js (a creature near you through the maze, not hunting): it lifts the target to at most DREAD_CAP, so a
-//           slow heartbeat comes before anything hunts you and dread alone never enters the hunt mood. 0 is exactly the tick before it
-//   level   0..1, chasing a target with attack 0.9/s and decay 0.12/s
+//   dread   0..1 from dread.js (a creature near you through the maze, not hunting): a term of its own, chasing dread x DREAD_K (at most
+//           DREAD_CAP) at the same attack and falling at 2/s, so a slow heartbeat comes before anything hunts you and stops within a
+//           beat of the thing going (a ward dispels it, it drifts out of reach), and dread alone never enters the hunt mood. 0 is
+//           exactly the tick before it: dread's term stays 0 and the level is huntLevel
+//   level   0..1, the louder of huntLevel and dread's term: a hunt's fade keeps its long breath, and dread's lift never lengthens it
 //   beat    seconds until the next heartbeat (heartbeatPeriod), Infinity when calm
 //   mood    'calm' | 'hunt' with hysteresis: enter after 1.5 s above TENSION_ENTER, exit after 6 s with huntLevel below TENSION_EXIT
-//           (dread never holds the hunt mood)
+//           (dread's term stays under TENSION_ENTER: it never moves the enter, the exit or the close, and never holds the mood)
 //   just    'enter' | 'exit' on the transition frame, else null
 //   close   true once when level crosses 0.85 upward, at most once per 12 s
-//   huntLevel  the same chase without the dread term (the mood's exit and the pulse read it, so dread can never hold either up)
+//   huntLevel  the hunt's own chase of its target, attack 0.9/s and decay 0.12/s (the mood's exit and the pulse read it, so dread can
+//              never hold either up)
 // huntDelta(mood) / calmDelta(mood): the four mood keys setMood may patch live. Tempo is never one of them.
 export const TENSION_ENTER = 0.55
 export const TENSION_EXIT  = 0.25
 export const DREAD_CAP = 0.35   // above BEAT_FLOOR, below TENSION_ENTER
 export const DREAD_K   = 0.6
 
-const ATTACK = 0.9, DECAY = 0.12
+const ATTACK = 0.9, DECAY = 0.12, DREAD_DECAY = 2
 const ENTER_S = 1.5, EXIT_S = 6
 const CLOSE_AT = 0.85, CLOSE_THROTTLE_S = 12
 const BEAT_FLOOR = 0.15
@@ -36,12 +39,12 @@ export function heartbeatPeriod(level) {
 
 export function createTension() {
   const res = { level: 0, beat: Infinity, mood: 'calm', just: null, close: false, huntLevel: 0 }
-  let level = 0, huntLevel = 0, mood = 'calm'
+  let level = 0, huntLevel = 0, dreadLevel = 0, mood = 'calm'
   let above = 0, below = 0         // time spent past the enter / exit lines
   let was85 = false, closeCd = 0
 
   function reset() {
-    level = 0; huntLevel = 0; mood = 'calm'; above = 0; below = 0; was85 = false; closeCd = 0
+    level = 0; huntLevel = 0; dreadLevel = 0; mood = 'calm'; above = 0; below = 0; was85 = false; closeCd = 0
     res.level = 0; res.beat = Infinity; res.mood = mood; res.just = null; res.close = false; res.huntLevel = 0
   }
 
@@ -53,8 +56,10 @@ export function createTension() {
     if (th.arcPending && target < 0.8) target = 0.8
     if (hp < 25 && target < 0.4) target = 0.4
     huntLevel = huntLevel < target ? Math.min(target, huntLevel + ATTACK * dt) : Math.max(target, huntLevel - DECAY * dt)
-    if (dread > 0) target = Math.max(target, Math.min(DREAD_CAP, dread * DREAD_K))
-    level = level < target ? Math.min(target, level + ATTACK * dt) : Math.max(target, level - DECAY * dt)
+    // dread's own term chases on its own, falling fast (DREAD_DECAY): a beat it raised stops within a beat of the thing going
+    const dTarget = dread > 0 ? Math.min(DREAD_CAP, dread * DREAD_K) : 0
+    dreadLevel = dreadLevel < dTarget ? Math.min(dTarget, dreadLevel + ATTACK * dt) : Math.max(dTarget, dreadLevel - DREAD_DECAY * dt)
+    level = huntLevel > dreadLevel ? huntLevel : dreadLevel
 
     let just = null
     if (mood === 'calm') {

@@ -300,15 +300,98 @@ describe('dread: the fourth argument', () => {
     for (const d of [0.42, 0.6, 1]) expect(exitAt(d), String(d)).toBe(plain)
   })
 
-  it('as dread lifts the level falls back at the decay rate, and reset() clears huntLevel', () => {
+  it('dread\'s own lift falls fast (2/s), a hunt still takes its long breath (0.12/s), and reset() clears both (review batch five)', () => {
     const t = createTension()
     run4(t, 4, calm, 100, 1)
+    expect(run4(t, 0.05, calm, 100, 0).level).toBeCloseTo(DREAD_CAP - 2 * 0.05, 9)
+    expect(run4(t, 0.15, calm, 100, 0).level).toBe(0)                 // gone in under 0.2 s, where the shared decay took 1.7 s to the beat floor
+    // a hunt with dread beside it: when both let go the level falls at the hunt's own rate, as it would with no dread at all
+    run4(t, 3, hunted(6), 100, 1)
     const r = run4(t, 1, calm, 100, 0)
-    expect(r.level).toBeCloseTo(DREAD_CAP - 0.12, 6)
-    t.reset()
+    expect(r.level).toBeCloseTo(0.8 - 0.12, 6)
+    expect(r.level).toBe(r.huntLevel)
+    run4(t, 4, calm, 100, 1)
+    t.reset()                                                          // dread's term too: a lift left over would read 0.25 on this tick
     expect(t.tick(0.05, calm, 100, 0)).toEqual({ level: 0, beat: Infinity, mood: 'calm', just: null, close: false, huntLevel: 0 })
   })
+
+  it('the beat stops within a beat of dread going to 0, while a hunt\'s fade still beats at its old pace (review batch five)', () => {
+    // dread alone, the ward dispelling the thing at four points of the heart's cycle: no beat a beat after it went, and none after 0.2 s
+    for (const warm of [3, 3.3, 3.6, 3.85]) {
+      const h = heart(createTension())
+      for (let i = 0; i < Math.round(warm / 0.05); i++) h.step(0.05, calm, 100, 1)
+      expect(h.times.length, String(warm)).toBeGreaterThan(0)
+      const off = h.now
+      let r
+      for (let i = 0; i < 4; i++) r = h.step(0.05, calm, 100, 0)
+      expect(r.beat, String(warm)).toBe(Infinity)
+      for (let i = 0; i < 60; i++) h.step(0.05, calm, 100, 0)
+      for (const b of h.times) expect(b - off, String(warm)).toBeLessThanOrEqual(heartbeatPeriod(DREAD_CAP))
+      expect(h.times.filter((b) => b > off + 0.2 + 1e-9), String(warm)).toEqual([])
+    }
+    // a hunt lets go with the thing still searching beside you (dread holds the beat over the hunt's fade), then the ward dispels it:
+    // from 0.2 s on the level and the beat are the dread-free run's, frame for frame, and that fade still beats for over a second
+    const h = heart(createTension()), p = heart(createTension())
+    const both = (n, threat, dread) => { let r = null; for (let i = 0; i < n; i++) { r = h.step(0.05, threat, 100, dread); p.step(0.05, threat, 100, 0) } return r }
+    both(60, hunted(4), 1)
+    const held = both(90, calm, 1)
+    expect(held.level).toBe(DREAD_CAP)
+    expect(held.huntLevel).toBeLessThan(DREAD_CAP)
+    expect(heartbeatPeriod(held.huntLevel)).toBeLessThan(Infinity)
+    const off = h.now
+    both(4, calm, 0)
+    let pLast = null
+    for (let i = 0; i < 200; i++) {
+      const r = h.step(0.05, calm, 100, 0), q = p.step(0.05, calm, 100, 0)
+      expect(Object.is(r.level, q.level) && Object.is(r.beat, q.beat) && Object.is(r.level, r.huntLevel)).toBe(true)
+      if (q.beat < Infinity) pLast = p.now
+    }
+    expect(pLast - off).toBeGreaterThan(1)
+    expect(h.times.filter((b) => b > off + 0.2).length).toBeGreaterThan(0)
+    expect(Math.max(...h.times)).toBeLessThanOrEqual(pLast + 1e-9)
+  })
+
+  it('dread never moves the hunt\'s own transitions: enter, exit and close fall on the frames they would with no dread (review batch five)', () => {
+    // a thing near you through the maze, then it hunts you: the shared chase started from dread's lift and entered the hunt 0.4 s early
+    const firsts = (dread) => {
+      const t = createTension()
+      run4(t, 4, calm, 100, dread)
+      let enter = null, close = null
+      for (let i = 1; i <= 80; i++) { const r = t.tick(0.05, hunted(0), 100, dread); if (r.just === 'enter' && enter === null) enter = i; if (r.close && close === null) close = i }
+      return [enter, close]
+    }
+    expect(firsts(0)).not.toContain(null)
+    expect(firsts(1)).toEqual(firsts(0))
+    const plain = createTension(), dread = createTension()
+    let enters = 0, closes = 0
+    for (const [dt, th, hp] of script(3000, 11)) {
+      const a = plain.tick(dt, th, hp)
+      const b = dread.tick(dt, th, hp, 0.9)
+      expect(['mood', 'just', 'close'].every((k) => Object.is(a[k], b[k]))).toBe(true)
+      if (a.just === 'enter') enters++
+      if (a.close) closes++
+    }
+    expect(enters).toBeGreaterThan(0)
+    expect(closes).toBeGreaterThan(0)
+  })
 })
+
+// game.js's heart over tension: heartT counts down each frame, and a beat sounds when it has run out while the period is finite
+function heart(t) {
+  let heartT = 0, now = 0
+  const times = []
+  return {
+    times,
+    get now() { return now },
+    step(dt, threat, hp, dread) {
+      now += dt
+      const r = t.tick(dt, threat, hp, dread)
+      heartT -= dt
+      if (r.beat < Infinity && heartT <= 0) { times.push(now); heartT = r.beat }
+      return r
+    },
+  }
+}
 
 function run4(t, seconds, threat, hp, dread, dt = 0.05) {
   let out = null
