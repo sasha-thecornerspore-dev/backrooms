@@ -4,7 +4,7 @@
 // hauntings behind game.js's calm gate, the floor murmurs, the flicker machine, the distant swell, and the message queue (messages.js)
 // that decides which lines are actually shown. Sightings use sightpins.visibleWays — the cone + line of sight the game pins the map with.
 //
-// What the tree's game.js wires decides what the walker meets (lib.mjs WIRING): on 2.0.4 the faint pull waits (90 s, 120 s on a fresh
+// What the tree's game.js wires decides what the walker meets (lib.mjs WIRING): on 2.0.4 the faint pull waits (PULL_WAIT_S, 120 s on a fresh
 // lobby, sooner after a hint), shows no metres, wobbles and never names a stair up; the plate budget, the arrival event, the murmur bag,
 // the seen line and its tell, dread with the teller and the dread heartbeat, the flashlight and smiler lines once a run. On 2.0.3 none.
 //

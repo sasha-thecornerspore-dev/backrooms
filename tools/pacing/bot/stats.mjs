@@ -29,13 +29,14 @@ const ACT_KEYS = /^(KeyE|KeyF|KeyQ|KeyL|Space|KeyC|Tab) /
 // the measured tree's own murmurs, exit hints and setting's line (from the instrumented copy run.mjs left beside the sessions): always
 // unprompted, whatever key the bot happened to press just before
 const UNPROMPTED = new Set()
-// and its bump lines (feedback.js BUMP_LINES) and landmarks' first-sight lines (sightpins.js SIGHT_LINES): walking into furniture or up
-// to a landmark is yours, key or no key
+// and its bump lines (feedback.js BUMP_LINES), the lines for edging through clutter (placement.js CLUTTER_LINES) and landmarks'
+// first-sight lines (sightpins.js SIGHT_LINES): walking into furniture, through it or up to a landmark is yours, key or no key
 const BUMPS = new Set()
 {
   const R = path.join(DIR, 'src', 'renderer')
-  const lv = path.join(R, 'levels.js'), wd = path.join(R, 'world.js'), fb = path.join(R, 'feedback.js'), sp = path.join(R, 'sightpins.js')
+  const lv = path.join(R, 'levels.js'), wd = path.join(R, 'world.js'), fb = path.join(R, 'feedback.js'), sp = path.join(R, 'sightpins.js'), pl = path.join(R, 'placement.js')
   if (existsSync(sp)) { const SP = await import(pathToFileURL(sp).href); for (const v of Object.values(SP.SIGHT_LINES ?? {})) if (v?.line) BUMPS.add(v.line) }
+  if (existsSync(pl)) { const PL = await import(pathToFileURL(pl).href); for (const v of Object.values(PL.CLUTTER_LINES ?? {})) BUMPS.add(v) }
   if (existsSync(lv) && existsSync(wd)) {
     const LV = await import(pathToFileURL(lv).href), WD = await import(pathToFileURL(wd).href)
     for (let i = 0; i < 4; i++) { const c = LV.levelConfig(WD.DEFAULT_CONFIG, i); for (const m of [...(c.messages || []), c.exit?.hint]) if (m) UNPROMPTED.add(m) }

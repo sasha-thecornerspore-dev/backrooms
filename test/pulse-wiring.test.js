@@ -421,12 +421,15 @@ describe('T1-2: the compass earns its pull', () => {
   }
   const fresh = () => { const f = createFirstRun({ fresh: true }); f.onLevel(LOBBY); return f }
   const ahead = { x: 10.5, y: 0.5, kind: 'down' }, upClose = { x: 0.5, y: 3.5, kind: 'up' }
+  // the faint line the frame should draw the moment the wait ends: toward `ahead`, leaning by the wobble at PULL_WAIT_S (phase 0)
+  const atWait = () => compassText(compassLines({ player: { x: 0.5, y: 0.5, angle: 0 }, known: [], fallback: { rec: ahead }, wobble: pullWobble(PULL_WAIT_S, 0) }, []))
 
-  it('the faint pull waits 90 s of the visit, names no metres, and never a stair up', () => {
+  it('the faint pull waits PULL_WAIT_S of the visit, names no metres, and never a stair up', () => {
     const r = rig({ decor: fakeDecor([ahead, upClose]) })
     expect(r.frame(0, { cellChanged: true })).toBe('')
     expect(r.frame(PULL_WAIT_S - 0.1)).toBe('')
-    expect(r.frame(PULL_WAIT_S)).toBe(`↑  ${FAINT}`)                     // straight ahead (the lean is small this early in its swing)
+    expect(r.frame(PULL_WAIT_S)).toBe(atWait())                          // ahead, give or take the lean (at most 30°)
+    expect(atWait()).toMatch(new RegExp(`^[↖↑↗]  ${FAINT}$`))
     expect(r.D.compassState.fallback.rec).toBe(ahead)                   // the stair up is nearer, and passed over
     expect(r.D.compassEl.textContent).not.toMatch(/\d/)
   })
@@ -461,14 +464,14 @@ describe('T1-2: the compass earns its pull', () => {
     expect(s).toBe(`↗  ${FAINT}`)                                      // 30° x sin(8 / 7): about 27°, over the sector line
     const q = rig({ decor: fakeDecor([ahead]) })
     q.frame(PULL_WAIT_S - 0.05, { cellChanged: true }); q.st.lastCompassT = PULL_WAIT_S - 0.05
-    expect(q.frame(PULL_WAIT_S)).toBe(`↑  ${FAINT}`)
+    expect(q.frame(PULL_WAIT_S)).toBe(atWait())
   })
   it('on the first run\'s lobby it waits for the thread instead (the soul\'s word, or 120 s), then leans toward the room the soul named', () => {
     const L = lobbyOnce(), fr = fresh()
     const soul = L.decor.getNpcs().find((n) => n.key === FIRST_SOUL.key)
     const r = rig({ index: LOBBY, decor: L.decor, firstRun: fr, player: { x: soul.x, y: soul.y, angle: 0 } })
     expect(r.frame(0, { cellChanged: true })).toBe('')
-    expect(r.frame(PULL_WAIT_S + 10, { floorHinted: true })).toBe('')    // past 90 s, and hinted: the lobby waits for the thread
+    expect(r.frame(PULL_WAIT_S + 10, { floorHinted: true })).toBe('')    // past the wait, and hinted: the lobby waits for the thread
     expect(fr.onRead(FIRST_NOTE.key)).toBe(true)
     expect(r.frame(PULL_WAIT_S + 11, { floorHinted: true })).toBe('')
     expect(fr.onSoul(FIRST_SOUL.key)).toBe(FIRST_SOUL.line)

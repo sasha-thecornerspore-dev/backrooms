@@ -193,14 +193,17 @@ describe('createTeller', () => {
     for (let k = 1; k < at.length; k++) expect(at[k] - at[k - 1]).toBe(3.5)
   })
 
-  it('the chance per tick is (0.12 + 0.4 x dread) x dt', () => {
+  // tune round 1: 0.12 + 0.4 x dread cued 76% of the L1-L2 sightings 5-25 s ahead (the first tell often came under 5 s before); the
+  // target is 80%
+  it('the chance per tick is (0.25 + 0.8 x dread) x dt', () => {
     const at = (dread, dt) => createTeller({ rng: () => 0.5 }).tick(dt, far(12, { dread }), P, 1) !== null
-    expect(at(1, 1)).toBe(true)                                  // 0.52 > 0.5
-    expect(at(0.9, 1)).toBe(false)                               // 0.48
-    expect(at(1, 0.25)).toBe(false)                              // 0.13
+    expect(at(0.35, 1)).toBe(true)                               // 0.53 > 0.5
+    expect(at(0.3, 1)).toBe(false)                               // 0.49
+    expect(at(0.2, 2)).toBe(true)                                // 0.82
+    expect(at(1, 0.25)).toBe(false)                              // 0.2625
     const c = []
-    createTeller({ rng: () => { c.push(1); return 0.129 } }).tick(0.25, far(12), P, 1)
-    expect(c.length).toBe(2)                                     // 0.129 < 0.13: it plays, and a second draw picks the sound
+    createTeller({ rng: () => { c.push(1); return 0.262 } }).tick(0.25, far(12), P, 1)
+    expect(c.length).toBe(2)                                     // 0.262 < 0.2625: it plays, and a second draw picks the sound
   })
 
   it('a chair moves instead one time in five', () => {

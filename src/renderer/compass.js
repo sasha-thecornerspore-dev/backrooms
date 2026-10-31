@@ -20,9 +20,9 @@ export function exitArrow(rel) {
 export const FAINT = 'something pulls, faintly'
 const CAME = 'the way you came'
 
-// the faint pull waits: 90 s of floor time this visit, or a hint from the floor (a page read, a trace pinned, a soul's line).
+// the faint pull waits: 60 s of floor time this visit, or a hint from the floor (a page read, a trace pinned, a soul's line).
 // On a fresh run's lobby it waits for the first-run thread instead: its second step, or 120 s.
-export const PULL_WAIT_S = 90
+export const PULL_WAIT_S = 60
 export const PULL_FRESH_S = 120
 // pullVisible({ floorT, hinted, fresh, step }) -> boolean. fresh: a fresh run's lobby with the first-run thread on; step: that
 // thread's step. The exit-hint plate there follows the same rule.
@@ -98,8 +98,8 @@ export function compassText(out, faintMetres = false) {
   return s
 }
 
-// the setting's line waits this long into a visit: past the arrival's plates (plates.js, 45 s), before the faint pull frees (90 s)
-export const LOST_AFTER_S = 60
+// the setting's line waits this long into a visit: past the arrival's plates (plates.js, 45 s), before the faint pull frees (60 s)
+export const LOST_AFTER_S = 50
 // lostDue(out, said, floorT, guided) -> boolean: levels.js LOST_LINE may be said now — the compass shows no way (neither a known
 // one nor the faint pull), the floor has had you LOST_AFTER_S of this visit and given you no lead (guided: a hint, the first
 // run's note), and the line has not been said this visit. You are lost, not only new

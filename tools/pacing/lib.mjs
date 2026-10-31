@@ -28,7 +28,7 @@ export function parseArgs(argv, valued = []) {
 
 // what this tree's game.js wires: each a plain source test, so the walker follows the game and not merely the modules on disk
 export const WIRING = Object.freeze({
-  pull: /pullVisible\(pullAsk\)/,                          // T1-2 the faint pull waits (90 s / 120 s fresh), no metres, wobbles
+  pull: /pullVisible\(pullAsk\)/,                          // T1-2 the faint pull waits (PULL_WAIT_S / 120 s fresh), no metres, wobbles
   nearestWayOn: /\.nearestWayOn\(/,                         // T1-2 the faint pull never names a stair up
   plates: /createPlateBudget\(\)/,                          // T1-4 the plate budget
   floorPlate: /plate\('floor', arrivalPlate\(/,             // T1-4 the floor's own line, first visit its sub-line

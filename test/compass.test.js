@@ -140,13 +140,16 @@ describe('compassText', () => {
 // T1-2: the faint pull earns its place: it waits, it names no metres, it wobbles slowly, and the caller may skip a kind
 describe('the faint pull', () => {
   it('pins its numbers', () => {
-    expect(PULL_WAIT_S).toBe(90); expect(PULL_FRESH_S).toBe(120); expect(PULL_WOBBLE).toBeCloseTo(Math.PI / 6, 12)
+    // tune round 1: 60 s puts the seek walk's p50 inside 45-90 s on every floor (90 s gave 95-107 s on L1-L3), and the setting's line
+    // moves ahead of it to 50 s
+    expect(PULL_WAIT_S).toBe(60); expect(PULL_FRESH_S).toBe(120); expect(PULL_WOBBLE).toBeCloseTo(Math.PI / 6, 12)
+    expect(LOST_AFTER_S).toBe(50)
   })
 
-  it('pullVisible: hidden before 90 s of floor time and shown from 90 s; a hint unlocks it at once', () => {
+  it('pullVisible: hidden before 60 s of floor time and shown from 60 s; a hint unlocks it at once', () => {
     expect(pullVisible({ floorT: 0 })).toBe(false)
-    expect(pullVisible({ floorT: 89.9 })).toBe(false)
-    expect(pullVisible({ floorT: 90 })).toBe(true)
+    expect(pullVisible({ floorT: 59.9 })).toBe(false)
+    expect(pullVisible({ floorT: 60 })).toBe(true)
     expect(pullVisible({ floorT: 400 })).toBe(true)
     expect(pullVisible({ floorT: 3, hinted: true })).toBe(true)
     expect(pullVisible({})).toBe(false); expect(pullVisible()).toBe(false)
@@ -227,7 +230,7 @@ describe('the faint pull', () => {
     expect(lostDue(out, false, T)).toBe(false)                                // a way is known
     compassLines({ player: player(0.5, 0.5), known: [], fallback: null, arrived: null }, out)
     expect(lostDue(out, false, T)).toBe(true)
-    // not in the arrival: the floor has to have had you a while (past the plate budget's 45 s window, before the 90 s pull)
+    // not in the arrival: the floor has to have had you a while (past the plate budget's 45 s window, before the pull frees)
     expect(lostDue(out, false)).toBe(false); expect(lostDue(out, false, 0)).toBe(false); expect(lostDue(out, false, T - 0.01)).toBe(false)
     expect(T).toBeGreaterThan(45); expect(T).toBeLessThan(PULL_WAIT_S)
     // and never once the floor has given you a lead (a hint, the first run's note)

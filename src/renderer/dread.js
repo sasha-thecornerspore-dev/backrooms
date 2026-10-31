@@ -30,7 +30,7 @@ const LINE = DREAD_R + 1.5        // the straight-line gate: path cells are whol
 const LINE2 = LINE * LINE
 const TELL_NEAR = 7               // nearer than this it is not a sound in the walls, it is there
 const TELL_GAP_S = 3.5
-const TELL_BASE = 0.12, TELL_K = 0.4
+const TELL_BASE = 0.25, TELL_K = 0.8    // soon enough after a thing comes within reach that the warning lands 5 s or more ahead
 const SCRAPE = 0.2                // a chair moves somewhere instead
 const PAN = 0.85
 // a thing that has seen you from off your screen: its tell, from where it is (game.js, on the hunt's 'seen')
