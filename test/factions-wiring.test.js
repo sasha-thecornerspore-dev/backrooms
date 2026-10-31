@@ -72,7 +72,7 @@ const ORIGIN_FILES = ['origin-intake.js', 'origin-rules.js', 'origin-tenant.js',
 
 describe('I14a: the scheduler\'s one mutable config, the file, the floor\'s depth', () => {
   it('ONE scheduler reads evConfig (never rebuilt, never bare); retension() is the one writer of its tension', () => {
-    expect(game).toMatch(/import \{ createEventScheduler, EVENTS \} from '\.\/events\.js'/)
+    expect(game).toMatch(/import \{ createEventScheduler, EVENTS(, [A-Za-z_, ]+)? \} from '\.\/events\.js'/)   // (pulse: the footsteps echo's table too)
     expect(at('const evConfig = { events: EVENTS, tension: 0 }')).toBeLessThan(loopAt)
     expect(count(/createEventScheduler\(/g)).toBe(1)
     expect(game).toContain('const eventSched = createEventScheduler({ config: evConfig })')
@@ -133,7 +133,8 @@ describe('I14a (W8): the floor\'s file — the placement overlay, the room\'s le
     expect(cross).not.toContain('Math.random() < 0.3')
     const vend = slice('function dispenseFromMachine(m) {', '// ── snapshot + persistence')
     expect(vend).toMatch(/const lean = trayLean\(level\.st\)\r?\n\s*if \(lean\.item\) pool\.push\(lean\.item, lean\.item\)\r?\n\s*const type = pool\[/)
-    expect(vend).toContain("drops into the tray.${lean.stamp ? ` the tray is stamped ${lean.stamp}.` : ''}`")
+    // (pulse T1-10: what drops is named with its article, TRAY_NAMES — pulse-wiring.test.js checks it covers every ITEM_NAMES key)
+    expect(vend).toContain("const clunk = `the machine clunks, and ${TRAY_NAMES[type] ?? type} drops into the tray.${lean.stamp ? ` the tray is stamped ${lean.stamp}.` : ''}`")
     expect(count(/trayLean\(/g)).toBe(1)
   })
 })
@@ -290,8 +291,8 @@ describe('I5: the file (origin-*.js) in game.js', () => {
 describe('I5: the form, the doors, the soul, the console, the naming', () => {
   it('E: the presence, else the form (or a page), else ∅\'s sealed door ahead for a tenant-to-be, else the soul (the processed refusal first)', () => {
     const e = slice("if (K['KeyE']) {", "if (K['Escape'] && dialogOpen)")
-    // (I13: the page opens sealed under compliance until it is read or given up)
-    const order = ['if (nearPresence) openDialog()', 'else if (nearScrap) nearScrap.form ? openForm() : mods.sealedCards && !readSet.has(nearScrap.frag) ? openSealed(nearScrap) : openNoteCard(nearScrap)',
+    // (I13: the page opens sealed under compliance until it is read or given up; pulse T1-10: a page not yet read comes before the presence)
+    const order = ['if (nearPresence && !scrapFirst) openDialog()','else if (nearScrap) nearScrap.form ? openForm() : mods.sealedCards && !readSet.has(nearScrap.frag) ? openSealed(nearScrap) : openNoteCard(nearScrap)',
       'else if (door) knockDoor(door)', 'else if (nearNpc) {'].map((s) => e.indexOf(s))
     for (let i = 0; i < order.length; i++) expect(order[i], String(i)).toBeGreaterThan(i ? order[i - 1] : 0)
     expect(e).toContain("const door = cfg.map && !nearPresence && !nearScrap && provisionalOrigin() === 'tenant' ? doorAhead() : null")
@@ -1490,7 +1491,7 @@ describe('I11 (W6): the caches — a thing set down with a word, read on the car
     expect(count(/mem\.setDropped\(/g)).toBe(4)
   })
   it('F on a cache, lifted and replayed: the word read on the card (whose, the arrow from where you stand), +4 for a stranger\'s, the ledger and the room let go of it', () => {
-    expect(game).toMatch(/if \(res\.ok\) \{ showMessage\(`you take the \$\{ITEM_NAMES\[res\.item\.type\] \?\? res\.item\.type\}\.`\); if \(!nearItem\.key\.startsWith\('d:'\)\) mem\.noteTaken\(level\.index, nearItem\.key\) \}[^\n]*\r?\n\s*else if \(res\.reason === 'full'\) showMessage\('your hands are full\.'\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(res\.ok && res\.item\.cacheKey\) \{/)
+    expect(game).toMatch(/if \(res\.ok\) \{ if \(ownSounds\(\)\) pickup\(\); showMessage\(`you take the \$\{ITEM_NAMES\[res\.item\.type\] \?\? res\.item\.type\}\.`\); if \(!nearItem\.key\.startsWith\('d:'\)\) mem\.noteTaken\(level\.index, nearItem\.key\) \}[^\n]*\r?\n\s*else if \(res\.reason === 'full'\) showMessage\('your hands are full\.'\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(res\.ok && res\.item\.cacheKey\) \{/)
     expect(pickupSrc).toContain('if (!isMine(res.item)) sanity = Math.min(100, sanity + 4)')
     const run = new Function('res', 'isMine', 'st', 'ledger', 'relayLater', 'openCard', 'readText', 'PHRASES', 'arrowFor', 'player', `let { sanity } = st\n${pickupSrc}\nst.sanity = sanity`)
     const go = (rec, mine, angle = 0) => {
@@ -2134,7 +2135,7 @@ describe('I15: the factions wave, closed', () => {
   it('the F chain (a friend down first, then the item, the machine, the drawer, the way) and the E chain (presence, page or form, door, soul)', () => {
     const order = (body, list) => { let k = -1; for (const s of list) { const n = body.indexOf(s); expect(n, s).toBeGreaterThan(k); k = n } }
     order(verbs, ['startKneel(dnFront)', 'if (nearItem) {', 'else if (nearMachine && !vendedSet.has(nearMachine.key)) {', 'else if (boxFirst) {', 'else if (nearExit) {', 'travel(nearExit)'])
-    order(verbs, ["if (K['KeyE']) {", 'if (nearPresence) openDialog()', 'else if (nearScrap) nearScrap.form ? openForm()', 'else if (door) knockDoor(door)', 'else if (nearNpc) {'])
+    order(verbs, ["if (K['KeyE']) {", 'if (nearPresence && !scrapFirst) openDialog()','else if (nearScrap) nearScrap.form ? openForm()', 'else if (door) knockDoor(door)', 'else if (nearNpc) {'])
   })
 
   it('the save: the identity and the caches after the fog; the resume reads both ABOVE the clock', () => {

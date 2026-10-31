@@ -27,7 +27,7 @@ describe('game.js: buildLevel order (cache -> grid -> bodies -> decor(hooks) -> 
     const bodies = at('const bodies    = createColliderIndex()')
     const decor = at('const decor     = createDecorSystem(cfg, isWall, worldSeed, {')
     const solid = at('const solid     = createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature })')
-    const ents = at('const entitySys = createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => playT })')
+    const ents = at('const entitySys = createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => playT, seed: worldSeed })')
     const gfx = at('const gfx       = makeGfx(cfg, cache)')
     expect(cache).toBeLessThan(grid); expect(grid).toBeLessThan(bodies); expect(bodies).toBeLessThan(decor)
     expect(decor).toBeLessThan(solid); expect(solid).toBeLessThan(ents); expect(ents).toBeLessThan(gfx)

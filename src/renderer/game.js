@@ -5,7 +5,7 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem, KEPT } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, drawerSlide, whistle, bump } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, step, pickup, paper, panelsOut, call, STEP_MATERIAL, STEP_GAIN, drawerSlide, whistle, bump } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
 import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
@@ -13,7 +13,7 @@ import { writeSave } from './save.js'
 import { formatAnchor, driftMeters, pinTag } from './anchor.js'
 import { initTouchControls, isTouchDevice } from './touch.js'
 import { SCRAPS } from './scraps.js'
-import { createEventScheduler, EVENTS } from './events.js'
+import { createEventScheduler, EVENTS, FOOTSTEPS_ECHO } from './events.js'
 import { createMessageQueue, PRIO } from './messages.js'
 import { takeKey } from './input.js'
 import { createSolidWorld, createColliderIndex, movePoint, PLAYER_R } from './collide.js'
@@ -30,7 +30,9 @@ import { resolveDeath, onArrive, wakeSpot } from './death.js'
 import { createFogMap, revealRadius } from './fogmap.js'
 import { visibleWays, SIGHT_LINES, PROX_PIN } from './sightpins.js'
 import { createMapCard } from './mapcard.js'
-import { compassLines, compassText, arrivalSummary } from './compass.js'
+import { compassLines, compassText, arrivalSummary, seenLine } from './compass.js'
+import { TELL, SEEN_TELL } from './dread.js'
+import { PRESENCE_HUSH_S } from './firstrun.js'
 import { lineOfSight, inViewCone } from './raycaster.js'
 import { dressPass } from './dress.js'
 import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog } from './containers.js'
@@ -81,6 +83,17 @@ const ITEM_NAMES = {
   'plumb':          'survey plumb',
   'ballast':        'ballast',
   'extension-slip': 'extension slip',
+}
+// what the machine's tray says drops into it: every ITEM_NAMES key with its article (the deep stacks' tools and a floor's lean included)
+const TRAY_NAMES = {
+  'almond-water':   'some almond water',
+  'glowstick':      'a glowstick',
+  'bandage':        'a bandage',
+  'polaroid':       'a polaroid camera',
+  'radio':          'a radio',
+  'plumb':          'a survey plumb',
+  'ballast':        'some ballast',
+  'extension-slip': 'an extension slip',
 }
 
 // The numbers station in the deep stacks reads the ledger aloud — the count that decodes (subtract the drift 3, then A=1..Z=26) to the
@@ -284,6 +297,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let closing    = null   // { key, until }: the way you just arrived by does not take you straight back
   let deaths     = 0
   let vendLocked = false  // after a death: 'the tray is empty.' until the next travel()
+  let lobbyFirst = false  // this is your first time in the lobby this run (buildLevel writes it; the presence hush reads it)
   // ── the map (fogmap.js / sightpins.js / mapcard.js / compass.js): the pencil sheet of what you walked and saw, held not modal ──
   const fog = createFogMap()
   let mapOpen = false, mapEverOpened = false, lastLostMsg = -Infinity
@@ -393,6 +407,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let haunts = null
   let dreadQuietT = 0, lightToggles = 0
   let waterT = 0, waterStepT = 0   // running water: footfall(8) now and every ~3 s while its 12 s timer runs
+  // the footsteps event (events.js FOOTSTEPS_ECHO): how many of your steps are still echoed, the echo's countdown, how long you have stood
+  let echoSteps = 0, echoT = 0, echoStill = 0
 
   // vending machines dispense once; the keys still spent on this floor at this visit (levelmem.vendedFor: a key expires only after
   // VEND_RESTOCK_S away from the floor, so a machine never refills while you watch). Replaced per buildLevel; noteVended writes mem.
@@ -417,7 +433,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     switch (ev.kind) {
       case 'seen':
         turningSaid.delete(ev.id)
-        if (ev.d <= fog * 1.1) { if (playT - lastSeenLine > 8) { lastSeenLine = playT; showMessage('it has seen you.', PRIO.combat) } }
+        if (ev.d <= fog * 1.1) {
+          if (playT - lastSeenLine > 8) {
+            // on your screen (in the cone, in sight) the line says it; off it, the line says less and its tell comes from where it is
+            // (dread.js TELL, panned to its bearing as a friend's whistle is). The event is pooled: read now, never kept
+            const onScreen = inViewCone(player.x, player.y, player.angle, ev.x, ev.y, HF, fog * 1.1) && lineOfSight(player.x, player.y, ev.x, ev.y, level.grid.floor)
+            lastSeenLine = playT; showMessage(seenLine(onScreen), PRIO.combat)
+            if (!onScreen && ownSounds()) call(TELL[ev.variant] ?? TELL.shade, SEEN_TELL.gain, whistlePan(ev.x - player.x, ev.y - player.y, player.angle) * SEEN_TELL.pan)
+          }
+        }
         else if (playT - lastFarLine > 30) { lastFarLine = playT; showMessage('something, far off, stops.', PRIO.ambient) }
         break
       case 'lost': showMessage('you have lost it. it is still looking.', PRIO.discovery); break
@@ -466,6 +490,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── per-level state, rebuilt on every transition ──
   let level = null
   let transitioning = false
+  // your own steps and the small sounds of your hands, and a sighting's tell, are the four procedural floors' (0-3): the block (∅) keeps
+  // the silence it has (audio.js STEP_MATERIAL has no entry for it either)
+  const ownSounds = () => level.index >= 0 && level.index <= 3
   // what the last level start cost (buildLevel, the renderer inside it, the first frame): the ?gfxstats=1 panel shows it
   let levelStart = null
   const fadeEl = document.getElementById('fade')
@@ -521,6 +548,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (closingOverlay(file.closing).scrapsDenom === 0) cfg.scraps = { ...cfg.scraps, denom: 0 }
     cfg.ways    = waysFor(index)
     spawnChunk  = at ?? { cx: 0, cy: 0 }
+    lobbyFirst  = index === 0 && !mem.get(0)?.visits   // read before mem.arrive counts this arrival (a resume imports the memory first)
     // HUD theme hook: index.html restyles body[data-level] ('0'..'3' | '∅') — light ink on dark plates below the lobby
     if (typeof document !== 'undefined' && document.body) document.body.dataset.level = String(cfg.levelIndex)
     // Level ∅ is a hand-authored fixed grid; the rest are procedural chunk worlds.
@@ -544,8 +572,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       onEvict: (k) => bodies.dropChunk(k),
     })
     const solid     = createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature })
-    // the creatures step around the same bodies, read the same grid, and count their dispels on the play clock (hunt.js)
-    const entitySys = createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => playT })
+    // the creatures step around the same bodies, read the same grid, and count their dispels on the play clock (hunt.js); where they
+    // stand is this floor's and this world's (entities.js: the maze salt and the world seed, which a room shares; null is unseeded)
+    const entitySys = createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => playT, seed: worldSeed })
     // The previous level's renderer is disposed BEFORE the next one is created: a GPU backend owns a WebGL context on a sibling canvas, and
     // browsers cap live contexts (~16), so a level change must not leave one behind.
     if (level && level.gfx) { try { level.gfx.dispose() } catch { /* a half-torn-down renderer must never block a level change */ } level.gfx = null }
@@ -1007,10 +1036,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (!level.cfg.map) fog.pinThing(level.index, 'n:' + scrap.key, 'note', scrap.x, scrap.y, true)
     if (card.state) renderCard(card.setFoot(card.state, REDACTED_FOOT + ' ' + pagesGiven(file.redacted.length) + '.'))   // the count, as you give it up (F5)
   }
-  // E at a scrap: m.'s page, revealed as it opens (today's card byte for byte: the text, '{n} of 26 pages found', +6 the first time, the pin)
+  // E at a scrap: m.'s page, revealed as it opens (today's card byte for byte: the text, '{n} of 26 pages found', +6 the first time, the pin),
+  // and the paper in your hands
   function openNoteCard(scrap) {
     if (!scrap || !openCard('page', { text: SCRAPS[scrap.frag] ?? '' }, scrap)) return
     revealScrap()
+    if (ownSounds()) paper('page')
   }
   // under compliance a page you have not read comes sealed (mods.sealedCards): read it (E) or leave it unread (X) for the file. One you
   // already gave up opens as the blocks it is now
@@ -1834,6 +1865,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   function fireEvent(id, prio = PRIO.ambient) {
     if (id === 'lights-cascade') {
       flickTgt = 0.14; flickTimer = 0.7                        // a wave of dark, held, then the loop recovers it
+      panelsOut()                                              // and you hear the panels go, one after another
       showMessage('the lights go out ahead of you, one by one. then, slowly, they come back.', prio)
     } else if (id === 'door-slam') {
       doorSlam(); shake = Math.max(shake, 0.35)
@@ -1845,7 +1877,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       sanity = Math.max(0, sanity - 4); whisper()
       showMessage('a cold spot. your breath fogs where there is nothing cold enough to fog it.', prio)
     } else if (id === 'footsteps') {
-      footfall()
+      footfall(); echoSteps = FOOTSTEPS_ECHO.steps; echoStill = 0   // and then they do keep your pace (the step block echoes yours)
       showMessage('footsteps. not yours. they keep your pace, and stop when you stop.', prio)
     } else if (id === 'crosser') {
       spawnCrosser(); footfall(3); heartbeat(0.7)
@@ -1955,8 +1987,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (!res.ok) { showMessage('the machine whirs, but your hands are already full.'); return }
     mem.noteVended(level.index, m.key, playT); vendedSet.add(m.key)
     if (!level.cfg.map) fog.pinThing(level.index, 'm:' + m.key, 'machine', m.x, m.y, true)   // struck through on the map
-    renderHotbar(); blip()
-    const clunk = `the machine clunks, and a ${ITEM_NAMES[type] ?? type} drops into the tray.${lean.stamp ? ` the tray is stamped ${lean.stamp}.` : ''}`
+    renderHotbar(); blip(); if (ownSounds()) pickup()
+    const clunk = `the machine clunks, and ${TRAY_NAMES[type] ?? type} drops into the tray.${lean.stamp ? ` the tray is stamped ${lean.stamp}.` : ''}`
     if (refilled) { showMessage('the machine has been refilled. by whom.', PRIO.discovery); setTimeout(() => showMessage(clunk), 1600) }
     else showMessage(clunk)
   }
@@ -2320,6 +2352,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const stepN = Math.floor(player.bob / Math.PI)
     const footstep = moved && stepN !== lastStepN
     lastStepN = stepN
+    // your own step (audio.js), on the edge of a step you actually took: a key held into a wall makes none, and the block has none (the
+    // hold). After a 'footsteps' event your next few are each echoed just behind you (events.js FOOTSTEPS_ECHO) until you stand still
+    if (echoT > 0 && (echoT -= dt) <= 0) footfall(1)
+    if (footstep && stepped && ownSounds()) {
+      step(STEP_MATERIAL[level.index], wantSprint ? STEP_GAIN.sprint : STEP_GAIN.walk)
+      if (echoSteps > 0) { echoSteps--; echoT = FOOTSTEPS_ECHO.delay }
+    }
+    if (stepped) echoStill = 0
+    else if (echoSteps > 0 && (echoStill += dt) >= FOOTSTEPS_ECHO.still) echoSteps = 0
     // the walk's bob, plus the clutter step: a +5 px rise that settles over 0.35 s (noteContact starts it on clutterEntered)
     const bobBase = (moved && getPref('headBob')) ? Math.sin(player.bob) * 4 : 0
     player.bobOffset = bobBase + (bobPulse > 0 ? Math.sin((0.35 - bobPulse) / 0.35 * Math.PI) * 5 : 0)
@@ -2391,8 +2432,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     }
     // a file closed in compliance: the shimmer is gone from the walls (closings.js isWishOpen; the overlay's presence: false)
     if (!isWishOpen(file.closing)) nearPresence = false
-    const hintEl = document.getElementById('presence-hint')
-    if (hintEl) hintEl.style.opacity = nearPresence ? '1' : '0'
+    // hunted (last frame's threat record, or the hunt's mood not yet let go) it keeps quiet; and on a run's first lobby visit, before any
+    // death, it leaves you the floor for PRESENCE_HUSH_S before it offers to speak (firstrun.js)
+    if (thA.hunted || huntMood) nearPresence = false
+    if (lobbyFirst && deaths === 0 && playT < PRESENCE_HUSH_S) nearPresence = false
 
     // ── items: pickup prompt ──
     const nearItem = itemSys.nearestItem(player.x, player.y, 1.4)
@@ -2405,6 +2448,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // 1.0 u (the block has no containers). Ladder: item > machine > container-or-way > scrap > soul
     const nearBox = cfg.map ? null : level.decor.nearestProp(player.x, player.y, 1.5, unsearchedBox)
     const boxFirst = nearBox !== null && (!nearExit || (nearExit.x - player.x) ** 2 + (nearExit.y - player.y) ** 2 > 1)
+    // E reads a page you have not read before the presence speaks, and its hint gives way to the page's (the block's form keeps its
+    // place under the presence: ∅ keeps its ladder)
+    const scrapFirst = !cfg.map && nearScrap !== null && !readSet.has(nearScrap.frag)
+    const hintEl = document.getElementById('presence-hint')
+    if (hintEl) hintEl.style.opacity = nearPresence && !scrapFirst ? '1' : '0'
     // a friend down in front of you, within 1.3 and ±0.6 rad, in sight (downed.js; this floor's remote players as the net block last filled
     // them — one frame old, the record itself): F kneels by them, and the prompt says so above everything else
     const dnFront = (bus && !kneel.st) ? downedInFront(player, remoteOnFloor, DN_OPTS) : null
@@ -2460,7 +2508,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     else if (K['Tab']) {
       K['Tab'] = false
       if (!transitioning && !dialogOpen && !chatOpen && !noteOpen && !cfg.map && settingsHidden()) {
-        mapCard.open(); mapOpen = true; document.body.classList.add('map-open')
+        mapCard.open(); mapOpen = true; document.body.classList.add('map-open'); paper('map')   // the sheet unfolds (never on the block)
         if (!mapEverOpened) { mapEverOpened = true; showMessage('you start drawing. it is the only way to know you are moving.', PRIO.discovery) }
       }
     }
@@ -2477,7 +2525,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         K['KeyF'] = false
         if (nearItem) {
           const res = itemSys.pickUp(nearItem.key)
-          if (res.ok) { showMessage(`you take the ${ITEM_NAMES[res.item.type] ?? res.item.type}.`); if (!nearItem.key.startsWith('d:')) mem.noteTaken(level.index, nearItem.key) }   // a chunk spawn never respawns; a set-down item is not 'taken'
+          if (res.ok) { if (ownSounds()) pickup(); showMessage(`you take the ${ITEM_NAMES[res.item.type] ?? res.item.type}.`); if (!nearItem.key.startsWith('d:')) mem.noteTaken(level.index, nearItem.key) }   // a chunk spawn never respawns; a set-down item is not 'taken'
           else if (res.reason === 'full') showMessage('your hands are full.')
           // a cache: the word left with it is read on the card ('you left this.' for your own; a stranger's steadies you — not alone, for a
           // moment) and the room is told it is gone. The page count never moves: a cache is not a page
@@ -2539,12 +2587,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         const code = `Digit${i + 1}`
         if (K[code]) { K[code] = false; cancelCommit(); itemSys.select(i); renderHotbar() }   // a slot change ends a wrap (consume takes the SELECTED item)
       }
-      // E — the presence, else the form or the scrap (sealed, under compliance, until you read it or give it up), else (∅, a tenant-to-be)
-      // the sealed door ahead, else the lost soul
+      // E — the presence (a page you have not read first), else the form or the scrap (sealed, under compliance, until you read it or give
+      // it up), else (∅, a tenant-to-be) the sealed door ahead, else the lost soul
       if (K['KeyE']) {
         K['KeyE'] = false
         const door = cfg.map && !nearPresence && !nearScrap && provisionalOrigin() === 'tenant' ? doorAhead() : null
-        if (nearPresence) openDialog()
+        if (nearPresence && !scrapFirst) openDialog()
         else if (nearScrap) nearScrap.form ? openForm() : mods.sealedCards && !readSet.has(nearScrap.frag) ? openSealed(nearScrap) : openNoteCard(nearScrap)
         else if (door) knockDoor(door)
         else if (nearNpc) {

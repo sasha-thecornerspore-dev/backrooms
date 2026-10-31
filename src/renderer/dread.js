@@ -8,6 +8,7 @@
 //
 // DREAD_R                                  the reach, in path cells
 // DREAD_W, TELL                            each kind's weight, each kind's sound (audio.call names)
+// SEEN_TELL                                the gain and the widest pan of the tell game.js plays for a sighting off your screen
 // dreadFrom(entities, field, player, out) -> out
 //   out = { dread 0..1, x, y, variant, d, los }: the sum over everything that counts within DREAD_R, and the nearest of it
 //   (d -1 and variant null when nothing counts). field null (none built) is no dread. Reused: read it, do not keep it
@@ -31,6 +32,8 @@ const TELL_GAP_S = 3.5
 const TELL_BASE = 0.12, TELL_K = 0.4
 const SCRAPE = 0.2                // a chair moves somewhere instead
 const PAN = 0.85
+// a thing that has seen you from off your screen: its tell, from where it is (game.js, on the hunt's 'seen')
+export const SEEN_TELL = Object.freeze({ gain: 0.6, pan: PAN })
 
 // still arriving, reeling (hunt.deriveState's stagger) or on your heels: none of these is dread
 function counts(e) {

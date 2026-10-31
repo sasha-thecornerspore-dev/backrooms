@@ -24,6 +24,8 @@
 import { LOBBY, BLOCK } from './topology.js'
 
 export const FIRST_RUN_UNLOCK_S = 120
+// the presence hush: on a run's first lobby visit, before any death, the presence waits this long before it offers to speak
+export const PRESENCE_HUSH_S = 40
 
 // at the crossing past the radio's page, where the hall south to the room begins: on the line a fresh player walks, in sight from the page
 export const FIRST_NOTE = Object.freeze({

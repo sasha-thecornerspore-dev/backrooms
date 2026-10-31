@@ -656,6 +656,8 @@ function burst(dest, type, freq, q, t, peak, atk, dur) {
 
 // Your own steps, by floor: game.js plays STEP_MATERIAL[level.index] on each step you actually take. Level ∅ has no entry (the hold).
 export const STEP_MATERIAL = Object.freeze({ 0: 'carpet', 1: 'concrete', 2: 'grate', 3: 'rubber' })
+// how hard game.js steps: a walk, a sprint
+export const STEP_GAIN = Object.freeze({ walk: 0.5, sprint: 0.9 })
 const STEP_PEAK = 0.035   // at intensity 1: a walk's knock (0.5) peaks at 0.35 x footfall's 0.05
 const STEP_BAND = 1.7     // a band of noise passes a small part of its gain: the noise in a step gets this much more, still under the cap
 // (levelled against the hum in an A-weighted offline render: a walk sits a little under the hum, a sprint about level with it)

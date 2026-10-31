@@ -29,7 +29,7 @@ describe('game.js: the real exported names, the re-exports, the placeholders gon
     expect(game).toMatch(/import \{ createFogMap, revealRadius \} from '\.\/fogmap\.js'/)
     expect(game).toMatch(/import \{ visibleWays, SIGHT_LINES, PROX_PIN \} from '\.\/sightpins\.js'/)
     expect(game).toMatch(/import \{ createMapCard \} from '\.\/mapcard\.js'/)
-    expect(game).toMatch(/import \{ compassLines, compassText, arrivalSummary \} from '\.\/compass\.js'/)
+    expect(game).toMatch(/import \{ compassLines, compassText, arrivalSummary(, [A-Za-z_, ]+)? \} from '\.\/compass\.js'/)   // (pulse: seenLine and the pull's helpers too)
   })
   it('exitArrow and applyResume are re-exported from game.js and ARE the modules\' functions; the local arrow table is gone', () => {
     expect(game).toMatch(/export \{ exitArrow \} from '\.\/compass\.js'/)
@@ -143,7 +143,7 @@ describe('game.js: the machines and the memory of what you took', () => {
     expect(body).toContain("fog.pinThing(level.index, 'm:' + m.key, 'machine', m.x, m.y, true)")
   })
   it('a pickup notes the key as taken (a set-down item is not); the dropped list is written on the one itemsDirty read', () => {
-    expect(game).toMatch(/if \(res\.ok\) \{ showMessage\(`you take the \$\{ITEM_NAMES\[res\.item\.type\] \?\? res\.item\.type\}\.`\); if \(!nearItem\.key\.startsWith\('d:'\)\) mem\.noteTaken\(level\.index, nearItem\.key\) \}/)
+    expect(game).toMatch(/if \(res\.ok\) \{ if \(ownSounds\(\)\) pickup\(\); showMessage\(`you take the \$\{ITEM_NAMES\[res\.item\.type\] \?\? res\.item\.type\}\.`\); if \(!nearItem\.key\.startsWith\('d:'\)\) mem\.noteTaken\(level\.index, nearItem\.key\) \}/)
     expect(game).toMatch(/if \(itemsDirty\) \{ mem\.setDropped\(level\.index, itemSys\.getDropped\(\)\); persist\(\) \}/)
     expect((game.match(/mem\.setDropped\(/g) || []).length).toBe(4)        // travel, die, the loop — and removeCache, a cache taken on another floor (I11)
   })

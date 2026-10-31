@@ -174,7 +174,7 @@ describe('game.js wiring (release rules)', () => {
   const sim = loop.slice(0, loop.indexOf('const wallFn = '))          // the frame up to the render call (the raycaster takes its own wall function)
   const order = (src, ...needles) => needles.map(n => { const i = src.indexOf(n); expect(i, n).toBeGreaterThanOrEqual(0); return i })
   it('buildLevel builds cache -> grid -> bodies -> decor(hooks) -> solid -> entitySys -> gfx, and the passes run stairs -> dress -> haunts', () => {
-    const idx = order(build, 'createChunkCache(cfg, worldSeed)', 'createGridReader(', 'createColliderIndex()', 'createDecorSystem(cfg, isWall, worldSeed, {', 'createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature })', 'createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => playT })', 'makeGfx(cfg, cache)')
+    const idx = order(build, 'createChunkCache(cfg, worldSeed)', 'createGridReader(', 'createColliderIndex()', 'createDecorSystem(cfg, isWall, worldSeed, {', 'createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature })', 'createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => playT, seed: worldSeed })', 'makeGfx(cfg, cache)')
     for (let i = 1; i < idx.length; i++) expect(idx[i]).toBeGreaterThan(idx[i - 1])
     expect(build).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\)\]\.filter\(Boolean\)/)
     expect(build).toMatch(/onChunk: \(k, bundle\) => bodies\.setChunk\(k, bundle\.colliders\)/)

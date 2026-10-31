@@ -236,7 +236,7 @@ describe('FEEL-2 / FEEL-3: the hit lines and the hound\'s tell land when they ha
     expect(game).toContain("showMessage('something takes your ankles.', PRIO.urgent)")
     expect(game).toContain("if (!houndTold) { houndTold = true; showMessage('it gathers itself. push now.', PRIO.urgent) }")
     expect(game).toContain("if (tn.close && playT - lastSeenLine > 1.6) showMessage('it is close.', PRIO.combat)")
-    expect(game).toContain("showMessage('it has seen you.', PRIO.combat)")                         // the level name / lift FIFO stays combat
+    expect(game).toContain('showMessage(seenLine(onScreen), PRIO.combat)')                          // the level name / lift FIFO stays combat (pulse T1-6: on screen or off)
   })
 })
 
