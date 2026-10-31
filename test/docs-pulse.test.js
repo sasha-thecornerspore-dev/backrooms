@@ -133,14 +133,17 @@ describe('the compass, the first minute and the lines the budget lets go', () =>
     expect(manual).toContain('the first time, a line of its own; after that, its name')
     expect(manual).toContain('When you reach a floor it says little for the first while')
   })
-  // the way line takes an arrival's second plate on a floor you come back to, and the summary after it is let go (plates.js, game.js
-  // travel keep=false); the filing line waits out the arrival window. If the game says either on time again, put it back in the docs and
-  // drop this guard
-  it('no doc promises the summary on coming back, or the filing line a few seconds in', () => {
+  // (review batch five) the summary takes an arrival's second plate on a floor you come back to, at 3.8 s, and the filing line takes it
+  // on the way that files you (game.js travel): both say themselves a few seconds in again, so both docs promise them again, as they did
+  // before the docs step took them out. If the budget loses either line again, take it out of the docs and turn this guard round
+  it('both docs promise the summary on coming back, and the filing line a few seconds in, not within the first minute', () => {
     const summary = arrivalSummary({ down: 0 }, 2)
-    for (const [k, d] of Object.entries(docs)) expect(d, k).not.toContain(summary)
-    expect(manual).not.toContain('a few breaths after the floor says its name')
-    expect(readme).not.toContain('a few seconds after you land')
+    for (const [k, d] of Object.entries(docs)) expect(d, k).toContain(summary)
+    expect(manual).toContain(`Come back to a floor and it says so: <i>${summary}</i> — and tells you how many ways down are on your map.`)
+    expect(readme).toContain(`come back and the floor says so: *${summary}*`)
+    expect(manual).toContain('a few breaths after the floor has had its say, a line arrives: <i>the file has you now.</i>')
+    expect(readme.match(/a few seconds after you land/g)).toHaveLength(2)
+    for (const [k, d] of Object.entries(docs)) expect(d, k).not.toContain('within your first minute there')
   })
   it('the manual says the flashlight speaks once a run below the block, the presence keeps quiet while hunted or by an unread page, and a floor plan marks the map', () => {
     expect(manual).toContain('On the four floors below the block it says so once a run; after that only the light changes.')

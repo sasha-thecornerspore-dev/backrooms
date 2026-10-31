@@ -102,11 +102,12 @@ describe('game.js: travel(way) replaces descend', () => {
     const place = body.indexOf('player.x = a.x; player.y = a.y'), dec = body.indexOf('level.decor.update(spawnChunk.cx, spawnChunk.cy)'), settle = body.indexOf('level.solid.settlePlayer(player)'), arr = body.indexOf('const rec = mem.arrive(')
     expect(place).toBeLessThan(dec); expect(dec).toBeLessThan(settle); expect(settle).toBeLessThan(arr)
   })
-  it('the message ladder: the level name (combat) at once; first visit: hint 3.8 s, way line 7.5 s; later: way line 3.8 s, the arrival summary 7.5 s; the raised ceiling at 11 s', () => {
-    // (pulse: the way line and the summary are let go, not kept, when the arrival's plates are spent — their moment passes with it)
+  it('the message ladder: the level name (combat) at once; first visit: hint 3.8 s (7.6 s when the way files you), way line 7.5 s; later: the arrival summary 3.8 s, way line 7.5 s; the raised ceiling at 11 s', () => {
+    // (pulse: the way line and the summary are let go, not kept, when the arrival's plates are spent — their moment passes with it;
+    // review batch five: the filing line takes the hint's moment on the way that files you, and the summary the way line's on a return)
     expect(body).toMatch(/plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)/)
-    expect(body).toMatch(/if \(first\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(level\.cfg\.exit\?\.hint && !followed\) \{ if \(freshLobby\(\)\) hintHeld = true; else later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\) \}\r?\n\s*if \(wm\) later\(7500, wm, PRIO\.discovery, false\)/)
-    expect(body).toMatch(/\} else \{\r?\n\s*if \(wm\) later\(3800, wm, PRIO\.discovery, false\)\r?\n\s*const s = arrivalSummary\(fog\.countWays\(way\.target\), rec\.visits\)\r?\n\s*if \(s\) later\(7500, s, PRIO\.discovery, false\)/)
+    expect(body).toMatch(/if \(first\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(level\.cfg\.exit\?\.hint && !followed\) \{ if \(freshLobby\(\)\) hintHeld = true; else later\(filing \? 7600 : 3800, level\.cfg\.exit\.hint, PRIO\.discovery\) \}\r?\n\s*if \(wm\) later\(7500, wm, PRIO\.discovery, false\)/)
+    expect(body).toMatch(/\} else \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const s = arrivalSummary\(fog\.countWays\(way\.target\), rec\.visits\)\r?\n\s*if \(s\) later\(3800, s, PRIO\.discovery, false\)\r?\n\s*if \(wm\) later\(7500, wm, PRIO\.discovery, false\)/)
     expect(body).toMatch(/if \(player\.maxHp > hp0\) later\(11000, 'the floor remembers you less\.', PRIO\.discovery\)/)
   })
   it('F takes the way through travel(nearExit); the prompt reads wayLabel, or the closing line for the way you came by', () => {
@@ -131,7 +132,7 @@ describe('game.js: die() through death.js', () => {
     expect(body).toMatch(/itemSys\.inventory\.length = 0\r?\n\s*itemSys\.inventory\.push\(\.\.\.r\.inventory\)\r?\n\s*itemSys\.select\(r\.selected\)\r?\n\s*player\.maxHp = r\.maxHp; player\.hp = r\.maxHp\r?\n\s*deaths = r\.deaths\r?\n\s*vendLocked = r\.vendLocked/)
     expect(body).toContain('mem.arrive(level.index, spawnChunk, playT)')
     expect(body).toContain('persist(true)')
-    expect(body).toMatch(/later\(2600, r\.message, PRIO\.discovery\)\r?\n\s*if \(r\.dropped\) later\(5200, r\.droppedLine, PRIO\.discovery\)/)
+    expect(body).toMatch(/later\(2600, r\.message, PRIO\.discovery, true, 'wake'\)\r?\n\s*if \(r\.dropped\) later\(5200, r\.droppedLine, PRIO\.discovery, true, 'wake'\)/)
     expect(body).toContain("cancelCommit('the bandage slips.')")
   })
 })

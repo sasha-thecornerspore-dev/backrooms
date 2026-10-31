@@ -174,18 +174,19 @@ describe('I5: the file (origin-*.js) in game.js', () => {
     expect(hud).toContain('if (leashEl && lt !== leashText) { leashText = lt; leashEl.textContent = lt }')
   })
   it('the first travel of a run files you, under the fade right after buildLevel: the arrival, the column, the layer, the rules, the weights, the room, the line', () => {
-    const b = travelBody.indexOf('buildLevel(way.target, fromC)'), f = travelBody.indexOf('if (!filed) {')
+    const b = travelBody.indexOf('buildLevel(way.target, fromC)'), f = travelBody.indexOf('if (filing) {')
     expect(b).toBeGreaterThan(0); expect(f).toBeGreaterThan(b)
     expect(f).toBeLessThan(travelBody.indexOf('const partner = '))
-    expect(travelBody).toMatch(/if \(!filed\) \{\r?\n\s*intakeCtx\.arrival = mpClient \? mpClient\.arrival\(\) : 'walked'\r?\n\s*filed = true; origin = intake\(intakeCtx\); thin = intakeCtx\.arrival === 'dropped'; rules = rulesFor\(origin, thin\)\r?\n\s*evConfig\.events = rules\.eventWeights\(\)\r?\n\s*bus\?\.here\(hereFields\(\)\)\r?\n\s*later\(7600, filingLine\(origin, thin\), PRIO\.discovery\)/)
-    expect(count(/if \(!filed\) \{/g)).toBe(1)
+    // (review batch five: the line says itself at 3.8 s, the arrival's second plate; the travel's hint knows the way filed you)
+    expect(travelBody).toMatch(/const filing = !filed\r?\n\s*if \(filing\) \{\r?\n\s*intakeCtx\.arrival = mpClient \? mpClient\.arrival\(\) : 'walked'\r?\n\s*filed = true; origin = intake\(intakeCtx\); thin = intakeCtx\.arrival === 'dropped'; rules = rulesFor\(origin, thin\)\r?\n\s*evConfig\.events = rules\.eventWeights\(\)\r?\n\s*bus\?\.here\(hereFields\(\)\)\r?\n\s*later\(3800, filingLine\(origin, thin\), PRIO\.discovery\)/)
+    expect(count(/if \(filing\) \{/g)).toBe(1); expect(count(/const filing = !filed/g)).toBe(1); expect(count(/if \(!filed\) \{/g)).toBe(0)
     // the anchored mercy, once per descent, after the arrival ladder and before the room hears the new floor
     const mercy = travelBody.indexOf("if (origin === 'anchored') later(9500, MERCY_LINE, PRIO.discovery)")
     expect(mercy).toBeGreaterThan(travelBody.indexOf("later(11000, 'the floor remembers you less.', PRIO.discovery)"))
     expect(mercy).toBeLessThan(travelBody.lastIndexOf('bus?.here(hereFields())'))
   })
   it('the filing block, lifted from game.js and replayed: solo files a tenant once, a dropped-in online player files thin, a walked-in opener files processed', () => {
-    const body = travelBody.match(/if \(!filed\) \{\r?\n([\s\S]*?)\r?\n\s*\}\r?\n/)[1]
+    const body = travelBody.match(/if \(filing\) \{\r?\n([\s\S]*?)\r?\n\s*\}\r?\n/)[1]
     const run = (filed0, ctx, mpClient) => {
       const evConfig = { events: EVENTS, tension: 0 }, said = [], heard = []
       const fn = new Function('intake', 'rulesFor', 'filingLine', 'PRIO', 'mpClient', 'evConfig', 'bus', 'hereFields', 'later', 'intakeCtx',
@@ -198,7 +199,7 @@ describe('I5: the file (origin-*.js) in game.js', () => {
     expect(solo.ctx.arrival).toBe('walked')
     expect(solo.rules).toBe(rulesFor('tenant', false))
     expect(solo.evConfig.events).toBe(TENANT_EVENTS)
-    expect(solo.said).toEqual([[7600, 'the file has you now. it has you at an address.', PRIO.discovery]])
+    expect(solo.said).toEqual([[3800, 'the file has you now. it has you at an address.', PRIO.discovery]])
     const dropped = run(false, { route: 'online', arrival: null, anchor: null, name: 'jo' }, { arrival: () => 'dropped' })
     expect([dropped.origin, dropped.thin]).toEqual(['tenant', true])
     expect(dropped.said[0][1]).toBe('the file has you now. it has you at an address. you dropped in. not all of you arrived.')
@@ -941,9 +942,9 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     expect(go(true, 1, 'ok', 'down')).toEqual({ down: 0, died: [legacyDeath], hp: 0 })   // the only friend here is down too: nobody can come
     expect(go(true, 2, 'ok', 'kneel')).toEqual({ down: 1, died: [], hp: 0 })        // kneeling by someone is still on their feet
   })
-  it('die(d): the reset right after the core\'s invuln line, then the decision (its regenDelay wins), the veil cleared; its line third, at 7800 ms', () => {
+  it('die(d): the reset right after the core\'s invuln line, then the decision (its regenDelay wins), the veil cleared; its line third, at 7800 ms, the wake\'s own', () => {
     expect(dieBody).toMatch(/invuln = 1\.6; regenDelay = 0; hurt = 0\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(down\.st === 'down'\) flashlight = savedLight\r?\n\s*down\.reset\(\); if \(kneel\.st\) \{ kneel\.stop\(\); flashlight = savedLight \}\r?\n\s*if \(d\) \{ if \(d\.mintThin && filed\) \{ thin = true; rules = rulesFor\(origin, thin\); thinFirstShot = true \} if \(d\.leashDebt > 0\) leashDebt = d\.leashDebt; if \(d\.sanity\) sanity = Math\.max\(0, Math\.min\(100, sanity \+ d\.sanity\)\); if \(d\.regenDelay\) regenDelay = d\.regenDelay \}\r?\n\s*if \(downEl\) downEl\.style\.opacity = '0'\r?\n\s*document\.body\.classList\.remove\('down'\)/)
-    expect(dieBody).toMatch(/if \(r\.dropped\) later\(5200, r\.droppedLine, PRIO\.discovery\)\r?\n\s*if \(d\?\.line\) later\(7800, d\.line, PRIO\.discovery\)/)
+    expect(dieBody).toMatch(/if \(r\.dropped\) later\(5200, r\.droppedLine, PRIO\.discovery, true, 'wake'\)\r?\n\s*if \(d\?\.line\) later\(7800, d\.line, PRIO\.discovery, true, 'wake'\)/)
     expect(game).not.toContain('you wake where you fell in.')
   })
   it('die(d)\'s block, lifted and replayed: LEGACY\'s d changes nothing; a filed timeout mints the layer, costs 20 and 12 s, gives the light back; the pin\'s debt', () => {
@@ -2133,8 +2134,8 @@ describe('I15: the factions wave, closed', () => {
   it('the order the steps fixed: the card before Enter; the filing in travel(); placement, the closing, then the ways; the caches after the items', () => {
     const cardBranch = at('for (let i = 0; i < CARD_KEYS.length; i++)', loopAt)
     expect(cardBranch).toBeLessThan(at('// Enter opens chat when connected to others', loopAt))
-    expect(travelBody.indexOf('buildLevel(way.target, fromC)')).toBeLessThan(travelBody.indexOf('if (!filed) {'))
-    expect(travelBody).toContain('later(7600, filingLine(origin, thin), PRIO.discovery)')
+    expect(travelBody.indexOf('buildLevel(way.target, fromC)')).toBeLessThan(travelBody.indexOf('if (filing) {'))
+    expect(travelBody).toContain('later(3800, filingLine(origin, thin), PRIO.discovery)')
     const p = buildBody.indexOf('applyPlacement(cfg, placementMods(st))'), c = buildBody.indexOf('closingOverlay(file.closing).scrapsDenom === 0'), w = buildBody.indexOf('cfg.ways    = waysFor(index)')
     expect(p).toBeGreaterThan(0); expect(p).toBeLessThan(c); expect(c).toBeLessThan(w)
     const e = buildBody.indexOf('itemSys.enterLevel('), q = buildBody.indexOf('for (const c of ledger.pendingFor(index))'), v = buildBody.indexOf('vendedSet = mem.vendedFor(')

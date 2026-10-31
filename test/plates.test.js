@@ -20,7 +20,7 @@ describe('the kinds', () => {
   it('names the arrival, unprompted and free kinds, frozen and disjoint', () => {
     expect(ARRIVAL_KINDS).toEqual(['floor', 'arrival'])
     expect(UNPROMPTED_KINDS).toEqual(['event', 'murmur', 'haunt', 'beat', 'clock', 'vignette', 'sign'])
-    expect(FREE_KINDS).toEqual(['read', 'search', 'speak', 'gate', 'combat'])
+    expect(FREE_KINDS).toEqual(['read', 'search', 'speak', 'gate', 'combat', 'wake'])   // (review batch five: the wake's own lines)
     for (const k of [ARRIVAL_KINDS, UNPROMPTED_KINDS, FREE_KINDS]) expect(Object.isFrozen(k)).toBe(true)
     const all = [...ARRIVAL_KINDS, ...UNPROMPTED_KINDS, ...FREE_KINDS]
     expect(new Set(all).size).toBe(all.length)
@@ -89,6 +89,17 @@ describe('createPlateBudget: player-caused text and combat', () => {
     expect(b.admit('arrival', 44, 'the hint')).toBe('show')    // the window's second plate is still there to spend
     for (const k of FREE_KINDS) for (let t = 46; t < 60; t += 0.5) expect(b.admit(k, t)).toBe('show')
     expect(b.admit('murmur', 64.5, 'm')).toBe('show')          // 20 s after the hint; the free lines in between did not count
+  })
+
+  it('the wake\'s own lines (a death\'s answer, said as you come to) show at their moments inside a death\'s window, and never spend it', () => {
+    const b = createPlateBudget()
+    b.arrive(0)
+    expect(b.admit('floor', 0, 'the lobby')).toBe('show')
+    for (const t of [2.6, 5.2, 7.8]) expect(b.admit('wake', t, `wake ${t}`), String(t)).toBe('show')
+    expect(b.admit('arrival', 9, 'the hint')).toBe('show')     // the window's second plate is still there to spend
+    expect(b.admit('arrival', 10, 'later')).toBe('queue')
+    expect(b.drain(45)).toBe('later')                           // nothing of the wake waited
+    expect(b.drain(500)).toBeNull()
   })
 
   it('a kind it does not know is let through, never swallowed', () => {

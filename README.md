@@ -123,7 +123,7 @@ what follows is what is known. the rest is in the pages m. left lying around.
 1. **the title.** type a name, or leave it blank — the office writes down what you give it. above the buttons, the anchor field takes a place if you want one ([anchors](#anchors--no-clip-from-a-real-place)); leave it empty and the maze is nobody's. **SOLO ▶** starts a fresh run in the lobby. **CONTINUE ▶** appears once a solo run is saved; starting SOLO (or the front door) over it replaces it, and there is no second slot. the gear ⚙ opens settings — creatures, damage and flicker can all be switched off there.
 2. **grab the mouse.** click the view. the mouse turns you left and right; there is no looking up or down. a page, the chat or the wish box lets the mouse go — click again to take it back. while it is loose, **←** and **→** turn you.
 3. **the lobby.** walk with **wasd**; **shift** runs. safe; nothing hunts here. learn it. pick things up (**f**), draw from a vending machine (**f**), search a cabinet (**f**, then keep still), read a page lying on the floor (**e**), open the map (**tab**). the plate above your items always says what **f** and **e** will do where you stand. before long, `• • •  e · speak  • • •` will appear over your items though there is nothing to see. that is a presence. [say something to it](#the-wish-system).
-4. **the way down.** a torn doorway with a cold blue rim and a beam that carries through the fog. the compass under your gauges points at the nearest one you have seen. **f** takes it — and this is when the file writes you in. a line, within your first minute there, says how it has you.
+4. **the way down.** a torn doorway with a cold blue rim and a beam that carries through the fog. the compass under your gauges points at the nearest one you have seen. **f** takes it — and this is when the file writes you in. a line, a few seconds after you land, says how it has you.
 5. **level 1.** things live here now. read the lines that fade in mid-screen: the building talks, and the important lines push in front. when your heart comes into your ears, something is near: slow, it has not found you yet; quick, it has. **space** pushes it back. a still body in the dark is hard to see. and if it catches you anyway, you wake a floor up, a little lighter.
 6. **the front door, when you mean it.** the line under the title's buttons starts a solo run on **the block**, level ∅ — the one real place in the game. find the form near the stoops and press **e** to read it. then find the gap: `f · no-clip out — level 0`. press **f**. nothing leads back up to the block.
 
@@ -183,7 +183,7 @@ descend and the world changes around you: the palette, the fog, the clutter, the
 
 **one building.** the floors are stacked: fall through a hole and you land a few rooms over from where you fell, on the floor below. under some holes there is a **stairwell up**, back to the floor you fell from. the **lift** on level 1 *only goes one place*, and it does not come back for you. the humming door at the bottom climbs out to the lobby, where you last stood in it. the way you just came through is *still closing* for a moment after you arrive. and anything that was hunting you when you went down may come after you: *it followed you down.*
 
-**the floors remember.** what you took stays taken, the drawers you searched stay searched, what you set down lies where you left it, and an emptied machine clunks again only after you have been away a while — never while you watch. *the machine has been refilled. by whom.*
+**the floors remember.** what you took stays taken, the drawers you searched stay searched, what you set down lies where you left it, and an emptied machine clunks again only after you have been away a while — never while you watch. *the machine has been refilled. by whom.* come back and the floor says so: *you have been on this floor before.*
 
 **when something finally has you,** you do not wake where you fell in: you wake a floor above, beside the hole you fell through, lighter — whatever was in your hand is gone, your body's ceiling a little lower — the hp bar never quite fills again — the trays empty until you move on. on the lobby you wake where you are. every floor you reach for the first time gives a little of the ceiling back. online, with a friend on your floor, you may go [down instead](#multiplayer).
 
@@ -318,7 +318,7 @@ the spirits decide. or rather, i do.
 
 somewhere above the drop ceiling there is an office, and it keeps a file on everyone who falls through. you never fill it in. it fills itself in — and the backrooms reads it.
 
-**the column.** nobody chooses one. the first way you take down, the file writes you in by how you came in — whether you gave it a name, a place, nothing at all, or opened a room yourself. a line tells you which, within your first minute there:
+**the column.** nobody chooses one. the first way you take down, the file writes you in by how you came in — whether you gave it a name, a place, nothing at all, or opened a room yourself. a line tells you which, a few seconds after you land:
 
 | column | the file says | what it feels like down here |
 |------|---------|---------|

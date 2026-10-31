@@ -8,16 +8,18 @@
 //   arrive(t)  a floor's arrival opens a window of `window` s; the old floor's waiting lines do not follow you down
 //   admit      inside the window at most `max` arrival or unprompted plates show, the floor's own line one of them (it always shows);
 //              outside it unprompted text shows at most once per `gap` s, and never ahead of an older line still waiting. Player-caused
-//              text (reading, searching, speaking, a gate), combat warnings and any kind the budget does not know always show and are
-//              never counted. A line held back waits when its text is given (at most QUEUE_CAP: the first ones are kept); without
-//              its text it is let go — the caller's way to drop a line whose moment passes with it
+//              text (reading, searching, speaking, a gate, and the wake's lines that answer your death), combat warnings and any kind the
+//              budget does not know always show and are never counted. A line held back waits when its text is given (at most QUEUE_CAP:
+//              the first ones are kept); without its text it is let go — the caller's way to drop a line whose moment passes with it
 //   drain(t)   after the window, the oldest waiting line: the window's own one per DRAIN_S, a line held after it once per `gap`. Allocates
 //              nothing (game.js asks every frame)
 // arrivalPlate(cfg, first) -> the plate a floor arrives with: its sub-line the first time (never shown anywhere before), its name after
 //   (the HUD carries the name already). The block keeps its name.
 export const ARRIVAL_KINDS = Object.freeze(['floor', 'arrival'])
 export const UNPROMPTED_KINDS = Object.freeze(['event', 'murmur', 'haunt', 'beat', 'clock', 'vignette', 'sign'])
-export const FREE_KINDS = Object.freeze(['read', 'search', 'speak', 'gate', 'combat'])
+// 'wake': a death's own lines (game.js die: where you woke, what your hands let go, the column's word on it). They answer what happened
+// to you, so they are said at their moments, as a page you read is; the floor's plate at a wake is still an arrival's
+export const FREE_KINDS = Object.freeze(['read', 'search', 'speak', 'gate', 'combat', 'wake'])
 export const DRAIN_S = 10
 export const QUEUE_CAP = 4
 

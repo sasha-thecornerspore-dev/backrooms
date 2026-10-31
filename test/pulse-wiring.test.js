@@ -18,9 +18,10 @@ import { TELL, SEEN_TELL, DREAD_CLOCK, DREAD_R, dreadFrom, dreadNear, createTell
 import { createPathField } from '../src/renderer/pathfield.js'
 import { createTension } from '../src/renderer/tension.js'
 import { createFogMap } from '../src/renderer/fogmap.js'
-import { seenLine, SEEN_ON, SEEN_OFF, compassLines, compassText, pullVisible, pullWobble, lostDue, FAINT, PULL_WAIT_S, PULL_FRESH_S, PULL_WOBBLE, PULL_REDRAW_S, LOST_AFTER_S } from '../src/renderer/compass.js'
+import { seenLine, SEEN_ON, SEEN_OFF, compassLines, compassText, arrivalSummary, pullVisible, pullWobble, lostDue, FAINT, PULL_WAIT_S, PULL_FRESH_S, PULL_WOBBLE, PULL_REDRAW_S, LOST_AFTER_S } from '../src/renderer/compass.js'
 import { PRESENCE_HUSH_S, FIRST_NOTE, FIRST_SOUL, FIRST_ROOM, createFirstRun, noteRecord } from '../src/renderer/firstrun.js'
-import { createPlateBudget, arrivalPlate, DRAIN_S } from '../src/renderer/plates.js'
+import { createPlateBudget, arrivalPlate, DRAIN_S, FREE_KINDS } from '../src/renderer/plates.js'
+import { filingLine } from '../src/renderer/origin-intake.js'
 import { LOST_LINE, levelConfig } from '../src/renderer/levels.js'
 import { searchingHint, CONTAINER_TYPES, NOT_NOW_LINE, SEARCHED_HINT, SQUEAL_LINE, SQUEAL_NOISE, TRACE_LINES, HANDS_FULL_LINE, applyRoll, createSearchLog } from '../src/renderer/containers.js'
 import { DEFAULT_CONFIG, CHUNK_SIZE, createChunkCache, createGridReader } from '../src/renderer/world.js'
@@ -324,7 +325,7 @@ let lobbyW = null
 const lobbyOnce = () => lobbyW ?? (lobbyW = lobby(true))
 const PLATE = /function plate\(kind, text, prio, keep = true\) \{[\s\S]*?\r?\n {2}\}/
 const VISIT = /function startVisit\(\) \{[\s\S]*?\r?\n {2}\}/
-const LATER = /function later\(ms, text, prio, keep = true\) \{[^\n]*\}/
+const LATER = /function later\(ms, text, prio, keep = true, kind = 'arrival'\) \{[^\n]*\}/
 // the faint pull's two lines, refilled before the map (a tenant's map reads the pull too)
 const PULL = /pullAsk\.floorT = playT - floorT0;[^\n]*\r?\n\s*const pull = [^\n]*/
 const LIGHT = /if \(K\['KeyL'\]\) \{[\s\S]*?\r?\n {6}\}/
@@ -370,7 +371,8 @@ describe('w2: a visit begins', () => {
     expect(t).toMatch(/persist\(true\)[^\n]*\r?\n\s*startVisit\(\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(way\.kind === 'lift'\) plate\('arrival', wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)/)
     const d = slice('function die(d = null) {', '// ── input ──')
     expect(d).toContain('const first = mem.arrive(level.index, spawnChunk, playT).visits === 1')
-    expect(d).toMatch(/persist\(true\)\r?\n\s*startVisit\(\)\r?\n\s*plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*later\(2600, r\.message, PRIO\.discovery\)/)
+    // (review batch five: the wake's plate only on a floor new to you, or on the block as 2.0.3; its lines are the wake's own kind)
+    expect(d).toMatch(/persist\(true\)\r?\n\s*startVisit\(\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(first \|\| level\.cfg\.map\) plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*later\(2600, r\.message, PRIO\.discovery, true, 'wake'\)/)
     const boot = slice('if (resume) {', 'if (bus) mpClient.onEv(bus.receive)')
     expect(boot).toMatch(/startVisit\(\)\r?\n\s*plate\('floor', arrivalPlate\(level\.cfg, !resume\), PRIO\.combat\)/)
     expect(game).not.toContain('showMessage(level.cfg.levelName')
@@ -541,7 +543,7 @@ describe('T1-2: the compass earns its pull', () => {
   })
   it('travel and the start hold the lobby\'s hint for the first run (the visit begun first), and the murmurs leave it out meanwhile', () => {
     const t = slice('function travel(way) {', '// die(): death.js resolves it')
-    expect(t).toContain('if (level.cfg.exit?.hint && !followed) { if (freshLobby()) hintHeld = true; else later(3800, level.cfg.exit.hint, PRIO.discovery) }')
+    expect(t).toContain('if (level.cfg.exit?.hint && !followed) { if (freshLobby()) hintHeld = true; else later(filing ? 7600 : 3800, level.cfg.exit.hint, PRIO.discovery) }')
     expect(t.indexOf('startVisit()')).toBeLessThan(t.indexOf('if (level.cfg.exit?.hint && !followed)'))
     const boot = slice('if (resume) {', 'if (bus) mpClient.onEv(bus.receive)')
     // (review D2: a resume mid-thread holds it too; only a fresh start says it at 3.8 s)
@@ -701,8 +703,8 @@ describe('T1-3: the first run, authored', () => {
 
 // the wrapper, later(), startVisit and the frame's drain lifted together and run on a play clock with the real budget; with `queue`
 // the real message queue too, ticked every frame, and what reaches #msg is recorded (else every line handed to showMessage is).
-// `map`: the block's cfg.map
-function arrival({ map = null, queue = false } = {}) {
+// `map`: the block's cfg.map; `cfg`: the floor's whole cfg (the floor's index follows it: the block's, else level 1's)
+function arrival({ map = null, queue = false, cfg = { map } } = {}) {
   const said = [], timers = []
   let now = 0
   const msgQ = queue ? createMessageQueue() : { idle: () => true }
@@ -715,7 +717,7 @@ function arrival({ map = null, queue = false } = {}) {
     `${lift(PLATE)}\n` +
     `${lift(LATER)}\n${lift(VISIT)}\nfunction drainFrame() {\n${drain}\n}\n` +
     'return { plate, later, startVisit, drainFrame, set: (t) => { playT = t } }')(createPlateBudget(), show, (f, ms) => timers.push({ ms, f, done: false }), PRIO,
-    msgQ, { index: map ? BLOCK : 1, cfg: { map } })
+    msgQ, { index: cfg.map ? BLOCK : 1, cfg })
   const run = (to, events = {}) => {
     for (; now <= to + 1e-9; now = Math.round((now + 0.1) * 10) / 10) {
       h.set(now)
@@ -735,7 +737,7 @@ describe('T1-4: the plate budget, and the plates that go', () => {
     expect(lift(PLATE)).toMatch(/if \(!kind \|\| !text\) return false\r?\n\s*if \(level\.cfg\.map\) \{ showMessage\(text, prio\); return true \}[^\n]*\r?\n\s*if \(prio === PRIO\.ambient && !msgQ\.idle\(\)\) return false[^\n]*\r?\n\s*if \(plates\.admit\(kind, playT, keep \? text : null\) !== 'show'\) return false\r?\n\s*showMessage\(text, prio\)\r?\n\s*return true/)
   })
   it('the arrival\'s delayed lines are its plates; the murmurs, the scheduled events and the placed haunts are let go when held back', () => {
-    expect(game).toContain("function later(ms, text, prio, keep = true) { const g = arrivalGen; setTimeout(() => { if (g === arrivalGen) plate('arrival', text, prio, keep) }, ms) }")
+    expect(game).toContain("function later(ms, text, prio, keep = true, kind = 'arrival') { const g = arrivalGen; setTimeout(() => { if (g === arrivalGen) plate(kind, text, prio, keep) }, ms) }")
     const fe = slice("function fireEvent(id, prio = PRIO.ambient, kind = 'event') {", 'function startSearch(p, th) {')
     expect(fe).not.toMatch(/showMessage\(/)
     expect((fe.match(/plate\(kind, '[^']+', (prio|PRIO\.interaction), false\)/g) || []).length).toBe(6)
@@ -785,18 +787,19 @@ describe('T1-4: the plate budget, and the plates that go', () => {
   })
   it('a line whose moment passes with the arrival (the way you came, the arrival summary) is let go when held back, not read 45 s on', () => {
     const t = slice('function travel(way) {', '// die(): death.js resolves it')
-    expect(t).toContain('if (wm) later(7500, wm, PRIO.discovery, false)')
-    expect(t).toContain('if (wm) later(3800, wm, PRIO.discovery, false)')
-    expect(t).toContain('if (s) later(7500, s, PRIO.discovery, false)')
-    // what stays true when it is read late is kept: the hint, the filing line, the raised ceiling, the mercy line, the wake's lines
+    // (review batch five: on a floor you come back to, the summary takes the second plate and the way line after it is let go)
+    expect(t.match(/if \(wm\) later\(7500, wm, PRIO\.discovery, false\)/g)).toHaveLength(2)
+    expect(t).toContain('if (s) later(3800, s, PRIO.discovery, false)')
+    // what stays true when it is read late is kept: the hint, the filing line, the raised ceiling, the mercy line (the wake's lines are
+    // free, never held)
     expect((t.match(/later\([^\n]*, false\)/g) || []).length).toBe(3)
     expect(slice('function die(d = null) {', '// ── input ──')).not.toMatch(/later\([^\n]*, false\)/)
     const { h, said, run } = arrival()
     h.startVisit()
     h.plate('floor', 'the floor.', PRIO.combat)
-    h.later(3800, 'the hint.', PRIO.discovery); h.later(7500, 'the way.', PRIO.discovery, false); h.later(7600, 'the form.', PRIO.discovery)
+    h.later(3800, 'the form.', PRIO.discovery); h.later(7500, 'the way.', PRIO.discovery, false); h.later(7600, 'the hint.', PRIO.discovery)
     run(80)
-    expect(said).toEqual([[0, 'the floor.'], [3.8, 'the hint.'], [45, 'the form.']])
+    expect(said).toEqual([[0, 'the floor.'], [3.8, 'the form.'], [45, 'the hint.']])
   })
   it('you rummage. is no plate any more: the scrape alone, and the hint says what you search while the hold runs', () => {
     expect(game).not.toContain('you rummage.')
@@ -1251,5 +1254,103 @@ describe('the hold: the block keeps 2.0.3', () => {
     expect(st.lightSaid).toBe(false)
     press(null); press(null)                                                                   // then below: the run's first line, then the light alone
     expect(said.slice(4)).toEqual([litOffLine(null)])
+  })
+})
+
+// ── review batch five, two: the lines the budget lost ───────────────────────────────────────────────────────────────────────────────
+// the wake's lines (the answer to your death) waited out the window as 'arrival' plates and were wiped by a travel; the filing line lost
+// the arrival's second plate to the hint and waited too; a floor you came back to let its summary go behind the way line. The tails of
+// die() and travel() are lifted from game.js and replayed with the real budget, so the order and the kinds below are the game's own
+describe('review batch five, two: the wake, the filing and the floor you come back to say their lines again', () => {
+  const dieBody = slice('function die(d = null) {', '// ── input ──')
+  const travelBody = slice('function travel(way) {', '// die(): death.js resolves it')
+  const WAKE = dieBody.slice(dieBody.indexOf('startVisit()'), dieBody.indexOf('bus?.here(hereFields())'))
+  const TAIL = travelBody.slice(travelBody.indexOf('startVisit()'), travelBody.lastIndexOf('bus?.here(hereFields())'))
+  const FILE = lift(/later\([0-9]+, filingLine\(origin, thin\), PRIO\.discovery\)/)
+  const L = (i) => levelConfig(DEFAULT_CONFIG, i)
+  const R = { message: 'you wake beside the hole you fell through.', dropped: 'almond-water', droppedLine: 'your hands opened.' }
+
+  // die()'s lines from startVisit() on: the floor's plate, then the wake's three
+  const wake = ({ cfg = L(LOBBY), first = true, r = R, d = { line: 'nobody came.' } } = {}) => {
+    const { h, said, run } = arrival({ cfg })
+    new Function('startVisit', 'plate', 'later', 'arrivalPlate', 'level', 'first', 'r', 'd', 'PRIO', WAKE)(
+      h.startVisit, h.plate, h.later, arrivalPlate, { cfg }, first, r, d, PRIO)
+    return { h, said, run }
+  }
+  // travel()'s lines from startVisit() on (the hint, the way line, the summary, the raised ceiling, the mercy line), and the filing line
+  // before them when this way files you
+  const land = ({ index = 1, first = true, filing = false, followed = 0, fresh = false, visits = first ? 1 : 2, down = 2, origin = 'tenant' } = {}) => {
+    const cfg = L(index)
+    const { h, said, run } = arrival({ cfg })
+    const out = new Function('startVisit', 'plate', 'later', 'arrivalPlate', 'level', 'first', 'filing', 'followed', 'freshLobby', 'way', 'wayMessage',
+      'partner', 'mem', 'fog', 'arrivalSummary', 'rec', 'player', 'hp0', 'origin', 'thin', 'filingLine', 'MERCY_LINE', 'PRIO',
+      `let hintHeld = false\nif (filing) ${FILE}\n${TAIL}\nreturn { hintHeld }`)(
+      h.startVisit, h.plate, h.later, arrivalPlate, { index, cfg }, first, filing, followed, () => fresh, { kind: 'down', target: index },
+      () => 'the way you came.', null, { get: () => null }, { countWays: () => ({ down, up: 0, lift: 0, ring: 0 }) }, arrivalSummary, { visits },
+      { maxHp: first ? 105 : 100 }, 100, origin, false, filingLine, 'the mercy.', PRIO)
+    return { h, said, run, out }
+  }
+
+  it('the wake is a free kind: never held, never counted', () => {
+    expect(FREE_KINDS).toContain('wake')
+    const b = createPlateBudget()
+    b.arrive(0); b.admit('floor', 0, 'f'); b.admit('arrival', 1, 'a')
+    expect(b.admit('wake', 2, 'w')).toBe('show')
+    for (let t = 45; t < 120; t++) expect(b.drain(t)).toBeNull()
+  })
+  it('the wake\'s lines are said at their moments, 2.6, 5.2 and 7.8 s, after the floor\'s own line on a floor new to you; the window keeps its second plate', () => {
+    expect(WAKE).toMatch(/later\(2600, r\.message, PRIO\.discovery, true, 'wake'\)\r?\n\s*if \(r\.dropped\) later\(5200, r\.droppedLine, PRIO\.discovery, true, 'wake'\)\r?\n\s*if \(d\?\.line\) later\(7800, d\.line, PRIO\.discovery, true, 'wake'\)/)
+    const { h, said, run } = wake()
+    run(20, { 20: () => h.plate('arrival', 'the hint.', PRIO.discovery) })
+    expect(said).toEqual([[0, L(LOBBY).levelSub], [2.6, R.message], [5.2, R.droppedLine], [7.8, 'nobody came.'], [20, 'the hint.']])
+    run(80, { 21: () => h.plate('arrival', 'one more.', PRIO.discovery) })
+    expect(said.slice(5)).toEqual([[45, 'one more.']])
+  })
+  it('on a floor you have been on, the wake puts up no plate of its own (the HUD carries the name): its lines alone, at their moments', () => {
+    const { said, run } = wake({ first: false })
+    run(80)
+    expect(said).toEqual([[2.6, R.message], [5.2, R.droppedLine], [7.8, 'nobody came.']])
+    const bare = wake({ first: false, r: { ...R, dropped: null, droppedLine: null }, d: null })     // LEGACY's death, nothing dropped
+    bare.run(80)
+    expect(bare.said).toEqual([[2.6, R.message]])
+  })
+  it('the block\'s wake is 2.0.3\'s: its name always, and every line at its moment', () => {
+    const B = L(BLOCK)
+    for (const first of [true, false]) {
+      const { said, run } = wake({ cfg: B, first })
+      run(80)
+      expect(said, String(first)).toEqual([[0, B.levelName], [2.6, R.message], [5.2, R.droppedLine], [7.8, 'nobody came.']])
+    }
+  })
+  it('the way that files you: the filing line takes the second plate at 3.8 s, the way line is let go, the hint waits (7.6 s, kept) and comes after', () => {
+    expect(travelBody).toMatch(/const filing = !filed\r?\n\s*if \(filing\) \{/)
+    expect(FILE).toBe('later(3800, filingLine(origin, thin), PRIO.discovery)')
+    expect(TAIL).toContain('if (level.cfg.exit?.hint && !followed) { if (freshLobby()) hintHeld = true; else later(filing ? 7600 : 3800, level.cfg.exit.hint, PRIO.discovery) }')
+    const { said, run } = land({ filing: true })
+    run(80)
+    expect(said).toEqual([[0, L(1).levelSub], [3.8, filingLine('tenant', false)], [45, L(1).exit.hint], [45 + DRAIN_S, 'the floor remembers you less.']])
+    // an anchored filing: the mercy line waits with the hint, in the order they were said
+    const pin = land({ filing: true, origin: 'anchored' })
+    pin.run(80)
+    expect(pin.said.map((s) => s[1])).toEqual([L(1).levelSub, filingLine('anchored', false), L(1).exit.hint, 'the mercy.', 'the floor remembers you less.'])
+    expect(pin.said[1][0]).toBe(3.8)
+  })
+  it('the front door\'s way into the first run\'s lobby: the hint is held for the thread as before, and the filing line still says itself at 3.8 s', () => {
+    const { said, run, out } = land({ index: LOBBY, filing: true, fresh: true })
+    run(80)
+    expect(out.hintHeld).toBe(true)
+    expect(said).toEqual([[0, L(LOBBY).levelSub], [3.8, filingLine('tenant', false)], [45, 'the floor remembers you less.']])
+  })
+  it('a first visit that files nothing keeps its ladder: the hint at 3.8 s, the way line let go', () => {
+    const { said, run } = land({ index: 2 })
+    run(80)
+    expect(said).toEqual([[0, L(2).levelSub], [3.8, L(2).exit.hint], [45, 'the floor remembers you less.']])
+  })
+  it('a floor you come back to says so at 3.8 s, with the ways down on your map; the way line after it is let go', () => {
+    expect(TAIL).toMatch(/\} else \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const s = arrivalSummary\(fog\.countWays\(way\.target\), rec\.visits\)\r?\n\s*if \(s\) later\(3800, s, PRIO\.discovery, false\)\r?\n\s*if \(wm\) later\(7500, wm, PRIO\.discovery, false\)\r?\n\s*\}/)
+    const { said, run } = land({ first: false })
+    run(80)
+    expect(said).toEqual([[0, L(1).levelName], [3.8, arrivalSummary({ down: 2 }, 2)]])
+    expect(said[1][1]).toBe('you have been on this floor before. two ways down are on your map.')
   })
 })

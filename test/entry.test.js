@@ -55,7 +55,7 @@ describe('game.js: the boot goes through entryLevel; nothing else about ∅ chan
     const resume = slice(game, 'if (resume) {', 'buildLevel(entryLevel(')
     expect(resume).not.toContain('exit?.hint')                    // a resumed run is not a first visit
     expect(levelConfig(DEFAULT_CONFIG, LOBBY).exit.hint).toBe('the walls are thin here — no-clip through a torn corner and you fall out of the lobby.')
-    expect(at(game, 'function later(ms, text, prio, keep = true)')).toBeLessThan(at(game, 'buildLevel(entryLevel('))
+    expect(at(game, "function later(ms, text, prio, keep = true, kind = 'arrival')")).toBeLessThan(at(game, 'buildLevel(entryLevel('))
   })
   it('the resume is untouched: a saved run on ∅ comes back to ∅', () => {
     const resume = slice(game, 'if (resume) {', 'buildLevel(entryLevel(')
@@ -64,7 +64,7 @@ describe('game.js: the boot goes through entryLevel; nothing else about ∅ chan
   })
   it('the filing is the first way, wherever it starts: travel never asks which floor you came in on', () => {
     const travel = slice(game, 'function travel(way) {', '// die(): death.js resolves it')
-    expect(travel).toMatch(/if \(!filed\) \{\r?\n\s*intakeCtx\.arrival = mpClient \? mpClient\.arrival\(\) : 'walked'\r?\n\s*filed = true; origin = intake\(intakeCtx\)/)
+    expect(travel).toMatch(/const filing = !filed\r?\n\s*if \(filing\) \{\r?\n\s*intakeCtx\.arrival = mpClient \? mpClient\.arrival\(\) : 'walked'\r?\n\s*filed = true; origin = intake\(intakeCtx\)/)
     expect(travel).not.toMatch(/frontDoor|index === 4|index === BLOCK/)
   })
   it('replayed: a solo filing from the lobby writes the same column the block did (the form\'s facts, not the floor)', () => {

@@ -215,7 +215,7 @@ describe('FEEL-1 / FEEL-4: an arrival\'s delayed lines belong to that arrival', 
     expect((dieBody.match(/later\(/g) || []).length).toBe(3)                       // + the death decision's own line at 7800 ms (I9)
   })
   it('later() drops a line when a newer arrival has begun (replayed from game.js\'s own source)', () => {
-    const src = game.match(/function later\(ms, text, prio, keep = true\) \{[^\n]*\}/)[0]
+    const src = game.match(/function later\(ms, text, prio, keep = true, kind = 'arrival'\) \{[^\n]*\}/)[0]
     const timers = [], said = []
     // (pulse T1-4: the line it keeps goes to the arrival's plate budget, as an 'arrival' plate)
     const mk = new Function('setTimeout', 'plate', `let arrivalGen = 0; ${src}; return { later, next: () => arrivalGen++ }`)
@@ -224,10 +224,13 @@ describe('FEEL-1 / FEEL-4: an arrival\'s delayed lines belong to that arrival', 
     g.next(); g.later(2600, 'you wake beside the hole you fell through. something of you stayed down there.', 1)    // a death in between
     for (const t of timers.sort((a, b) => a.ms - b.ms)) t.f()
     expect(said).toEqual([['arrival', 'you wake beside the hole you fell through. something of you stayed down there.', 1]])
+    // (review batch five: a kind given is the plate's; the wake's lines are 'wake', free)
+    g.later(5200, 'your hands opened.', 1, true, 'wake'); timers.at(-1).f()
+    expect(said.at(-1)).toEqual(['wake', 'your hands opened.', 1])
   })
   it('with followers placed, the first-visit hint gives its discovery slot to \'it followed you down.\'', () => {
     expect(travelBody).toContain('const followed = followers.length ? level.entitySys.inject(')
-    expect(travelBody).toContain('if (level.cfg.exit?.hint && !followed) { if (freshLobby()) hintHeld = true; else later(3800, level.cfg.exit.hint, PRIO.discovery) }')
+    expect(travelBody).toContain('if (level.cfg.exit?.hint && !followed) { if (freshLobby()) hintHeld = true; else later(filing ? 7600 : 3800, level.cfg.exit.hint, PRIO.discovery) }')
   })
 })
 

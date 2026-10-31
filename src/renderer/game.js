@@ -681,11 +681,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const chunkUnder = () => ({ cx: Math.floor(player.x / CHUNK_SIZE), cy: Math.floor(player.y / CHUNK_SIZE) })
   // the arrival's delayed lines belong to that arrival: a travel or a death in between (arrivalGen moved on) drops them, so the old way's
   // line never reads on the next floor; and they are its plates (plates.js): past the window's two, they wait for the arrival to settle,
-  // or, when keep is false (a line whose moment passes with the arrival: the way you came, the arrival summary), are let go
+  // or, when keep is false (a line whose moment passes with the arrival: the way you came, the arrival summary), are let go. The kind is
+  // the plate's, an arrival's unless said: the wake's own lines are 'wake', free (plates.js: never held, never counted)
   let arrivalGen = 0
-  function later(ms, text, prio, keep = true) { const g = arrivalGen; setTimeout(() => { if (g === arrivalGen) plate('arrival', text, prio, keep) }, ms) }
+  function later(ms, text, prio, keep = true, kind = 'arrival') { const g = arrivalGen; setTimeout(() => { if (g === arrivalGen) plate(kind, text, prio, keep) }, ms) }
   // a visit begins (a travel, the wake, the start, a resume): its clock and its hint start over, the faint pull takes a new lean, the
-  // once-a-visit lines are unsaid, and the plate budget opens its window. The floor's own plate follows at each caller (arrivalPlate)
+  // once-a-visit lines are unsaid, and the plate budget opens its window. The floor's own plate follows at each caller (arrivalPlate; the
+  // wake's only on a floor new to you)
   function startVisit() {
     floorT0 = playT; floorHinted = false; pullPhase = Math.random() * Math.PI * 2; lostSaid = false; hintHeld = false
     plates.arrive(playT)
@@ -723,12 +725,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       buildLevel(way.target, fromC)
       // the first way of a run files you (the lobby -> 1; ∅ -> the lobby when you came in by the front door), the form reaching you as this line: the arrival
       // is the client's (fixed at join; 'walked' solo), the column is intake's, the layer is thin when you dropped into a room already live
-      if (!filed) {
+      const filing = !filed
+      if (filing) {
         intakeCtx.arrival = mpClient ? mpClient.arrival() : 'walked'
         filed = true; origin = intake(intakeCtx); thin = intakeCtx.arrival === 'dropped'; rules = rulesFor(origin, thin)
         evConfig.events = rules.eventWeights()
         bus?.here(hereFields())
-        later(7600, filingLine(origin, thin), PRIO.discovery)   // after the level name, the hint (3.8 s) and the way line (7.5 s); it belongs to this arrival
+        later(3800, filingLine(origin, thin), PRIO.discovery)   // the run's intake: the arrival's second plate, a few breaths in (the hint waits); it belongs to this arrival
       }
       const partner = way.kind === 'down' ? level.decor.wayAt(fromC.cx, fromC.cy, 'up') : way.kind === 'up' ? level.decor.exitAt(fromC.cx, fromC.cy) : null
       const m = way.kind === 'ring' ? mem.get(way.target) : null
@@ -759,13 +762,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       const wm = wayMessage(way, { partner, mem: mem.get(way.target) })
       if (first) {
         // with followers on the way, the hint gives its slot to 'it followed you down.' (it is still a floor murmur in level.messages);
-        // on the first run's lobby (the front door's way in) it waits with the faint pull, and the frame says it then
-        if (level.cfg.exit?.hint && !followed) { if (freshLobby()) hintHeld = true; else later(3800, level.cfg.exit.hint, PRIO.discovery) }
+        // on the first run's lobby (the front door's way in) it waits with the faint pull, and the frame says it then; on the way that
+        // files you it gives the arrival's second plate to the filing line and is said after it (7.6 s, kept: it waits out the window)
+        if (level.cfg.exit?.hint && !followed) { if (freshLobby()) hintHeld = true; else later(filing ? 7600 : 3800, level.cfg.exit.hint, PRIO.discovery) }
         if (wm) later(7500, wm, PRIO.discovery, false)
       } else {
-        if (wm) later(3800, wm, PRIO.discovery, false)
+        // a floor you come back to says so first, the arrival's second plate, with the ways down on your map; the way line is let go
         const s = arrivalSummary(fog.countWays(way.target), rec.visits)
-        if (s) later(7500, s, PRIO.discovery, false)
+        if (s) later(3800, s, PRIO.discovery, false)
+        if (wm) later(7500, wm, PRIO.discovery, false)
       }
       if (player.maxHp > hp0) later(11000, 'the floor remembers you less.', PRIO.discovery)
       // a new floor sets you down beside the pin's drift origin again (buildLevel resets spawnX / spawnY): a mercy, said once per descent
@@ -822,10 +827,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       renderHotbar()
       persist(true)
       startVisit()
-      plate('floor', arrivalPlate(level.cfg, first), PRIO.combat)
-      later(2600, r.message, PRIO.discovery)
-      if (r.dropped) later(5200, r.droppedLine, PRIO.discovery)
-      if (d?.line) later(7800, d.line, PRIO.discovery)   // the column's word on it ('nobody came.' first when nobody did); LEGACY has none
+      // the wake's own lines answer your death ('wake', a free kind: plates.js), each at its moment, none left waiting out the window for a
+      // travel to wipe; the floor's plate goes up only on a floor new to you (its own line), else the HUD carries the name and a wake never
+      // stacks four plates. The block's wake keeps its name, as 2.0.3 did (the hold)
+      if (first || level.cfg.map) plate('floor', arrivalPlate(level.cfg, first), PRIO.combat)
+      later(2600, r.message, PRIO.discovery, true, 'wake')
+      if (r.dropped) later(5200, r.droppedLine, PRIO.discovery, true, 'wake')
+      if (d?.line) later(7800, d.line, PRIO.discovery, true, 'wake')   // the column's word on it ('nobody came.' first when nobody did); LEGACY has none
       bus?.here(hereFields())           // woken a floor above: the room learns it at once
     })
   }
