@@ -265,7 +265,8 @@ describe('I5: the file (origin-*.js) in game.js', () => {
     const ballast = slice("} else if (eff.type === 'ballast') {", "} else if (eff.type === 'extension-slip') {")
     expect(ballast).toContain('if (thin) { thin = false; rules = rulesFor(origin, false); setTimeout(() => showMessage(CURE_LINE, PRIO.discovery), 2600); bus?.here(hereFields()) }')
     const pin = slice('function pinSeen(reach) {', 'const entityAsm = createEntityAssembler()')
-    expect(pin).toMatch(/if \(rules\.wayReveal === 'loaded'\) \{ const ex = level\.decor\.getExits\(\); for \(let i = 0; i < ex\.length; i\+\+\) fog\.pinWay\(L, ex\[i\], epochOf\(/)
+    // (pulse T1-2: the plans are read once the faint pull is free, and not while the first run leans on its room: the map is earned)
+    expect(pin).toMatch(/if \(rules\.wayReveal === 'loaded' && pullVisible\(pullAsk\) && !firstRun\.toward\(\)\) \{ const ex = level\.decor\.getExits\(\); for \(let i = 0; i < ex\.length; i\+\+\) fog\.pinWay\(L, ex\[i\], epochOf\(/)
     const cross = slice('function spawnCrosser() {', 'function fireEvent(')
     expect(cross).toContain('if (faint && rules.crosserPause()) { a.pauseAtTtl = a.ttl / 2; a.pauseT = 0; a.paused = false }')
     expect(game).toMatch(/if \(a\.pauseT > 0\) \{ a\.pauseT -= dt; continue \}/)
@@ -1067,8 +1068,8 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     expect(loop).toMatch(/if \(!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen\) \{\r?\n(\s*\/\/[^\n]*\r?\n)+\s*if \(K\['KeyF'\] && \(kneel\.st \|\| dnFront\)\) \{ K\['KeyF'\] = false; if \(kneel\.st\) stopKneel\(null\); else startKneel\(dnFront\) \}\r?\n\s*if \(K\['KeyF'\]\) \{/)
     expect(loop).toMatch(/if \(kneel\.st && K\['Escape'\]\) \{ K\['Escape'\] = false; stopKneel\(null\) \}[^\n]*\r?\n(\s*\r?\n)?(\s*\/\/[^\n]*\r?\n)*\s*if \(mapOpen && \(K\['Escape'\] \|\| K\['Tab'\]\)\)/)
     // (the off line is lightshare.js litOffLine since I12: today's 'flashlight off — the dark leans in.' when nobody's light reaches you)
-    // (pulse T1-4: the plain lines once a run, the friend's always)
-    expect(loop).toMatch(/if \(K\['KeyL'\]\) \{\r?\n\s*K\['KeyL'\] = false\r?\n\s*if \(kneel\.st\) showMessage\(LIGHT_STAYS_LINE\)[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*else \{ flashlight = !flashlight; lightToggles\+\+; if \(!lightSaid \|\| \(!flashlight && litRec\)\) \{ lightSaid = true; showMessage\(flashlight \? 'flashlight on\.' : litOffLine\(litRec \? litRec\.name : null\)\) \} \}/)
+    // (pulse T1-4: the plain lines once a run, the friend's always; the block's every time, as it was: the hold)
+    expect(loop).toMatch(/if \(K\['KeyL'\]\) \{\r?\n\s*K\['KeyL'\] = false\r?\n\s*if \(kneel\.st\) showMessage\(LIGHT_STAYS_LINE\)[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*else \{ flashlight = !flashlight; lightToggles\+\+; if \(cfg\.map \|\| !lightSaid \|\| \(!flashlight && litRec\)\) \{ if \(!cfg\.map\) lightSaid = true; showMessage\(flashlight \? 'flashlight on\.' : litOffLine\(litRec \? litRec\.name : null\)\) \} \}/)
     expect(LIGHT_STAYS_LINE).toBe('your light stays on them.')
   })
   it('the prompt: who is down in front (the hoisted options, last frame\'s fill) heads the ladder, dimming as you count; the kneel ticks after the remote fill', () => {
@@ -1687,8 +1688,9 @@ describe('I12 (W7): a friend\'s light, a friend\'s ward, a friend\'s photograph 
   })
   it('L: going dark in a friend\'s light names them, always; in nobody\'s it is today\'s line, once a run (pulse T1-4); kneeling, the light stays on them', () => {
     const L = lift(/if \(K\['KeyL'\]\) \{[\s\S]*?\r?\n {6}\}/)
-    const run = new Function('K', 'kneel', 'litOffLine', 'showMessage', 'LIGHT_STAYS_LINE', 'st', `let { flashlight, lightToggles, litRec, lightSaid } = st\n${L}\nObject.assign(st, { flashlight, lightToggles, lightSaid })`)
-    const said = [], press = (st, kneel = { st: null }) => run({ KeyL: true }, kneel, litOffLine, (m) => said.push(m), LIGHT_STAYS_LINE, st)
+    // (below the block: cfg.map unset; the block's own toggles are pulse-wiring's hold guard)
+    const run = new Function('K', 'kneel', 'litOffLine', 'showMessage', 'LIGHT_STAYS_LINE', 'cfg', 'st', `let { flashlight, lightToggles, litRec, lightSaid } = st\n${L}\nObject.assign(st, { flashlight, lightToggles, lightSaid })`)
+    const said = [], press = (st, kneel = { st: null }) => run({ KeyL: true }, kneel, litOffLine, (m) => said.push(m), LIGHT_STAYS_LINE, { map: null }, st)
     let st = { flashlight: true, lightToggles: 0, litRec: { name: 'maddie' }, lightSaid: false }
     press(st)
     expect([st.flashlight, st.lightToggles, said.at(-1)]).toEqual([false, 1, "flashlight off — you stand in maddie's light."])

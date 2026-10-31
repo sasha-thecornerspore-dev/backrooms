@@ -88,19 +88,24 @@ export function compassLines({ player, known, fallback = null, arrived = null, s
 }
 
 // '↗  descend — level 2  ·  41m' newline '←  the way you came  ·  12m'; '' when there is nothing to point at. The faint line
-// names no metres: a pull, not a measurement.
-export function compassText(out) {
+// names no metres: a pull, not a measurement. faintMetres keeps them on it: the block's compass, as it was (the hold).
+export function compassText(out, faintMetres = false) {
   let s = ''
   for (let i = 0; i < out.length; i++) {
     const l = out[i]
-    s += (i ? '\n' : '') + (l.text === FAINT ? `${l.arrow}  ${l.text}` : `${l.arrow}  ${l.text}  ·  ${Math.round(l.dist)}m`)
+    s += (i ? '\n' : '') + (l.text === FAINT && !faintMetres ? `${l.arrow}  ${l.text}` : `${l.arrow}  ${l.text}  ·  ${Math.round(l.dist)}m`)
   }
   return s
 }
 
-// lostDue(out, said) -> boolean: levels.js LOST_LINE may be said now — the compass shows no way (neither a known one nor the
-// faint pull) and the line has not been said this visit
-export function lostDue(out, said) { return !said && !(out.length > 0 && out[0].text !== CAME) }
+// the setting's line waits this long into a visit: past the arrival's plates (plates.js, 45 s), before the faint pull frees (90 s)
+export const LOST_AFTER_S = 60
+// lostDue(out, said, floorT, guided) -> boolean: levels.js LOST_LINE may be said now — the compass shows no way (neither a known
+// one nor the faint pull), the floor has had you LOST_AFTER_S of this visit and given you no lead (guided: a hint, the first
+// run's note), and the line has not been said this visit. You are lost, not only new
+export function lostDue(out, said, floorT = 0, guided = false) {
+  return !said && !guided && floorT >= LOST_AFTER_S && !(out.length > 0 && out[0].text !== CAME)
+}
 
 // the seen line (T1-6): it names the thing only when it is on screen (in the view cone, in sight); off screen the creature's
 // tell, panned toward it, carries the direction instead of words

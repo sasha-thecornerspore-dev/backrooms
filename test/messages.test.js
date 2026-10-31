@@ -22,6 +22,23 @@ describe('createMessageQueue', () => {
     expect(q.tick(1)).toBeNull()
   })
 
+  it('idle(): true exactly when an ambient push would show (nothing showing, nothing waiting); asking changes nothing', () => {
+    const q = createMessageQueue({ holdS: 1, discoveryGapS: 6 })
+    expect(q.idle()).toBe(true)
+    q.push('level one.', PRIO.combat)
+    expect(q.idle()).toBe(false)
+    q.push('a murmur.', PRIO.ambient)                                      // dropped: the queue was not idle
+    expect(q.tick(0.1)).toEqual({ text: 'level one.', show: true })
+    q.push('the hint.', PRIO.discovery)                                    // waits behind the combat line
+    expect(q.idle()).toBe(false)
+    const log = run(q, 3)
+    expect(shown(log)).toEqual(['the hint.'])                              // the murmur never shows
+    expect(q.idle()).toBe(true)
+    q.push('another murmur.', PRIO.ambient)
+    expect(q.idle()).toBe(false); expect(q.tick(0.1)).toEqual({ text: 'another murmur.', show: true })
+    q.clear(); expect(q.idle()).toBe(true)
+  })
+
   it('an urgent push replaces a combat line at once (no dwell), and a later urgent replaces it too; combat keeps its FIFO', () => {
     const q = createMessageQueue({ dwellS: 1.6 })
     q.push('it has seen you.', PRIO.combat)

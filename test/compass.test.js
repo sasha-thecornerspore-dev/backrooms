@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   EXIT_DIRS, exitArrow, wayLabel, FAINT, compassLines, compassText, arrivalSummary, numberWord,
-  PULL_WAIT_S, PULL_FRESH_S, PULL_WOBBLE, pullVisible, pullWobble, lostDue, seenLine, SEEN_ON, SEEN_OFF,
+  PULL_WAIT_S, PULL_FRESH_S, PULL_WOBBLE, pullVisible, pullWobble, lostDue, LOST_AFTER_S, seenLine, SEEN_ON, SEEN_OFF,
 } from '../src/renderer/compass.js'
 import { wayLabel as topoLabel } from '../src/renderer/topology.js'
 
@@ -125,6 +125,16 @@ describe('compassText', () => {
     expect(compassText([{ arrow: '↓', text: '~the lift — level 3', dist: 7.5 }])).toBe('↓  ~the lift — level 3  ·  8m')
     expect(compassText([])).toBe('')
   })
+  it('the faint line keeps its metres only when asked (the block, as it was: the hold); a known line is the same either way', () => {
+    const out = [{ arrow: '↗', text: FAINT, dist: 19.4 }, { arrow: '←', text: 'the way you came', dist: 11.6 }]
+    expect(compassText(out)).toBe(`↗  ${FAINT}
+←  the way you came  ·  12m`)
+    expect(compassText(out, false)).toBe(compassText(out))
+    expect(compassText(out, true)).toBe(`↗  ${FAINT}  ·  19m
+←  the way you came  ·  12m`)
+    const known = [{ arrow: '↓', text: '~the lift — level 3', dist: 7.5 }]
+    expect(compassText(known, true)).toBe(compassText(known))
+  })
 })
 
 // T1-2: the faint pull earns its place: it waits, it names no metres, it wobbles slowly, and the caller may skip a kind
@@ -204,18 +214,24 @@ describe('the faint pull', () => {
     expect(out[0].text).toBe(FAINT)
   })
 
-  it('lostDue: the lost line is due only while no way is shown and it has not been said this visit', () => {
+  it('lostDue: the lost line is due only while no way is shown, the floor has had you a while and given you no lead, and it has not been said this visit', () => {
     const out = []
     const fb = { rec: { key: 'x', kind: 'down', x: 20.5, y: 0.5, label: 'descend', target: 2 }, dist: 20 }
+    const T = LOST_AFTER_S
     compassLines({ player: player(0.5, 0.5), known: [], fallback: fb, arrived: { x: 0.5, y: -12.5 }, pull: false }, out)
-    expect(lostDue(out, false)).toBe(true)
-    expect(lostDue(out, true)).toBe(false)
+    expect(lostDue(out, false, T)).toBe(true)
+    expect(lostDue(out, true, T)).toBe(false)
     compassLines({ player: player(0.5, 0.5), known: [], fallback: fb, arrived: null, pull: true }, out)
-    expect(lostDue(out, false)).toBe(false)                                   // the pull is showing
+    expect(lostDue(out, false, T)).toBe(false)                                // the pull is showing
     compassLines({ player: player(0.5, 0.5), known: [pin('k', 'down', 10.5, 0.5)], fallback: null, arrived: null, pull: false }, out)
-    expect(lostDue(out, false)).toBe(false)                                   // a way is known
+    expect(lostDue(out, false, T)).toBe(false)                                // a way is known
     compassLines({ player: player(0.5, 0.5), known: [], fallback: null, arrived: null }, out)
-    expect(lostDue(out, false)).toBe(true)
+    expect(lostDue(out, false, T)).toBe(true)
+    // not in the arrival: the floor has to have had you a while (past the plate budget's 45 s window, before the 90 s pull)
+    expect(lostDue(out, false)).toBe(false); expect(lostDue(out, false, 0)).toBe(false); expect(lostDue(out, false, T - 0.01)).toBe(false)
+    expect(T).toBeGreaterThan(45); expect(T).toBeLessThan(PULL_WAIT_S)
+    // and never once the floor has given you a lead (a hint, the first run's note)
+    expect(lostDue(out, false, T + 100, true)).toBe(false)
   })
 })
 

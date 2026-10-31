@@ -215,7 +215,7 @@ describe('FEEL-1 / FEEL-4: an arrival\'s delayed lines belong to that arrival', 
     expect((dieBody.match(/later\(/g) || []).length).toBe(3)                       // + the death decision's own line at 7800 ms (I9)
   })
   it('later() drops a line when a newer arrival has begun (replayed from game.js\'s own source)', () => {
-    const src = game.match(/function later\(ms, text, prio\) \{[^\n]*\}/)[0]
+    const src = game.match(/function later\(ms, text, prio, keep = true\) \{[^\n]*\}/)[0]
     const timers = [], said = []
     // (pulse T1-4: the line it keeps goes to the arrival's plate budget, as an 'arrival' plate)
     const mk = new Function('setTimeout', 'plate', `let arrivalGen = 0; ${src}; return { later, next: () => arrivalGen++ }`)

@@ -35,8 +35,8 @@ describe('game.js: one voice (messages.js)', () => {
     expect(game).toMatch(/showMessage\('everything goes dark\.', PRIO\.combat\)/)
     expect(game).toMatch(/later\(2600, r\.message, PRIO\.discovery\)/)
     expect(game).toMatch(/buildLevel\(entryLevel\(\{ online: !!mpClient, frontDoor \}\)\)[^\n]*\r?\n\s*if \(getPref\('solidBodies'\)\) level\.solid\.settlePlayer\(player\)[^\n]*\r?\n\s*\}\r?\n(\s*\/\/[^\n]*\r?\n)*\s*startVisit\(\)\r?\n\s*plate\('floor', arrivalPlate\(level\.cfg, !resume\), PRIO\.combat\)/)
-    // (pulse T1-5: the murmurs come from the floor's bag, not a coin)
-    expect(game).toMatch(/const murmur = level\.messages\[murmurBag\.next\(\)\]\r?\n\s*if \(!hintHeld \|\| murmur !== cfg\.exit\?\.hint\) plate\('murmur', murmur, PRIO\.ambient, false\)/)
+    // (pulse T1-5: the murmurs come from the floor's bag, not a coin; the block keeps its coin, the hold)
+    expect(game).toMatch(/const murmur = cfg\.map \? level\.messages\[Math\.floor\(Math\.random\(\) \* level\.messages\.length\)\] : level\.messages\[murmurBag\.next\(\)\]\r?\n\s*if \(!hintHeld \|\| murmur !== cfg\.exit\?\.hint\) plate\('murmur', murmur, PRIO\.ambient, false\)/)
     // event lines: fireEvent's prio — ambient by default (the scheduler passes none), interaction when a drawer fires them — except the two
     // that answer to you, which stay at interaction; all through the plate budget (pulse T1-4)
     expect(game).toContain("function fireEvent(id, prio = PRIO.ambient, kind = 'event') {")

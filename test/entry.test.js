@@ -54,7 +54,7 @@ describe('game.js: the boot goes through entryLevel; nothing else about ∅ chan
     const resume = slice(game, 'if (resume) {', 'buildLevel(entryLevel(')
     expect(resume).not.toContain('exit?.hint')                    // a resumed run is not a first visit
     expect(levelConfig(DEFAULT_CONFIG, LOBBY).exit.hint).toBe('the walls are thin here — no-clip through a torn corner and you fall out of the lobby.')
-    expect(at(game, 'function later(ms, text, prio)')).toBeLessThan(at(game, 'buildLevel(entryLevel('))
+    expect(at(game, 'function later(ms, text, prio, keep = true)')).toBeLessThan(at(game, 'buildLevel(entryLevel('))
   })
   it('the resume is untouched: a saved run on ∅ comes back to ∅', () => {
     const resume = slice(game, 'if (resume) {', 'buildLevel(entryLevel(')

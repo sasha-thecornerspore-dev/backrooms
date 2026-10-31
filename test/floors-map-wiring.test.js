@@ -103,9 +103,10 @@ describe('game.js: travel(way) replaces descend', () => {
     expect(place).toBeLessThan(dec); expect(dec).toBeLessThan(settle); expect(settle).toBeLessThan(arr)
   })
   it('the message ladder: the level name (combat) at once; first visit: hint 3.8 s, way line 7.5 s; later: way line 3.8 s, the arrival summary 7.5 s; the raised ceiling at 11 s', () => {
+    // (pulse: the way line and the summary are let go, not kept, when the arrival's plates are spent — their moment passes with it)
     expect(body).toMatch(/plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)/)
-    expect(body).toMatch(/if \(first\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(level\.cfg\.exit\?\.hint && !followed\) \{ if \(freshLobby\(\)\) hintHeld = true; else later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\) \}\r?\n\s*if \(wm\) later\(7500, wm, PRIO\.discovery\)/)
-    expect(body).toMatch(/\} else \{\r?\n\s*if \(wm\) later\(3800, wm, PRIO\.discovery\)\r?\n\s*const s = arrivalSummary\(fog\.countWays\(way\.target\), rec\.visits\)\r?\n\s*if \(s\) later\(7500, s, PRIO\.discovery\)/)
+    expect(body).toMatch(/if \(first\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(level\.cfg\.exit\?\.hint && !followed\) \{ if \(freshLobby\(\)\) hintHeld = true; else later\(3800, level\.cfg\.exit\.hint, PRIO\.discovery\) \}\r?\n\s*if \(wm\) later\(7500, wm, PRIO\.discovery, false\)/)
+    expect(body).toMatch(/\} else \{\r?\n\s*if \(wm\) later\(3800, wm, PRIO\.discovery, false\)\r?\n\s*const s = arrivalSummary\(fog\.countWays\(way\.target\), rec\.visits\)\r?\n\s*if \(s\) later\(7500, s, PRIO\.discovery, false\)/)
     expect(body).toMatch(/if \(player\.maxHp > hp0\) later\(11000, 'the floor remembers you less\.', PRIO\.discovery\)/)
   })
   it('F takes the way through travel(nearExit); the prompt reads wayLabel, or the closing line for the way you came by', () => {
@@ -234,7 +235,7 @@ describe('game.js: the map, held not modal', () => {
   it('the compass recomputes only on a cell, heading or known-ways change (and, pulse T1-2, a change of the pull or its slow clock), writes the text only when it changed, and hides under the prompt; the old block is gone', () => {
     // (pulse T1-2: the faint pull reads the ways that lead on, the thread's room while it waits on it, the pull's rule and its lean)
     expect(game).toMatch(/const known = fog\.ways\(level\.index\)\r?\n\s*if \(cellChanged \|\| Math\.abs\(player\.angle - lastCompassAngle\) > 0\.05 \|\| known\.length !== lastWayCount \|\| pull !== compassState\.pull \|\| playT - lastCompassT >= PULL_REDRAW_S\) \{\r?\n\s*lastCompassAngle = player\.angle; lastWayCount = known\.length; lastCompassT = playT\r?\n\s*compassState\.known = known\r?\n\s*const room = firstRun\.toward\(\)\r?\n\s*if \(room\) \{ roomPull\.rec = room; compassState\.fallback = roomPull \}\r?\n\s*else compassState\.fallback = level\.decor\.nearestWayOn\(player\.x, player\.y, compassState\.skip\)/)
-    expect(game).toMatch(/compassState\.pull = pull; compassState\.wobble = cfg\.map \? 0 : pullWobble\(pullAsk\.floorT, pullPhase\)\r?\n\s*compassState\.arrived = fog\.arrivedPin\(level\.index\)\r?\n\s*compassLines\(compassState, compassOut\)\r?\n\s*const s = compassText\(compassOut\)\r?\n\s*if \(s !== lastCompassText\) \{ compassEl\.textContent = s; lastCompassText = s \}/)
+    expect(game).toMatch(/compassState\.pull = pull; compassState\.wobble = cfg\.map \? 0 : pullWobble\(pullAsk\.floorT, pullPhase\)\r?\n\s*compassState\.arrived = fog\.arrivedPin\(level\.index\)\r?\n\s*compassLines\(compassState, compassOut\)\r?\n\s*const s = compassText\(compassOut, !!cfg\.map\)\r?\n\s*if \(s !== lastCompassText\) \{ compassEl\.textContent = s; lastCompassText = s \}/)
     expect(game).toMatch(/compassEl\.style\.opacity = \(compassOut\.length === 0 \|\| nearExit\) \? '0' : '1'/)
     expect(game).not.toMatch(/cfg\.exit\?\.label \?\? 'descent'/)
     expect(game).not.toMatch(/exitArrow\(rel\)/)

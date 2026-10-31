@@ -2,7 +2,7 @@
 //
 // PRIO: ambient 0 (floor murmurs) < discovery 1 (what you found) < interaction 2 (what you did) < combat 3 (what has you)
 // < urgent 4 (the hit itself, the hound's one tell: the line must land in the frame it happens).
-// createMessageQueue({ dwellS, holdS, discoveryGapS }) -> { push(text, prio), tick(dt) -> null | { text, show }, clear() }
+// createMessageQueue({ dwellS, holdS, discoveryGapS }) -> { push(text, prio), tick(dt) -> null | { text, show }, clear(), idle() }
 //   - a line holds holdS seconds, then ONE tick returns { show: false } so the caller fades the element
 //   - a push above the current priority replaces it at once; at or below, it waits until the current line has been visible dwellS
 //   - an urgent push replaces whatever shows at once, even another urgent line (the line it replaces is dropped, not queued); combat
@@ -12,6 +12,7 @@
 //   - interaction lines queue behind a combat line; past 2 waiting the OLDEST goes (the player acted again: that result is stale)
 //   - the same text pushed while it shows re-arms its hold (no flicker)
 //   - tick() hands back ONE reused result object or null; the idle path allocates nothing
+//   - idle() reads whether an ambient push would show now (nothing showing, nothing waiting); it changes nothing
 export const PRIO = Object.freeze({ ambient: 0, discovery: 1, interaction: 2, combat: 3, urgent: 4 })
 
 const MAX_WAITING_INTERACTION = 2
@@ -28,11 +29,12 @@ export function createMessageQueue({ dwellS = 1.6, holdS = 4.2, discoveryGapS = 
 
   function setCur(text, prio) { cur = text; curPrio = prio; visT = 0; holdLeft = holdS; dirty = true }
   const waiting = () => qCombat.length + qInteraction.length + qDiscovery.length
+  const idle = () => cur === null && waiting() === 0
 
   function push(text, prio) {
     if (!text) return
     if (cur !== null && text === cur) { holdLeft = holdS; return }                      // re-arm the hold, no flicker
-    if (prio === PRIO.ambient) { if (cur === null && waiting() === 0) setCur(text, prio); return }
+    if (prio === PRIO.ambient) { if (idle()) setCur(text, prio); return }
     if (prio === PRIO.discovery) {
       if (qDiscovery.indexOf(text) !== -1) return                                        // deduped by exact text
       if ((cur === null || prio > curPrio) && sinceDisc >= discoveryGapS) setCur(text, prio)
@@ -73,5 +75,5 @@ export function createMessageQueue({ dwellS = 1.6, holdS = 4.2, discoveryGapS = 
     cur = null; curPrio = -1; visT = 0; holdLeft = 0; dirty = false; sinceDisc = Infinity
   }
 
-  return { push, tick, clear }
+  return { push, tick, clear, idle }
 }

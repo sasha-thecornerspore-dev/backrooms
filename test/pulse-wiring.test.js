@@ -10,7 +10,7 @@
 // for, its runners squeal for real, its floor plan pins one thing on your map, and an opened one says so; and dread, on its own 4 Hz
 // clock through the path field, lifts the heartbeat and lets a creature's tell through before you see it. game.js only boots in a
 // page, so these are source guards plus the pieces lifted out of game.js and replayed against the real modules.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import fs from 'node:fs'
 import { STEP_MATERIAL, STEP_GAIN, CALL_SOUNDS, CALL_LEN } from '../src/renderer/audio.js'
 import { FOOTSTEPS_ECHO, FX_PLAY, EVENTS, eventFx, createBag, createEventScheduler } from '../src/renderer/events.js'
@@ -18,7 +18,7 @@ import { TELL, SEEN_TELL, DREAD_CLOCK, DREAD_R, dreadFrom, dreadNear, createTell
 import { createPathField } from '../src/renderer/pathfield.js'
 import { createTension } from '../src/renderer/tension.js'
 import { createFogMap } from '../src/renderer/fogmap.js'
-import { seenLine, SEEN_ON, SEEN_OFF, compassLines, compassText, pullVisible, pullWobble, lostDue, FAINT, PULL_WAIT_S, PULL_FRESH_S, PULL_WOBBLE, PULL_REDRAW_S } from '../src/renderer/compass.js'
+import { seenLine, SEEN_ON, SEEN_OFF, compassLines, compassText, pullVisible, pullWobble, lostDue, FAINT, PULL_WAIT_S, PULL_FRESH_S, PULL_WOBBLE, PULL_REDRAW_S, LOST_AFTER_S } from '../src/renderer/compass.js'
 import { PRESENCE_HUSH_S, FIRST_NOTE, FIRST_SOUL, FIRST_ROOM, createFirstRun, noteRecord } from '../src/renderer/firstrun.js'
 import { createPlateBudget, arrivalPlate, DRAIN_S } from '../src/renderer/plates.js'
 import { LOST_LINE, levelConfig } from '../src/renderer/levels.js'
@@ -31,7 +31,7 @@ import { inViewCone, lineOfSight } from '../src/renderer/raycaster.js'
 import { HF } from '../src/renderer/gfx-frame.js'
 import { whistlePan } from '../src/renderer/rollcall.js'
 import { trayLean, standing, placementMods, applyPlacement } from '../src/renderer/docket.js'
-import { PRIO } from '../src/renderer/messages.js'
+import { PRIO, createMessageQueue } from '../src/renderer/messages.js'
 import { BLOCK, LOBBY, waysFor, stairsPass, chunkMid, findOpenNear } from '../src/renderer/topology.js'
 import { SCRAPS } from '../src/renderer/scraps.js'
 import { litOffLine } from '../src/renderer/lightshare.js'
@@ -313,6 +313,11 @@ let lobbyW = null
 const lobbyOnce = () => lobbyW ?? (lobbyW = lobby(true))
 const PLATE = /function plate\(kind, text, prio, keep = true\) \{[\s\S]*?\r?\n {2}\}/
 const VISIT = /function startVisit\(\) \{[\s\S]*?\r?\n {2}\}/
+const LATER = /function later\(ms, text, prio, keep = true\) \{[^\n]*\}/
+// the faint pull's two lines, refilled before the map (a tenant's map reads the pull too)
+const PULL = /pullAsk\.floorT = playT - floorT0;[^\n]*\r?\n\s*const pull = [^\n]*/
+const LIGHT = /if \(K\['KeyL'\]\) \{[\s\S]*?\r?\n {6}\}/
+const MURMUR = /const murmur = cfg\.map \? [^\n]*\r?\n[^\n]*/
 
 describe('w2: the imports, the state, the shell', () => {
   it('imports the pull, the setting\'s line, the thread, the budget and the search hint by their real names', () => {
@@ -369,7 +374,7 @@ describe('w2: a visit begins', () => {
 })
 
 describe('T1-2: the compass earns its pull', () => {
-  const src = () => slice('// ── the faint pull', 'netTimer += dt')
+  const src = () => slice('// ── the lobby\'s exit hint, held for the first run', 'netTimer += dt')
   // decor.js nearestWayOn over a list: never a stair up, one reused record
   const fakeDecor = (ways) => {
     const any = { rec: null, dist: 0 }
@@ -386,18 +391,19 @@ describe('T1-2: the compass earns its pull', () => {
   function rig({ index = 1, map = null, decor, known = [], arrived = null, firstRun = createFirstRun(), hint = null, player = { x: 0.5, y: 0.5, angle: 0 } } = {}) {
     const said = [], calls = { n: 0 }
     const plates = createPlateBudget(); plates.arrive(0)
-    const level = { index, decor }
+    const cfg = { map, exit: hint ? { hint } : undefined }
+    const level = { index, decor, cfg }
     const D = {
       pullAsk: { floorT: 0, hinted: false, fresh: false, step: 0 }, freshLobby: () => level.index === 0 && firstRun.on(), firstRun,
-      cfg: { map, exit: hint ? { hint } : undefined }, pullVisible, PRIO, compassEl: { textContent: '', style: { opacity: '' } },
+      cfg, pullVisible, PRIO, msgQ: { idle: () => true }, compassEl: { textContent: '', style: { opacity: '' } },
       fog: { ways: () => known, arrivedPin: () => arrived }, level, player,
       compassState: { player, known: null, fallback: null, arrived: null, stale: null, pull: false, wobble: 0, skip: null },
       PULL_REDRAW_S, roomPull: { rec: null, dist: null }, pullWobble, compassLines: (s, o) => { calls.n++; return compassLines(s, o) }, compassOut: [],
       compassText, lostDue, LOST_LINE, plates, showMessage: (t, p) => said.push([t, p]),
     }
     const st = { playT: 0, floorT0: 0, floorHinted: false, hintHeld: false, cellChanged: true, lastCompassAngle: NaN, lastWayCount: -1,
-      lastCompassT: -Infinity, lastCompassText: null, lostSaid: false, pullPhase: 0, nearExit: null }
-    const fn = new Function('st', 'D', `const { ${Object.keys(D).join(', ')} } = D\nlet { ${Object.keys(st).join(', ')} } = st\n${lift(PLATE)}\n${src()}\n` +
+      lastCompassT: -Infinity, lastCompassText: null, lostSaid: false, pullPhase: 0, nearExit: null, transitioning: false }
+    const fn = new Function('st', 'D', `const { ${Object.keys(D).join(', ')} } = D\nlet { ${Object.keys(st).join(', ')} } = st\n${lift(PLATE)}\n${lift(PULL)}\n${src()}\n` +
       'Object.assign(st, { hintHeld, lastCompassAngle, lastWayCount, lastCompassT, lastCompassText, lostSaid })')
     const frame = (t, o = {}) => { Object.assign(st, { cellChanged: false }, o, { playT: t }); fn(st, D); return D.compassEl.textContent }
     return { st, D, said, calls, frame }
@@ -469,26 +475,39 @@ describe('T1-2: the compass earns its pull', () => {
     const k = r.D.compassState.fallback.rec.key
     expect(k).toBe(L.decor.nearestWayOn(11.5, 11.5).rec.key); expect(k).toBe(FIRST_ROOM.way.key)   // from the spawn the nearest is the room's own
   })
-  it('the setting\'s line: on the lobby only, while nothing is known and the pull is hidden, once a visit, through the budget', () => {
+  it('the setting\'s line: on the lobby only, while nothing is known and the pull is hidden, once the floor has had you a while, once a visit, through the budget', () => {
     const r = rig({ index: LOBBY, decor: fakeDecor([ahead]) })
-    r.frame(0, { cellChanged: true }); r.frame(1); r.frame(30)
+    r.frame(0, { cellChanged: true }); r.frame(1); r.frame(30); r.frame(LOST_AFTER_S - 0.1)
+    expect(r.said).toEqual([])                                           // never in the arrival: you are not lost yet, only new
+    r.frame(LOST_AFTER_S)
     expect(r.said).toEqual([[LOST_LINE, PRIO.discovery]]); expect(r.st.lostSaid).toBe(true)
+    r.frame(LOST_AFTER_S + 5); expect(r.said).toHaveLength(1)
     for (const o of [{ index: 1 }, { index: LOBBY, known: [{ type: 'down', x: 5.5, y: 0.5, target: 1 }] }]) {
-      const q = rig({ decor: fakeDecor([ahead]), ...o }); q.frame(0, { cellChanged: true }); q.frame(60)
+      const q = rig({ decor: fakeDecor([ahead]), ...o }); q.frame(0, { cellChanged: true }); q.frame(LOST_AFTER_S)
       expect(q.said, JSON.stringify(o)).toEqual([])
     }
-    const h = rig({ index: LOBBY, decor: fakeDecor([ahead]) }); h.frame(0, { cellChanged: true, floorHinted: true })
+    const h = rig({ index: LOBBY, decor: fakeDecor([ahead]) }); h.frame(0, { cellChanged: true, floorHinted: true }); h.frame(LOST_AFTER_S, { floorHinted: true })
     expect(h.said).toEqual([])                                           // the pull shows at once: the compass names a way
-    // the arrival's two plates already up: it waits out the window, then is said the moment the budget lets it (it is still true)
+    // the first run's lobby: a hint does not free the pull there, but it is a lead, and so is the note read: you are not lost
+    const f = rig({ index: LOBBY, decor: fakeDecor([ahead]), firstRun: fresh() })
+    f.frame(0, { cellChanged: true, floorHinted: true }); f.frame(LOST_AFTER_S + 10, { floorHinted: true })
+    expect(f.D.compassEl.textContent).toBe(''); expect(f.said).toEqual([])
+    const n = rig({ index: LOBBY, decor: fakeDecor([ahead]), firstRun: fresh() }); n.D.firstRun.onRead(FIRST_NOTE.key)
+    n.frame(0, { cellChanged: true }); n.frame(LOST_AFTER_S + 10)
+    expect(n.D.compassEl.textContent).toBe(''); expect(n.said).toEqual([])
+    // never while the veil is down
+    const v = rig({ index: LOBBY, decor: fakeDecor([ahead]) }); v.frame(0, { cellChanged: true }); v.frame(LOST_AFTER_S, { transitioning: true })
+    expect(v.said).toEqual([])
+    // a lobby arrival's exit hint at 3.8 s (a seeded world, a room) keeps the window's second plate: the line does not take it
     const w = rig({ index: LOBBY, decor: fakeDecor([ahead]) })
-    w.D.plates.admit('floor', 0); w.D.plates.admit('arrival', 0.1)
-    for (let t = 0; t < 45; t += 0.5) w.frame(t, { cellChanged: t === 0 })
-    expect(w.said).toEqual([])
-    w.frame(45); expect(w.said).toEqual([[LOST_LINE, PRIO.discovery]])
+    w.D.plates.admit('floor', 0)
+    for (let t = 0; t <= 3.8; t = Math.round((t + 0.1) * 10) / 10) w.frame(t, { cellChanged: t === 0 })
+    expect(w.said).toEqual([]); expect(w.D.plates.admit('arrival', 3.8, 'the hint.')).toBe('show')
   })
-  it('the block keeps its compass (the hold): the pull at once, true, and never the setting\'s line', () => {
+  it('the block keeps its compass (the hold): the pull at once, true, with its metres as in 2.0.3, and never the setting\'s line', () => {
+    expect(game).toContain('const s = compassText(compassOut, !!cfg.map)')
     const r = rig({ index: BLOCK, map: {}, decor: fakeDecor([{ x: 10.5, y: 0.5, kind: 'ring' }]) })
-    expect(r.frame(0, { cellChanged: true, pullPhase: Math.PI / 2 })).toBe(`↑  ${FAINT}`)
+    expect(r.frame(0, { cellChanged: true, pullPhase: Math.PI / 2 })).toBe(`↑  ${FAINT}  ·  10m`)
     expect(r.D.compassState.wobble).toBe(0); expect(r.said).toEqual([])
   })
   it('the lobby\'s exit hint, held for the first run, is said the moment the pull frees, and not before', () => {
@@ -502,6 +521,7 @@ describe('T1-2: the compass earns its pull', () => {
     expect(r.said.at(-1)).toEqual([hint, PRIO.discovery]); expect(r.st.hintHeld).toBe(false)
     const q = rig({ index: LOBBY, decor: L.decor, firstRun: fresh(), hint, player: { x: 11.5, y: 11.5, angle: 0 } })
     q.frame(0, { cellChanged: true, hintHeld: true })
+    q.frame(LOST_AFTER_S); expect(q.said.map((s) => s[0])).toEqual([LOST_LINE])     // a minute in, nothing known, no lead: the setting's line
     q.frame(PULL_FRESH_S - 0.1); expect(q.said.map((s) => s[0])).not.toContain(hint)
     q.frame(PULL_FRESH_S); expect(q.said.at(-1)).toEqual([hint, PRIO.discovery])
   })
@@ -512,7 +532,7 @@ describe('T1-2: the compass earns its pull', () => {
     const boot = slice('if (resume) {', 'if (bus) mpClient.onEv(bus.receive)')
     expect(boot).toContain('if (!resume && level.cfg.exit?.hint) { if (freshLobby()) hintHeld = true; else later(3800, level.cfg.exit.hint, PRIO.discovery) }')
     expect(boot.indexOf('startVisit()')).toBeLessThan(boot.indexOf('if (!resume && level.cfg.exit?.hint)'))
-    expect(game).toMatch(/const murmur = level\.messages\[[^\n]*\]\r?\n\s*if \(!hintHeld \|\| murmur !== cfg\.exit\?\.hint\) plate\('murmur', murmur, PRIO\.ambient, false\)/)
+    expect(game).toMatch(/const murmur = [^\n]*level\.messages\[murmurBag\.next\(\)\]\r?\n\s*if \(!hintHeld \|\| murmur !== cfg\.exit\?\.hint\) plate\('murmur', murmur, PRIO\.ambient, false\)/)
   })
   it('what frees the pull: a page read, a soul\'s word and a pinned trace (w3: the drawers\' pass); the visit clears it', () => {
     expect(slice('function revealScrap() {', 'function redactScrap() {')).toContain('floorHinted = true')
@@ -525,6 +545,37 @@ describe('T1-2: the compass earns its pull', () => {
     expect(src()).toContain('compassState.fallback = level.decor.nearestWayOn(player.x, player.y, compassState.skip)')
     expect(src()).not.toContain('nearestWayAny')
     expect(src()).not.toMatch(/\{ [a-z]+:|=>|\bnew\b|\[\]/)
+    expect(lift(PULL)).not.toMatch(/\{ [a-z]+:|=>|\bnew\b|\[\]/)
+  })
+  it('the pull is refilled once a frame, after the thread\'s step and before the map: the map reads it too', () => {
+    const loop = game.slice(loopAt)
+    expect(count(/const pull = /g)).toBe(1); expect(count(/pullAsk\.floorT = /g)).toBe(1)
+    const pullAt = loop.indexOf(lift(PULL))
+    expect(pullAt).toBeGreaterThan(loop.indexOf('if (cellChanged) { const rl = firstRun.onEnter(cix, ciy)'))
+    expect(pullAt).toBeLessThan(loop.indexOf('const st = fog.step('))
+    expect(pullAt).toBeLessThan(loop.indexOf('if (hintHeld && pull)'))
+  })
+  it('a tenant\'s map marks the loaded ways only once the pull is free, and not while the first run leans on its room (T1-2 holds for every column)', () => {
+    const body = slice('function pinSeen(reach) {', 'const entityAsm = createEntityAssembler()')
+    const REVEAL = /if \(rules\.wayReveal === 'loaded' && pullVisible\(pullAsk\) && !firstRun\.toward\(\)\) \{[^\n]*\}/
+    expect(body).toMatch(REVEAL)
+    const exits = [{ x: 3.5, y: 0.5, kind: 'down' }, { x: 40.5, y: 9.5, kind: 'lift' }]
+    const run = (rules, pullAsk, firstRun = createFirstRun()) => {
+      const pinned = []
+      new Function('rules', 'pullVisible', 'pullAsk', 'firstRun', 'level', 'fog', 'L', 'epochOf', 'CHUNK_SIZE', body.match(REVEAL)[0])(
+        rules, pullVisible, pullAsk, firstRun, { decor: { getExits: () => exits } }, { pinWay: (l, e) => pinned.push(e) }, 1, () => 0, CHUNK_SIZE)
+      return pinned
+    }
+    const ask = (o) => ({ floorT: 0, hinted: false, fresh: false, step: 0, ...o })
+    const tenant = { wayReveal: 'loaded' }
+    expect(run(tenant, ask({ floorT: 0 }))).toEqual([])                                   // arrived: the map waits like everyone's
+    expect(run(tenant, ask({ floorT: PULL_WAIT_S - 0.1 }))).toEqual([])
+    expect(run(tenant, ask({ floorT: PULL_WAIT_S }))).toEqual(exits)                      // then the file's plans, every loaded way
+    expect(run(tenant, ask({ floorT: 5, hinted: true }))).toEqual(exits)
+    expect(run({ wayReveal: 'seen' }, ask({ floorT: 500 }))).toEqual([])
+    const fr = createFirstRun({ fresh: true }); fr.onLevel(LOBBY); fr.onRead(FIRST_NOTE.key); fr.onSoul(FIRST_SOUL.key)
+    expect(fr.toward()).toBe(FIRST_ROOM.way)
+    expect(run(tenant, ask({ floorT: 30, fresh: true, step: fr.step() }), fr)).toEqual([])   // the room's pull leads while the thread waits on it
   })
 })
 
@@ -608,13 +659,43 @@ describe('T1-3: the first run, authored', () => {
   })
 })
 
+// the wrapper, later(), startVisit and the frame's drain lifted together and run on a play clock with the real budget; with `queue`
+// the real message queue too, ticked every frame, and what reaches #msg is recorded (else every line handed to showMessage is).
+// `map`: the block's cfg.map
+function arrival({ map = null, queue = false } = {}) {
+  const said = [], timers = []
+  let now = 0
+  const msgQ = queue ? createMessageQueue() : { idle: () => true }
+  const show = queue ? (t, p) => msgQ.push(t, p) : (t) => said.push([now, t])
+  const drain = slice('const held = plates.drain(playT)', '// ── Living Atmosphere')
+  // (w3: startVisit also starts the floor's events and its dread over: inert stand-ins here, replayed for real in the w3 section)
+  const h = new Function('plates', 'showMessage', 'setTimeout', 'PRIO', 'msgQ', 'level',
+    `let playT = 0, arrivalGen = 0, floorT0 = 0, floorHinted = false, pullPhase = 0, lostSaid = false, hintHeld = false\n` +
+    'let dreadQuietT = 0, sanity = 100, fieldOn = false, fxLeft = 0\nconst eventSched = { arrive() {} }, teller = { reset() {} }, dreadOut = { dread: 0 }\n' +
+    `${lift(PLATE)}\n` +
+    `${lift(LATER)}\n${lift(VISIT)}\nfunction drainFrame() {\n${drain}\n}\n` +
+    'return { plate, later, startVisit, drainFrame, set: (t) => { playT = t } }')(createPlateBudget(), show, (f, ms) => timers.push({ ms, f, done: false }), PRIO,
+    msgQ, { index: map ? BLOCK : 1, cfg: { map } })
+  const run = (to, events = {}) => {
+    for (; now <= to + 1e-9; now = Math.round((now + 0.1) * 10) / 10) {
+      h.set(now)
+      for (const t of timers) if (!t.done && t.ms / 1000 <= now + 1e-9) { t.done = true; t.f() }
+      if (events[now]) events[now]()
+      h.drainFrame()
+      if (queue) { const r = msgQ.tick(0.1); if (r?.show) said.push([now, r.text]) }
+    }
+  }
+  return { h, said, run }
+}
+
 describe('T1-4: the plate budget, and the plates that go', () => {
   it('plate() wraps showMessage for the budgeted kinds: shown when admitted; a line held back is kept for later only when asked', () => {
-    // (w3: no kind is a line not said at all — the arrival's event is heard, not read)
-    expect(lift(PLATE)).toMatch(/if \(!kind \|\| !text \|\| plates\.admit\(kind, playT, keep \? text : null\) !== 'show'\) return false\r?\n\s*showMessage\(text, prio\)\r?\n\s*return true/)
+    // (w3: no kind is a line not said at all — the arrival's event is heard, not read; the block keeps 2.0.3's lines, unbudgeted (the
+    // hold); an ambient line the queue would drop is not shown, so it is never counted)
+    expect(lift(PLATE)).toMatch(/if \(!kind \|\| !text\) return false\r?\n\s*if \(level\.cfg\.map\) \{ showMessage\(text, prio\); return true \}[^\n]*\r?\n\s*if \(prio === PRIO\.ambient && !msgQ\.idle\(\)\) return false[^\n]*\r?\n\s*if \(plates\.admit\(kind, playT, keep \? text : null\) !== 'show'\) return false\r?\n\s*showMessage\(text, prio\)\r?\n\s*return true/)
   })
   it('the arrival\'s delayed lines are its plates; the murmurs, the scheduled events and the placed haunts are let go when held back', () => {
-    expect(game).toContain("function later(ms, text, prio) { const g = arrivalGen; setTimeout(() => { if (g === arrivalGen) plate('arrival', text, prio) }, ms) }")
+    expect(game).toContain("function later(ms, text, prio, keep = true) { const g = arrivalGen; setTimeout(() => { if (g === arrivalGen) plate('arrival', text, prio, keep) }, ms) }")
     const fe = slice("function fireEvent(id, prio = PRIO.ambient, kind = 'event') {", 'function startSearch(p, th) {')
     expect(fe).not.toMatch(/showMessage\(/)
     expect((fe.match(/plate\(kind, '[^']+', (prio|PRIO\.interaction), false\)/g) || []).length).toBe(6)
@@ -628,28 +709,6 @@ describe('T1-4: the plate budget, and the plates that go', () => {
     expect(game.slice(loopAt)).toMatch(/plate\('murmur', murmur, PRIO\.ambient, false\)\r?\n\s*\}\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const held = plates\.drain\(playT\)\r?\n\s*if \(held\) showMessage\(held, PRIO\.discovery\)/)
     expect(count(/plates\.drain\(/g)).toBe(1)
   })
-  // the wrapper, later(), startVisit and the frame's drain lifted together and run on a play clock with the real budget
-  function arrival() {
-    const said = [], timers = []
-    let now = 0
-    const drain = slice('const held = plates.drain(playT)', '// ── Living Atmosphere')
-    // (w3: startVisit also starts the floor's events and its dread over: inert stand-ins here, replayed for real in the w3 section)
-    const h = new Function('plates', 'showMessage', 'setTimeout', 'PRIO',
-      `let playT = 0, arrivalGen = 0, floorT0 = 0, floorHinted = false, pullPhase = 0, lostSaid = false, hintHeld = false\n` +
-      'let dreadQuietT = 0, sanity = 100, fieldOn = false, fxLeft = 0\nconst level = { index: 1 }, eventSched = { arrive() {} }, teller = { reset() {} }, dreadOut = { dread: 0 }\n' +
-      `${lift(PLATE)}\n` +
-      `${lift(/function later\(ms, text, prio\) \{[^\n]*\}/)}\n${lift(VISIT)}\nfunction drainFrame() {\n${drain}\n}\n` +
-      'return { plate, later, startVisit, drainFrame, set: (t) => { playT = t } }')(createPlateBudget(), (t) => said.push([now, t]), (f, ms) => timers.push({ ms, f, done: false }), PRIO)
-    const run = (to, events = {}) => {
-      for (; now <= to + 1e-9; now = Math.round((now + 0.1) * 10) / 10) {
-        h.set(now)
-        for (const t of timers) if (!t.done && t.ms / 1000 <= now + 1e-9) { t.done = true; t.f() }
-        if (events[now]) events[now]()
-        h.drainFrame()
-      }
-    }
-    return { h, said, run }
-  }
   it('replayed: two plates at most in an arrival\'s first 45 s; the kept ones after, one a while; the let-go ones never; what you do always', () => {
     const { h, said, run } = arrival()
     h.startVisit()
@@ -668,6 +727,37 @@ describe('T1-4: the plate budget, and the plates that go', () => {
     run(200)
     expect(said.slice(8).map((s) => s[1])).toEqual(['the next floor.'])
   })
+  it('replayed with the real queue: a murmur the queue drops (the floor\'s plate still up) is never counted, so the hint keeps the window\'s second plate', () => {
+    const { h, said, run } = arrival({ queue: true })
+    const got = []
+    h.startVisit()
+    h.plate('floor', 'level one.', PRIO.combat)
+    h.later(3800, 'the hint.', PRIO.discovery)
+    run(44.9, { 1.5: () => got.push(h.plate('murmur', 'a murmur.', PRIO.ambient, false)) })
+    expect(got).toEqual([false])
+    expect(said.map((s) => s[1])).toEqual(['level one.', 'the hint.'])
+    expect(said[1][0]).toBeGreaterThanOrEqual(3.8); expect(said[1][0]).toBeLessThan(5)
+    // past the window too: a murmur dropped while a line shows does not start the 20 s gap, so the next unprompted line is not held off
+    run(70, { 60: () => h.plate('search', 'in the drawer.', PRIO.interaction), 61: () => got.push(h.plate('murmur', 'a murmur.', PRIO.ambient, false)),
+      70: () => got.push(h.plate('event', 'a door.', PRIO.ambient, false)) })
+    expect(got).toEqual([false, false, true])
+    expect(said.map((s) => s[1])).toEqual(['level one.', 'the hint.', 'in the drawer.', 'a door.'])
+  })
+  it('a line whose moment passes with the arrival (the way you came, the arrival summary) is let go when held back, not read 45 s on', () => {
+    const t = slice('function travel(way) {', '// die(): death.js resolves it')
+    expect(t).toContain('if (wm) later(7500, wm, PRIO.discovery, false)')
+    expect(t).toContain('if (wm) later(3800, wm, PRIO.discovery, false)')
+    expect(t).toContain('if (s) later(7500, s, PRIO.discovery, false)')
+    // what stays true when it is read late is kept: the hint, the filing line, the raised ceiling, the mercy line, the wake's lines
+    expect((t.match(/later\([^\n]*, false\)/g) || []).length).toBe(3)
+    expect(slice('function die(d = null) {', '// ── input ──')).not.toMatch(/later\([^\n]*, false\)/)
+    const { h, said, run } = arrival()
+    h.startVisit()
+    h.plate('floor', 'the floor.', PRIO.combat)
+    h.later(3800, 'the hint.', PRIO.discovery); h.later(7500, 'the way.', PRIO.discovery, false); h.later(7600, 'the form.', PRIO.discovery)
+    run(80)
+    expect(said).toEqual([[0, 'the floor.'], [3.8, 'the hint.'], [45, 'the form.']])
+  })
   it('you rummage. is no plate any more: the scrape alone, and the hint says what you search while the hold runs', () => {
     expect(game).not.toContain('you rummage.')
     expect(game).toMatch(/function startSearch\(p, th\) \{\r?\n\s*if \(th\.hunted \|\| th\.nearest <= 4\) \{ showMessage\([^\n]*\); return \}\r?\n\s*searchTarget = p; searchT = SEARCH_HOLD_S; searchHint = searchingHint\(p\.type\)\r?\n\s*drawerSlide\(\)/)
@@ -677,10 +767,10 @@ describe('T1-4: the plate budget, and the plates that go', () => {
     expect(searchingHint('cabinet')).toBe(`searching ${CONTAINER_TYPES.cabinet}`)
   })
   it('the flashlight\'s plain lines once a run, then the light alone; going dark in a friend\'s light always names them', () => {
-    const L = lift(/if \(K\['KeyL'\]\) \{[\s\S]*?\r?\n {6}\}/)
-    const run = new Function('K', 'kneel', 'litOffLine', 'showMessage', 'LIGHT_STAYS_LINE', 'st',
+    const L = lift(LIGHT)
+    const run = new Function('K', 'kneel', 'litOffLine', 'showMessage', 'LIGHT_STAYS_LINE', 'cfg', 'st',
       `let { flashlight, lightToggles, litRec, lightSaid } = st\n${L}\nObject.assign(st, { flashlight, lightToggles, lightSaid })`)
-    const said = [], press = (st) => run({ KeyL: true }, { st: null }, litOffLine, (m) => said.push(m), 'your light stays on them.', st)
+    const said = [], press = (st) => run({ KeyL: true }, { st: null }, litOffLine, (m) => said.push(m), 'your light stays on them.', { map: null }, st)
     const st = { flashlight: true, lightToggles: 0, litRec: null, lightSaid: false }
     press(st); press(st); press(st)
     expect(said).toEqual([litOffLine(null)])
@@ -748,7 +838,7 @@ describe('T1-5: events that carry their own effect, the arrival\'s event, the mu
     let now = 0
     const plates = createPlateBudget(); plates.arrive(-1000)
     const D = {
-      PRIO, eventFx, evConfig: { events: EVENTS }, CALL_LEN, FX_PLAY, FOOTSTEPS_ECHO, plates, level: { index },
+      PRIO, eventFx, evConfig: { events: EVENTS }, CALL_LEN, FX_PLAY, FOOTSTEPS_ECHO, plates, level: { index, cfg: { map: null } }, msgQ: { idle: () => true },
       call: (s, g, p) => heard.push([now, s, g, p]), showMessage: (t, p) => said.push([now, t, p]),
       panelsOut: () => other.push('panels'), doorSlam: () => other.push('slam'), humDuck: () => other.push('duck'), whisper: () => other.push('whisper'),
       footfall: () => other.push('footfall'), heartbeat: () => {}, spawnCrosser: () => other.push('crosser'),
@@ -805,7 +895,8 @@ describe('T1-5: events that carry their own effect, the arrival\'s event, the mu
   })
   it('plate(): no kind is a line not said at all, and the budget is never asked', () => {
     const asked = [], shown = []
-    const plate = new Function('plates', 'showMessage', `let playT = 5\n${lift(PLATE)}\nreturn plate`)({ admit: (...a) => { asked.push(a); return 'show' } }, (t) => shown.push(t))
+    const plate = new Function('plates', 'showMessage', 'level', 'msgQ', 'PRIO', `let playT = 5\n${lift(PLATE)}\nreturn plate`)(
+      { admit: (...a) => { asked.push(a); return 'show' } }, (t) => shown.push(t), { cfg: { map: null } }, { idle: () => true }, PRIO)
     expect(plate(null, 'a phone.', PRIO.ambient, false)).toBe(false)
     expect([asked, shown]).toEqual([[], []])
     expect(plate('event', 'a phone.', PRIO.ambient, false)).toBe(true); expect(shown).toEqual(['a phone.'])
@@ -838,8 +929,9 @@ describe('T1-5: events that carry their own effect, the arrival\'s event, the mu
     expect(count(/eventSched\.arrive\(/g)).toBe(1)                                          // only here: travel, the wake, the start, a resume
   })
   it('the murmurs come from a bag the floor builds with its lines: each once before any comes again, never twice running', () => {
-    expect(game).toMatch(/const murmur = level\.messages\[murmurBag\.next\(\)\]\r?\n\s*if \(!hintHeld \|\| murmur !== cfg\.exit\?\.hint\) plate\('murmur', murmur, PRIO\.ambient, false\)/)
-    expect(game).not.toMatch(/level\.messages\[Math\.floor\(Math\.random\(\)/)
+    // (the block draws by its coin, as it did: the hold)
+    expect(game).toMatch(/const murmur = cfg\.map \? level\.messages\[Math\.floor\(Math\.random\(\) \* level\.messages\.length\)\] : level\.messages\[murmurBag\.next\(\)\]\r?\n\s*if \(!hintHeld \|\| murmur !== cfg\.exit\?\.hint\) plate\('murmur', murmur, PRIO\.ambient, false\)/)
+    expect(count(/level\.messages\[Math\.floor\(Math\.random\(\)/g)).toBe(1)
     const b0 = at('function buildLevel(index, at = null) {'), bagAt = at('murmurBag = createBag(messages.length)')
     expect(bagAt).toBeGreaterThan(at('].filter(Boolean)', b0))
     expect(bagAt).toBeLessThan(at('level = { index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages }'))
@@ -848,7 +940,7 @@ describe('T1-5: events that carry their own effect, the arrival\'s event, the mu
     const messages = [...cfg.messages, cfg.exit?.hint].filter(Boolean)
     const draw = new Function('messages', 'createBag', 'plate', 'PRIO', 'cfg', 'hintHeld',
       `let murmurBag\n${lift(/murmurBag = createBag\(messages\.length\)/)}\nconst level = { messages }\n` +
-      `return () => { ${lift(/const murmur = level\.messages\[murmurBag\.next\(\)\][^\n]*\r?\n[^\n]*/)} }`)
+      `return () => { ${lift(MURMUR)} }`)
     const said = []
     const next = draw(messages, createBag, (k, t) => { said.push(t); return true }, PRIO, cfg, false)
     for (let i = 0; i < messages.length; i++) next()
@@ -956,7 +1048,7 @@ describe('T1-9: drawers that pay a little more', () => {
 })
 
 describe('T1-8: dread you hear before you see', () => {
-  const DREAD = () => slice('// ── dread (dread.js)', '// ── the faint pull')
+  const DREAD = () => slice('// ── dread (dread.js)', '// ── the lobby\'s exit hint, held for the first run')
   // a real level 1 around its spawn, the chunks preload holds; the creatures are placed by a field of its own
   let world = null
   const L1 = () => world ?? (world = (() => {
@@ -990,7 +1082,7 @@ describe('T1-8: dread you hear before you see', () => {
 
   it('runs after the frame\'s preload (the field reads only the chunks it holds) and before the compass; its block allocates nothing', () => {
     expect(at('// ── dread (dread.js)', loopAt)).toBeGreaterThan(at('level.cache.preload(pcx, pcy)', loopAt))
-    expect(at('// ── dread (dread.js)', loopAt)).toBeLessThan(at('// ── the faint pull', loopAt))
+    expect(at('// ── dread (dread.js)', loopAt)).toBeLessThan(at('// ── the compass (compass.js)', loopAt))
     expect(DREAD()).toMatch(/const near = creaturesLive && !transitioning && !cfg\.map && dreadNear\(ents, player\)/)
     expect(DREAD()).toMatch(/const tell = teller\.tick\(DREAD_CLOCK\.tick, dreadOut, player\)\r?\n\s*if \(tell\) call\(tell\.sound, tell\.gain, tell\.pan\)/)
     expect(DREAD()).not.toMatch(/\{ [a-z]+:|=>|\bnew\b|\[\]/)
@@ -1036,5 +1128,62 @@ describe('T1-8: dread you hear before you see', () => {
     for (let i = 0; i < 600; i++) { tn = t.tick(1 / 60, null, 100, r.D.dreadOut.dread); tc = calm.tick(1 / 60, null, 100, 0) }
     expect(tn.beat).toBeLessThan(Infinity); expect(tn.mood).not.toBe('hunt'); expect(tn.huntLevel).toBe(0)
     expect(tc.beat).toBe(Infinity)
+  })
+})
+
+// ── the hold: Level ∅ (the block) keeps 2.0.3. Nothing of this pass reaches it: its compass, its plates, its murmurs, its light ────────
+
+describe('the hold: the block keeps 2.0.3', () => {
+  const B = levelConfig(DEFAULT_CONFIG, BLOCK)
+  it('the block is the one floor with a map of its own (cfg.map), the flag every guard below reads', () => {
+    expect(B.map).toBeTruthy()
+    for (const i of [0, 1, 2, 3]) expect(levelConfig(DEFAULT_CONFIG, i).map, String(i)).toBeFalsy()
+  })
+  it('its compass keeps the faint line\'s metres, as in 2.0.3; the four floors\' faint line names none', () => {
+    expect(game).toContain('const s = compassText(compassOut, !!cfg.map)')
+    const out = [{ arrow: '↗', text: FAINT, dist: 19 }]
+    expect(compassText(out, !!B.map)).toBe(`↗  ${FAINT}  ·  19m`)
+    expect(compassText(out, !!levelConfig(DEFAULT_CONFIG, 1).map)).toBe(`↗  ${FAINT}`)
+  })
+  it('plate() on the block goes straight to showMessage: the budget is never asked, the queue alone decides (as in 2.0.3)', () => {
+    const asked = [], shown = []
+    const plate = new Function('plates', 'showMessage', 'level', 'msgQ', 'PRIO', `let playT = 5\n${lift(PLATE)}\nreturn plate`)(
+      { admit: (...a) => { asked.push(a); return 'queue' } }, (t, p) => shown.push([t, p]), { cfg: { map: B.map } }, { idle: () => false }, PRIO)
+    expect(plate('floor', 'the block.', PRIO.combat)).toBe(true)
+    expect(plate('arrival', 'the gap.', PRIO.discovery)).toBe(true)
+    expect(plate('murmur', 'a window.', PRIO.ambient, false)).toBe(true)
+    expect(plate(null, 'heard, not read.', PRIO.ambient)).toBe(false)
+    expect(asked).toEqual([])
+    expect(shown).toEqual([['the block.', PRIO.combat], ['the gap.', PRIO.discovery], ['a window.', PRIO.ambient]])
+  })
+  it('replayed with the real queue: the block\'s name, its gap\'s line at 3.8 s and a murmur at 30 s all reach the screen, as in 2.0.3', () => {
+    const { h, said, run } = arrival({ map: B.map, queue: true })
+    h.startVisit()
+    h.plate('floor', 'the block.', PRIO.combat)
+    h.later(3800, 'the gap.', PRIO.discovery)
+    run(60, { 30: () => h.plate('murmur', 'a window.', PRIO.ambient, false) })
+    expect(said.map((s) => s[1])).toEqual(['the block.', 'the gap.', 'a window.'])
+    expect(said[2][0]).toBe(30)
+  })
+  it('its murmurs are drawn by the coin, as in 2.0.3, and the four floors\' bag is never asked', () => {
+    const messages = ['one.', 'two.', 'three.'], said = []
+    const bag = { n: 0, next() { this.n++; return 1 } }
+    const draw = (map) => new Function('level', 'murmurBag', 'plate', 'PRIO', 'cfg', 'hintHeld', `${lift(MURMUR)}`)(
+      { messages }, bag, (k, t) => { said.push(t); return true }, PRIO, { map }, false)
+    const spy = vi.spyOn(Math, 'random')
+    try { spy.mockReturnValue(0.99); draw(B.map); spy.mockReturnValue(0); draw(B.map); draw(B.map) } finally { spy.mockRestore() }
+    expect(said).toEqual(['three.', 'one.', 'one.']); expect(bag.n).toBe(0)
+    draw(null); expect(said.at(-1)).toBe('two.'); expect(bag.n).toBe(1)                        // below the block: the bag
+  })
+  it('every flashlight toggle on the block says its line, as in 2.0.3, and does not use up the run\'s first line below', () => {
+    const run = new Function('K', 'kneel', 'litOffLine', 'showMessage', 'LIGHT_STAYS_LINE', 'cfg', 'st',
+      `let { flashlight, lightToggles, litRec, lightSaid } = st\n${lift(LIGHT)}\nObject.assign(st, { flashlight, lightToggles, lightSaid })`)
+    const said = [], st = { flashlight: true, lightToggles: 0, litRec: null, lightSaid: false }
+    const press = (map) => run({ KeyL: true }, { st: null }, litOffLine, (m) => said.push(m), 'your light stays on them.', { map }, st)
+    for (let i = 0; i < 4; i++) press(B.map)
+    expect(said).toEqual([litOffLine(null), 'flashlight on.', litOffLine(null), 'flashlight on.'])
+    expect(st.lightSaid).toBe(false)
+    press(null); press(null)                                                                   // then below: the run's first line, then the light alone
+    expect(said.slice(4)).toEqual([litOffLine(null)])
   })
 })
