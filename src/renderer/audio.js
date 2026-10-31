@@ -1,6 +1,13 @@
 let actx, humGain, humOsc, ambienceGain
 let ambienceOn  = true   // the toggle
 let ambienceVol = 1      // the volume scale (1 == 100%, the historic level)
+let humBase  = 120       // the hum's base pitch (config.audio.humFrequency), kept by initAudio: setFlicker dips from it
+let noiseBuf = null      // one second of white noise, built once by initAudio: every step, page, hiss, pant and rasp plays a slice of it
+
+const PEAK_CAP = 0.06    // the loudest the pulse's small sounds (and the hum, through setHum) may ever be, at the bus
+const NOISE_S  = 1       // the shared noise, s
+const HUM_GAIN = 0.018   // the hum's level; setHum's gainMul multiplies it
+const cap = (v) => (v > PEAK_CAP ? PEAK_CAP : v)
 
 export function initAudio(config) {
   try {
@@ -12,15 +19,21 @@ export function initAudio(config) {
     ambienceGain.gain.value = 1
     ambienceGain.connect(actx.destination)
 
+    // the shared noise: your steps land 2-4 times a second on a phone, so no noise recipe below allocates its own
+    noiseBuf = actx.createBuffer(1, actx.sampleRate * NOISE_S, actx.sampleRate)
+    const nd = noiseBuf.getChannelData(0)
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1
+
     // Fluorescent hum
+    humBase = config.audio.humFrequency
     humOsc  = actx.createOscillator()
     humGain = actx.createGain()
     const humFilter = actx.createBiquadFilter()
     humFilter.type = 'lowpass'
     humFilter.frequency.value = 400
     humOsc.type = 'sawtooth'
-    humOsc.frequency.value = config.audio.humFrequency
-    humGain.gain.value = 0.018
+    humOsc.frequency.value = humBase
+    humGain.gain.value = HUM_GAIN
     humOsc.connect(humFilter)
     humFilter.connect(humGain)
     humGain.connect(ambienceGain)
@@ -44,9 +57,9 @@ export function initAudio(config) {
 
 export function setFlicker(intensity) {
   if (!humOsc || !actx) return
-  // Hum pitch drops slightly during flicker
+  // Hum pitch drops slightly during flicker (from the configured base; setHum's glide rides on the detune, so this never undoes it)
   humOsc.frequency.setTargetAtTime(
-    120 * (0.85 + intensity * 0.15),
+    humBase * (0.85 + intensity * 0.15),
     actx.currentTime,
     0.05
   )
@@ -514,13 +527,7 @@ export function bump(kind, intensity = 1, pan = 0) {
       g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.09 * k, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0004, t + 0.25)
       o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.27)
     } else if (kind === 'scrape') {
-      const len = Math.floor(actx.sampleRate * 0.12)
-      const buf = actx.createBuffer(1, len, actx.sampleRate); const d = buf.getChannelData(0)
-      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2)
-      const src = actx.createBufferSource(); src.buffer = buf
-      const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 1.2
-      const g = actx.createGain(); g.gain.setValueAtTime(0.07 * k, t); g.gain.exponentialRampToValueAtTime(0.0004, t + 0.12)
-      src.connect(bp); bp.connect(g); g.connect(dest); src.start(t); src.stop(t + 0.13)
+      scrapeInto(dest, t, 0.07 * k)
     } else if (kind === 'wood') {
       const o = actx.createOscillator(), g = actx.createGain()
       o.type = 'sine'
@@ -531,6 +538,17 @@ export function bump(kind, intensity = 1, pan = 0) {
       whisperInto(dest, 0.5)
     }
   } catch { /* ignore */ }
+}
+// the scrape's graph (bump's 'scrape', and call's: a chair moving somewhere): 0.12 s of noise falling away, band-passed at 900 Hz.
+// Its envelope is baked into its own short buffer, so it keeps it rather than slicing the shared noise.
+function scrapeInto(dest, t, peak) {
+  const len = Math.floor(actx.sampleRate * 0.12)
+  const buf = actx.createBuffer(1, len, actx.sampleRate); const d = buf.getChannelData(0)
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2)
+  const src = actx.createBufferSource(); src.buffer = buf
+  const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 1.2
+  const g = actx.createGain(); g.gain.setValueAtTime(peak, t); g.gain.exponentialRampToValueAtTime(0.0004, t + 0.12)
+  src.connect(bp); bp.connect(g); g.connect(dest); src.start(t); src.stop(t + 0.13)
 }
 // where a bump plays: the ambience bus, through a panner when one is asked for and the engine has them (a centred bump needs none)
 function panTo(pan) {
@@ -597,5 +615,194 @@ export function humDuck(seconds = 2.6) {
         }
       } catch { /* ignore */ }
     }, seconds * 1000)
+  } catch { /* ignore */ }
+}
+
+// ── the pulse's small sounds (T1-1): your own steps, the things you take and read, the panels going out, the calls the building
+//    makes (a creature's tell, a landmark) and the hum's glide. All on the ambience bus, panned through panTo where they take a pan,
+//    never louder than PEAK_CAP however they are asked; no-ops without audio, and none of them throws. ──
+
+// a slice of the shared noise: `dur` s from a random place in it, ended by its own duration, so no two sound alike and none allocates
+function noiseAt(t, dur) {
+  const src = actx.createBufferSource(); src.buffer = noiseBuf
+  src.start(t, Math.random() * (NOISE_S - dur), dur)
+  return src
+}
+// (a low- or high-pass takes its Q in dB here: -3 is flat, no peak at the corner to push a recipe over its cap)
+function filter(type, freq, q) {
+  const f = actx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q
+  return f
+}
+// struck: from nothing up to `peak` in `atk` s, then away to nothing by `end` s (the exponential pair every one-shot here uses)
+function struck(g, t, peak, atk, end) {
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + atk); g.gain.exponentialRampToValueAtTime(0.0004, t + end)
+}
+// one struck oscillator: `type` at f0, gliding to f1 by t + glide when f1 is given, through `via` when given, stopped once it is quiet
+function voice(dest, type, f0, f1, glide, t, peak, atk, end, via) {
+  const o = actx.createOscillator(), g = actx.createGain()
+  o.type = type
+  o.frequency.setValueAtTime(f0, t); if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + glide)
+  struck(g, t, peak, atk, end)
+  if (via) { o.connect(via); via.connect(g) } else o.connect(g)
+  g.connect(dest); o.start(t); o.stop(t + end + 0.01)
+}
+// one struck burst of the shared noise through one filter; the filter is handed back for a recipe that moves it
+function burst(dest, type, freq, q, t, peak, atk, dur) {
+  const src = noiseAt(t, dur), f = filter(type, freq, q), g = actx.createGain()
+  struck(g, t, peak, atk, dur)
+  src.connect(f); f.connect(g); g.connect(dest)
+  return f
+}
+
+// Your own steps, by floor: game.js plays STEP_MATERIAL[level.index] on each step you actually take. Level ∅ has no entry (the hold).
+export const STEP_MATERIAL = Object.freeze({ 0: 'carpet', 1: 'concrete', 2: 'grate', 3: 'rubber' })
+const STEP_PEAK = 0.035   // at intensity 1: a walk's knock (0.5) peaks at 0.35 x footfall's 0.05
+const STEP_BAND = 1.7     // a band of noise passes a small part of its gain: the noise in a step gets this much more, still under the cap
+// (levelled against the hum in an A-weighted offline render: a walk sits a little under the hum, a sprint about level with it)
+const STEPS = {
+  carpet:   (d, t, p) => { burst(d, 'bandpass', 300, 0.3, t, p * STEP_BAND, 0.008, 0.06) },        // the lobby: a soft thump of noise
+  concrete: (d, t, p) => { voice(d, 'sine', 90, 60, 0.05, t, p, 0.004, 0.05)                         // a low knock
+                           voice(d, 'sine', 2000, 0, 0, t, p * 0.7, 0.001, 0.012) },                  // and the grit under the sole
+  grate:    (d, t, p) => { voice(d, 'triangle', 260, 0, 0, t, p, 0.004, 0.07)                         // a hollow step
+                           voice(d, 'sine', 1800, 0, 0, t, p * 0.18, 0.002, 0.14) },                  // and the mesh pinging after it
+  rubber:   (d, t, p) => { voice(d, 'sine', 70, 0, 0, t, p * 0.6, 0.006, 0.06)                       // the matting: one dull tap
+                           burst(d, 'bandpass', 600, 0.5, t, p * 1.1, 0.006, 0.05) },                 // and the sole on it (a 70 Hz tap alone is felt, not heard)
+  // not a floor's: the dead-panels district's wet carpet (2c), the thump with a squelch as its band slides down
+  wet:      (d, t, p) => { const f = burst(d, 'bandpass', 900, 0.8, t, p * STEP_BAND, 0.01, 0.1)
+                           f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(380, t + 0.09) },
+}
+
+// One step: `intensity` 0..1 (0.5 a walk, 0.9 a sprint), `pan` -1..1. An unknown material (Level ∅'s none) plays nothing.
+export function step(material, intensity = 0.5, pan = 0) {
+  if (!actx || !(intensity > 0) || !Object.hasOwn(STEPS, material)) return
+  try {
+    STEPS[material](panTo(pan), actx.currentTime, STEP_PEAK * (intensity > 1 ? 1 : intensity))
+  } catch { /* ignore */ }
+}
+
+// Taking something (the tray, a machine's dispense): two 30 ms ticks, 1.2 then 1.6 kHz.
+export function pickup() {
+  if (!actx) return
+  try {
+    const d = ambienceGain || actx.destination, t = actx.currentTime
+    voice(d, 'sine', 1200, 0, 0, t, 0.04, 0.002, 0.03)
+    voice(d, 'sine', 1600, 0, 0, t + 0.05, 0.04, 0.002, 0.03)
+  } catch { /* ignore */ }
+}
+
+// Paper in your hands: 'page' a note opened (one 0.18 s high-passed rustle), 'map' the map unfolded (two 0.1 s, a little heavier).
+export function paper(kind) {
+  if (!actx || (kind !== 'page' && kind !== 'map')) return
+  try {
+    const d = ambienceGain || actx.destination, t = actx.currentTime
+    if (kind === 'page') burst(d, 'highpass', 2400, -3, t, 0.035, 0.012, 0.18)
+    else { burst(d, 'highpass', 1600, -3, t, 0.032, 0.01, 0.1); burst(d, 'highpass', 1800, -3, t + 0.14, 0.025, 0.01, 0.1) }
+  } catch { /* ignore */ }
+}
+
+// The lights cascade (silent until now): three soft thuds a quarter second apart, bump's thud lower, each panel further off.
+export function panelsOut() {
+  if (!actx) return
+  try {
+    const d = ambienceGain || actx.destination, t = actx.currentTime
+    for (let i = 0; i < 3; i++) voice(d, 'sine', 110, 40, 0.14, t + i * 0.25, 0.045 * Math.pow(0.8, i), 0.006, 0.18)
+  } catch { /* ignore */ }
+}
+
+// The calls: a creature's tell (dread.js TELL) or a landmark (soundscape.js CALLS), each written at full scale and played at `gain`.
+const CALLS = {
+  // the payphone through the walls: a bell, not a dial tone. Two gongs, 1.1 and 1.4 kHz, under a low-pass (the walls take the top);
+  // the clapper strikes them in turn, 20 blows a second for 2 s, each falling away before the next, then they ring out. One call
+  // is the 2 s on; the off is the caller's cadence.
+  ring(d, t, k) {
+    const wall = filter('lowpass', 1500, -3)
+    wall.connect(d)
+    for (let gong = 0; gong < 2; gong++) {
+      const o = actx.createOscillator(), g = actx.createGain()
+      const peak = PEAK_CAP * k * (gong ? 0.4 : 0.6), first = t + gong * 0.05, lastBlow = first + 1.9   // the lower gong carries further
+      o.type = 'sine'; o.frequency.value = gong ? 1400 : 1100
+      for (let i = 0; i < 20; i++) {
+        const s = first + i * 0.1, a = peak * (i ? 1 : gong ? 0.85 : 0.7)                                // the clapper comes up to speed
+        g.gain.setValueAtTime(a, s)
+        g.gain.exponentialRampToValueAtTime(i < 19 ? a * 0.3 : 0.0004, s + (i < 19 ? 0.098 : 0.45))
+      }
+      o.connect(g); g.connect(wall); o.start(first); o.stop(lastBlow + 0.46)
+    }
+  },
+  // a receiver left off the hook: the two tones of a line ringing somewhere else, small, from an earpiece, steady for 2 s
+  offhook(d, t, k) {
+    const ear = filter('bandpass', 700, 0.6), g = actx.createGain(), peak = 0.02 * k
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.03); g.gain.setValueAtTime(peak, t + 1.95); g.gain.linearRampToValueAtTime(0, t + 2)
+    const a = actx.createOscillator(), b = actx.createOscillator()
+    a.frequency.value = 440; b.frequency.value = 480
+    a.connect(ear); b.connect(ear); ear.connect(g); g.connect(d)
+    a.start(t); b.start(t); a.stop(t + 2.02); b.stop(t + 2.02)
+  },
+  // the TV wall: a swell of static, band-passed high
+  hiss(d, t, k) {
+    const src = noiseAt(t, 0.4), bp = filter('bandpass', 4500, 0.6), g = actx.createGain(), peak = 0.035 * k
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.06); g.gain.linearRampToValueAtTime(peak * 0.7, t + 0.3); g.gain.linearRampToValueAtTime(0, t + 0.4)
+    src.connect(bp); bp.connect(g); g.connect(d)
+  },
+  // the chair pile: a wood tap pitched down, its note sagging as the stack settles
+  creak(d, t, k) { voice(d, 'triangle', 240, 110, 0.26, t, 0.06 * k, 0.006, 0.3, filter('bandpass', 520, 0.7)) },
+  // the tesla: a 120 Hz saw through a 1 kHz band-pass, a quarter second of something live
+  buzz(d, t, k) {
+    const o = actx.createOscillator(), bp = filter('bandpass', 1000, 2), g = actx.createGain(), peak = 0.06 * k
+    o.type = 'sawtooth'; o.frequency.value = 120
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.01); g.gain.setValueAtTime(peak, t + 0.22); g.gain.linearRampToValueAtTime(0, t + 0.25)
+    o.connect(bp); bp.connect(g); g.connect(d); o.start(t); o.stop(t + 0.26)
+  },
+  // a smiler's: two dry 3 kHz ticks, close together
+  click(d, t, k) { voice(d, 'sine', 3000, 0, 0, t, 0.045 * k, 0.001, 0.012); voice(d, 'sine', 3000, 0, 0, t + 0.09, 0.045 * k, 0.001, 0.012) },
+  // a hound's: three noise breaths through 600 Hz, the middle one out
+  pant(d, t, k) {
+    const src = noiseAt(t, 0.6), bp = filter('bandpass', 600, 1.2), g = actx.createGain(), peak = 0.05 * k
+    for (let i = 0; i < 3; i++) {
+      const s = t + i * 0.21
+      g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(peak * (i === 1 ? 0.8 : 1), s + 0.05); g.gain.linearRampToValueAtTime(0, s + 0.16)
+    }
+    src.connect(bp); bp.connect(g); g.connect(d)
+  },
+  // a lurker's: one drop, 1.4 falling to 0.9 kHz in 0.05 s
+  drip(d, t, k) { voice(d, 'sine', 1400, 900, 0.05, t, 0.01 * k, 0.002, 0.12) },   // a pure tone up where the ear is keenest: quiet
+  // a crawler's: its breath along the floor, 0.3 s of noise at 400 Hz
+  rasp(d, t, k) {
+    const src = noiseAt(t, 0.3), bp = filter('bandpass', 400, 0.9), g = actx.createGain(), peak = 0.06 * k
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 0.04); g.gain.linearRampToValueAtTime(peak * 0.6, t + 0.22); g.gain.linearRampToValueAtTime(0, t + 0.3)
+    src.connect(bp); bp.connect(g); g.connect(d)
+  },
+  // a watcher's: the whisper, low (at the default gain, 0.6 of the sanity whisper: under it, and panned where the sanity one never is)
+  hush(d, t, k) { whisperInto(d, 1.2 * k) },
+  // a shade's: one heavy 50 Hz thump in the structure, with the knock of it landing (50 Hz alone is felt, not heard, on a phone)
+  thump(d, t, k) {
+    voice(d, 'triangle', 50, 44, 0.2, t, 0.03 * k, 0.008, 0.3, filter('lowpass', 180, -3))
+    burst(d, 'bandpass', 260, 0.6, t, 0.03 * k, 0.004, 0.09)
+  },
+  // a chair moving somewhere (the teller's other sound): bump's scrape, under the cap
+  scrape(d, t, k) { scrapeInto(d, t, cap(0.07 * k)) },
+}
+export const CALL_SOUNDS = Object.freeze(Object.keys(CALLS))
+
+// Play a call at `gain` 0..1 (soundscape.js's falloff, dread.js's tell gain), panned -1..1 toward where it comes from. An unknown
+// sound, or no gain to give it, plays nothing.
+export function call(sound, gain = 0.5, pan = 0) {
+  if (!actx || !(gain > 0) || !Object.hasOwn(CALLS, sound)) return
+  try {
+    CALLS[sound](panTo(pan), actx.currentTime, gain > 1 ? 1 : gain)
+  } catch { /* ignore */ }
+}
+
+// Glide the hum: its pitch by `ratio` (an octave either way at most) and its level by `gainMul`, arriving in about `seconds`. The
+// stir warning drops it half a note, the hush swells it, every arrival puts it back with setHum(1, 1, 0.5). The pitch rides on the
+// detune, since setFlicker re-aims the frequency every frame; the level is capped like everything above.
+export function setHum(ratio = 1, gainMul = 1, seconds = 3) {
+  if (!actx || !humOsc || !humGain) return
+  try {
+    const r = ratio > 0 && ratio < Infinity ? (ratio < 0.5 ? 0.5 : ratio > 2 ? 2 : ratio) : 1
+    const m = gainMul >= 0 ? gainMul : 1
+    const tc = seconds > 0 ? seconds / 3 : 0.01, t = actx.currentTime   // setTargetAtTime is ~95% there after three time constants
+    humOsc.detune.setTargetAtTime(1200 * Math.log2(r), t, tc)
+    humGain.gain.setTargetAtTime(cap(HUM_GAIN * m), t, tc)
   } catch { /* ignore */ }
 }
