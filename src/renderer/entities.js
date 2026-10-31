@@ -24,10 +24,21 @@ function entityRng(cx, cy, salt = 0, seed = 0) {
   return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 0xffffffff }
 }
 
+// a full 32-bit finaliser (murmur3's fmix32): every input bit reaches every output bit
+function fmix(h) {
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b)
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35)
+  h ^= h >>> 16
+  return h
+}
+
 // does this chunk roll a creature. Exported for a pass that marks where one began. hash() comes back signed (its last ^),
-// and so does this: an unsigned roll would divide a different number at salt 0 and seed 0, and move today's creatures
+// and so does this: an unsigned roll would divide a different number at salt 0 and seed 0, and move today's creatures.
+// A world seed is mixed after its XOR: XORed in bare, a power-of-two denominator (L2's 8) read only its low bits, and seeds
+// eight apart shared every creature chunk. Seed 0 skips the mix and keeps today's roll
 export function shouldSpawn(cx, cy, spawnDenom, salt = 0, seed = 0) {
-  return (hash(cx + 1000 + salt, cy + 2000 + salt) ^ Math.imul(seed, 0x9E3779B1)) % spawnDenom === 0
+  const h = hash(cx + 1000 + salt, cy + 2000 + salt)
+  return (seed === 0 ? h : fmix(h ^ Math.imul(seed, 0x9E3779B1))) % spawnDenom === 0
 }
 
 // Advance one entity along e.dir at `speed`, sliding along walls (turn 90° on a

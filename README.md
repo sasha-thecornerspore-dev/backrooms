@@ -161,7 +161,7 @@ once the file has you, the things hunt movement. stand still and make no sound, 
 
 the lost souls say it their own way: *if the lights go out, stop moving. it hunts movement.*
 
-under the gauges sits the compass: an arrow to the nearest way on that you have *seen*, and how far — or, when you have seen none, *something pulls, faintly*. a `~` before it means the building has moved under that mark. a second line points back the way you came. above the item dock, a prompt says what **f** or **e** will do where you stand. the lines that fade in mid-screen are the building talking; your people talk in the chat at the lower left.
+under the gauges sits the compass: an arrow to the nearest way on that you have *seen*, and how far — or, when you have seen none, after a while or a hint, *something pulls, faintly*: no distance, and not quite true. a `~` before it means the building has moved under that mark. a second line points back the way you came. above the item dock, a prompt says what **f** or **e** will do where you stand. the lines that fade in mid-screen are the building talking; your people talk in the chat at the lower left.
 
 the whole screen speaks too. it flashes red when you are hit, closes in violet when your mind runs low, and goes dark while you are down, lifting as a friend counts you back. with a pin, the level plate also shows your drift.
 
@@ -281,7 +281,7 @@ on the deepest floors the machines sometimes give stranger things. these you kee
 
 **vending machines.** `f · draw from the machine`. each gives one thing, once; an emptied one is ⊠ on your map. it refills only after you have been away a while. after something has you, every tray is empty until you take a way. *the tray is empty.*
 
-**drawers.** a cabinet, a crate, a box, a drum, a panel, a cart or a couch can be searched: `f · search the cabinet`. press **f** once and keep still a moment — a step away leaves it, and nothing may be close (*not now.*). mostly there are words, sometimes nothing, sometimes a find, and rarely the building answers instead. it makes a little noise. *something counts the drawers you open.*
+**drawers.** a cabinet, a crate, a box, a drum, a panel, a cart or a couch can be searched: `f · search the cabinet`. press **f** once and keep still a moment — a step away leaves it, and nothing may be close (*not now. something is close.*). mostly there are words, sometimes nothing, sometimes a find, sometimes a floor plan that marks your map; a find your hands are too full for waits in the drawer for this visit. rarely the building answers instead. a searched drawer says *searched.* it makes a little noise. *something counts the drawers you open.*
 
 **m.'s pages.** 26 of them, lying on the floors, out of order. read one with **e**. together they are one story — someone who signs *m.*, the tallies and the graffiti answering each other, and further down, something stranger. the first time you read a page it steadies you, and it goes on your map. they hold real advice: *rule i learned today: the almond water is real. drink it. the dark drinks you back if you do not.*
 
@@ -397,7 +397,7 @@ hit the gear ⚙ (top-right) for the control panel — on the title screen or mi
 | updates | desktop: **automatic**, **ask before downloading** or **only when i check** — see [updates](#updates); **check for updates** sits right under it |
 | software rendering | desktop: fixes freezing on some GPUs (restart to apply). it does nothing in the browser |
 | music | the generative bed on/off, plus a volume slider |
-| ambience | the fluorescent hum, drone, and distant events, plus a volume slider |
+| ambience | the fluorescent hum, drone, distant events, your own steps and the sounds of things nearby, plus a volume slider |
 | film grain / particles / crosshair / head-bob | visual feel — the particles are the dust, the steam and the sparks |
 | mouse sensitivity | look speed (the touch drag follows it too) |
 | creatures | below level 0: turn every entity off for pure liminal exploration |

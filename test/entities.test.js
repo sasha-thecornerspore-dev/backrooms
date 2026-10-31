@@ -74,6 +74,23 @@ describe('placement per floor and per world (the maze salt and the world seed)',
     }
   })
 
+  // review D3/C9: a power-of-two denominator (L2's 8) read only the seed's low bits when the seed was XORed in after the hash, so
+  // seeds eight apart shared every L2 creature chunk (one pair of rooms in eight). The seed is mixed after the XOR now
+  it('seeds eight apart give different sets on a power-of-two floor (L2: denom 8, salt 0x2222), at the same rate', () => {
+    for (const k of [1, 2, 3, 0x5eed, 0x12345678]) {
+      expect(spawnSet(8, 0x2222, k + 8), `seed ${k}`).not.toEqual(spawnSet(8, 0x2222, k))
+      expect(spawnSet(4, 0x2222, k + 4), `seed ${k} / 4`).not.toEqual(spawnSet(4, 0x2222, k))
+    }
+    const sets = new Set()
+    for (let seed = 1; seed <= 64; seed++) {
+      const s = spawnSet(8, 0x2222, seed)
+      sets.add(s.join(' '))
+      expect(s.length, `seed ${seed}`).toBeGreaterThan(400 / 8 * 0.5)
+      expect(s.length, `seed ${seed}`).toBeLessThan(400 / 8 * 1.6)
+    }
+    expect(sets.size).toBe(64)
+  })
+
   it('createEntitySystem reads config.maze.salt and deps.seed; two systems on one floor of one world agree', () => {
     const cfg = oneChunk(8, { maze: { salt: 0x2222 } })
     let moved = 0
