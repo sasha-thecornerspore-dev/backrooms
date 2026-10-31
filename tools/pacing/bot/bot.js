@@ -29,12 +29,19 @@
   const WATCH = ['msg', 'item-hint', 'presence-hint', 'hud', 'exit-compass', 'hotbar', 'note-text', 'note-foot', 'map-foot', 'chat-log', 'wish-prompt', 'wish-response', 'note-card', 'map-card', 'wish-dialog']
   const lastSeen = {}
   const visOf = (el) => { let o = 1; for (let e = el; e && e.nodeType === 1; e = e.parentElement) { const cs = getComputedStyle(e); if (cs.display === 'none' || cs.visibility === 'hidden') return 0; o *= parseFloat(cs.opacity) } return o }
+  // the black veil a travel or a death draws (#fade, game.js createFader): what stacks under it (the base #msg, the HUD) is dimmed by it,
+  // so a line the queue puts up while the screen is black is no plate. Cards stacked over it (the map, a note) are not dimmed. A text
+  // only the veil hides logs '(veiled)': stats.mjs reads the same text given back after it as the same plate going on
+  const fadeEl = document.getElementById('fade')
+  const zOf = (el) => { for (let e = el; e && e.nodeType === 1; e = e.parentElement) { const z = parseInt(getComputedStyle(e).zIndex, 10); if (Number.isFinite(z)) return z } return 0 }
+  const veilZ = fadeEl ? zOf(fadeEl) : 0
   function sampleDom() {
+    const veil = fadeEl ? (parseFloat(getComputedStyle(fadeEl).opacity) || 0) : 0
     for (const id of WATCH) {
       const el = document.getElementById(id); if (!el) continue
-      const v = visOf(el) > 0.15
+      const own = visOf(el), v = own * (veil > 0 && zOf(el) < veilZ ? 1 - veil : 1) > 0.15
       const txt = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 400)
-      const key = v ? txt : '(hidden)'
+      const key = v ? txt : own > 0.15 ? '(veiled)' : '(hidden)'
       if (lastSeen[id] !== key) { lastSeen[id] = key; log('dom:' + id, key) }
     }
   }

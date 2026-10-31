@@ -43,6 +43,20 @@ describe('pacing tools: the counts', () => {
   it('moments merge a burst', () => { expect(moments([1, 2, 3.5, 10], 3)).toEqual([1, 10]) })
 })
 
+describe('pacing tools: what the bot counts as on screen', () => {
+  // a line the queue puts up while the travel's (or a death's) black veil is down is not a plate: nobody can read it. The bot reads the
+  // veil (#fade, game.js createFader) and dims whatever stacks under it, as index.html stacks the base #msg under it
+  it('the veil: #fade sits over the base #msg, and the bot reads it', () => {
+    const html = read('index.html')
+    expect(html).toContain('<div id="fade"></div>')
+    expect(Number(/^\s*#fade\s*\{[^}]*z-index:\s*(\d+)/m.exec(html)?.[1])).toBeGreaterThan(0)
+    for (const m of html.matchAll(/^\s*#msg\s*\{([^}]*)\}/gm)) expect(m[1]).not.toMatch(/z-index/)
+    const bot = fs.readFileSync(path.join(import.meta.dirname, '..', 'tools', 'pacing', 'bot', 'bot.js'), 'utf8')
+    expect(bot).toMatch(/getElementById\('fade'\)/)
+    expect(bot).toMatch(/1 - veil/)
+  })
+})
+
 describe('pacing tools: the bot instruments a copy, and every anchor is still where it was', () => {
   it('game.js: the expose block and every hook that every tree has', () => {
     const { text, applied } = patchGame(read('game.js'))

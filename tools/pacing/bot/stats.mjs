@@ -4,7 +4,8 @@
 //   node tools/pacing/bot/stats.mjs --dir <run.mjs --out dir>
 //
 // How lines are told apart (the same rules on every tree, so 2.0.3 and 2.0.4 are measured alike):
-//   a plate          a new text on #msg once it is visible (the HUD, not the queue)
+//   a plate          a new text on #msg once it is visible (the HUD, not the queue; bot.js dims it by the travel's or a death's
+//                    black veil, so a line put up while the screen is black is none)
 //   player-caused    its showMessage came within 2.5 s after a key the bot pressed to act (E, F, Q, L, Space, C): a search's result,
 //                    a soul's word, the light, an item; the plate budget never counts these
 //   a warning        a hunt line ('it has seen you.', 'it has you.', ...): never budgeted either
@@ -67,11 +68,16 @@ function measure(S) {
     return { t: r.t, text: r.d[0], prio: r.d[1], happening: near.some((m) => m.k !== 'roll') && !near.some((m) => m.k === 'roll') }
   })
   const msgRows = rows.filter((r) => r.k === 'dom:msg')
+  // '(veiled)' (bot.js): the text is up, but the black veil of a travel or a death covers it. It hides like '(hidden)', and the same text
+  // given back just after it (the old line still fading as the veil lifts) is the plate it was, going on, not a new one
+  const hid = (d) => d === '(hidden)' || d === '(veiled)'
+  const goesOn = (i) => i >= 2 && msgRows[i - 1].d === '(veiled)' && msgRows[i - 2].d === msgRows[i].d
   const moves = rows.filter((r) => r.k === 'travel' || r.k === 'die').map((r) => r.t)
   // the plates, each classified
   const shows = []
-  for (const r of msgRows) {
-    if (r.d === '(hidden)') continue
+  for (let i = 0; i < msgRows.length; i++) {
+    const r = msgRows[i]
+    if (hid(r.d) || goesOn(i)) continue
     const say = [...says].reverse().find((s) => s.t <= r.t + 0.05 && r.t - s.t < 6 && s.text.replace(/\s+/g, ' ').trim().slice(0, 400) === r.d)
     // whichever came last decides: a key you pressed after you arrived (the map's first opening) is yours; the travel your F started is not
     const before = (list) => { let b = -Infinity; if (say) for (const x of list) if (x <= say.t + 0.05 && x > b) b = x; return b }
@@ -80,13 +86,15 @@ function measure(S) {
     const player = !!say && (BUMPS.has(say.text) || (!arrival && !say.happening && !UNPROMPTED.has(say.text) && say.t - lastKey <= 2.5))
     shows.push({ t: r.t, text: r.d, cls: WARNINGS.has(r.d) ? 'warning' : player ? 'player' : 'budgeted' })
   }
-  // on screen: from each shown text to the next text or '(hidden)', and whose time it was
+  // on screen: from each shown text to the next text, '(hidden)' or '(veiled)', and whose time it was
   let onS = 0, since = null, cur = null, si = 0
   const onBy = { budgeted: 0, player: 0, warning: 0 }
   const close = (t) => { if (since !== null) { onS += t - since; onBy[cur] += t - since } }
-  for (const r of msgRows) {
+  for (let i = 0; i < msgRows.length; i++) {
+    const r = msgRows[i]
     close(r.t)
-    if (r.d !== '(hidden)') { since = r.t; cur = shows[si++].cls } else since = null
+    if (hid(r.d)) since = null
+    else { since = r.t; if (!goesOn(i)) cur = shows[si++].cls }
   }
   close(end)
   // arrivals and the first 45 s of each
@@ -123,7 +131,7 @@ function measure(S) {
     sightings: sightings.length, sightingsCued: preceded(sightings, [...tells, ...seenTells, ...beats]), tells: tells.length, seenTells: seenTells.length, heartbeats: beats.length,
     quietStretchesPer5Min: r2(300 * quietStretches(quietMarks, end, 45) / end), happeningGapP90: dist(gaps(moments(happen), end)).p90,
     plateDecisions: HAS_PLATES ? Object.fromEntries(['show', 'queue', 'none'].map((d) => [d, plateRows.filter((r) => r.d[2] === d).length])) : null,
-    pagesRead: rows.filter((r) => r.k === 'dom:note-text' && r.d !== '(hidden)').map((r) => Math.round(r.t)),
+    pagesRead: rows.filter((r) => r.k === 'dom:note-text' && !hid(r.d)).map((r) => Math.round(r.t)),
     taken: shows.filter((s) => /^you take the/.test(s.text)).map((s) => [Math.round(s.t), s.text]),
     consoleErrors: rows.filter((r) => r.k === 'console-error').length,
     shows,

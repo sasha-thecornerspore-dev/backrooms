@@ -46,7 +46,7 @@ module.exports = async (ctx) => {
     for (const l of logs) {
       out({ t: l[0], k: l[1], d: l[2] })
       // a new line mid-screen: grab a frame of it once it has faded in; a happening: a frame just after
-      if (l[1] === 'dom:msg' && l[2] !== '(hidden)' && l[2] !== msgPrev && st.t - lastExtra > 2.5 && extraNext < 0) { msgPrev = l[2]; extraNext = l[0] + 0.7 }
+      if (l[1] === 'dom:msg' && l[2] !== '(hidden)' && l[2] !== '(veiled)' && l[2] !== msgPrev && st.t - lastExtra > 2.5 && extraNext < 0) { msgPrev = l[2]; extraNext = l[0] + 0.7 }
       if ((l[1] === 'event' || l[1] === 'haunt' || l[1] === 'die' || l[1] === 'tell' || (l[1] === 'seen' && /^thing|^soul|^way|^sight/.test(String(l[2])))) && st.t - lastExtra > 2.5 && extraNext < 0) extraNext = l[0] + 0.4
     }
     const aud = await exec('globalThis.__bot.audio()')
