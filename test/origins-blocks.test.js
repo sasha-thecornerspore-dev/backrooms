@@ -112,6 +112,11 @@ describe('tenant', () => {
     expect(TENANT.wayReveal).toBe('loaded')
     expect(Object.isFrozen(TENANT_EVENTS)).toBe(true)
     expect(TENANT_EVENTS).toHaveLength(EVENTS.length)
+    expect(TENANT_EVENTS).toHaveLength(10)                            // the tenant inherits T1-5's four, effects and ceilings included
+    for (const id of ['phone-rings', 'chair-scrape', 'pipe-knock', 'breaker-trip']) {
+      const e = TENANT_EVENTS.find((x) => x.id === id)
+      expect(e?.fx?.sound, id).toBeTruthy(); expect(Number.isInteger(e.maxLevel), id).toBe(true)
+    }
     expect(TENANT.eventWeights()).toBe(TENANT_EVENTS)
     for (let i = 0; i < EVENTS.length; i++) {
       if (EVENTS[i].id === 'crosser') expect(TENANT_EVENTS[i]).toEqual({ ...EVENTS[i], weight: 6 })

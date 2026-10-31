@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { LEVELS, levelConfig, levelCount } from '../src/renderer/levels.js'
+import { LEVELS, levelConfig, levelCount, LOST_LINE } from '../src/renderer/levels.js'
 import { DEFAULT_CONFIG } from '../src/renderer/world.js'
 import { createFixedMap } from '../src/renderer/fixedmap.js'
 import { NULL_MAP } from '../src/renderer/level-null-map.js'
@@ -76,6 +76,78 @@ describe('levels', () => {
     expect(levelConfig(DEFAULT_CONFIG, 4).levelIndex).toBe('∅')   // ∅ is index 4
     expect(levelConfig(DEFAULT_CONFIG, 5).levelIndex).toBe(0)     // wraps back to the lobby
     expect(levelConfig(DEFAULT_CONFIG, -1).levelIndex).toBe('∅')  // -1 wraps to the last (∅)
+  })
+
+  // T1-5 / T1-2 / T1-7: twelve murmurs a floor, the lost line out of the draw, the lobby's sub-line, L2's wanderers
+  it('levels 0-3 murmur from twelve distinct lines each, lowercase, no exclamation marks', () => {
+    for (const i of [0, 1, 2, 3]) {
+      const m = LEVELS[i].config.messages
+      expect(m, `L${i}`).toHaveLength(12)
+      expect(new Set(m).size, `L${i}`).toBe(12)
+      for (const l of m) { expect(l).toBe(l.toLowerCase()); expect(l).not.toContain('!'); expect(l.at(-1)).toBe('.') }
+    }
+  })
+
+  it('keeps every old murmur but the lost line, and adds the new ones without digits', () => {
+    const NEW = {
+      0: ['somewhere a printer is warming up. nobody sent anything.', 'the carpet is wetter here. you did not see where it starts.',
+        'a ceiling tile is missing. the dark above it is very tidy.', 'every room has been tidied by someone who did not stay.',
+        'you keep almost recognising the corners.', 'one of the lights is a different white.'],
+      1: ['a charging cable, plugged into nothing, still warm.', 'tyre marks lead into a wall and stop.',
+        'someone has labelled the pillars. no two labels are in the same hand.', 'the cold comes up through your shoes.',
+        'a pallet of water bottles. every one has been opened and closed again.', 'far off, a roller door goes up. it does not come down.'],
+      2: ['a pressure gauge, its needle resting past the end of the dial.', 'the pipes are warm on one side only.',
+        'someone chalked an arrow on the pipe. it points into the pipe.', 'the drips keep a rhythm that is almost your walk.',
+        'a valve wheel, chained shut. the chain is newer than the valve.', 'the steam smells faintly of almonds.', 'the pipes knock, then wait for an answer.'],
+      3: ['the cables run into the floor and do not come out anywhere.', 'a warning sign. the warning has been sanded off.',
+        'your light flickers in time with something behind the panels.', 'every transformer is a slightly different note.',
+        'the hair on your arms stands up near the cabinets.', 'a breaker panel with every label torn away.', 'the dark here is warm, like a room someone just left.'],
+    }
+    const OLD = {
+      0: ['the wallpaper is the same in every direction.', 'the carpet is damp.', 'the lights do not turn off.', 'you have been walking for hours. days. weeks.',
+        'the humming never stops.', 'level 0. somewhere. always.'],
+      1: ['the concrete sweats.', 'a shopping cart, alone, a mile from anywhere.', 'you are not the only thing awake here.', 'the lights buzz, then stop, then buzz.',
+        'something followed you in from the lobby.', 'level 1. it is bigger than it looks.'],
+      2: ['the pipes tick as they cool. or fill.', 'steam, from somewhere. it is warm and wrong.', 'do not follow the sound of running water.', 'the dark here has weight.',
+        'level 2. bring your own light.'],
+      3: ['everything here is live. do not touch the walls.', 'the current hums a note you can feel in your teeth.', 'something with too many joints is in here with you.',
+        'the way up is here. somewhere. find the humming door.', 'level 3. the deepest you should go.'],
+    }
+    for (const i of [0, 1, 2, 3]) {
+      expect(LEVELS[i].config.messages, `L${i}`).toEqual([...OLD[i], ...NEW[i]])
+      for (const l of NEW[i]) expect(l).not.toMatch(/[0-9]/)
+    }
+    // 'it followed you down.' keeps its slot: game.js swaps the hint, the floor murmur stays
+    expect(LEVELS[1].config.messages).toContain('something followed you in from the lobby.')
+  })
+
+  it('LOST_LINE is the setting\'s line, kept for its conditional and out of every murmur pool', () => {
+    expect(LOST_LINE).toBe('there is no exit. keep looking.')
+    for (let i = 0; i < levelCount(); i++) expect(levelConfig(DEFAULT_CONFIG, i).messages).not.toContain(LOST_LINE)
+  })
+
+  it("the lobby's sub-line drops its contradiction; the other floors keep theirs", () => {
+    expect(LEVELS[0].sub).toBe('the hum of fluorescent light. damp carpet. you are here.')
+    expect(levelConfig(DEFAULT_CONFIG, 0).levelSub).toBe('the hum of fluorescent light. damp carpet. you are here.')
+    expect(LEVELS.slice(1).map((l) => l.sub)).toEqual([
+      'concrete and dim service lights. something moved in the warehouse dark.',
+      'endless maintenance tunnels. steam, rust, and the dark between the pipes.',
+      'transformers hum with current in the black. one door leads back up.',
+      'harlem park, west baltimore. a plan cleared the street out of the block and left this.',
+    ])
+  })
+
+  it('L2 is not a floor of sleepers: its wanderers are the crawler and the watcher; the other floors are untouched', () => {
+    expect(LEVELS[2].config.entities.wandererVariants).toEqual(['crawler', 'watcher'])
+    expect(levelConfig(DEFAULT_CONFIG, 2).entities.wandererVariants).toEqual(['crawler', 'watcher'])
+    expect(LEVELS[2].config.entities.stalkerVariants).toEqual(['lurker', 'hound'])
+    expect(LEVELS[1].config.entities.wandererVariants).toEqual(['watcher'])
+    expect(LEVELS[3].config.entities.wandererVariants).toEqual(['watcher'])
+  })
+
+  it('∅ keeps its seven lines (the hold)', () => {
+    expect(LEVELS[4].config.messages).toHaveLength(7)
+    expect(LEVELS[4].config.messages[0]).toBe('a form was left on the counter. someone started filling it out. they got bored.')
   })
 
   it('∅ carries the one authored note (the form on the counter) on open ground; levels 0-3 carry none', () => {

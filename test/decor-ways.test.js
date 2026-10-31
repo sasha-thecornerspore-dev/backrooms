@@ -158,6 +158,55 @@ describe('stairsPass', () => {
     expect(CHANNELS.upStair.gate).toEqual([9311, 4177]); expect(CHANNELS.lift.gate).toEqual([8629, 1109])
   })
 
+  // T1-2: the faint pull never names a stair up; it reads the same reused record nearestWayAny writes
+  it('nearestWayOn(px, py) never returns a stair up: the nearest exit or lift, from the reused anyWay record', () => {
+    for (const T of [1, 2, 3]) {
+      const cfg = cfgFor(T)
+      // a chunk with a stair up under seed 0, loaded with its neighbours
+      let at = null
+      for (let cy = -30; cy < 30 && !at; cy++) for (let cx = -30; cx < 30 && !at; cx++) if (hasUpStair(T, cx, cy, 0)) at = [cx, cy]
+      expect(at, `L${T}`).not.toBeNull()
+      const sys = createDecorSystem(cfg, open, 0, { passes: [stairsPass(cfg, cfg.ways)] })
+      sys.update(at[0], at[1])
+      const ways = [...sys.getExits(), ...sys.getStairs()]
+      const ups = sys.getStairs().filter((s) => s.kind === 'up')
+      expect(ups.length).toBeGreaterThan(0)
+      for (const s of ups) {
+        for (const [dx, dy] of [[0, 0], [0.4, 0], [-3, 2], [7, -5]]) {
+          const px = s.x + dx, py = s.y + dy
+          const any = sys.nearestWayAny(px, py)
+          const on = sys.nearestWayOn(px, py)
+          expect(on).toBe(any)                                                    // one reused record, rewritten
+          expect(on.rec.kind).not.toBe('up')
+          let best = null, bestD = Infinity
+          for (const w of ways) { if (w.kind === 'up') continue; const d = (w.x - px) ** 2 + (w.y - py) ** 2; if (d < bestD) { bestD = d; best = w } }
+          expect(on.rec).toBe(best); expect(on.dist).toBeCloseTo(Math.sqrt(bestD), 9)
+        }
+      }
+      // where the nearest way is not a stair up, the two agree
+      const e = sys.getExits()[0]
+      const a = sys.nearestWayAny(e.x + 0.1, e.y).rec
+      expect(sys.nearestWayOn(e.x + 0.1, e.y).rec).toBe(a)
+    }
+  })
+
+  it('nearestWayOn takes the compass\'s skip(kind) too, and is null with nothing it may name', () => {
+    const cfg = cfgFor(1)
+    let at = null
+    for (let cy = -40; cy < 40 && !at; cy++) for (let cx = -40; cx < 40 && !at; cx++) {
+      if (hash(cx + CHANNELS.lift.gate[0] + (cfg.maze.salt | 0), cy + CHANNELS.lift.gate[1] + (cfg.maze.salt | 0), 0) % LIFT_DENOM === 0) at = [cx, cy]
+    }
+    const sys = createDecorSystem(cfg, open, 0, { passes: [stairsPass(cfg, cfg.ways)] })
+    sys.update(at[0], at[1])
+    const lift = sys.getStairs().find((s) => s.kind === 'lift')
+    expect(sys.nearestWayOn(lift.x, lift.y).rec).toBe(lift)
+    const past = sys.nearestWayOn(lift.x, lift.y, (k) => k === 'lift')
+    expect(past.rec.kind).toBe('down')
+    expect(sys.nearestWayOn(lift.x, lift.y, (k) => k === 'lift' || k === 'down')).toBeNull()
+    const empty = createDecorSystem(cfgFor(0), solid); empty.update(0, 0)
+    expect(empty.nearestWayOn(0, 0)).toBeNull()
+  })
+
   it('getExits() positions / targets / kinds are unchanged with the pass on; getStairs lists the pass records', () => {
     for (const i of [1, 2, 3]) {
       const cfg = cfgFor(i)

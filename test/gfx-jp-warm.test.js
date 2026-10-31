@@ -11,8 +11,8 @@ import { levelConfig } from '../src/renderer/levels.js'
 const frozen = (fn) => { const spy = vi.spyOn(performance, 'now').mockReturnValue(0); try { return fn() } finally { spy.mockRestore() } }
 const FOV = Math.PI / 2.4
 const L1 = levelConfig(DEFAULT_CONFIG, 1), L2 = levelConfig(DEFAULT_CONFIG, 2)
-// names level 1 can show and level 2 cannot (props, the cast, items)
-const ONLY_L1 = ['pallet', 'barrel', 'couch', 'cart', 'smiler', 'watcher', 'polaroid']
+// names level 1 can show and level 2 cannot (props, the cast, items); the watcher walks L2 too since T1-7
+const ONLY_L1 = ['pallet', 'barrel', 'couch', 'cart', 'smiler', 'polaroid']
 const L2_NAMES = new Set(['portal', 'unread', 'read', 'lit', 'spent', ...L2.entities.stalkerVariants, ...L2.entities.wandererVariants, ...L2.props.types, ...L2.items.types])
 const key = (a) => a.join('|')
 const built = (a) => { const n = atlasStats().frames; getFrame(...a); return atlasStats().frames === n }   // (builds it if it was not)

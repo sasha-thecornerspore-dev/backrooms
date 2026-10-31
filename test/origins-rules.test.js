@@ -99,6 +99,7 @@ describe('LEGACY IDENTITY — game.js at 2cb9c76', () => {
     expect(LEGACY.presenceReply('claim')).toBe(null)
     expect(LEGACY.wishMeta()).toEqual({ origin: null })
     expect(LEGACY.eventWeights()).toBe(EVENTS)
+    expect(LEGACY.eventWeights()).toHaveLength(10)                    // the six, and T1-5's phone, chair, knock and breaker
     for (const c of [{}, { thinFirstShot: true }, { D: 900, firstShotOfLevel: true, glyph: 'i', anchor: PIN }])
       expect(LEGACY.polaroid(c)).toBe(null)
     expect(LEGACY.crosserPause()).toBe(null)

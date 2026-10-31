@@ -12,13 +12,17 @@
 // transition. Inventory and hit points carry with you; the world does not.
 import { NULL_MAP, NULL_SPAWN, NULL_EXIT } from './level-null-map.js'
 
+// the setting's line, out of the murmur draw: said only while no way on is known and the faint pull is hidden, once a visit
+// (compass.js lostDue), so it never plays while the compass names the exit
+export const LOST_LINE = 'there is no exit. keep looking.'
+
 export const LEVELS = [
   // ── Level 0 — The Lobby ──────────────────────────────────────────────
   // Mono-yellow rooms, damp carpet, the fluorescent hum. Safe. No entities.
   {
     id: 0,
     name: 'level 0 — the lobby',
-    sub: 'the hum of fluorescent light. damp carpet. no exit. you are here.',
+    sub: 'the hum of fluorescent light. damp carpet. you are here.',
     config: {
       palette: { wall: '#C8B870', ceiling: '#E8E0C0', floor: '#4A3820', fog: '#D4C87A' },
       fogDistance: 16,
@@ -39,14 +43,20 @@ export const LEVELS = [
       haunts: { denom: 14 },     // the lobby is barely haunted: chairs that have been moved (haunts.js)
       exit:  { target: 1, denom: 4, label: 'no-clip deeper',
                hint: 'the walls are thin here — no-clip through a torn corner and you fall out of the lobby.' },
+      // twelve a floor, drawn from a bag (events.js createBag) so a line does not come round again soon
       messages: [
         'the wallpaper is the same in every direction.',
         'the carpet is damp.',
         'the lights do not turn off.',
         'you have been walking for hours. days. weeks.',
         'the humming never stops.',
-        'there is no exit. keep looking.',
         'level 0. somewhere. always.',
+        'somewhere a printer is warming up. nobody sent anything.',
+        'the carpet is wetter here. you did not see where it starts.',
+        'a ceiling tile is missing. the dark above it is very tidy.',
+        'every room has been tidied by someone who did not stay.',
+        'you keep almost recognising the corners.',
+        'one of the lights is a different white.',
       ],
     },
   },
@@ -83,6 +93,12 @@ export const LEVELS = [
         'the lights buzz, then stop, then buzz.',
         'something followed you in from the lobby.',
         'level 1. it is bigger than it looks.',
+        'a charging cable, plugged into nothing, still warm.',
+        'tyre marks lead into a wall and stop.',
+        'someone has labelled the pillars. no two labels are in the same hand.',
+        'the cold comes up through your shoes.',
+        'a pallet of water bottles. every one has been opened and closed again.',
+        'far off, a roller door goes up. it does not come down.',
       ],
     },
   },
@@ -104,8 +120,9 @@ export const LEVELS = [
       maze:  { salt: 0x2222, roomChance: 0.10, braid: 0.08, corridor: 1 },
       particles: { count: 40, color: [190, 182, 170], size: 2.6, sway: 0.55, speed: 0.5, rise: true },   // rising steam
       lights: false,
+      // not a floor of sleepers: the watcher roams beside the crawler (which keeps its one rule)
       entities: { enabled: true, spawnDenom: 8, stalkerDenom: 3, chaseRange: 26, damage: 18,
-                  stalkerVariants: ['lurker', 'hound'], wandererVariants: ['crawler'] },
+                  stalkerVariants: ['lurker', 'hound'], wandererVariants: ['crawler', 'watcher'] },
       items: { density: 4, types: ['almond-water', 'glowstick', 'bandage', 'radio'] },
       props: { density: 5, types: ['pipe', 'valve', 'drum', 'toolbox', 'vent', 'crate'] },
       scraps: { denom: 9 },   // fewer make it this deep, and fewer stop to write
@@ -119,6 +136,13 @@ export const LEVELS = [
         'do not follow the sound of running water.',
         'the dark here has weight.',
         'level 2. bring your own light.',
+        'a pressure gauge, its needle resting past the end of the dial.',
+        'the pipes are warm on one side only.',
+        'someone chalked an arrow on the pipe. it points into the pipe.',
+        'the drips keep a rhythm that is almost your walk.',
+        'a valve wheel, chained shut. the chain is newer than the valve.',
+        'the steam smells faintly of almonds.',
+        'the pipes knock, then wait for an answer.',
       ],
     },
   },
@@ -155,6 +179,13 @@ export const LEVELS = [
         'something with too many joints is in here with you.',
         'the way up is here. somewhere. find the humming door.',
         'level 3. the deepest you should go.',
+        'the cables run into the floor and do not come out anywhere.',
+        'a warning sign. the warning has been sanded off.',
+        'your light flickers in time with something behind the panels.',
+        'every transformer is a slightly different note.',
+        'the hair on your arms stands up near the cabinets.',
+        'a breaker panel with every label torn away.',
+        'the dark here is warm, like a room someone just left.',
       ],
     },
   },
