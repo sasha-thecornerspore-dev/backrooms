@@ -6,7 +6,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { LEVELS } from '../src/renderer/levels.js'
 import { NOT_NOW_LINE, SEARCHED_HINT, TRACE_LINES, searchingHint } from '../src/renderer/containers.js'
-import { FAINT } from '../src/renderer/compass.js'
+import { FAINT, SEEN_ON, SEEN_OFF } from '../src/renderer/compass.js'
+import { EVENTS } from '../src/renderer/events.js'
 
 const root = path.resolve(import.meta.dirname, '..')
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8').replace(/\r\n/g, '\n')
@@ -46,6 +47,30 @@ describe('the compass', () => {
     expect(manual).toContain(`<code>${FAINT}</code>: no distance, and not quite true`)
     expect(readme).not.toContain(`when you have seen none, *${FAINT}*.`)
     expect(readme).toContain(`after a while or a hint, *${FAINT}*: no distance, and not quite true`)
+  })
+})
+
+describe('the events, the seen line, the tray and the presence (review S12)', () => {
+  // each data event (events.js fx) as the docs tell it; a new one turns this red until the docs name it
+  const TOLD = { 'phone-rings': 'a phone rings a few rooms over', 'chair-scrape': 'a chair is pushed back in the next room',
+    'pipe-knock': 'something knocks along the pipe toward you', 'breaker-trip': 'a breaker trips' }
+  it('both docs tell every event that carries its own effect, and that the first on a floor is often heard, not read', () => {
+    expect(Object.keys(TOLD).sort()).toEqual(EVENTS.filter((e) => e.fx).map((e) => e.id).sort())
+    for (const [k, d] of Object.entries(docs)) {
+      for (const w of Object.values(TOLD)) expect(d.toLowerCase(), `${k}: ${w}`).toContain(w)
+      expect(d.toLowerCase(), k).toContain('more often than not, the first of them on a floor you have just reached is heard, not read')
+    }
+  })
+  it('both docs give the seen line on your screen and off it', () => {
+    expect(manual).toContain(`<i>${SEEN_ON}</i>`); expect(manual).toContain(`<i>${SEEN_OFF}</i>`)
+    expect(readme).toContain(`*${SEEN_ON}*`); expect(readme).toContain(`*${SEEN_OFF}*`)
+  })
+  it('the manual\'s tray line lets the game\'s own article stand', () => {
+    expect(manual).not.toContain('and a … drops into the tray.')
+    expect(manual).toContain('<i>the machine clunks, and … drops into the tray.</i>')
+  })
+  it('the manual says the lobby\'s presence keeps quiet a little while when you first arrive', () => {
+    expect(manual).toContain('There is always one close to where you first arrive in the lobby. That one keeps quiet a little while before it first offers to speak.')
   })
 })
 

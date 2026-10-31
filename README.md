@@ -218,7 +218,7 @@ the compass under your gauges reads the same sheet. it points only at ways that 
 
 nothing in the lobby hunts. below it, things do. they **hear** — a walk barely carries, a run carries round corners, a push of will carries further, a whistle further still, and sound follows the halls, not straight through walls. they **see** only along a clear line; on the dark floors they see less, and your own light helps them. walls block them. furniture does not, but a furnished room makes them come round corners.
 
-they go still when they hear something, come to the noise, hunt you once they see you (*it has seen you.*), and search where they lost you. break the line and keep quiet, and they lose you. *you have lost it. it is still looking.* running down a hole does not shake one.
+they go still when they hear something, come to the noise, hunt you once they see you (*it has seen you.* — or, when it is off your screen, *something has seen you.* and its sound comes from where it is), and search where they lost you. break the line and keep quiet, and they lose you. *you have lost it. it is still looking.* running down a hole does not shake one.
 
 each kind keeps one rule. the wanderers wrote some of them on the walls long before you got here:
 
@@ -229,7 +229,7 @@ each kind keeps one rule. the wanderers wrote some of them on the walls long bef
 - something never touches you at all. it only watches. watching back is what costs you.
 - on the deepest floor the lights drop for a breath before the current finds you. a wall between you is enough.
 
-**not everything is a thing.** the lights go out ahead of you one by one, and come back. a door slams somewhere far off. *the hum stops. the silence has a shape.* footsteps keep your pace. a figure crosses the intersection ahead, and the hall is empty when you look again. none of it can touch you, though a cold spot takes a little of your mind.
+**not everything is a thing.** the lights go out ahead of you one by one, and come back. a door slams somewhere far off. *the hum stops. the silence has a shape.* footsteps keep your pace. a figure crosses the intersection ahead, and the hall is empty when you look again. on the lobby and the habitable zone a phone rings a few rooms over, or a chair is pushed back in the next room; in the pipes something knocks along the pipe toward you; on the electrical station a breaker trips and the dark leans closer. more often than not, the first of them on a floor you have just reached is heard, not read. none of it can touch you, though a cold spot takes a little of your mind.
 
 and some places are wrong every time you pass them. *the chairs have been moved. nobody moved them.* a haunting never hurts you, never comes toward you, and never happens while something real is near. so: **a figure that stands still is the building. one that moves is not.** the map marks the place.
 

@@ -22,7 +22,7 @@ import { seenLine, SEEN_ON, SEEN_OFF, compassLines, compassText, pullVisible, pu
 import { PRESENCE_HUSH_S, FIRST_NOTE, FIRST_SOUL, FIRST_ROOM, createFirstRun, noteRecord } from '../src/renderer/firstrun.js'
 import { createPlateBudget, arrivalPlate, DRAIN_S } from '../src/renderer/plates.js'
 import { LOST_LINE, levelConfig } from '../src/renderer/levels.js'
-import { searchingHint, CONTAINER_TYPES, NOT_NOW_LINE, SEARCHED_HINT, SQUEAL_LINE, TRACE_LINES, HANDS_FULL_LINE, applyRoll, createSearchLog } from '../src/renderer/containers.js'
+import { searchingHint, CONTAINER_TYPES, NOT_NOW_LINE, SEARCHED_HINT, SQUEAL_LINE, SQUEAL_NOISE, TRACE_LINES, HANDS_FULL_LINE, applyRoll, createSearchLog } from '../src/renderer/containers.js'
 import { DEFAULT_CONFIG, CHUNK_SIZE, createChunkCache, createGridReader } from '../src/renderer/world.js'
 import { createDecorSystem } from '../src/renderer/decor.js'
 import { dressPass } from '../src/renderer/dress.js'
@@ -266,16 +266,17 @@ describe('T1-10: frictions', () => {
   })
   const ITEM_NAMES = new Function(`return ${lift(/const ITEM_NAMES = \{[\s\S]*?\n\}/).replace(/^const ITEM_NAMES = /, '')}`)()
   const TRAY_NAMES = new Function(`return ${lift(/const TRAY_NAMES = \{[\s\S]*?\n\}/).replace(/^const TRAY_NAMES = /, '')}`)()
-  it('TRAY_NAMES names every ITEM_NAMES key with its article (a, an or some), lowercase, no digits', () => {
+  it('TRAY_NAMES names every ITEM_NAMES key with its article (a, an or some), or a measure of it, lowercase, no digits', () => {
     expect(Object.keys(TRAY_NAMES).sort()).toEqual(Object.keys(ITEM_NAMES).sort())
     for (const [k, v] of Object.entries(TRAY_NAMES)) {
       const m = /^(a|an|some) (.+)$/.exec(v)
-      expect(m, v).not.toBeNull(); expect(m[2]).toBe(ITEM_NAMES[k])
+      // the item's own name, or a measure of it (Appendix A: 'a bottle of almond water')
+      expect(m, v).not.toBeNull(); expect(m[2] === ITEM_NAMES[k] || m[2].endsWith(` of ${ITEM_NAMES[k]}`), v).toBe(true)
       if (m[1] === 'a') expect(m[2]).toMatch(/^[^aeiou]/)
       if (m[1] === 'an') expect(m[2]).toMatch(/^[aeiou]/)
       expect(v).toBe(v.toLowerCase()); expect(v).not.toMatch(/[0-9!]/)
     }
-    expect(TRAY_NAMES['almond-water']).toBe('some almond water'); expect(TRAY_NAMES['extension-slip']).toBe('an extension slip')
+    expect(TRAY_NAMES['almond-water']).toBe('a bottle of almond water'); expect(TRAY_NAMES['extension-slip']).toBe('an extension slip')
   })
   it('the tray says it with the article, for everything the machine can drop (the pool, the deep stacks, every lean)', () => {
     const vend = slice('function dispenseFromMachine(m) {', '// ── snapshot + persistence')
@@ -894,7 +895,7 @@ describe('T1-5: events that carry their own effect, the arrival\'s event, the mu
   }
 
   it('the scheduler\'s event: kind \'event\', or none for the arrival\'s (heard, not read); the quiet; then the data event\'s repeats', () => {
-    expect(game).toMatch(/const evId = eventSched\.tick\(dt, \{ level: level\.index, sanity, canFire: evCanFire \}\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(evId\) \{ fireEvent\(evId, PRIO\.ambient, eventSched\.soundOnly \? null : 'event'\); dreadQuietT = 12 \}\r?\n\s*dreadQuietT = Math\.max\(0, dreadQuietT - dt\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(fxLeft > 0 && \(fxT -= dt\) <= 0\) \{ fxLeft--; fxT \+= fxEvery; call\(fxSound, FX_PLAY\.gain, fxPan\) \}/)
+    expect(game).toMatch(/const evId = eventSched\.tick\(dt, \{ level: level\.index, sanity, canFire: evCanFire \}\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(evId\) \{ fireEvent\(evId, PRIO\.ambient, eventSched\.soundOnly \? null : 'event'\); dreadQuietT = 12 \}\r?\n\s*dreadQuietT = Math\.max\(0, dreadQuietT - dt\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(fxLeft > 0 && !transitioning && \(fxT -= dt\) <= 0\) \{ fxLeft--; fxT \+= fxEvery; call\(fxSound, FX_PLAY\.gain, fxPan\) \}/)
     expect(count(/fireEvent\(evId/g)).toBe(1)
   })
   it('one generic branch, last, for the events that carry their effect as data (the six keep their own)', () => {
@@ -922,6 +923,14 @@ describe('T1-5: events that carry their own effect, the arrival\'s event, the mu
     expect(b.heard).toHaveLength(1); expect(b.heard[0][1]).toBe('thump'); expect(Math.abs(b.heard[0][3])).toBe(0)
     expect([b.st.flickTgt, b.st.flickTimer]).toEqual([eventFx('breaker-trip').flick, FX_PLAY.flickS])
     for (const x of [k, c, b]) expect(x.said).toHaveLength(1)
+  })
+  it('replayed: a death or a way taken stops the repeats under the veil, and the visit clears what was left (review W7)', () => {
+    const k = rig({ index: 2 }); k.fire('pipe-knock'); k.frames(0.3)
+    expect(k.heard).toHaveLength(1)
+    k.st.transitioning = true; k.frames(1.5)                                                // the fade: three knocks would have come
+    expect(k.heard).toHaveLength(1)
+    k.visit(); k.st.transitioning = false; k.frames(3)                                     // the new floor hears none of the old one's
+    expect(k.heard).toHaveLength(1); expect(k.st.fxLeft).toBe(0)
   })
   it('replayed: the six keep their own effects (no data sound); an unknown id does nothing at all', () => {
     const r = rig(); r.fire('door-slam'); r.fire('hum-stops'); r.frames(10)
@@ -1025,12 +1034,14 @@ describe('T1-9: drawers that pay a little more', () => {
     expect(r.said[1]).toMatch(/^in the drawer: /); expect(r.rolled.n).toBe(1)
     expect(r.D.searchLog.isSearched(p.key)).toBe(true); expect(r.D.searchLog.held(p.key)).toBeNull()
   })
-  it('replayed: the runners squeal for real, a noise of 3 at that drawer beside the search\'s own 4; the other empties only the 4', () => {
+  it('replayed: the runners squeal for real, SQUEAL_NOISE at that drawer beside the search\'s own 4, and louder (the loudest is what is heard); the other empties only the 4', () => {
+    const own = Number(lift(RESOLVE).match(/level\.entitySys\.noise\(p\.x, p\.y, (\d+)\)/)[1])
+    expect(own).toBe(4); expect(SQUEAL_NOISE).toBeGreaterThan(own)                        // (review C12: a 3 beside the 4 was never heard)
     const r = rig({ roll: { kind: 'empty' } })
     for (let n = 0; n < 8; n++) r.resolve(box(n))
     const k = r.said.indexOf(SQUEAL_LINE)
     expect(k).toBeGreaterThanOrEqual(0)
-    expect(r.noise.filter((x) => x[2] === 3)).toEqual([[box(k).x, box(k).y, 3]])
+    expect(r.noise.filter((x) => x[2] === SQUEAL_NOISE)).toEqual([[box(k).x, box(k).y, SQUEAL_NOISE]])
     expect(r.noise.filter((x) => x[2] === 4)).toHaveLength(8)
   })
   it('replayed: a floor plan that pins says so and steadies nothing; with nothing to pin it is read as its own note', () => {

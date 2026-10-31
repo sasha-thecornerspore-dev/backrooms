@@ -88,7 +88,7 @@ const ITEM_NAMES = {
 }
 // what the machine's tray says drops into it: every ITEM_NAMES key with its article (the deep stacks' tools and a floor's lean included)
 const TRAY_NAMES = {
-  'almond-water':   'some almond water',
+  'almond-water':   'a bottle of almond water',
   'glowstick':      'a glowstick',
   'bandage':        'a bandage',
   'polaroid':       'a polaroid camera',
@@ -2516,8 +2516,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // the arrival's event (events.js soundOnly, true only in the frame it fires) is heard, not read: no kind, so no line
     if (evId) { fireEvent(evId, PRIO.ambient, eventSched.soundOnly ? null : 'event'); dreadQuietT = 12 }
     dreadQuietT = Math.max(0, dreadQuietT - dt)
-    // an event's repeats (fireEvent's data branch): the next from the same side once the last has sounded and its quiet passed
-    if (fxLeft > 0 && (fxT -= dt) <= 0) { fxLeft--; fxT += fxEvery; call(fxSound, FX_PLAY.gain, fxPan) }
+    // an event's repeats (fireEvent's data branch): the next from the same side once the last has sounded and its quiet passed;
+    // none under a death's or a way's veil (startVisit clears what is left before the veil lifts)
+    if (fxLeft > 0 && !transitioning && (fxT -= dt) <= 0) { fxLeft--; fxT += fxEvery; call(fxSound, FX_PLAY.gain, fxPan) }
     // running water (a haunt): the footfalls keep your pace for as long as its timer runs
     if (waterT > 0) { waterT -= dt; waterStepT -= dt; if (waterStepT <= 0 && waterT > 0) { waterStepT = 3; footfall(8) } }
 

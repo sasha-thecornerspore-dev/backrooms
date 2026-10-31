@@ -3,9 +3,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   CONTAINER_TYPES, DRAWER_NOTES, EMPTY_LINES, SEARCH_HOLD_S, HANDS_FULL_LINE, DRAWER_COST,
-  SEARCH_HOLD_DARK_S, TRACE_LINES, SQUEAL_LINE, NOT_NOW_LINE, SEARCHED_HINT, searchingHint,
+  SEARCH_HOLD_DARK_S, TRACE_LINES, SQUEAL_LINE, SQUEAL_NOISE, NOT_NOW_LINE, SEARCHED_HINT, searchingHint,
   foldKey, itemSlot, isItemEligible, rollContainer, applyRoll, createSearchLog,
 } from '../src/renderer/containers.js'
+import { createNoiseField, floodNoise, loudnessAt } from '../src/renderer/hunt.js'
 import { LEVELS } from '../src/renderer/levels.js'
 import { PRIO } from '../src/renderer/messages.js'
 
@@ -319,7 +320,7 @@ describe('applyRoll', () => {
     expect(log.behind).toBe(1); expect(log.fired).toEqual([]); expect(log.messages).toEqual([])
   })
 
-  it('empty: true with one of EMPTY_LINES, cycling through all eight; the squeal is a real noise of 3', () => {
+  it('empty: true with one of EMPTY_LINES, cycling through all eight; the squeal is a real noise, SQUEAL_NOISE', () => {
     const seen = new Set()
     for (let i = 0; i < 16; i++) {
       const { a, log } = api()
@@ -327,12 +328,24 @@ describe('applyRoll', () => {
       expect(log.messages).toHaveLength(1)
       expect(EMPTY_LINES).toContain(log.messages[0][0]); expect(log.messages[0][1]).toBe(PRIO.interaction)
       expect(log.sanity).toBe(0)
-      expect(log.noise).toEqual(log.messages[0][0] === SQUEAL_LINE ? [3] : [])
+      expect(log.noise).toEqual(log.messages[0][0] === SQUEAL_LINE ? [SQUEAL_NOISE] : [])
       seen.add(log.messages[0][0])
     }
     expect(seen.size).toBe(8)
     // an api without noise still says the line
     for (let i = 0; i < 8; i++) { const { a } = api({ noise: undefined }); expect(() => applyRoll({ kind: 'empty' }, a)).not.toThrow() }
+  })
+
+  it('the squeal carries farther than the search it ends (every completed search is a noise of 4 at the drawer, game.js resolveSearch; a thing reacts to the loudest it hears)', () => {
+    expect(SQUEAL_NOISE).toBeGreaterThan(4)
+    const corridor = (x, y) => y === 60
+    const heardOver = (L) => {
+      const f = createNoiseField(); floodNoise(f, { x: 60.5, y: 60.5, L, t: 0 }, corridor)
+      let n = 0
+      for (let x = 40; x <= 80; x++) if (loudnessAt(f, x, 60) >= 1) n++
+      return n
+    }
+    expect(heardOver(SQUEAL_NOISE)).toBeGreaterThan(heardOver(4))
   })
 
   it('trace: the content line or the way line, by what api.trace() pinned; true either way, no sanity', () => {

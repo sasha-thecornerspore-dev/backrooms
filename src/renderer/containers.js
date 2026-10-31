@@ -25,8 +25,11 @@ export const SEARCHED_HINT = 'searched.'
 export function searchingHint(type) { return CONTAINER_TYPES[type] ? `searching ${CONTAINER_TYPES[type]}` : 'searching' }
 // the deep floors charge for every completed search (game.js applies it: applyRoll does not know the level); the line is said once a level
 export const DRAWER_COST = Object.freeze({ minLevel: 2, sanity: 2, line: 'something counts the drawers you open.' })
-// the one empty that is heard: applyRoll makes a real noise of 3 at the drawer with it
+// the one empty that is heard: applyRoll makes a real noise at the drawer with it, SQUEAL_NOISE. Every completed search is already
+// a noise of 4 there (game.js resolveSearch) and a thing reacts to the loudest it hears, so the squeal is the plan's 3 on top of
+// that 4: about a running step, heard farther than any other search
 export const SQUEAL_LINE = 'empty. the runners squeal.'
+export const SQUEAL_NOISE = 7
 export const EMPTY_LINES = Object.freeze([
   'empty. someone has been through here.',
   'empty. the drawer sticks on the way back.',
@@ -167,7 +170,7 @@ export function applyRoll(roll, api) {
     case 'empty': {
       const line = EMPTY_LINES[emptyN++ % EMPTY_LINES.length]
       api.message(line, PRIO.interaction)
-      if (line === SQUEAL_LINE) api.noise?.(3)
+      if (line === SQUEAL_LINE) api.noise?.(SQUEAL_NOISE)
       return true
     }
     case 'note':
