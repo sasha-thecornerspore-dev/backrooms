@@ -9,13 +9,27 @@ describe('CHANNELS', () => {
   it('names every channel the release plan places by', () => {
     expect(Object.keys(CHANNELS).sort()).toEqual(
       ['props', 'exits', 'npcs', 'scraps', 'machines', 'sights', 'upStair', 'lift', 'dress', 'containerSlot', 'containerRoll', 'haunts',
-        'firstrun'].sort())
+        'firstrun', 'feelings'].sort())
   })
 
   it('is append-only: the older channels keep their order and the first-run thread comes after them', () => {
     expect(Object.keys(CHANNELS).slice(0, 13)).toEqual(
       ['props', 'exits', 'npcs', 'scraps', 'machines', 'sights', 'upStair', 'lift', 'dress', 'containerSlot', 'containerRoll', 'haunts',
         'firstrun'])
+  })
+
+  it('the floor feelings come after the first run: appended, never reordered', () => {
+    expect(Object.keys(CHANNELS).slice(13)).toEqual(['feelings'])
+  })
+
+  it('feelings is a gate, a pick and an rng of its own, shared with no other channel', () => {
+    const fe = CHANNELS.feelings
+    expect(fe.gate).toHaveLength(2); expect(fe.pick).toHaveLength(2); expect(fe.rng).toHaveLength(4)
+    for (const [k, c] of entries) {
+      if (k === 'feelings') continue
+      for (const g of [c.gate, c.type, c.pick]) if (g) for (const own of [fe.gate, fe.pick]) { expect(g[0]).not.toBe(own[0]); expect(g.join(',')).not.toBe(own.join(',')) }
+      if (c.rng) expect(`${c.rng[0]},${c.rng[1]}`).not.toBe(`${fe.rng[0]},${fe.rng[1]}`)
+    }
   })
 
   it('firstrun is a gate and an rng of its own, shared with no other channel', () => {

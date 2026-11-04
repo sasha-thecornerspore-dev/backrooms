@@ -177,7 +177,8 @@ describe('game.js wiring (release rules)', () => {
     const idx = order(build, 'createChunkCache(cfg, worldSeed)', 'createGridReader(', 'createColliderIndex()', 'createDecorSystem(cfg, isWall, worldSeed, {', 'createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature })', 'createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => playT, seed: worldSeed })', 'makeGfx(cfg, cache)')
     for (let i = 1; i < idx.length; i++) expect(idx[i]).toBeGreaterThan(idx[i - 1])
     expect(build).toMatch(/passes: cfg\.map \? \[\] : \[stairsPass\(cfg, cfg\.ways\), dressPass\(cfg\), hauntsPass\(cfg\), index === 0 && firstRun\.on\(\) \? firstNotePass : null\]\.filter\(Boolean\)/)   // (pulse w2: the first run's note last)
-    expect(build).toMatch(/onChunk: \(k, bundle\) => bodies\.setChunk\(k, bundle\.colliders\)/)
+    // (floor feelings: the passage marks the chunk's drawers and chairs after the colliders are set, feelings-wiring)
+    expect(build).toMatch(/onChunk: \(k, bundle\) => \{ bodies\.setChunk\(k, bundle\.colliders\); markPassage\(bundle\.props, feel, searchLog\) \}/)
     expect(build).toMatch(/onEvict: \(k\) => bodies\.dropChunk\(k\)/)
     expect(game).toMatch(/level = \{ index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages \}/)      // the level object carries them all
   })

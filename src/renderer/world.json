@@ -31,6 +31,7 @@
     "the wallpaper is the same in every direction."
   ],
   "messageInterval": [25, 90],
+  "feelings": true,
   "items": {
     "density": 5,
     "types": ["almond-water", "glowstick", "polaroid", "radio"]

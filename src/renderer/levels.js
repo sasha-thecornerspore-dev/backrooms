@@ -275,6 +275,8 @@ export function levelConfig(base, index) {
     exit:     { ...(c.exit ?? {}) },
     // level messages replace the base atmospheric set
     messages: c.messages ?? base?.messages ?? [],
+    // the floor feelings' kill switch (feelings.js): world.json `feelings: false` turns them off on every floor; absent, they are on
+    feelings: base?.feelings !== false,
     levelIndex: lvl.id,
     levelName:  lvl.name,
     levelSub:   lvl.sub,
