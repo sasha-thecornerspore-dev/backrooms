@@ -11,7 +11,7 @@ import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerSt
 import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
 import { writeSave } from './save.js'
 import { formatAnchor, driftMeters, pinTag } from './anchor.js'
-import { initTouchControls, isTouchDevice } from './touch.js'
+import { initTouchControls, isTouchDevice, beaconShown, lineShown } from './touch.js'
 import { SCRAPS } from './scraps.js'
 import { createEventScheduler, EVENTS, FOOTSTEPS_ECHO, FX_PLAY, eventFx, createBag } from './events.js'
 import { createMessageQueue, PRIO } from './messages.js'
@@ -908,8 +908,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
   // ── touch controls (phones / ChromeOS tablets) — feeds K + player.angle, and the WARD button feeds the ward's edge counters;
   //    a no-op on desktop, so keyboard play is unchanged. CALL is a plain key button: it sets K['KeyC'] and the loop edge-consumes the
-  //    whistle exactly as it does the key (never an edge counter here) ──
-  initTouchControls({ canvas, K, player, getPref, edges: { Space: wardInput } })
+  //    whistle exactly as it does the key (never an edge counter here). BEACON is another (K['KeyB']); TYPE runs touchLine, the loop's
+  //    own Enter, inside the tap, so the line's input is focused inside the gesture and the phone's keyboard comes up. The loop tells
+  //    touchUi once a frame which of the two would do something (null off a touch screen) ──
+  const touchUi = initTouchControls({ canvas, K, player, getPref, edges: { Space: wardInput }, taps: { Enter: touchLine } })
 
   // ── wish dialog ──
   let dialogOpen = false
@@ -1405,9 +1407,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (chatInputEl) chatInputEl.style.display = 'none'
     if (typingSent) { typingSent = false; clearTimeout(typingStopT); mpClient?.sendTyping(false) }
   }
+  // the touch TYPE button (touch.js taps.Enter): the Enter branch of the loop, run inside the tap — the same line the keyboard opens
+  function touchLine() { if (!chatOpen && !dialogOpen && !noteOpen) openChat() }
   chatInputEl?.addEventListener('keydown', (e) => {
     e.stopPropagation()
-    if (e.code === 'Enter' || e.code === 'NumpadEnter') {
+    // a phone's on-screen keyboard may send its enter key with no code: its key is 'Enter' all the same (a keyboard's Enter is unchanged)
+    if (e.code === 'Enter' || e.code === 'NumpadEnter' || (e.key === 'Enter' && !e.isComposing)) {
       const t = chatInputEl.value.trim()
       if (t.startsWith('/') && !t.startsWith('/me ')) handleCommand(t)   // the field console
       else if (t && mpClient) mpClient.sendChat(t)
@@ -2826,6 +2831,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       // Space — the ward — is the charger block at the head of the frame (ward.js reads the press / release edge counts)
     }
     if (K['Escape'] && dialogOpen) { K['Escape'] = false; closeDialog() }
+    // the touch discs that come and go (touch.js; touchUi is null off a touch screen): TYPE while Enter would open the line (the Enter
+    // branch's test — in a room the chat, alone the console), BEACON while B would push one (a beacon set, the verbs live, not down)
+    if (touchUi) touchUi.show(lineShown(!!chatInputEl && !chatOpen && !dialogOpen && !noteOpen, !!mpClient), beaconShown(getPref('beaconEffect'), !transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen && down.st !== 'down'))
 
     // ── stream world + subsystems around the player ──
     level.cache.preload(pcx, pcy)

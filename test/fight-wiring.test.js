@@ -52,7 +52,7 @@ describe('game.js: the ward edges and the latch drops', () => {
     expect(at("if (r === 'ignore') return")).toBeLessThan(at("if (e.code === 'Space') wardInput.press++"))
   })
   it('the WARD touch button feeds the same counters', () => {
-    expect(game).toMatch(/initTouchControls\(\{ canvas, K, player, getPref, edges: \{ Space: wardInput \} \}\)/)
+    expect(game).toMatch(/initTouchControls\(\{ canvas, K, player, getPref, edges: \{ Space: wardInput \}, taps: \{ Enter: touchLine \} \}\)/)   // (I5: TYPE's tap)
   })
   it('a latch is dropped without firing on chat open, blur, a hidden tab and a lost pointer lock (the K sweep on blur stays)', () => {
     expect(game).toMatch(/window\.addEventListener\('blur', \(\) => \{ for \(const k in K\) K\[k\] = false; charger\.forceRelease\(\) \}\)/)
@@ -281,13 +281,14 @@ describe('touch.js edges (integrator)', () => {
   }
   afterEach(() => { for (const k of Object.keys(saved)) { if (saved[k] === undefined) delete globalThis[k]; else globalThis[k] = saved[k] } })
   it('source: initTouchControls takes `edges`; press++ on touchstart, release++ and the key let go on touchend / touchcancel; ACTIONS is six', () => {
-    expect(touch).toMatch(/export function initTouchControls\(\{ canvas, K, player, getPref, edges = null \} = \{\}\)/)
+    expect(touch).toMatch(/export function initTouchControls\(\{ canvas, K, player, getPref, edges = null, taps = null \} = \{\}\)/)   // (I5: taps, TYPE's Enter)
     expect(touch).toMatch(/if \(edge\) edge\.press\+\+/)
     expect(touch).toMatch(/if \(edge\) \{ edge\.release\+\+; K\[code\] = false \}/)
     const codes = [...touch.match(/const ACTIONS = \[([\s\S]*?)\n\]/)[1].matchAll(/code:\s*'([^']+)'/g)].map((x) => x[1])
     expect(codes).toEqual(['KeyF', 'KeyQ', 'Space', 'KeyE', 'KeyL', 'KeyC'])
     expect(touch).toMatch(/\{ code: 'KeyC', label: 'CALL', hint: 'whistle' \}/)
-    // six discs and ACT overflow a landscape phone: the top of the stack wraps into a second column to the left
+    // six discs and ACT overflow a landscape phone: the top of the stack wraps into a second column to the left (the CSS fallback;
+    // I5's placeDiscs keeps that order and wraps where another control is in the way — touch.test.js)
     expect(touch).toContain('flex-wrap: wrap-reverse')
   })
   it('replayed: WARD moves press on touchstart and release on touchend (clearing K.Space); ACT leaves K.KeyF for the loop', () => {
