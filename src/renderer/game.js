@@ -5,7 +5,7 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem, KEPT } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, setHum, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, step, pickup, paper, panelsOut, call, STEP_MATERIAL, STEP_GAIN, CALL_LEN, drawerSlide, whistle, bump } from './audio.js'
+import { initAudio, setFlicker, setRadio, setRadioStatic, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, setHum, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, step, pickup, paper, panelsOut, call, STEP_MATERIAL, STEP_GAIN, CALL_LEN, drawerSlide, whistle, bump } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
 import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
@@ -34,6 +34,7 @@ import { createMapCard } from './mapcard.js'
 import { compassLines, compassText, arrivalSummary, seenLine, pullVisible, pullWobble, lostDue, PULL_REDRAW_S } from './compass.js'
 import { TELL, SEEN_TELL, DREAD_CLOCK, dreadFrom, dreadNear, createTeller } from './dread.js'
 import { createPathField } from './pathfield.js'
+import { createRadioStatic } from './radiostatic.js'
 import { PRESENCE_HUSH_S, FIRST_NOTE, createFirstRun, noteRecord } from './firstrun.js'
 import { createPlateBudget, arrivalPlate } from './plates.js'
 import { feelingFor, applyFeeling, markPassage, FEEL } from './feelings.js'
@@ -347,6 +348,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const pathField = createPathField(), teller = createTeller()
   const dreadOut = { dread: 0, x: 0, y: 0, variant: null, d: -1, los: false }
   let dreadT = 0, fieldT = -Infinity, fieldOn = false
+  // the radio's static (radiostatic.js): your radio, on, hisses as that dread rises; one reused record, read each frame after tension
+  const radioStatic = createRadioStatic()
 
   // ── the numbers station + the counter-claim (the reality-tunneling arc) ──
   let stationIdx  = 0     // which group of the ledger-count the radio reads next
@@ -2968,6 +2971,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     huntMood = tn.mood === 'hunt'
     // not on the heels of 'it has seen you.': it would only wait out that line's dwell and push the hit's line back
     if (tn.close && playT - lastSeenLine > 1.6) showMessage('it is close.', PRIO.combat)
+    // ── the radio's static (radiostatic.js): your radio, carried and on, hisses under its tune as the dread above rises — the path's
+    //    dread, so a thing behind a wall counts only for the long way round to it, however close it stands, and one level in both
+    //    ears, so it says something is near along the halls and never where. A hunt holds it (dread counts nothing hunting you).
+    //    Behind dread's own gate and the block's: creatures off, a fade or the block, the radio is the radio it was. audio.js glides
+    //    to it and ignores an unchanged ask. Its price is perceptionFor's: the radio on, never hidden ──
+    const rs = radioStatic.tick(dreadOut.dread, th.hunted, aiCtx.radioOn, creaturesLive && !transitioning && !cfg.map)
+    setRadioStatic(rs.gain, rs.tc)
 
     // ── sanity — dark, the hunt and a thing's gaze drain it; light, almond water, a friend restore it ──
     // ONE step (compose-sanity.js), per second: under LEGACY the post-core block term for term — light ±2, the depth drain (Level ∅ none),
