@@ -8,7 +8,8 @@
 //   noiseMul      x what a creature hears of YOUR noises (a lure's and a friend's are never scaled)
 // The numbers are the rule blocks' (origin-rules.js and the origin blocks: rules.perception(ctx)); LEGACY is { 1, false, 1, 1 }
 // always. perceptionFor is the one seam game.js calls per frame: it copies the block's object (each block reuses its own; copy,
-// never retain) into ONE reused object here, and the caller copies the four values onto aiCtx.
+// never retain) into ONE reused object here, and the caller copies the four values onto aiCtx. One rule is the seam's own: your
+// radio on, you are never hidden (the price of its static, radiostatic.js). Every block already says so; the seam holds it for any.
 
 export const AI_CTX_KEYS = Object.freeze(['flashlight', 'sprinting', 'dark', 'fog', 'radioOn', 'lures', 't', 'hf', 'playerAngle', 'player', 'damage',
   'sightMul', 'hidden', 'loseTrackMul', 'noiseMul'])
@@ -21,7 +22,7 @@ const out = { sightMul: 1, hidden: false, loseTrackMul: 1, noiseMul: 1 }
 export function perceptionFor(ctx) {
   const p = ctx.rules.perception(ctx)
   out.sightMul = p.sightMul
-  out.hidden = p.hidden === true          // hunt.js hides only on `true`: the copy says what the things will do
+  out.hidden = p.hidden === true && !ctx.radioOn   // hunt.js hides only on `true`: the copy says what the things will do
   out.loseTrackMul = p.loseTrackMul
   out.noiseMul = p.noiseMul
   return out

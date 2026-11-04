@@ -12,6 +12,8 @@
 // Each composer hands back its one reused record every frame, and the aiCtx never gains a key.
 // The pulse's dread rides it too (S6a w3): read on its 4 Hz clock with the twenty always in reach, so the path field is flooded at
 // its most (twice a second) into the one record dreadFrom refills.
+// The radio's static rides it after the hunt's report (M21): radiostatic.js's one record every frame, the radio on so it does its real
+// work, handed to audio.js (no context in node: a no-op, as on a machine with no audio); the frame's aiCtx is left as it was.
 import { describe, it, expect } from 'vitest'
 import { DEFAULT_CONFIG, CHUNK_SIZE, createChunkCache, createGridReader } from '../src/renderer/world.js'
 import { levelConfig } from '../src/renderer/levels.js'
@@ -37,6 +39,8 @@ import { statusMods, depthOf } from '../src/renderer/status.js'
 import { closingOverlay, standConditions, standTick } from '../src/renderer/closings.js'
 import { createPathField } from '../src/renderer/pathfield.js'
 import { DREAD_CLOCK, dreadFrom, dreadNear, createTeller } from '../src/renderer/dread.js'
+import { createRadioStatic } from '../src/renderer/radiostatic.js'
+import { setRadioStatic } from '../src/renderer/audio.js'
 
 const FRAMES = 600, DT = 1 / 60, CREATURES = 20, BUDGET_MS = 150
 const SPEED = 0.05                      // game.js: const SPEED = 0.05; sp = SPEED * dt * 60 * mult
@@ -80,6 +84,7 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
   const compassOut = [], seenWays = [], seenSights = [], entEvents = []
   const pathField = createPathField(), teller = createTeller({ rng: () => 0.5 })   // game.js's one field, teller and record
   const dreadOut = { dread: 0, x: 0, y: 0, variant: null, d: -1, los: false }
+  const radioStatic = createRadioStatic()                                            // game.js's one static
   // game.js's aiCtx: the eleven the things always read, then the file's four trailing at their defaults (perceptionFor writes them per frame)
   const aiCtx = { flashlight: true, sprinting: false, dark: !cfg.lights, fog: cfg.fogDistance, radioOn: false, lures: [], t: 0, hf: HF, playerAngle: 0, player, damage: cfg.entities?.damage ?? 16, sightMul: 1, hidden: false, loseTrackMul: 1, noiseMul: 1 }
   // the file, as game.js holds it: the rules (anchored, thin over it), the status's mods and the closing's overlay, the stillness clocks on
@@ -104,7 +109,7 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
   // the walker's state across runs: the play clock, the cell / compass memos, the last hit, the identities seen so far
   const S = { playT: 0, lureT: 0, stepT: 0, hits: -Infinity, frame: 0, lastCellIx: NaN, lastCellIy: NaN, lastCompassAngle: -Infinity, lastWayCount: -1, lastCompassText: '', lastCompassT: -Infinity, pcx: NaN, pcy: NaN, threat: null, report: null, sameThreat: true, sameReport: true, maxEntities: 0, crossings: 0,
     sanity: 100, standHeld: 0, pf: null, san: null, stand: null, samePf: true, sameSan: true, sameStand: true, hiddenFrames: 0,
-    dreadT: 0, fieldT: -Infinity, fieldOn: false, builds: 0, reads: 0, sameDread: true }
+    dreadT: 0, fieldT: -Infinity, fieldOn: false, builds: 0, reads: 0, sameDread: true, rs: null, sameRs: true, hissFrames: 0 }
 
   // ONE frame of game.js's loop below the renderer, in its order
   function frame(dt) {
@@ -202,6 +207,11 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
     if (h) haunts.fire(h.key)
     // ── HP: contact damage with the game's i-frames; the walker never dies (the floor stays level 1) ──
     if (th.dmg > 0) { S.hits = S.playT; player.hp = Math.max(1, player.hp - th.dmg) }
+    // ── the radio's static, on this frame's dread and hunt, the radio on ──
+    const rs = radioStatic.tick(dreadOut.dread, th.hunted, true, true)
+    if (S.rs === null) S.rs = rs; else if (rs !== S.rs) S.sameRs = false
+    if (rs.gain > 0) S.hissFrames++
+    setRadioStatic(rs.gain, rs.tc)
     // ── the one sanity step (the reused sanCtx refilled where game.js refills it), the clamp, the pool; then the stand's tick ──
     sanCtx.flashlight = aiCtx.flashlight; sanCtx.litNear = false; sanCtx.hunted = th.hunted; sanCtx.gaze = th.gaze; sanCtx.gazeRate = th.gazeRate
     sanCtx.drift = 0; sanCtx.leashCalm = 0; sanCtx.down = false
@@ -246,6 +256,8 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
     expect(S.sameSan, 'sanityStep returns the one record every frame').toBe(true)
     expect(S.sameStand, 'standTick returns the one record every frame').toBe(true)
     expect(S.sameDread, 'dreadFrom refills the one record every read').toBe(true)
+    expect(S.sameRs, 'the radio static hands back the one record every frame').toBe(true)
+    expect(S.hissFrames, 'the twenty in reach: the static hissed').toBeGreaterThan(0)
     // 4 Hz reads over both runs; the field flooded at most twice a second, and flooded at all (the twenty are in reach)
     expect(Math.abs(S.reads - (2 * FRAMES * DT) / DREAD_CLOCK.tick)).toBeLessThanOrEqual(1)
     expect(S.builds).toBeGreaterThan(0); expect(S.builds).toBeLessThanOrEqual((2 * FRAMES * DT) / DREAD_CLOCK.build + 1)
