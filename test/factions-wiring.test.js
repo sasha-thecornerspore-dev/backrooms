@@ -777,7 +777,7 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
   it('the film, lifted and replayed: today\'s three captions, +8 after the caption read the sanity, the letter only on a letter; a friend in frame, the soul\'s door, the pin\'s calm, thin\'s first shot', () => {
     const body = slice('const thinNear = ephemera.some(', '// the door a lost soul in the film stands before').replace(/\}\s*$/, '')
     const fn = new Function('ephemera', 'player', 'bus', 'subjectInFrame', 'FRAME_OPTS', 'level', 'SOUL_RANGE', 'inFrame', 'polaroidCaption', 'knownWayArrow', 'rules', 'mods', 'file',
-      'origin', 'thin', 'anchor', 'myPinTag', 'driftD', 'wardPulse', 'window', 'dataUrl', 'showMessage', 'st', 'out',
+      'origin', 'thin', 'anchor', 'myPinTag', 'driftD', 'wardPulse', 'window', 'dataUrl', 'showMessage', 'st', 'out', 'developDen',
       `let { sanity, photoIdx, thinFirstShot, shotOnLevel, leashCalm } = st\n${body}\nObject.assign(st, { sanity, photoIdx, thinFirstShot, shotOnLevel, leashCalm })`)
     const player = { x: 10.5, y: 10.5, angle: 0 }
     const opts = { pos: (id) => (id === 'f' ? { x: 15.5, y: 10.5, angle: Math.PI } : null), cone: inViewCone, hf: HF, maxCells: SUBJECT_RANGE, los: () => true }
@@ -785,7 +785,9 @@ describe('I8 (W4 / W3 / W8): the film, the station, the presence, the seam and t
       const out = { said: [], pulses: 0 }
       fn(o.ephemera ?? [], player, o.bus ?? null, subjectInFrame, opts, { index: st.index, depth: depthOf(st.index), decor: { nearestNpc: () => o.npc ?? null } }, SOUL_RANGE, inFrame,
         polaroidCaption, () => o.arrow ?? null, o.rules ?? LEGACY, o.mods ?? NM, { status: o.status ?? 'notice-mailed' }, o.origin ?? null, o.thin ?? false, o.anchor ?? null,
-        o.tag ?? null, () => o.D ?? 0, () => out.pulses++, {}, null, (m, p) => out.said.push(p === undefined ? m : [m, p]), st, out)
+        o.tag ?? null, () => o.D ?? 0, () => out.pulses++, {}, null, (m, p) => out.said.push(p === undefined ? m : [m, p]), st, out,
+        () => out.said.push('(den)'))                                 // the film's den: its own step, after the caption (film-wiring.test.js)
+      out.said = out.said.filter((m, i, a) => { if (m !== '(den)') return true; expect(i, 'the den after the caption').toBe(a.length - 1); return false })
       return out
     }
     const legacy = (thinNear, index, sanity, photoIdx) => thinNear ? 'the film shows someone who was not in the room. you can see the wall through them.'

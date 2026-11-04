@@ -4,7 +4,7 @@
 // flood-fills from the player's cell through OPEN cells only (4-connected) to Chebyshev radius r on fixed scratch arrays, so parallel
 // halls you never entered stay blank. EPOCHS: when the cache has regenerated a chunk (epochOf differs from the one stored) its bits are
 // NOT cleared: the chunk is flagged faded (drawn at 0.22), its epoch updated, and what you walk from then on goes into a second 'fresh'
-// bitfield as well, so re-walked strokes draw dark over the ghost of the old ones. Pins (ways, machines, sights, notes, arrivals, hurts)
+// bitfield as well, so re-walked strokes draw dark over the ghost of the old ones. Pins (ways, machines, sights, notes, arrivals, hurts, dens)
 // are keyed records; a way pin whose chunk went stale and is not where you drew it is 'lost' (drawn hollow, dropped from the compass).
 // Pure: no DOM, no clock. export() is plain JSON (cached base64 per chunk) for the save.
 import { CHUNK_SIZE } from './world.js'
@@ -210,7 +210,8 @@ export function createFogMap() {
     return p
   }
 
-  // anything else worth a glyph: machines (flag = vended), notes (flag = read), sights, npcs, where you arrived, where it hurt you
+  // anything else worth a glyph: machines (flag = vended), notes (flag = read), sights, npcs, where you arrived, where it hurt you, a
+  // creature's den (flag = its kind: film.js, the polaroid's)
   function pinThing(level, key, type, x, y, flag = null) {
     const L = levelOf(level)
     const cx = Math.floor(x / N), cy = Math.floor(y / N)

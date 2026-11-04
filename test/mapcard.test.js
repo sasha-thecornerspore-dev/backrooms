@@ -38,7 +38,7 @@ function fogWithPins() {
 describe('GLYPHS', () => {
   it('covers every WAY_KINDS entry and the things', () => {
     for (const k of WAY_KINDS) expect(typeof GLYPHS[k]).toBe('string')
-    expect(GLYPHS).toEqual({ down: '▽', up: '△', lift: '◇', ring: '▽', machine: '⊟', sight: '✶', note: '¶', arrived: '○', hurt: '×' })
+    expect(GLYPHS).toEqual({ down: '▽', up: '△', lift: '◇', ring: '▽', machine: '⊟', sight: '✶', note: '¶', arrived: '○', hurt: '×', den: '⌂' })
   })
 })
 

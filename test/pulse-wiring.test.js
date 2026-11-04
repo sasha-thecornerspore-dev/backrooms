@@ -730,7 +730,7 @@ function arrival({ map = null, queue = false, cfg = { map } } = {}) {
   // (w3: startVisit also starts the floor's events and its dread over: inert stand-ins here, replayed for real in the w3 section)
   const h = new Function('plates', 'showMessage', 'setTimeout', 'PRIO', 'msgQ', 'level',
     `let playT = 0, arrivalGen = 0, floorT0 = 0, floorHinted = false, pullPhase = 0, lostSaid = false, hintHeld = false\n` +
-    'let dreadQuietT = 0, sanity = 100, fieldOn = false, fxLeft = 0\nconst eventSched = { arrive() {} }, teller = { reset() {} }, dreadOut = { dread: 0 }\n' +
+    'let dreadQuietT = 0, sanity = 100, fieldOn = false, fxLeft = 0\nconst eventSched = { arrive() {} }, teller = { reset() {} }, dreadOut = { dread: 0 }, film = { arrive() {} }\n' +
     `${lift(PLATE)}\n` +
     `${lift(LATER)}\n${lift(VISIT)}\nfunction drainFrame() {\n${drain}\n}\n` +
     'return { plate, later, startVisit, drainFrame, set: (t) => { playT = t } }')(createPlateBudget(), show, (f, ms) => timers.push({ ms, f, done: false }), PRIO,
@@ -907,7 +907,7 @@ describe('T1-5: events that carry their own effect, the arrival\'s event, the mu
       panelsOut: () => other.push('panels'), doorSlam: () => other.push('slam'), humDuck: () => other.push('duck'), whisper: () => other.push('whisper'),
       footfall: () => other.push('footfall'), heartbeat: () => {}, spawnCrosser: () => other.push('crosser'),
       eventSched: sched ?? { tick: () => null, soundOnly: false, arrive: (l, s) => arrived.push([l, s]) },
-      teller: { reset: () => other.push('teller') }, dreadOut: { dread: 0.4 },
+      teller: { reset: () => other.push('teller') }, dreadOut: { dread: 0.4 }, film: { n: 0, arrive() { this.n++ } },
     }
     const st = { playT: 0, dt: 0, flickTgt: 1, flickTimer: 0, shake: 0, sanity: 100, echoSteps: 0, echoStill: 0, transitioning: false, dialogOpen: false,
       chatOpen: false, noteOpen: false, searchT: 0, dreadQuietT: quiet, fxSound: '', fxPan: 0, fxLeft: 0, fxEvery: 0, fxT: 0,
@@ -995,6 +995,7 @@ describe('T1-5: events that carry their own effect, the arrival\'s event, the mu
       expect(r.arrived).toEqual([[index, 61]])
       expect([r.st.dreadQuietT, r.st.fieldOn, r.D.dreadOut.dread, r.st.fxLeft]).toEqual([0, false, 0, 0])
       expect(r.other).toEqual(['teller'])
+      expect(r.D.film.n).toBe(1)                                                             // and the film's caught kinds go (film-wiring.test.js)
     }
     const b = rig({ index: BLOCK, quiet: 20 }); b.visit()
     expect(b.arrived).toEqual([]); expect(b.st.dreadQuietT).toBe(0)                       // the block has no events: nothing to start

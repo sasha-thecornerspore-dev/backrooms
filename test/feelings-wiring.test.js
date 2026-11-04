@@ -136,7 +136,7 @@ function arrival(cfg) {
   const drain = slice('const held = plates.drain(playT)', '// ── Living Atmosphere')
   const h = new Function('plates', 'showMessage', 'setTimeout', 'PRIO', 'msgQ', 'level',
     'let playT = 0, arrivalGen = 0, floorT0 = 0, floorHinted = false, pullPhase = 0, lostSaid = false, hintHeld = false\n' +
-    'let dreadQuietT = 0, sanity = 100, fieldOn = false, fxLeft = 0\nconst eventSched = { arrive() {} }, teller = { reset() {} }, dreadOut = { dread: 0 }\n' +
+    'let dreadQuietT = 0, sanity = 100, fieldOn = false, fxLeft = 0\nconst eventSched = { arrive() {} }, teller = { reset() {} }, dreadOut = { dread: 0 }, film = { arrive() {} }\n' +
     `${lift(PLATE)}\n${lift(LATER)}\n${lift(VISIT)}\nfunction drainFrame() {\n${drain}\n}\n` +
     'return { plate, later, startVisit, drainFrame, set: (t) => { playT = t } }')(createPlateBudget(), (t) => said.push([now, t]), (f, ms) => timers.push({ ms, f, done: false }), PRIO,
     { idle: () => true }, { index: 1, cfg })
