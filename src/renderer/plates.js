@@ -17,7 +17,7 @@
 // arrivalPlate(cfg, first) -> the plate a floor arrives with: its sub-line the first time (never shown anywhere before), its name after
 //   (the HUD carries the name already). The block keeps its name.
 export const ARRIVAL_KINDS = Object.freeze(['floor', 'arrival'])
-export const UNPROMPTED_KINDS = Object.freeze(['event', 'murmur', 'haunt', 'beat', 'clock', 'vignette', 'sign'])
+export const UNPROMPTED_KINDS = Object.freeze(['event', 'murmur', 'haunt', 'beat', 'clock', 'vignette', 'sign', 'learn'])   // 'learn': a floor's things learned a habit of yours (learn.js)
 export const FREE_KINDS = Object.freeze(['read', 'search', 'speak', 'gate', 'combat'])
 export const DRAIN_S = 10
 export const QUEUE_CAP = 4

@@ -26,6 +26,7 @@ import { createTension, huntDelta, calmDelta } from './tension.js'
 import { FOV, HF } from './gfx-frame.js'
 import { waysFor, stairsPass, chunkMid, findOpenNear, arrivalFor, wayMessage, wayLabel, entryLevel } from './topology.js'
 import { createLevelMemory, applyResume } from './levelmem.js'
+import { createLearning, learnsHere } from './learn.js'
 import { resolveDeath, onArrive, wakeSpot } from './death.js'
 import { createFogMap, revealRadius } from './fogmap.js'
 import { visibleWays, SIGHT_LINES, PROX_PIN } from './sightpins.js'
@@ -296,6 +297,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    searched, set down; where you stood), the chunk you arrived in, the way you came by (still closing behind you for 5 s), the
   //    deaths, and the trays locked after one until the next travel ──
   const mem = createLevelMemory()
+  // the things learn your habits (learn.js, M19): each floor counts how you got away from its hunts, in that same memory, and the third
+  // getaway by one method teaches its things one refinement against it for the rest of the run there (buildLevel hands them it)
+  const learning = createLearning({ mem })
   let spawnChunk = { cx: 0, cy: 0 }
   let closing    = null   // { key, until }: the way you just arrived by does not take you straight back
   let deaths     = 0
@@ -482,6 +486,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       case 'crawler': sanity = Math.max(0, sanity - 8); showMessage('something takes your ankles.', PRIO.urgent); break
       case 'watcher-dispelled': sanity = Math.min(100, sanity + 12); showMessage('it looks away first.', PRIO.interaction); break
       // 'arc': the jolt itself lands through th.dmg / th.dmgKind ('the current finds you.')
+      // a thing that hunted you gave up (learn.js): the getaway counts on this floor, and the third by one method teaches its things and
+      // says so once, a discovery the plate budget holds like any unprompted line. None comes in a room, on the block or with the things off
+      case 'escape-still': case 'escape-ward': case 'escape-run': case 'escape-flash': { const l = learning.escape(level.index, ev.kind, playT); if (l) plate('learn', l, PRIO.discovery) } break
     }
   }
 
@@ -618,6 +625,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // the creatures step around the same bodies, read the same grid, and count their dispels on the play clock (hunt.js); where they
     // stand is this floor's and this world's (entities.js: the maze salt and the world seed, which a room shares; null is unseeded)
     const entitySys = createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => playT, seed: worldSeed })
+    // what this floor's things have learned of you (learn.js): alone only (a room relays a friend's ward onto your things and keeps no
+    // save, so the habits would be no one's) and never on the block; null is the hunt as it always was
+    entitySys.setLearn(learnsHere({ room: !!mpClient, block: !!cfg.map }) ? learning.refinements(index) : null)
     // The previous level's renderer is disposed BEFORE the next one is created: a GPU backend owns a WebGL context on a sibling canvas, and
     // browsers cap live contexts (~16), so a level change must not leave one behind.
     if (level && level.gfx) { try { level.gfx.dispose() } catch { /* a half-torn-down renderer must never block a level change */ } level.gfx = null }

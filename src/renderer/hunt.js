@@ -9,8 +9,14 @@
 // entities.js owns the list, the spawns and the ward; it calls stepAI(e, dt, ctx, spec, env, threat) for every gated
 // creature and separate(gated, env) after. `env` is ONE object entities.js mutates per frame:
 //   { dt, now, pcx, pcy, player, ctx, isWall(ix, iy), floor(ix, iy), obstacles | null, field, losBudget, damage,
-//     helpers (made here, once), threat }
+//     helpers (made here, once), threat, learn }
 // Nothing here allocates per frame: the helpers object, the event pool and the noise field are made once.
+//
+// env.learn (M19, learn.js; entities.setLearn) is what this floor's things have learned of your habits: null (or absent) is the hunt as
+// it always was, byte for byte (learn.test.js pins it against the code before M19). Present, every thing carries `lrn`, how its hunt of
+// you is going: 'hunt' while it hunts, then the way the hunt broke ('still' / 'run' here, 'ward' / 'flash' in entities.js), and when it
+// gives up (its search runs out) letGo() says so as an escape event (ESCAPE_KINDS). Its tables, each null until the floor is taught:
+// still (x loseTrack while you are hidden) and run (on along your last heading at the loss) here, ward and flash in entities.js.
 import { lineOfSight } from './raycaster.js'
 import { creatureRadius } from './collide.js'
 import { specFor, stepVariant, sightRange, CRAWLER_DMG } from './variants.js'
@@ -40,6 +46,17 @@ const OFFS = [0.6, -0.6, 1.2, -1.2, 1.9, -1.9]
 const DX4 = [1, -1, 0, 0], DY4 = [0, 0, 1, -1]
 // the hunting phases: threat.hunted here, and what entities.snapshotChasers counts as on your heels
 export const HUNTING = new Set(['hunt', 'freeze', 'windup', 'lunge', 'recover', 'arcCharge'])
+// M19: the getaway a thing reports when it gives up, by the way its hunt of you broke (levelmem.ESCAPE_METHODS; learn.js counts them)
+export const ESCAPE_KINDS = Object.freeze({ still: 'escape-still', ward: 'escape-ward', run: 'escape-run', flash: 'escape-flash' })
+
+// M19: a thing that hunted you gives up (its search ran out, it came apart in the light, it fell beyond the gate): the way the hunt
+// broke is the getaway, said once as its escape event; a hunt still going ('hunt') or none ('') says nothing. Only ever reached with
+// env.learn set: `lrn` is never written otherwise
+export function letGo(e, threat, d) {
+  const k = e.lrn === 'still' || e.lrn === 'ward' || e.lrn === 'run' || e.lrn === 'flash' ? ESCAPE_KINDS[e.lrn] : null
+  if (k !== null) threat.emit(k, e, d)
+  e.lrn = ''
+}
 
 function hash3(a, b, c) {
   let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263) + Math.imul(c | 0, 2246822519)) | 0
@@ -332,13 +349,38 @@ function enterHunt(e, d, threat, p) {
   if (e.ai !== 'hunt') { threat.emit('seen', e, d); e.huntT = 0 }
   e.ai = 'hunt'; e.lostT = 0; e.blockedT = 0; e.holdT = 0
   e.lastSeenX = p.x; e.lastSeenY = p.y
+  if (e.lrnLed === true) e.lrnLed = false                    // M19: a fresh sighting may follow your heading again
 }
 function enterSearch(e, x, y) {
   e.ai = 'search'; e.lastSeenX = x; e.lastSeenY = y; e.tx = x; e.ty = y
   e.searchT = 0; e.searchK = -1; e.dwellT = 0; e.progT = 0; e.bestD = Infinity; e.blockedT = 0; e.holdT = 0
 }
-function enterRoam(e) {
+function enterRoam(e, L, threat, d) {
   e.ai = 'roam'; e.searchN++; e.dirTimer = 0; e.holdT = 0; e.blockedT = 0
+  if (L !== null) letGo(e, threat, d)                         // M19: it gave up on you
+}
+// M19 against the run: your heading as it read it between two sightings (your facing until you have moved a little)
+function noteHeading(e, p) {
+  if (e.lastSeenX === null || e.lastSeenY === null) return
+  const hx = p.x - e.lastSeenX, hy = p.y - e.lastSeenY
+  if (hx * hx + hy * hy > 0.0025) e.lrnHead = Math.atan2(hy, hx)
+  else if (e.lrnHead === undefined) e.lrnHead = p.angle ?? 0
+}
+// M19 against the run: from where it lost you, on along your last heading, half a cell at a time until a wall, at most R.lead u ->
+// whether there was a cell of it (moved its last-seen point there); under a cell, it searches where it lost you, as before
+function followHeading(e, R, env) {
+  const a = e.lrnHead
+  if (a === undefined) return false
+  const max = R.lead[e.variant] ?? 0
+  const c = Math.cos(a), s = Math.sin(a)
+  let k = 0
+  for (let u = 0.5; u <= max + 1e-9; u += 0.5) {
+    if (!env.floor(Math.floor(e.lastSeenX + c * u), Math.floor(e.lastSeenY + s * u))) break
+    k = u
+  }
+  if (k < 1) return false
+  e.lastSeenX += c * k; e.lastSeenY += s * k
+  return true
 }
 function enterTurning(e, burst) {
   e.stagger = 0; e.staggerBlockedT = 0; e.ai = 'turning'; e.turnT = TURNING_S; e.turnBurst = burst
@@ -379,6 +421,8 @@ export function stepAI(e, dt, ctx, spec, env, threat) {
   const dx = p.x - e.x, dy = p.y - e.y
   const d = Math.sqrt(dx * dx + dy * dy)
   if (spec.hostilePhases.size > 0 && !(e.stagger > 0) && d < threat.nearest) { threat.nearest = d; threat.nearestEntity = e }
+  const L = env.learn ?? null                                 // M19: what this floor's things have learned of you (null: nothing)
+  if (L !== null && HUNTING.has(e.ai) && !(e.stagger > 0)) e.lrn = 'hunt'   // it hunts you: whatever broke an earlier hunt is moot
 
   // hearing: every live flood not yet heard (ids rise with each noise), read once each at this creature's cell; the
   // loudest audible one is reacted to, and everything audible up to the newest counts as heard. Your own noises carry
@@ -447,20 +491,35 @@ export function stepAI(e, dt, ctx, spec, env, threat) {
         break
       }
       case 'hunt': {
-        if (e.seen) { if (e.fresh) { e.lastSeenX = p.x; e.lastSeenY = p.y } e.lostT = 0 } else e.lostT += dt
+        if (e.seen) {
+          if (e.fresh) { if (L !== null && L.run !== null) noteHeading(e, p); e.lastSeenX = p.x; e.lastSeenY = p.y }
+          e.lostT = 0
+          if (e.lrnLed === true) e.lrnLed = false
+        } else e.lostT += dt
         e.huntT += dt
         if (e.burstT > 0) e.burstT -= dt
         moveToward(e, e.lastSeenX, e.lastSeenY, spec.hunt * (e.burstT > 0 ? 1.33 : 1), env)
-        if (e.lostT > spec.loseTrack * (ctx.loseTrackMul ?? 1)) { if (e.huntT >= 4) threat.emit('lost', e, d); enterSearch(e, e.lastSeenX, e.lastSeenY) }
+        let lose = spec.loseTrack * (ctx.loseTrackMul ?? 1)
+        if (L !== null && L.still !== null && ctx.hidden === true) lose *= L.still[e.variant] ?? 1   // M19: it has learned to wait
+        if (e.lostT > lose) {
+          // M19: taught against the run, a thing that loses the line (you not hidden) keeps your last heading on, once a sighting
+          if (L !== null && L.run !== null && ctx.hidden !== true && e.lrnLed !== true && followHeading(e, L.run, env)) {
+            e.lrnLed = true; e.lostT = Math.max(0, lose - L.run.extra)
+          } else {
+            if (e.huntT >= 4) threat.emit('lost', e, d)
+            if (L !== null) e.lrn = ctx.hidden === true ? 'still' : 'run'
+            enterSearch(e, e.lastSeenX, e.lastSeenY)
+          }
+        }
         break
       }
       case 'search': {
         if (e.seen) { enterHunt(e, d, threat, p); break }
         e.searchT += dt
-        if (e.searchT > SEARCH_MAX) { enterRoam(e); break }
+        if (e.searchT > SEARCH_MAX) { enterRoam(e, L, threat, d); break }
         if (e.dwellT > 0) {                                   // standing at a point, looking
           e.dwellT -= dt
-          if (e.dwellT <= 0) { e.dwellT = 0; if (e.searchK >= WAYPOINTS - 1) enterRoam(e); else nextWaypoint(e) }
+          if (e.dwellT <= 0) { e.dwellT = 0; if (e.searchK >= WAYPOINTS - 1) enterRoam(e, L, threat, d); else nextWaypoint(e) }
           break
         }
         const sx = e.tx - e.x, sy = e.ty - e.y

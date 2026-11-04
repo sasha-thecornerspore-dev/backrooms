@@ -19,7 +19,7 @@ const BUDGETED = [...ARRIVAL_KINDS, ...UNPROMPTED_KINDS]
 describe('the kinds', () => {
   it('names the arrival, unprompted and free kinds, frozen and disjoint', () => {
     expect(ARRIVAL_KINDS).toEqual(['floor', 'arrival'])
-    expect(UNPROMPTED_KINDS).toEqual(['event', 'murmur', 'haunt', 'beat', 'clock', 'vignette', 'sign'])
+    expect(UNPROMPTED_KINDS).toEqual(['event', 'murmur', 'haunt', 'beat', 'clock', 'vignette', 'sign', 'learn'])   // (M19: the things learned a habit of yours)
     expect(FREE_KINDS).toEqual(['read', 'search', 'speak', 'gate', 'combat'])   // (review batch five follow-up: no 'wake'; a death's lines are its arrival's)
     for (const k of [ARRIVAL_KINDS, UNPROMPTED_KINDS, FREE_KINDS]) expect(Object.isFrozen(k)).toBe(true)
     const all = [...ARRIVAL_KINDS, ...UNPROMPTED_KINDS, ...FREE_KINDS]
