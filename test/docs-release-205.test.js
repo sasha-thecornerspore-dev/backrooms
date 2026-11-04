@@ -9,12 +9,31 @@ import { denLine } from '../src/renderer/film.js'
 import { SITUATIONAL } from '../src/renderer/touch.js'
 
 const notes = fs.readFileSync(new URL('../docs/release-notes/v2.0.5.md', import.meta.url), 'utf8')
-const draftLeftOpen = (s) => /DRAFT|<!--|-->/.test(s.replace(/<!--[^]*?-->/g, ''))
+// what is left outside the closed comments, walked with indexOf as docs-pulse.test.js does, and whether a marker is left open in it
+const draftLeftOpen = (s) => {
+  let rest = ''
+  for (let i = 0; ;) {
+    const open = s.indexOf('<!--', i)
+    if (open < 0) { rest += s.slice(i); break }
+    rest += s.slice(i, open)
+    const ends = [s.indexOf('-->', open + 4), s.indexOf('--!>', open + 4)].filter((e) => e >= 0)
+    if (!ends.length) return true
+    const end = Math.min(...ends)
+    i = end + (s.startsWith('-->', end) ? 3 : 4)
+  }
+  return rest.includes('DRAFT') || rest.includes('<!--') || rest.includes('-->') || rest.includes('--!>')
+}
+const dropLeadingComment = (s) => {
+  if (!s.startsWith('<!--')) return s
+  const end = s.indexOf('-->')
+  return end < 0 ? s : s.slice(end + 3).replace(/^\r?\n/, '')
+}
 
 describe('the 2.0.5 release notes', () => {
   it('leave no draft marker open, with the draft comment or without it', () => {
     expect(draftLeftOpen(notes)).toBe(false)
-    expect(draftLeftOpen(notes.replace(/^<!--[^]*?-->\r?\n/, ''))).toBe(false)
+    expect(draftLeftOpen(dropLeadingComment(notes))).toBe(false)
+    expect(notes.startsWith('<!--')).toBe(false)   // the owner kept the features as built (2026-11-04): the draft comment is off
   })
   it('quote the new lines as the game says them, and name the touch buttons as the discs read', () => {
     for (const f of Object.values(FEELINGS)) expect(notes, f.line).toContain(`*${f.line}*`)
