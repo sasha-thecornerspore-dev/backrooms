@@ -1,6 +1,6 @@
 import { CHUNK_SIZE } from './world.js'
 import { specFor } from './variants.js'
-import { stepAI, separate, createThreat, createNoiseField, floodNoise, lineOfSight, letGo, DISPEL_S, TURNING_S, HUNTING } from './hunt.js'
+import { stepAI, separate, createThreat, createNoiseField, floodNoise, lineOfSight, letGo, huntsYou, DISPEL_S, TURNING_S, HUNTING } from './hunt.js'
 import { creatureRadius } from './collide.js'
 
 const MAX_ENTITIES = 20
@@ -347,7 +347,7 @@ export function createEntitySystem(config, isWallFn, deps = null) {
       const spec        = specFor(e.variant)
       let   staggerTime = opts.staggerTime ?? spec.staggerT
       const dispelAt    = opts.dispelAt    ?? spec.dispelAt
-      const hunting     = L !== null && ((e.lrn !== undefined && e.lrn !== '') || HUNTING.has(e.ai))
+      const hunting     = L !== null && ((e.lrn !== undefined && e.lrn !== '') || huntsYou(e))
       if (L !== null && L.ward !== null && staggerTime > TURNING_S) staggerTime = TURNING_S + (staggerTime - TURNING_S) * (L.ward[e.variant] ?? 1)
       const kb          = knockback * (e.ai === 'windup' || e.ai === 'lunge' ? spec.wardMul : 1)
       const r           = Math.min(creatureRadius(e.variant), 0.22)
@@ -399,7 +399,7 @@ export function createEntitySystem(config, isWallFn, deps = null) {
       a = Math.atan2(Math.sin(a), Math.cos(a))
       if (Math.abs(a) > halfCone) continue
       if (!lineOfSight(player.x, player.y, e.x, e.y, env.floor)) continue
-      const hunting = L !== null && ((e.lrn !== undefined && e.lrn !== '') || HUNTING.has(e.ai))
+      const hunting = L !== null && ((e.lrn !== undefined && e.lrn !== '') || huntsYou(e))
       e.stagger = F !== null ? stagger * (F.reel[e.variant] ?? 1) : stagger; e.staggerBlockedT = 0; e.turnBurst = false
       if (e.variant === 'smiler' || e.variant === 'lurker') { e.ai = 'retreat'; e.phaseT = F !== null ? (F.head[e.variant] ?? 0) : 0 } else e.ai = 'stagger'
       if (hunting) e.lrn = 'flash'

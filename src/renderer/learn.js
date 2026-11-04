@@ -6,8 +6,8 @@
 //   ward    a push ended the hunt (it reeled, turned and searched where you had been; or it came apart in the light)
 //   flash   the polaroid did (it reeled blind, or ran from it)
 // A getaway counts when the thing gives up (its search runs out, it comes apart, it falls beyond the gate), not when the hunt breaks:
-// a search that finds you again was no getaway. The lurker sent off by your light is its own rule, not a habit: not counted. A brood
-// that gives up together is one getaway (LEARN.merge). The counts are the floor's memory (levelmem.escapesFor / noteEscape), so they
+// a search that finds you again was no getaway. The lurker sent off by your light is its own rule, not a habit: not counted; nor is
+// anything after a crawler's grab, which is its one rule and never a hunt (hunt.js huntsYou). A brood that gives up together is one getaway (LEARN.merge). The counts are the floor's memory (levelmem.escapesFor / noteEscape), so they
 // last the rest of the run there, through a death and across a quit, and a new run starts clean.
 //
 // After the third getaway by one method on a floor (LEARN.after), every thing on that floor gains one refinement against it, for the

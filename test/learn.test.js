@@ -318,6 +318,42 @@ describe('the getaways the hunt tells apart (counting on, no refinement yet)', (
     expect(kinds).toContain('lurker-hunt')
     expect(kinds.filter((k) => k.startsWith('escape-'))).toEqual([])
   })
+  it('not a getaway: a crawler\'s grab (its lunge is its one rule, not a hunt), whatever comes after it', () => {
+    const none = (kinds) => kinds.filter((k) => k.startsWith('escape-'))
+    // you stand beside it in the dark: it takes your ankles, draws off and lies still; then you walk off beyond the gate
+    const a = scene(counting(), 'crawler')
+    a.e.x = 13.5; a.ctx.dark = true
+    let kinds = drive(a.sys, a.player, a.ctx, 6)
+    expect(kinds).toContain('crawler')
+    expect(a.e.ai).toBe('still')
+    expect('lrn' in a.e).toBe(false)                                     // never tagged as hunting you
+    a.player.x = 5.5 + 5 * N
+    kinds = kinds.concat(drive(a.sys, a.player, a.ctx, 1))
+    expect(a.e.ai).toBe('roam')
+    expect(none(kinds)).toEqual([])
+    // a ward that takes it apart mid-grab (dispelAt 2), and one that only sends it reeling, then the gate
+    const b = scene(counting(), 'crawler')
+    b.e.ai = 'lunge'; b.e.x = 14.2; b.e.wardHits = 1
+    expect(b.sys.ward(b.player).dispelled).toBe(1)
+    expect(none(drive(b.sys, b.player, b.ctx, DT))).toEqual([])
+    const c = scene(counting(), 'crawler')
+    c.e.ai = 'lunge'; c.e.x = 14.2
+    expect(c.sys.ward(c.player).hit).toBe(1)
+    kinds = drive(c.sys, c.player, c.ctx, 3)
+    c.player.x = 5.5 + 5 * N
+    kinds = kinds.concat(drive(c.sys, c.player, c.ctx, 1))
+    expect(none(kinds)).toEqual([])
+    expect('lrn' in c.e).toBe(false)
+    // a flash mid-grab, then the gate
+    const f = scene(counting(), 'crawler')
+    f.e.ai = 'lunge'; f.e.x = 12.5; f.player.angle = Math.PI
+    expect(f.sys.flash(f.player).hit).toBe(1)
+    kinds = drive(f.sys, f.player, f.ctx, 3)
+    f.player.x = 5.5 + 5 * N
+    kinds = kinds.concat(drive(f.sys, f.player, f.ctx, 1))
+    expect(none(kinds)).toEqual([])
+    expect('lrn' in f.e).toBe(false)
+  })
   it('a hunter left behind beyond the gate (three chunks) is a getaway by the run', () => {
     const { player, ctx, sys, e } = scene(counting())
     drive(sys, player, ctx, 0.5)

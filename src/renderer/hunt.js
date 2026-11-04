@@ -48,6 +48,9 @@ const DX4 = [1, -1, 0, 0], DY4 = [0, 0, 1, -1]
 export const HUNTING = new Set(['hunt', 'freeze', 'windup', 'lunge', 'recover', 'arcCharge'])
 // M19: the getaway a thing reports when it gives up, by the way its hunt of you broke (levelmem.ESCAPE_METHODS; learn.js counts them)
 export const ESCAPE_KINDS = Object.freeze({ still: 'escape-still', ward: 'escape-ward', run: 'escape-run', flash: 'escape-flash' })
+// M19: whether a thing is hunting you, as learn.js counts getaways: a hunting phase, but never the crawler. Its grab ('lunge') is its one
+// rule, not a hunt, and a reel that bursts it into 'hunt' has it lying still again that same frame; so nothing it does is a getaway
+export function huntsYou(e) { return e.variant !== 'crawler' && HUNTING.has(e.ai) }
 
 // M19: a thing that hunted you gives up (its search ran out, it came apart in the light, it fell beyond the gate): the way the hunt
 // broke is the getaway, said once as its escape event; a hunt still going ('hunt') or none ('') says nothing. Only ever reached with
@@ -422,7 +425,7 @@ export function stepAI(e, dt, ctx, spec, env, threat) {
   const d = Math.sqrt(dx * dx + dy * dy)
   if (spec.hostilePhases.size > 0 && !(e.stagger > 0) && d < threat.nearest) { threat.nearest = d; threat.nearestEntity = e }
   const L = env.learn ?? null                                 // M19: what this floor's things have learned of you (null: nothing)
-  if (L !== null && HUNTING.has(e.ai) && !(e.stagger > 0)) e.lrn = 'hunt'   // it hunts you: whatever broke an earlier hunt is moot
+  if (L !== null && huntsYou(e) && !(e.stagger > 0)) e.lrn = 'hunt'   // it hunts you: whatever broke an earlier hunt is moot
 
   // hearing: every live flood not yet heard (ids rise with each noise), read once each at this creature's cell; the
   // loudest audible one is reacted to, and everything audible up to the newest counts as heard. Your own noises carry
