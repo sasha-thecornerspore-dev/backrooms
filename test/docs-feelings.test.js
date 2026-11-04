@@ -35,9 +35,10 @@ describe('the manual', () => {
     expect(section).toMatch(/never in a shared room/)
     expect(section).toMatch(/classic shading/)
   })
-  it('says when the line comes and when it does not: after the floor\'s name on a return, in place of the carpet\'s climbing out, none off the lift', () => {
-    expect(section).toContain('On a floor you come back to, the line comes just after the floor\'s name, in place of the line that says you have been there before; climbing out to the lobby, in place of <i>the carpet remembers you.</i>')
-    expect(section).toContain('Coming down in the lift there is no room for it after the lift\'s own line, and on a first visit the floor\'s own hint comes first: then the line may not come at all, though the floor still feels that way.')
+  it('says when the line comes and when it does not: after the floor\'s name (or the lift\'s line) on a return, in place of the carpet\'s climbing out, not when a first visit has no room', () => {
+    expect(section).toContain("On a floor you come back to, the line comes just after the floor's name (off the lift, just after the lift's own line), in place of the line that says you have been there before; climbing out to the lobby, in place of <i>the carpet remembers you.</i>")
+    expect(section).toContain("On a first visit the floor's own lines come first, and the lift's: then the line may not come at all, though the floor still feels that way.")
+    expect(section).not.toMatch(/no room for it after the lift/)
     // the ways table's ring row says the same
     expect(manual).toContain('back to the lobby — <i>the carpet remembers you.</i> (on a visit the lobby <a href="#feelings">feels different</a>, its feeling is said instead)')
   })

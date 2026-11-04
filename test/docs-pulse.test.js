@@ -9,7 +9,7 @@ import { NOT_NOW_LINE, SEARCHED_HINT, TRACE_LINES, searchingHint } from '../src/
 import { FAINT, SEEN_ON, SEEN_OFF, arrivalSummary } from '../src/renderer/compass.js'
 import { EVENTS } from '../src/renderer/events.js'
 import { LOST_LINE } from '../src/renderer/levels.js'
-import { wayMessage } from '../src/renderer/topology.js'
+import { wayMessage, waysFor } from '../src/renderer/topology.js'
 
 const root = path.resolve(import.meta.dirname, '..')
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8').replace(/\r\n/g, '\n')
@@ -32,7 +32,9 @@ describe('the drawers', () => {
       expect(d, k).not.toMatch(/not now\.(?! something is close\.)/)
     }
   })
-  it('the manual says the hold\'s hint, the searched hint, a floor plan, and a find held for the visit', () => {
+  // (review batch six) a drawer's roll is fixed by its key (containers.js rollContainer) and a full-handed search leaves the key unsearched,
+  // as in 2.0.3, so the find waits in the drawer on a later visit too: no doc says it waits for this visit only, or calls it new
+  it('the manual says the hold\'s hint, the searched hint, a floor plan, and a find that waits in the drawer', () => {
     expect(manual).toContain(`<i>${searchingHint('cabinet')}</i>`)
     expect(manual).toContain(`<i>${SEARCHED_HINT}</i>`)
     expect(manual).toContain(`<i>${TRACE_LINES.content}</i>`)
@@ -40,6 +42,11 @@ describe('the drawers', () => {
     expect(readme).toContain(`*${SEARCHED_HINT}*`)
     expect(readme).toContain('a floor plan that marks your map')
     expect(readme).toMatch(/hands are too full for waits in the drawer/)
+    expect(manual).toContain('if your hands are full, it waits in that drawer until you search it again.')
+    expect(readme).toContain('a find your hands are too full for waits in the drawer.')
+    const notes = read('docs/release-notes/v2.0.4.md')
+    for (const [k, d] of Object.entries({ ...docs, notes })) expect(d, k).not.toMatch(/on this visit|for this visit|for the visit/)
+    expect(notes).not.toContain('too full for waits in the drawer')
   })
 })
 
@@ -50,18 +57,23 @@ describe('the compass', () => {
     expect(manual).toContain(`<code>${FAINT}</code>: no distance, and not quite true`)
     expect(readme).not.toContain(`when you have seen none, *${FAINT}*.`)
     expect(readme).toContain(`after a while or a hint, *${FAINT}*: no distance, and not quite true`)
+    // (review batch six) the block's pull is free at once and keeps its metres (game.js: pull = !!cfg.map || ..., compassText(.., !!cfg.map))
+    expect(readme).toContain(`after a while or a hint, *${FAINT}*: no distance, and not quite true (on the block it points at the gap at once, with its distance)`)
   })
 })
 
 describe('the events, the seen line, the tray and the presence (review S12)', () => {
   // each data event (events.js fx) as the docs tell it; a new one turns this red until the docs name it
   const TOLD = { 'phone-rings': 'a phone rings a few rooms over', 'chair-scrape': 'a chair is pushed back in the next room',
-    'pipe-knock': 'something knocks along the pipe toward you', 'breaker-trip': 'a breaker trips' }
+    'pipe-knock': 'something knocks along the pipe', 'breaker-trip': 'a breaker trips' }
   it('both docs tell every event that carries its own effect, and that the first on a floor is often heard, not read', () => {
     expect(Object.keys(TOLD).sort()).toEqual(EVENTS.filter((e) => e.fx).map((e) => e.id).sort())
     for (const [k, d] of Object.entries(docs)) {
       for (const w of Object.values(TOLD)) expect(d.toLowerCase(), `${k}: ${w}`).toContain(w)
       expect(d.toLowerCase(), k).toContain('more often than not, the first of them on a floor you have just reached is heard, not read')
+      // (review batch six) the knock's four strikes play at one gain from one side (events.js fx, game.js FX_PLAY): heard first, nothing
+      // in it comes toward you, so no doc says it does (the line, when read, is the game's own)
+      expect(d.toLowerCase(), k).not.toContain('knocks along the pipe toward you')
     }
   })
   it('both docs give the seen line on your screen and off it', () => {
@@ -112,6 +124,17 @@ describe('the things on the floors, and hearing them first', () => {
     expect(readme).not.toContain('when your heart comes into your ears, something has you.')
     expect(readme).toMatch(/when your heart comes into your ears, something is near: slow, it has not found you yet/)
     expect(readme).toMatch(/\*\*listen to your heart\.\*\* [^\n]*has not found you yet[^\n]*its own sound[^\n]*slowly/)
+    // (review batch six) badly hurt, your heart beats with nothing near (tension.js tick: hp < 25 lifts it to a slow beat, any floor, as in
+    // 2.0.3): no doc says a heartbeat always means something is near
+    expect(readme).toContain('when your heart comes into your ears, something is near: slow, it has not found you yet; quick, it has. badly hurt, you hear it with nothing near at all.')
+    expect(manual).not.toContain('again. If you can hear your pulse, it is already near.')
+    expect(manual).toContain('Badly hurt, you hear your own heart with nothing near at all; otherwise, if you can hear your pulse, it is already near.')
+    const notes = read('docs/release-notes/v2.0.4.md')
+    expect(notes).toContain('close by a slow heartbeat starts before anything hunts you, and stops when the thing goes — never through a wall (badly hurt, you hear it anyway).')
+    // (review batch six, follow-up) the manual's creatures section says the same of the wall as the notes do
+    expect(manual).not.toContain('Only the halls carry it; through a wall, nothing.</li>')
+    expect(manual).toContain('Closer still, your heart starts to beat, slowly. Only the halls carry it; through a wall, nothing (badly hurt, you hear your heart anyway).</li>')
+    expect(read('src/renderer/tension.js')).toContain('if (hp < 25 && target < 0.4) target = 0.4')
   })
   it('quiet water is told by what the things hear, now that you hear your own steps (they do not go quieter to you)', () => {
     expect(manual).not.toContain('your footsteps are softer for a while')
@@ -129,19 +152,34 @@ describe('the compass, the first minute and the lines the budget lets go', () =>
     expect(manual).toContain('On the block it points at the gap at once, with its distance.')
     expect(manual).toContain('A presence waits close to where you arrive, and on a solo run without a pin someone has left a note a little way off.')
   })
-  it('a floor speaks its own line the first time and its name after, and says little while you arrive', () => {
+  // (review batch six) a lift ride back to a floor you know puts up no name plate: the lift's own line takes its place (game.js travel;
+  // pulse-wiring replays it)
+  it('a floor speaks its own line the first time and its name after (off the lift, the lift\'s line in its place), and says little while you arrive', () => {
     expect(manual).not.toContain('and the floor below says its name.')
-    expect(manual).toContain('the first time, a line of its own; after that, its name')
-    expect(manual).toContain('When you reach a floor it says little for the first while')
+    expect(manual).toContain('the first time, a line of its own; after that, its name, except off the lift, where the lift\'s own line takes its place (the level plate has the name).')
+    expect(manual).toContain('When you reach a floor it says little for the first while: its line or its name, and one more. Off the lift, on a floor you know, the lift\'s own line takes the name\'s place.')
   })
   // (review batch five) the summary takes an arrival's second plate on a floor you come back to, at 3.8 s, and the filing line takes it
   // on the way that files you (game.js travel): both say themselves a few seconds in again, so both docs promise them again, as they did
-  // before the docs step took them out. If the budget loses either line again, take it out of the docs and turn this guard round
-  it('both docs promise the summary on coming back, and the filing line a few seconds in, not within the first minute', () => {
+  // before the docs step took them out. If the budget loses either line again, take it out of the docs and turn this guard round.
+  // (review batch six) the lift's return says it too now (its name plate gives way), and climbing out says the ring's own line in its
+  // place, so the promise names the ways that keep it, and the lobby's own way (pulse-wiring replays every one)
+  // (review batch six, follow-up) the lift only goes to level 3, whose ways are a climb out and a stair up, and the summary counts ways
+  // down only when there are some (compass.js arrivalSummary): the manual promises the count only where there is one. The notes' sentence
+  // is pinned with the docs'
+  it('both docs promise the summary on coming back by a hole, a stairwell or the lift, and the filing line a few seconds in, not within the first minute', () => {
     const summary = arrivalSummary({ down: 0 }, 2)
+    const ring = wayMessage({ kind: 'ring', target: 0 }, { mem: { x: 0, y: 0 } })
+    const notes = read('docs/release-notes/v2.0.4.md')
     for (const [k, d] of Object.entries(docs)) expect(d, k).toContain(summary)
-    expect(manual).toContain(`Come back to a floor and it says so: <i>${summary}</i> — and tells you how many ways down are on your map.`)
-    expect(readme).toContain(`come back and the floor says so: *${summary}*`)
+    expect(manual).toContain(`Come back to a floor by a hole, a stairwell or the lift and it says so: <i>${summary}</i> — and tells you how many ways down are on your map, if there are any. Climb out to the lobby and it says so in its own way: <i>${ring}</i>`)
+    expect(manual).not.toContain('— and tells you how many ways down are on your map. ')
+    expect(readme).toContain(`come back by a hole, a stairwell or the lift and the floor says so: *${summary}* climb out and the lobby says so in its own way: *${ring}*`)
+    expect(notes).toContain('a floor you come back to by a hole, a stairwell or the lift says so (climbing out, the lobby says so in its own way).')
+    for (const [k, d] of Object.entries({ ...docs, notes })) expect(d, k).not.toMatch(/come back to a floor and it says so|come back and the floor says so|a floor you come back to says so/i)
+    expect(waysFor(1).find((w) => w.kind === 'lift')?.target).toBe(3)
+    expect(waysFor(3).map((w) => w.kind)).toEqual(['ring', 'up'])                // no way down from where the lift goes
+    expect(arrivalSummary({ down: 0 }, 2)).toBe('you have been on this floor before.')
     expect(manual).toContain('a few breaths after the floor has had its say, a line arrives: <i>the file has you now.</i>')
     expect(readme.match(/a few seconds after you land/g)).toHaveLength(2)
     for (const [k, d] of Object.entries(docs)) expect(d, k).not.toContain('within your first minute there')
@@ -155,10 +193,62 @@ describe('the compass, the first minute and the lines the budget lets go', () =>
     // (2.0.5: on a visit the lobby feels different, its feeling takes that plate, and the row says so; docs-feelings pins the note)
     expect(manual).toContain(`<tr><td class="k">f · climb out — level 0</td><td data-label="from">3</td><td data-label="what it does">back to the lobby — <i>${ring}</i> (on a visit the lobby <a href="#feelings">feels different</a>, its feeling is said instead)</td></tr>`)
   })
-  it('the manual says the flashlight speaks once a run below the block, the presence keeps quiet while hunted or by an unread page, and a floor plan marks the map', () => {
-    expect(manual).toContain('On the four floors below the block it says so once a run; after that only the light changes.')
+  // (review batch six) one flag covers both plain lines and the light starts on (game.js lightSaid, flashlight = true), so below the block
+  // the run's first press says the dark's line and 'flashlight on.' is not said; the flag is not saved, so a continued run starts over
+  // (review batch six, follow-up) dark in a friend's light the line names them on every press (game.js: !flashlight && litRec), as the
+  // manual says, so the notes give that too; and the light starts on with a run and with a continued one (initGame: flashlight = true,
+  // not saved) and keeps whatever you left it at through a way or a wake, so no doc says it is on when you arrive
+  it('the manual says only the first press speaks below the block, the presence keeps quiet while hunted or by an unread page, and a floor plan marks the map', () => {
+    expect(manual).not.toContain('On the four floors below the block it says so once a run; after that only the light changes.')
+    expect(manual).not.toContain('Press <kbd>L</kbd> — <i>flashlight on.</i>')
+    expect(manual).toContain('Press <kbd>L</kbd> to turn your light off and on. It is on when you start or continue a run. Light steadies you; turn it off and <i>the dark leans in.</i> On the four floors below the block only the first press of a run says anything (a run you continue starts over), unless you go dark in a friend\'s light; after that only the light changes. On the block every press says so, and the light coming back says <i>flashlight on.</i>')
+    expect(manual).not.toContain('It is on when you arrive.')
+    const notes = read('docs/release-notes/v2.0.4.md')
+    expect(notes).not.toContain('the flashlight\'s lines and the smiler\'s warning come once a run')
+    expect(notes).not.toContain('below the block, only your first press of the light says anything, and')
+    expect(notes).toContain('below the block, only your first press of the light says anything (going dark in a friend\'s light still names them), and the smiler\'s warning comes once; a run you continue hears each once more.')
+    const game = read('src/renderer/game.js')
+    expect(game).toContain('if (cfg.map || !lightSaid || (!flashlight && litRec))')
+    expect(game).toContain('let flashlight = true')
+    const travel = game.slice(game.indexOf('function travel(way) {'), game.indexOf('function die(d = null) {'))
+    expect(travel).not.toMatch(/\bflashlight = /)
     expect(manual).toContain('It keeps quiet while something is hunting you, and while an unread page lies within reach')
     expect(manual).toContain('A floor plan from a <a href="#drawers">drawer</a> can mark one thing you have not seen yet.')
+  })
+  // (review batch six) the wake's lines are its arrival's plates (game.js die; pulse-wiring replays every wake): on a floor you know no
+  // name, where you woke at 2.6 s and what your hands let go at 5.2 s; on a floor new to you its own line and where you woke, what your
+  // hands let go after the window; the third after the window, all of it lost to a way taken first. If the wake's order or its plates
+  // change, change these sentences with it
+  it('the docs say what a wake says and when, and no doc promises what your hands let go at once', () => {
+    const notes = read('docs/release-notes/v2.0.4.md')
+    expect(notes).not.toContain('told at once what your hands let go')
+    // (review batch six, follow-up) with nothing let go, the file's word is the second plate on a floor you know (die: later(7800, d.line)),
+    // as the manual says: the notes say it too
+    expect(notes).toContain('when you wake from a death, where you woke comes a few seconds in (after the floor\'s own line, on a floor new to you), and on a floor you know, what your hands let go comes next (or the file\'s word on your death, if they held nothing); the rest waits until the floor has settled, and goes unsaid if you take a way first.')
+    expect(manual).toContain('Waking from a death is an arrival too: on a floor you know it does not say its name (the level plate has it), only where you woke and then what your hands let go, or the file\'s word on your death if they held nothing; on a floor new to you, its line, then where you woke.')
+    expect(manual).toContain('Anything else waits until the floor has settled, about three quarters of a minute, or is let go; what waits goes unsaid if you take a way first.')
+    expect(manual).not.toContain('Anything else waits until later, or is let go.')
+    expect(manual).toContain('<li>Waking is an arrival: the floor says little at first, and the rest of what the death has to say waits. See <a href="#speaking">the building speaking</a>.</li>')
+    expect(manual).toContain('<h3 id="speaking">The building speaking</h3>')
+  })
+  // (review batch six, old since 2.0.3) a wake never gives the ceiling back (game.js die calls mem.arrive, not onArrive), and it counts
+  // the floor as set foot on, so a floor first reached by waking never gives it back. If die() ever calls onArrive, turn this round
+  // (review batch six, follow-up; old since 2.0.3) 'the floor remembers you less.' is the ceiling coming back (travel: later(11000, ..) when
+  // maxHp rose), not the floor you fell on: the manual quotes it with the ceiling
+  it('both docs say only a floor first reached by a way gives the ceiling back, not one you first wake on', () => {
+    expect(manual).not.toContain('Every floor you set foot on for the first time gives some of it back.')
+    expect(manual).toContain('Every floor you first reach by a way gives some of it back (<i>the floor remembers you less.</i>); one you first wake on does not.')
+    expect(manual).toContain('<li><b>The floor remembers where you fell.</b></li>')
+    expect(manual).not.toContain('<li><b>The floor remembers where you fell.</b> <i>the floor remembers you less.</i></li>')
+    const g = read('src/renderer/game.js')
+    const tr = g.slice(g.indexOf('function travel(way) {'), g.indexOf('function die(d = null) {'))
+    expect(tr).toContain('if (player.maxHp > hp0) later(11000, \'the floor remembers you less.\', PRIO.discovery)')
+    expect(g.match(/the floor remembers you less\./g)).toHaveLength(1)
+    expect(readme).not.toContain('every floor you reach for the first time gives a little of the ceiling back.')
+    expect(readme).toContain('every floor you first reach by a way gives a little of the ceiling back (one you first wake on does not).')
+    const game = read('src/renderer/game.js'), die = game.slice(game.indexOf('function die(d = null) {'), game.indexOf('// ── input ──'))
+    expect(die).not.toContain('onArrive(')
+    expect(die).toContain('const first = mem.arrive(level.index, spawnChunk, playT).visits === 1')
   })
 })
 
@@ -166,14 +256,34 @@ describe('the compass, the first minute and the lines the budget lets go', () =>
 // it: the guard holds with it or without it, and asks only that nothing of it is left half-deleted (a stray DRAFT, <!-- or --> outside
 // a closed comment would show in the release, or hide the notes after it). The notes are found through package.json and no version is
 // pinned; the lines below are 2.0.4's own, so they read 2.0.4's notes by name, as docs-launch reads 2.0.0's.
-const draftLeftOpen = (s) => /DRAFT|<!--|-->/.test(s.replace(/<!--[^]*?-->/g, ''))
+// The comments are walked with indexOf, not taken out with a regex: a comment also ends at --!> (as a browser reads it), and an
+// opener with no end leaves the rest of the notes open, which is the half-deleted case
+const draftLeftOpen = (s) => {
+  let rest = ''
+  for (let i = 0; ;) {
+    const open = s.indexOf('<!--', i)
+    if (open < 0) { rest += s.slice(i); break }
+    rest += s.slice(i, open)
+    const ends = [s.indexOf('-->', open + 4), s.indexOf('--!>', open + 4)].filter((e) => e >= 0)
+    if (!ends.length) return true
+    const end = Math.min(...ends)
+    i = end + (s.startsWith('-->', end) ? 3 : 4)
+  }
+  return rest.includes('DRAFT') || rest.includes('<!--') || rest.includes('-->') || rest.includes('--!>')
+}
+const dropLeadingComment = (s) => {
+  if (!s.startsWith('<!--')) return s
+  const end = s.indexOf('-->\n')
+  return end < 0 ? s : s.slice(end + 4)
+}
 describe('the release notes for this version', () => {
   const file = `docs/release-notes/v${pkg.version}.md`
   it('exist for the version in package.json, and leave no draft marker open, with the draft comment or without it', () => {
     expect(fs.existsSync(path.join(root, file))).toBe(true)
     const notes = read(file)
     expect(draftLeftOpen(notes)).toBe(false)
-    expect(draftLeftOpen(notes.replace(/^<!--[^]*?-->\n/, ''))).toBe(false)
+    expect(draftLeftOpen(dropLeadingComment(notes))).toBe(false)
+    expect(draftLeftOpen('<!-- DRAFT for the owner. --!>\nnotes')).toBe(false)
     for (const half of ['DRAFT for the owner. -->\nnotes', '<!-- DRAFT for the owner.\nnotes', 'ready to publish. -->\nnotes']) {
       expect(draftLeftOpen(half), half).toBe(true)
     }
@@ -186,5 +296,17 @@ describe('the release notes for this version', () => {
     expect(notes).toMatch(/2\.0\.3 copy and a 2\.0\.4 copy in the same room/)
     expect(notes).toContain('nothing new goes over the wire')
     expect(notes).toMatch(/saved on 2\.0\.3[^\n]*levels one to three[^\n]*somewhere new/)
+  })
+  // (review batch six) a line held inside an arrival's window drains one per DRAIN_S (10 s, plates.js), and some unasked lines never pass
+  // the budget, so no doc names a fixed gap; and the tick plays on a pick-up and a machine's draw only (game.js: pickup() twice)
+  it('name no fixed gap between unasked lines, and give the tick where the game plays it', () => {
+    const notes = read('docs/release-notes/v2.0.4.md')
+    for (const [k, d] of Object.entries({ ...docs, notes })) expect(d, k).not.toContain('every twenty seconds')
+    expect(notes).toContain('after that the building speaks unasked only every so often.')
+    expect(manual).toContain('After that it speaks unasked only every so often')
+    expect(notes).not.toContain('a tick when you take something')
+    expect(notes).toContain('a tick when you pick something up or draw from a machine')
+    const game = read('src/renderer/game.js')
+    expect((game.match(/\bpickup\(\)/g) || []).length).toBe(2)
   })
 })

@@ -209,12 +209,20 @@ describe('replayed: game.js\'s own arrivals with a feeling, inside the arrival b
     run(120)
     expect(said).toEqual([[0, L(LOBBY).levelName], [FEEL.aheadMs / 1000, f.line]])
   })
-  it('the lift\'s line and the floor\'s fill the window: the line is let go (the feeling still holds)', () => {
-    const lift2 = { kind: 'lift', target: 2 }
-    const { said, run, inWindow } = land({ index: 2, feel: feelOn('quiet', 2), first: false, way: lift2, wayMsg: wayMessage })
-    run(120)
-    expect(said.map((s) => s[1])).toEqual([wayMessage(lift2, { before: true }), L(2).levelName])
-    expect(inWindow()).toBe(2)
+  // (2.0.4, review batch six) a lift ride back to a floor you know puts up no name plate: the lift's line takes its place, so the
+  // feeling's line has the second plate there too, in place of the summary, as on any return. The first ride is as it was
+  it('off the lift on a return the line follows the lift\'s own line, in place of the summary; the first ride has no room for it', () => {
+    const lift3 = { kind: 'lift', target: 3 }
+    const f = feelOn('quiet', 3)
+    const back = land({ index: 3, feel: f, first: false, way: lift3, wayMsg: wayMessage })
+    back.run(120)
+    expect(back.said).toEqual([[0, wayMessage(lift3, { before: true })], [FEEL.aheadMs / 1000, f.line]])
+    expect(back.inWindow()).toBe(2)
+    const ride = land({ index: 3, feel: f, first: true, way: lift3, wayMsg: wayMessage })
+    ride.run(120)
+    expect(ride.said.map((s) => s[1]).slice(0, 2)).toEqual([wayMessage(lift3, { before: true }), L(3).levelSub])
+    expect(ride.said.map((s) => s[1])).not.toContain(f.line)
+    expect(ride.inWindow()).toBe(2)
   })
   it('a first visit: the floor\'s own line and its hint keep their plates, the raised ceiling waits; the line is let go, never read late', () => {
     const { said, run, inWindow } = land({ feel: dark })

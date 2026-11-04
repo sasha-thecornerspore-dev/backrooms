@@ -216,39 +216,127 @@ export function preceded(targets, cues, lo = 5, hi = 25) {
 }
 
 // ── the bot's plates and the says that put them up (bot/stats.mjs) ──
-// queueWaitS(MSG): the longest a line can wait in a tree's message queue between its showMessage and its plate, read off the queue
-// itself (MSG is that tree's messages.js; the queue built as game.js builds it, with no options), so every tree is measured by its own:
-// the discovery gap (two discovery lines pushed together: the second goes up this long after the first) plus the hold (one line alone,
-// from up to fading). A discovery line pushed just after another went up waits out the gap; and the line it finds on screen when the
-// gap runs out keeps it no longer than its hold (the queue promotes past that one at its dwell, sooner: the hold is the safe side). The
-// case that wants it: a search's result goes up over the exit hint, and the deep floor's drawer line, pushed with it, waits for the gap
-// the hint started: up 6.05 s after its say, past the flat 6 s the matcher used to allow (RESULTS.md miss 2)
-export function queueWaitS(MSG, dt = 0.001, capS = 120) {
-  const ups = (lines, prio, until) => {
-    const q = MSG.createMessageQueue(), seen = []
-    for (const l of lines) q.push(l, prio)
-    for (let n = 0; n * dt < capS; n++) { const r = q.tick(dt); if (r) { seen.push([n, r.text, r.show]); if (until(seen)) return seen } }
-    throw new Error(`queueWaitS: the queue never ${prio === MSG.PRIO.discovery ? 'put up a second discovery line' : 'let its line fade'} in ${capS} s`)
+// replayQueue(MSG, pushes, { dt, untilS, clears }): a tree's message queue (MSG is that tree's messages.js; the queue built as game.js
+// builds it, with no options) fed pushes [[t, text, prio]] as showMessage feeds it and ticked every dt as the frame loop ticks it, and
+// cleared at each time in `clears` (frame times) as buildLevel clears it: in the fade's timeout, after that frame's tick, with the pushes
+// of that instant said after the clear (the floor's line) -> { plates, says }: what it put up [{ t, text }] and what was said [{ t, text }],
+// on the play clock to 0.01 s as the bot logs them (a plate at the time of the frame whose tick put it up)
+export function replayQueue(MSG, pushes, { dt = 1 / 60, untilS = 60, clears = [] } = {}) {
+  const q = MSG.createMessageQueue(), plates = [], says = []
+  const ps = [...pushes].sort((a, b) => a[0] - b[0]), cs = [...clears].sort((a, b) => a - b)
+  const atClear = (x) => cs.some((cc) => Math.abs(cc - x) < 1e-9)
+  let i = 0, c = 0
+  for (let n = 0; n * dt <= untilS + 1e-9; n++) {
+    const t = r2(n * dt)
+    const say = () => { q.push(ps[i][1], ps[i][2]); says.push({ t, text: ps[i][1] }); i++ }
+    while (i < ps.length && ps[i][0] <= t + 1e-9 && !atClear(ps[i][0])) say()
+    const r = q.tick(dt)
+    if (r?.show) plates.push({ t, text: r.text })
+    if (c < cs.length && cs[c] <= t + 1e-9) {
+      while (c < cs.length && cs[c] <= t + 1e-9) { q.clear(); c++ }
+      while (i < ps.length && ps[i][0] <= t + 1e-9) say()
+    }
   }
-  const hold = ups(['a'], MSG.PRIO.combat, (s) => s.some((x) => !x[2]))
-  const gap = ups(['a', 'b'], MSG.PRIO.discovery, (s) => s.some((x) => x[1] === 'b' && x[2]))
-  const at = (s, text, show) => s.find((x) => x[1] === text && x[2] === show)[0]
-  return r2((at(hold, 'a', false) - at(hold, 'a', true) + at(gap, 'b', true) - at(gap, 'a', true)) * dt)
+  return { plates, says }
 }
-// matchSays(plates, says, windowS): plates [{ t, text }] in time order (text as #msg shows it), says [{ t, text }] (showMessage's, any
-// order) -> for each plate the say that put it up, or null: the latest say of its text that no earlier plate took, said no longer than
-// windowS before the plate and no later than the log's frame (0.05 s) after it
-export function matchSays(plates, says, windowS) {
+// queueBound(MSG, n): what bounds a line's wait in a tree's message queue between its showMessage and its plate, read off the queue
+// itself -> { keepsS, clears }. No fixed window does:
+//   keepsS  how long the last of n discovery lines said together waits for its plate (null: the queue let it go). The queue drops no
+//           discovery line, so a line waits out the gap of every one said before it: the extension's three closing lines and a landmark's
+//           first-sight line said 0.4 s after the last of them put the sight line up 12.05 s after its say, past the discovery gap plus
+//           the hold (10.2 s) that review batch five's matcher allowed
+//   clears  whether clear() drops every line still waiting (game.js buildLevel clears the queue at each arrival: buildLevelClears).
+//           Then nothing said before an arrival goes up after it, and the arrival is the one bound on a plate's say
+export function queueBound(MSG, n = 40) {
+  const P = MSG.PRIO
+  const line = (i) => `line ${i}`
+  const many = replayQueue(MSG, Array.from({ length: n }, (_, i) => [0, line(i), P.discovery]), { dt: 0.01, untilS: 60 * n })
+  const last = many.plates.find((p) => p.text === line(n - 1))
+  // one line up, one of each other priority waiting behind it, then the arrival's clear
+  const waiting = ['waits (discovery)', 'waits (interaction)', 'waits (combat)']
+  const cleared = replayQueue(MSG, [[0, 'up', P.combat], [0.01, waiting[0], P.discovery], [0.01, waiting[1], P.interaction], [0.01, waiting[2], P.combat]],
+    { dt: 0.01, untilS: 60, clears: [0.02] })
+  return { keepsS: last ? last.t : null, clears: !cleared.plates.some((p) => waiting.includes(p.text)) }
+}
+// buildLevelClears(game): whether a tree's game.js (its source, or the bot's instrumented copy) clears its message queue in buildLevel,
+// which every arrival (a travel, a wake on another floor) runs
+export function buildLevelClears(game) {
+  const m = /\n( *)function buildLevel\([^)]*\) \{\n([\s\S]*?)\n\1\}\n/.exec(String(game).replace(/\r\n/g, '\n'))
+  return !!m && /\bmsgQ\.clear\(\)/.test(m[2])
+}
+// arrivalClears(rows): the bot's log rows (log.jsonl, file order) -> the play times its queue was cleared: every 'level' row but the
+// first. buildLevel runs in the fade's timeout, between two frames, and the floor's line is said just after it; the bot's frame runs at
+// the head of the next one (bot.js wraps requestAnimationFrame), before the game's frame moves the play clock, so its 'level' row has the
+// clear's play time. Its first 'level' row is its own first frame on the floor the game started on. A travel F turned away (the way still
+// closing) logs 'travel' and builds nothing, and a wake on the floor you died on builds no level: neither clears, and neither logs 'level'
+export function arrivalClears(rows) {
+  return rows.filter((r) => r.k === 'level').slice(1).map((r) => r.t)
+}
+// matchSays(plates, says, clears): plates [{ t, text }] in time order (text as #msg shows it), says [{ t, text }] (showMessage's, any
+// order), clears the times the queue was cleared (arrivalClears; none: one arrival) -> for each plate the say that put it up, or null:
+// the latest say of its text that no earlier plate took, said in the plate's own arrival and no later than the log's frame (0.05 s)
+// after the plate. However long the line waited in the queue (queueBound: the arrival is the one bound). At a clear's instant a say was
+// said after the clear (the floor's line), and a plate was put up before it: the bot read #msg in that frame's head, and only the game's
+// frame, which comes after it, writes #msg (msgQ.tick). A plate with no say is a boot line, said before the bot's hooks
+export function matchSays(plates, says, clears = []) {
   const norm = (s) => String(s).replace(/\s+/g, ' ').trim().slice(0, 400)
-  const byT = says.map((s) => ({ s, key: norm(s.text) })).sort((a, b) => a.s.t - b.s.t)
+  const cs = [...clears].sort((a, b) => a - b)
+  const arrival = (t, atClear) => { let a = 0; while (a < cs.length && (cs[a] < t || (atClear && cs[a] === t))) a++; return a }
+  const byT = says.map((s) => ({ s, key: norm(s.text), at: arrival(s.t, true) })).sort((a, b) => a.s.t - b.s.t)
   const used = new Set()
   return plates.map((p) => {
+    const at = arrival(p.t, false)
     for (let i = byT.length - 1; i >= 0; i--) {
-      const { s, key } = byT[i]
-      if (s.t > p.t + 0.05) continue
-      if (p.t - s.t > windowS) break
+      const { s, key, at: sat } = byT[i]
+      if (s.t > p.t + 0.05 || sat > at) continue
+      if (sat < at) break
       if (key === p.text && !used.has(i)) { used.add(i); return s }
     }
     return null
   })
+}
+
+// timedArrivalLines(tree) -> Set: the lines game.js says on its own timer a few seconds into an arrival (later()), read off the measured
+// tree's own modules, so a key the bot pressed in the 2.5 s before one of them is not taken for its cause: the filing line for every column
+// and layer (origin-intake.js filingLine), a floor you come back to (compass.js arrivalSummary, with any count of ways down), each way's line
+// (topology.js wayMessage), the pin's mercy (origin-anchored.js MERCY_LINE), where you woke (death.js resolveDeath), and what game.js's
+// later() says as written ('the floor remembers you less.'). tree: { intake, compass, topology, anchored, death } the modules (any may be
+// missing), game its game.js text. The wake's other two (what your hands let go, by ITEM_NAMES in game.js; the file's word, compose-gates.js)
+// are not read: no measured bot has died
+export function timedArrivalLines({ intake, compass, topology, anchored, death, game = '' } = {}) {
+  const out = new Set()
+  const add = (s) => { if (typeof s === 'string' && s) out.add(s) }
+  if (typeof intake?.filingLine === 'function') for (const o of intake.ORIGINS ?? []) for (const thin of [false, true]) add(intake.filingLine(o, thin))
+  if (typeof compass?.arrivalSummary === 'function') for (let d = 0; d <= 16; d++) add(compass.arrivalSummary({ down: d }, 2))
+  if (typeof topology?.wayMessage === 'function') {
+    for (const kind of ['down', 'up', 'lift', 'ring']) {
+      add(topology.wayMessage({ kind, target: 0 }, { before: true }))
+      for (const partner of [null, {}]) for (const mem of [null, { x: 0, y: 0 }]) add(topology.wayMessage({ kind, target: 0 }, { partner, mem }))
+    }
+  }
+  add(anchored?.MERCY_LINE)
+  if (typeof death?.resolveDeath === 'function') add(death.resolveDeath({ level: 1, inventory: [], selected: 0, maxHp: 100, deaths: 0 }).message)
+  for (const m of String(game).matchAll(/\blater\(\s*\d+\s*,\s*'([^'\\\n]+)'/g)) add(m[1])
+  return out
+}
+
+// sayCause(say, ctx): whose a plate's say is, by the rules RESULTS.md's method gives (stats.mjs classes every plate by it). say { t, text,
+// happening } (happening: said in the instant an event or a haunt fired, no drawer rolled), or null; ctx.keys the times of the bot's act
+// keys, ctx.moves of its travels and deaths, ctx.timed timedArrivalLines, ctx.unprompted the tree's murmurs, hints and setting's line,
+// ctx.bumps its bump, clutter and landmark lines ->
+//   'player'      a bump, clutter or landmark line, key or no key; else a line said within playerS after an act key (a key logged in the
+//                 say's own frame, 0.05 s, came first), not an arrival's, an event's or a haunt's, and not one of the tree's unprompted
+//   'arrival'     one of the arrival's timed lines, whatever key came between and however late the budget let it go; or any line said
+//                 within arrivalS of a travel or a death with no act key since (whichever came last decides: a key you pressed after you
+//                 arrived is yours; the travel your F started is not)
+//   'unprompted'  anything else
+//   null          no say: a boot line, said before the bot's hooks
+export function sayCause(say, { keys = [], moves = [], timed = null, unprompted = null, bumps = null, arrivalS = 12, playerS = 2.5 } = {}) {
+  if (!say) return null
+  const before = (list) => { let b = -Infinity; for (const x of list) if (x <= say.t + 0.05 && x > b) b = x; return b }
+  const lastKey = before(keys), lastMove = before(moves)
+  if (bumps?.has(say.text)) return 'player'
+  if (timed?.has(say.text) || (lastMove >= lastKey && say.t - lastMove <= arrivalS)) return 'arrival'
+  if (!say.happening && !unprompted?.has(say.text) && say.t - lastKey <= playerS) return 'player'
+  return 'unprompted'
 }

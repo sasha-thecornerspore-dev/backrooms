@@ -23,7 +23,8 @@ describe('the 2.0.5 release notes', () => {
     for (const b of SITUATIONAL) expect(notes, b.label).toContain(`**${b.label}**`)
   })
   it('say when a feeling\'s line is not said, and that the radio does not hear what is already after you', () => {
-    expect(notes).toContain('climbing out to the lobby it is said in place of *the carpet remembers you.*, and coming down in the lift there is no room for it: the feeling holds, unsaid.')
+    expect(notes).toContain("on a floor you come back to it comes just after the floor's name (off the lift, just after the lift's own line); on a first visit the floor's own lines keep their places, and the lift's, and it is said only if they leave room: if not, the feeling holds, unsaid; climbing out to the lobby it is said in place of *the carpet remembers you.*")
+    expect(notes).not.toMatch(/coming down in the lift there is no room for it/)
     expect(notes).toContain('once something is coming for you the hiss does not die down, but it no longer rises for that thing, and one that followed you down brings none.')
     expect(notes).not.toContain('once something is coming for you it does not die down.')
   })

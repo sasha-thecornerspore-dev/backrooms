@@ -789,9 +789,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       persist(true)                     // save on every travel, with the map
       startVisit()
       // the lift's line is said under the veil, past buildLevel's msgQ.clear() (which would drop it before the fade): at combat it is never
-      // queued behind a prompt result, and combat queues FIFO, so it reads before the floor's plate (the sub-line the first time, the name after)
+      // queued behind a prompt result, and combat queues FIFO, so it reads before the floor's plate (the sub-line the first time, the name after).
+      // A lift ride back to a floor you know puts up no name plate (the HUD carries the name, as on the wake): the lift's line takes its
+      // place, and the summary keeps the arrival's second plate
       if (way.kind === 'lift') plate('arrival', wayMessage(way, { before: true }), PRIO.combat)
-      plate('floor', arrivalPlate(level.cfg, first), PRIO.combat)
+      if (way.kind !== 'lift' || first) plate('floor', arrivalPlate(level.cfg, first), PRIO.combat)
       const wm = wayMessage(way, { partner, mem: mem.get(way.target) })
       if (first) {
         // with followers on the way, the hint gives its slot to 'it followed you down.' (it is still a floor murmur in level.messages);

@@ -480,8 +480,8 @@
     <div class="krow"><div class="cap">friends</div><div class="kdesc">Pale figures with a nameplate and a small health bar. (The friend in this manual's examples is called <code>maddie</code>; yours will have names of their own.) Warm when your light is on them. <code>name · down</code> when they have fallen.</div></div>
   </div>
 
-  <h3>The building speaking</h3>
-  <p>One line at a time appears in the middle of the screen, on a small notice, for a few seconds each. Some are the floor talking to itself. Some are about you. <b>The important ones push in</b> — a hit, a warning — and the idle ones are dropped when anything else needs saying. When you reach a floor it says little for the first while: its line or its name, and one more. Anything else waits until later, or is let go. After that it speaks unasked only every so often; what you do is always answered. Read them. They are the closest thing down here to instructions.</p>
+  <h3 id="speaking">The building speaking</h3>
+  <p>One line at a time appears in the middle of the screen, on a small notice, for a few seconds each. Some are the floor talking to itself. Some are about you. <b>The important ones push in</b> — a hit, a warning — and the idle ones are dropped when anything else needs saying. When you reach a floor it says little for the first while: its line or its name, and one more. Off the lift, on a floor you know, the lift's own line takes the name's place. Waking from a death is an arrival too: on a floor you know it does not say its name (the level plate has it), only where you woke and then what your hands let go, or the file's word on your death if they held nothing; on a floor new to you, its line, then where you woke. Anything else waits until the floor has settled, about three quarters of a minute, or is let go; what waits goes unsaid if you take a way first. After that it speaks unasked only every so often; what you do is always answered. Read them. They are the closest thing down here to instructions.</p>
   <p>The whole screen speaks too: a red wash when you are hurt, violet when your mind runs low, black while you lie down, a black fade between floors that holds until the new floor has drawn, a warm flash for a photograph, a shake for something heavy. <b>Reduce flicker</b> in settings softens the flash and the shake.</p>
 
   <h3 id="cards">The paper card</h3>
@@ -540,7 +540,7 @@
   <p>Stamina is one pool for two things: <b>running</b> and <b>warding</b>. A full pool is a few breaths of running. It refills when you walk or stand, but not while you hold a charged ward. Running headlong into something heavy knocks a little out of you, and it is loud. Sweet almond water and ballast fill it at once. Do not sprint away from a thing and then try to push it off — there will be nothing left in your legs to push with.</p>
 
   <h3>Your light</h3>
-  <p>Press <kbd>L</kbd> — <i>flashlight on.</i> It is on when you arrive. Light steadies you; turn it off and <i>the dark leans in.</i> On the four floors below the block it says so once a run; after that only the light changes. On the lobby and the habitable zone the building lights itself. On <b>pipe dreams</b> and the <b>electrical station</b> there are no lights at all: your beam is the only one, and on those floors the things see less far in the dark — unless you are the light. Sometimes it is worth being dark. Often it is not.</p>
+  <p>Press <kbd>L</kbd> to turn your light off and on. It is on when you start or continue a run. Light steadies you; turn it off and <i>the dark leans in.</i> On the four floors below the block only the first press of a run says anything (a run you continue starts over), unless you go dark in a friend's light; after that only the light changes. On the block every press says so, and the light coming back says <i>flashlight on.</i> On the lobby and the habitable zone the building lights itself. On <b>pipe dreams</b> and the <b>electrical station</b> there are no lights at all: your beam is the only one, and on those floors the things see less far in the dark — unless you are the light. Sometimes it is worth being dark. Often it is not.</p>
   <p>If you can stand in the dark beside a friend whose light is on, you are harder to see. See <a href="#together">together</a>.</p>
   <figure class="fig">
     <svg viewBox="0 0 700 150" role="img" aria-label="illustration: a cone of flashlight beam holding back the surrounding dark">
@@ -558,17 +558,18 @@
   </figure>
 
   <h3>Your heart</h3>
-  <p>When something is hunting you, <b>your heartbeat comes into your ears</b>, faster as it closes. It can come sooner, slow, when a thing is close to you through the halls and has not found you yet. The floor's own music thickens with it: a beat comes in, it darkens and gets louder. When you lose what was following you, the music takes a long breath before it sounds like itself again. If you can hear your pulse, it is already near. <i>it is close.</i></p>
+  <p>When something is hunting you, <b>your heartbeat comes into your ears</b>, faster as it closes. It can come sooner, slow, when a thing is close to you through the halls and has not found you yet. The floor's own music thickens with it: a beat comes in, it darkens and gets louder. When you lose what was following you, the music takes a long breath before it sounds like itself again. Badly hurt, you hear your own heart with nothing near at all; otherwise, if you can hear your pulse, it is already near. <i>it is close.</i></p>
 
   <h3 id="death">Everything goes dark</h3>
   <p>When your body gives out, the screen fades — <i>everything goes dark.</i> — and you <b>wake one floor up</b>, beside the hole you fell through, facing it. On the lobby and on the block you wake where you are.</p>
   <ul class="plain">
     <li><b>Whatever was in your hand is gone.</b> <i>your hands opened.</i> Switch to something cheap before a fight you might lose.</li>
-    <li><b>You come back a little less.</b> <i>you wake beside the hole you fell through. something of you stayed down there.</i> Your body's ceiling drops a little each time, so the HP bar never quite fills again. Every floor you set foot on for the first time gives some of it back.</li>
+    <li><b>You come back a little less.</b> <i>you wake beside the hole you fell through. something of you stayed down there.</i> Your body's ceiling drops a little each time, so the HP bar never quite fills again. Every floor you first reach by a way gives some of it back (<i>the floor remembers you less.</i>); one you first wake on does not.</li>
     <li><b>The machines on that floor are empty</b> until you next take a way. <i>the tray is empty.</i></li>
-    <li><b>The floor remembers where you fell.</b> <i>the floor remembers you less.</i></li>
+    <li><b>The floor remembers where you fell.</b></li>
     <li>Once the file has you, dying changes how it has you. See <a href="#thin">thin</a>.</li>
     <li>Online, with a friend on your floor, a killing blow may lay you <a href="#down">down</a> instead.</li>
+    <li>Waking is an arrival: the floor says little at first, and the rest of what the death has to say waits. See <a href="#speaking">the building speaking</a>.</li>
   </ul>
 </section>
 
@@ -576,7 +577,7 @@
 <section id="descent">
   <div class="tag">§ 07 — the descent</div>
   <h2>Down is the only direction that means anything.</h2>
-  <p>The floors are stacked in one building. You go down through a <b>way</b> — a torn doorway in the world with a cold blue rim that breathes, a ring on the floor, and a beam that carries through the fog. Walk up to one, read the prompt, press <kbd>F</kbd>. The screen goes black, you fall, and the floor below speaks — the first time, a line of its own; after that, its name. Fall through a hole and you land near the same spot one floor down.</p>
+  <p>The floors are stacked in one building. You go down through a <b>way</b> — a torn doorway in the world with a cold blue rim that breathes, a ring on the floor, and a beam that carries through the fog. Walk up to one, read the prompt, press <kbd>F</kbd>. The screen goes black, you fall, and the floor below speaks — the first time, a line of its own; after that, its name, except off the lift, where the lift's own line takes its place (the level plate has the name). Fall through a hole and you land near the same spot one floor down.</p>
 
   <figure class="fig">
     <svg viewBox="0 0 700 300" role="img" aria-label="diagram: Level ∅ above, a one-way gap into Level 0; Levels 0 to 3 stacked below; a door on Level 3 climbs back to Level 0; stairwells climb up; a lift on Level 1">
@@ -662,7 +663,7 @@
   </div>
 
   <h3>Every floor remembers you</h3>
-  <p>What you took stays taken. Drawers you searched stay searched. What you set down lies where you left it. Come back to a floor and it says so: <i>you have been on this floor before.</i> — and tells you how many ways down are on your map. An emptied vending machine gives again only after you have been away from its floor a good while. It never refills while you watch.</p>
+  <p>What you took stays taken. Drawers you searched stay searched. What you set down lies where you left it. Come back to a floor by a hole, a stairwell or the lift and it says so: <i>you have been on this floor before.</i> — and tells you how many ways down are on your map, if there are any. Climb out to the lobby and it says so in its own way: <i>the carpet remembers you.</i> An emptied vending machine gives again only after you have been away from its floor a good while. It never refills while you watch.</p>
   <p class="say">the machine has been refilled. by whom.</p>
 </section>
 
@@ -727,7 +728,7 @@
   <p>The building talks. Every so often a floor murmurs a line of its own, and repeats its hint about the way down. The lights flicker, a little on the lobby, a great deal by the electrical station. When they suddenly hold steady, it is because something is holding them: water you drank, a find you used, a file you closed.</p>
 
   <h3>Things that happen</h3>
-  <p>On the four floors below the block the building has moods. Lights go out down a hall and come back. A far door slams. The hum stops. A cold spot. Below the lobby, footsteps that keep your pace, and a figure crossing an intersection far ahead. On the lobby and the habitable zone a phone rings a few rooms over, or a chair is pushed back in the next room; in the pipes something knocks along the pipe toward you; on the electrical station a breaker trips and the dark leans closer. More often than not, the first of them on a floor you have just reached is heard, not read. They come more often the deeper you are and the lower your mind runs, and never while you are reading or speaking. <b>None of them can hurt you</b> — a cold spot takes a little of your mind, and that is all.</p>
+  <p>On the four floors below the block the building has moods. Lights go out down a hall and come back. A far door slams. The hum stops. A cold spot. Below the lobby, footsteps that keep your pace, and a figure crossing an intersection far ahead. On the lobby and the habitable zone a phone rings a few rooms over, or a chair is pushed back in the next room; in the pipes something knocks along the pipe; on the electrical station a breaker trips and the dark leans closer. More often than not, the first of them on a floor you have just reached is heard, not read. They come more often the deeper you are and the lower your mind runs, and never while you are reading or speaking. <b>None of them can hurt you</b> — a cold spot takes a little of your mind, and that is all.</p>
   <p class="say">footsteps. not yours. they keep your pace, and stop when you stop.</p>
 
   <h3 id="hauntings">Places that are wrong</h3>
@@ -737,7 +738,7 @@
 
   <h3 id="feelings">Some visits, a floor feels different</h3>
   <p>Now and then a floor below the block is not quite as you left it, for that visit only, and it says so once. <i>the lights are out here.</i> — the panels are dark and only a few lamps still burn, so your own light matters; the walls still read. <i>it is very quiet.</i> — the hum is a little lower, and the floor's moods and murmurs come further apart. <i>someone came through here before you.</i> — some of the drawers are already searched (<i>searched.</i>), and on the lobby some of the chairs have been moved. Nothing else changes: the same rooms, the same things in them, and the things behave as they always do.</p>
-  <p>About one arrival in three feels like this, and never the same way two visits running. Never your first time in the lobby on a run, never on the block, and never in a shared room. On a floor you come back to, the line comes just after the floor's name, in place of the line that says you have been there before; climbing out to the lobby, in place of <i>the carpet remembers you.</i> Coming down in the lift there is no room for it after the lift's own line, and on a first visit the floor's own hint comes first: then the line may not come at all, though the floor still feels that way. With <b>classic shading</b> the dark shows mostly as the panels going out.</p>
+  <p>About one arrival in three feels like this, and never the same way two visits running. Never your first time in the lobby on a run, never on the block, and never in a shared room. On a floor you come back to, the line comes just after the floor's name (off the lift, just after the lift's own line), in place of the line that says you have been there before; climbing out to the lobby, in place of <i>the carpet remembers you.</i> On a first visit the floor's own lines come first, and the lift's: then the line may not come at all, though the floor still feels that way. With <b>classic shading</b> the dark shows mostly as the panels going out.</p>
   <p class="say">the lights are out here.</p>
 
   <h3>Furniture, rooms, landmarks</h3>
@@ -756,7 +757,7 @@
   <ul class="plain">
     <li><b>They hear.</b> A sound carries through the halls, never through walls, quieter the farther it goes. Walking is quiet. Running is loud. A ward is louder. A whistle is louder still. A thing that hears you stops, turns toward the sound — <i>something, far off, stops.</i> — and comes to look.</li>
     <li><b>They see.</b> Walls block their sight; furniture does not, but corners do. On the dark floors they see much less — unless your flashlight is on. Right up close, they need no line at all.</li>
-    <li><b>You hear them first.</b> A thing near you through the halls, out of sight and not yet on to you, makes its own sound now and then, from where it is — or a chair moves somewhere. Closer still, your heart starts to beat, slowly. Only the halls carry it; through a wall, nothing.</li>
+    <li><b>You hear them first.</b> A thing near you through the halls, out of sight and not yet on to you, makes its own sound now and then, from where it is — or a chair moves somewhere. Closer still, your heart starts to beat, slowly. Only the halls carry it; through a wall, nothing (badly hurt, you hear your heart anyway).</li>
     <li><b>They hunt.</b> <i>it has seen you.</i> — or, when it is off your screen, <i>something has seen you.</i> and its sound comes from where it is. Break the line — a corner, a door, a dressed room — and keep quiet, and after a while it goes to search where it last saw you. <i>you have lost it. it is still looking.</i> Then it gives up.</li>
     <li><b>They follow you down.</b> A hunter close behind you when you take a hole or a stair may arrive a few seconds after you.</li>
     <li><b>They hunt movement.</b> Once the file has you, a person who stands completely still and silent in the dark — light off, radio off — becomes, after a breath, very hard to find. Before the file has you, there is nowhere to hide. See <a href="#file">the file</a>.</li>
@@ -944,7 +945,7 @@
 
   <h3 id="drawers">Drawers</h3>
   <p>Cabinets, crates, boxes, toolboxes, panel cabinets, carts, drums, couches: <code>f · search the cabinet</code>. <b>Press <kbd>F</kbd> once and keep still</b> for a moment — the hint reads <i>searching the cabinet</i> while you do. A step away stops it. You cannot search with something hunting you or something hostile close: <i>not now. something is close.</i> A search makes a little noise.</p>
-  <p>Usually you find words — memos, notes, scraps of the office — and they steady you a little. Sometimes nothing: <i>empty. someone has been through here.</i> Sometimes an item; if your hands are full, it waits in that drawer until you search it again on this visit. Sometimes a floor plan marks one thing on your map: <i>a floor plan with one room shaded in. you mark it on yours.</i> Rarely, the building answers instead. A searched drawer stays searched, and says so: <i>searched.</i> On the deep floors, every drawer asks something small of your mind, and the building tells you so once.</p>
+  <p>Usually you find words — memos, notes, scraps of the office — and they steady you a little. Sometimes nothing: <i>empty. someone has been through here.</i> Sometimes an item; if your hands are full, it waits in that drawer until you search it again. Sometimes a floor plan marks one thing on your map: <i>a floor plan with one room shaded in. you mark it on yours.</i> Rarely, the building answers instead. A searched drawer stays searched, and says so: <i>searched.</i> On the deep floors, every drawer asks something small of your mind, and the building tells you so once.</p>
   <p class="say">a memo about the hum. it asks everyone to stop mentioning the hum.</p>
   <p class="say">something counts the drawers you open.</p>
 

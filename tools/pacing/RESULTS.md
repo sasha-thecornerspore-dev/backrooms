@@ -7,7 +7,8 @@ The same tools measure three trees: 2.0.3 (`20f4650`), 2.0.4 as built (`5bfb1ae`
   - In `tension.js`, dread is a term of its own that falls at 2/s, and the heartbeat follows the louder of it and the hunt's.
   - A wake, the way that files you and a floor you come back to say their lines again (`game.js` `die()` and `travel()`).
   - Sweet almond water softens the step you hear as it softens the one the things hear.
-- Batch five also fixed a tool: `stats.mjs` matches a plate to its say within the measured tree's queue wait, not a flat 6 s (see *How the tools follow the review*).
+- Batch five also fixed a tool, and review batch six fixed it again: `stats.mjs` matches a plate to its say within the plate's arrival, however long the line waited in the queue, not within a flat 6 s (see *How the tools follow the review*). On this measure's logs batch six's matcher gives the same numbers as batch five's.
+- Batch six also gave an arrival its own timed lines: a line the game says on a timer a few seconds into an arrival (the filing line, the summary, a way's line) is the arrival's, whatever key the bot pressed just before it. It moves no table cell; it moves the split of plate on screen by class, on 2.0.3 and on this measure's fresh runs (see *How the tools follow the review*).
 
 Two tools, both run the same way on each tree:
 - **The pacing walker** (`walks.mjs`, `analyze.mjs`). It walks 60 worlds per floor (seed null plus 1–59), 300 s each, as an explore walker and as a seek walker (a compass follower), with the light off 14% of the time.
@@ -52,8 +53,8 @@ The 2.0.3 column comes from the same tools on 2.0.3. It differs from the plan's 
      - A floor-time floor on the step-2 pull. Tune round 2 tried 75 s and dropped it: the bots then took the way beside the soul.
      - Or let playtest #1 judge the target: a person reads and looks around more slowly than this bot.
 2. **Plates are on screen 36–53% of the time** (target ≤ 40%). 8 of the 11 sessions are above 40%; seed 602's fresh run (36%), L0 (39%) and L3 (40%) are not.
-   - Budgeted plates take 8–15% of the time and warnings 0–6%.
-   - The bot's own plates take 25–42%: drawer results above all (6–17 searches in 3 minutes), the soul's word and the light. The floor plan's line (`a floor plan with one room shaded in. you mark it on yours.`) was the most shown line, 22 times.
+   - Budgeted plates take 8–18% of the time and warnings 0–6%.
+   - The bot's own plates take 24–42%: drawer results above all (6–17 searches in 3 minutes), the soul's word and the light. The floor plan's line (`a floor plan with one room shaded in. you mark it on yours.`) was the most shown line, 22 times.
    - Nothing hunted the bot this run, so it said no ward lines (21 at the last measure).
    - L2 is at 52% with 10% budgeted. Its player-caused plates, with 11 searches, take 42%.
    - Over the 44 sessions of four bot runs (the last measure's three and this one), budgeted plates never take more than 21%, and plate on screen runs 32–64%.
@@ -64,8 +65,9 @@ The 2.0.3 column comes from the same tools on 2.0.3. It differs from the plan's 
   - Dread's term now falls at 2/s, so a beat it raised stops within a beat of the thing going. The last measure's far beats came after a ward had dispelled the thing, or in the tail of a hunt's fade.
   - Dread's beats fell from 585 to 371, and all heartbeats from 2495 to 2368. The cued sightings did not move (96/117).
 - **At most 2 budgeted plates in the first 45 s of every arrival** (2 / 8 over 26 arrivals; 3 / 13 at the last measure).
-  - The tool: `stats.mjs` now matches a plate to its say within the queue's own longest wait. A line the player caused that waited behind a result keeps its cause (the last measure's miss).
-  - Here 1 of 255 plates needed more than 6 s: a way's hint, held 6.15 s. It is an arrival line either way.
+  - The tool: `stats.mjs` now matches a plate to its say within the plate's arrival, however long the line waited in the queue. A line the player caused that waited behind a result keeps its cause (the last measure's miss).
+  - Here 1 of 255 plates needed more than 6 s: a way's hint, held 6.15 s. It is an arrival line either way. No line waited longer.
+  - 18 of the 26 arrivals hold 2. In every fresh run the first way's arrival does, and its second plate is the filing line. In 6 of the 7 the bot had searched a drawer 1.1–2.4 s before the line was said, and the tool gave the line to the bot until it learned the arrival's timed lines (review batch six). `plate()` had counted it as an arrival's line.
   - The game: `plate()`'s own log admitted at most 2 budgeted plates in every arrival window. A search's result beside them is free.
 - **The filing line went up in all 7 fresh runs.** It was said 3.8 s into the first arrival and went up 3.8–5.9 s in.
   - At the last measure it waited out the window: said at 45 s in 5 of 7 runs, and up in 4.
@@ -91,9 +93,10 @@ The pull never names a stair up: 0 of 180 seekers were sent to one, against 75 o
   - Fresh lobby p50 over runs of 7 on the same lobby code: 84 s (`b07d456`), then 68, 55, 55 and 56 s (the tune rounds' game code), then 72 s (this tree).
   - Plate on screen over those four runs of the 11 sessions: 35–56%, 32–50%, 41–64% and 36–53%.
   - One long hunt moves a session a long way. At the last measure seed 605 was hunted for about a minute, warded 20 times and reached 64%. Nothing hunted the bot this run.
-  - The plate budget's two tool misses (the veil, then the queue's wait) each came from 1 arrival of 25–27, a line held at an edge the tool drew. Both edges are now read off the game: the veil's opacity and the queue's wait.
+  - The plate budget's two tool misses (the veil, then the queue's wait) each came from 1 arrival of 25–27, a line held at an edge the tool drew. The tool draws neither edge now: the bot reads the veil's opacity, and a plate's say is looked for back to its arrival, where `buildLevel` clears the queue.
 - **The bot's drawer rolls are not independent.** A drawer's roll is fixed by its key, and every fresh run opens the same boxes in the fixed lobby. The box by the soul gives a floor plan to every bot that opens it. The sweep is the measure.
 - **The bot met few creatures.** Sightings and heartbeats are the walker's.
+- **The fresh lobby rests on the shipped docket** (review batch six). The lobby's note and soul, and the pull's longer wait, hold only while the lobby's row of `world.json`'s docket leads nothing that re-lays its souls (`firstrun.js` `threadHolds`). A compliance or litigation lead there (two such wishes filed on the lobby and recounted by `tools/docket.mjs`) turns the thread off: no note, and the pull frees at the ordinary 60 s. The docket ships all zeros, and these numbers and the manual's note are that docket's. No test guards it, because a red test would fail the wish workflows' grant (`wish-auto.yml` runs `npm test` after the recount). Re-measure the fresh lobby, and say so in the manual, if a granted wish ever leans that row.
 
 ### What playtest #1 must still judge
 - **The fresh lobby.** The note → soul → room thread takes this bot 53–84 s. Is a person who reads and listens let go too soon? Is 90–150 s still the right target for a person?
@@ -110,13 +113,28 @@ The pull never names a stair up: 0 of 180 seekers were sent to one, against 75 o
 - **The bot's plate hook matches the reviewed `plate()`.** `test/pacing-tools.test.js` fails if the plate or tell anchor slips on a tree that has them.
 - **`stats.mjs` counts clutter lines as the player's** (`placement.js` `CLUTTER_LINES`), like bump lines (tune round 1).
 - **The bot sees the travel's veil** (tune round 2). `bot.js` dims what stacks under `#fade` by the veil's opacity and logs `(veiled)`; `stats.mjs` hides it like `(hidden)`. `test/pacing-tools.test.js` guards that `#fade` still stacks over the base `#msg`.
-- **`stats.mjs` matches a plate to its say within the queue's longest wait** (review batch five).
-  - `lib.mjs` `queueWaitS` reads the wait off the measured tree's own `messages.js`: its discovery gap plus its hold, 10.2 s on all three trees.
-  - `matchSays` gives each plate the latest say of its text that no earlier plate took.
-  - `test/pacing-tools.test.js` guards both, and that `stats.mjs` uses them.
-- **The current `stats.mjs` over the 2.0.3 and as-built bot logs.**
+- **`stats.mjs` matches a plate to its say within the plate's arrival, however long the line waited** (review batches five and six).
+  - Batch five's window, the queue's discovery gap plus its hold (10.2 s), was not the longest wait. The queue drops no discovery line, so a line waits out the gap of every one said before it. The extension's three closing lines, with a landmark's line said 0.4 s after the last of them, put the landmark's line up 12.05 s after its say.
+  - Only an arrival ends a wait: `buildLevel` clears the queue, and `clear()` drops what still waits. `lib.mjs` `queueBound` and `buildLevelClears` read both off the measured tree's own `messages.js` and `game.js`. On a tree that kept its lines through an arrival, `stats.mjs` would match with no bound.
+  - `matchSays` gives each plate the latest say of its text, in the plate's arrival, that no earlier plate took. A say logged at the arrival's instant is the new floor's; a plate logged there is still the old floor's (the bot reads `#msg` before the game's frame ticks the queue).
+  - On the logs of this measure and of the three 2.0.4 runs before it, each plate gets the say that a replay of the logged says through the measured tree's own queue gives it, wherever the replay can place the plate.
+  - `stats.txt` lists, per session, the plates with no say and the longest waits.
+  - `test/pacing-tools.test.js` guards the matcher, the bound, and that `stats.mjs` uses them.
+- **`stats.mjs` gives an arrival its own timed lines** (review batch six).
+  - The game says some lines on a timer a few seconds into an arrival (`game.js` `later()`). A key the bot pressed in the 2.5 s before one of them did not cause it. The key rule had counted such a line as the bot's.
+  - `lib.mjs` `timedArrivalLines` reads them off the measured tree: the filing line for every column and layer, the summary of a floor you come back to, each way's line, the pin's mercy, *the floor remembers you less.* and where you woke. `sayCause` holds the rules and counts these as the arrival's, whatever key came between and whenever the budget lets them go.
+  - On 2.0.3's logs, 14 of 375 plates move from the bot to the budget: the way's line and the filing line in each of the six seeded fresh runs, and two summaries. The bot had pressed a key 0.07–1.95 s before each: its light back on, a search, the map folded.
+  - There, 12 of 37 arrivals now hold 4 budgeted plates (5 before), and the most stays 4. In the six seeded fresh runs the budgeted share of the time rises 4–6 points, and the bot's falls by about as much.
+  - On this measure's logs, 6 filing lines move (see *Met since review batch five*). 18 of 26 arrivals hold 2 (12 before), and the most stays 2. Five fresh runs' budgeted share rises 3 points.
+  - On the as-built logs 1 plate moves, and on the three 2.0.4 runs before this one 3 plates move. All four are filing lines the budget held and let go after the window, so no arrival's count moves.
+  - No table cell moves.
+  - `test/pacing-tools.test.js` replays seed 601's filing line and seed 605's summary on 2.0.3, reads the lines off this tree, and guards that `stats.mjs` uses both.
+- **The current `stats.mjs` over the bot logs, against the flat 6 s.**
   - On the as-built logs, 1 of 250 plates gains its cause and no metric moves.
-  - On 2.0.3's, 6 of 375 gain theirs, and the most budgeted plates in one arrival falls from 5 to 4. Plate on screen keeps its range; only its split by class moves.
+  - On 2.0.3's, 13 of 375 gain theirs, and the most budgeted plates in one arrival falls from 5 to 4. Plate on screen keeps its range. Three plates change class, all to the player: the tv wall's line twice and *something counts the drawers you open.*
+  - 7 of the 13 waited 10.3–14.2 s, past batch five's window: five filing lines, the tv wall's line and a floor-you-know line. Only the tv wall's line changes class with its say: it is a landmark's line, and the bot walked up to it. The other six are the game's timed arrival lines and stay in the budget. Before the tool knew those lines, the key rule gave five of the six to the bot.
+  - No cell of the 2.0.3 column moves.
+  - On the 2.0.4 logs (this measure's and the three before it), batch six's matcher changes no plate.
   - The table's 2.0.3 column is the current tool's.
 - **Neither tool hears your own steps**, so quiet water's change moves no row.
 
@@ -132,12 +150,13 @@ The pull never names a stair up: 0 of 180 seekers were sent to one, against 75 o
   - Bot: one 3-minute session per floor, and 7 fresh runs. Its drawer counts (89–105 rolls) cannot settle 8–10%: 11/105 has a 95% interval of 6–18%. The sweep, over 20,000 keys per floor and the containers actually placed, is the measure.
 - **How the bot's plates are classed.** The same rules apply on every tree.
   - **Player-caused:** a line said within 2.5 s after a key the bot pressed to act (E, F, Q, L, Space, C, Tab), plus bump, clutter and landmark lines.
-  - **Arrival:** a line said within 12 s of a travel or a death, with no key pressed since.
+  - **Arrival:** a line said within 12 s of a travel or a death, with no key pressed since. The lines the game says on a timer after an arrival (`lib.mjs` `timedArrivalLines`, read off the measured tree: the filing line, the summary, a way's line, the mercy, *the floor remembers you less.*, where you woke) are the arrival's whatever key came between, and however late the budget lets them go. `lib.mjs` `sayCause` holds these rules.
   - **Warning:** the hunt's lines.
   - **Arrival + unprompted:** everything else. This is the column T1-4 budgets.
   - The tree's own murmurs, and lines fired by an event or a haunt, are always unprompted, unless a drawer rolled them.
   - Each arrival window ends at the next arrival.
-  - A plate's say is the latest `showMessage` of its text that no earlier plate took, within the measured tree's queue wait (10.2 s on all three trees). A line held longer loses its cause and counts as unprompted.
+  - A plate's say is the latest `showMessage` of its text that no earlier plate took, said in the plate's arrival, however long before it. Only an arrival ends a line's wait in the queue: `buildLevel` clears it.
+  - A plate with no say is a boot line, said before the bot's hooks, and counts as unprompted: the floor's line or name at 0.1–0.3 s, and on the as-built tree the setting's line at 1.6 s.
   - On 2.0.4, the instrumented copy also logs every `plate()` decision, so this can be cross-checked.
 - **What the walker does not model.** Searches and their floor plans; game.js's delayed `later()` arrival lines; the dimmer view with the light off. Its "lines in the first 45 s" are therefore approximate. The bot's count is the measure.
 - **Only scratch copies are instrumented.** The bot only ever patches a copy outside the tree. None of the 82 sessions logged a page error or a blocked network request (11 on 2.0.3, 11 on the tree as built, 16 on `b07d456`, 33 on the tune rounds' game code, 11 on this tree). The block is installed when the bot takes over, so the boot before that is not covered.

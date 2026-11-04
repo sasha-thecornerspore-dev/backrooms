@@ -85,7 +85,7 @@ describe('I14a: the scheduler\'s one mutable config, the file, the floor\'s dept
     expect(at('let file = ')).toBeLessThan(loopAt)
     expect(game).toContain('hereObj.status = file.status')
     expect(game).toMatch(/level = \{ index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages \}/)
-    expect(buildBody).toMatch(/lastCellIx = NaN[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*level\.depth = depthOf\(index\); level\.st = st; level\.amb = ambientMods\(st, bus \? bus\.roomStanding\(\) : null\); retension\(\)/)
+    expect(buildBody).toMatch(/lastCellIx = NaN[^\n]*\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*level\.depth = depthOf\(index\); level\.st = st; level\.amb = ambientMods\(st, bus \? bus\.roomStanding\(\) : null\); retension\(\)/)
   })
 })
 
@@ -212,7 +212,7 @@ describe('I5: the file (origin-*.js) in game.js', () => {
   })
   it('the save ADDS the identity after the fog; the resume reads it ABOVE the clock (applyResume\'s buildLevel reads filedFloors), with the weights', () => {
     const snap = slice('function snapshot(full = false) {', 'let saveTimer = 0')
-    expect(snap).toMatch(/s\.fog = fogExport\r?\n(\s*\/\/[^\n]*\r?\n)*\s*Object\.assign\(s, identityOut\(\{ origin, thin, filed, intakeCtx, filedFloors \}\)\)/)
+    expect(snap).toMatch(/s\.fog = fogExport\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*Object\.assign\(s, identityOut\(\{ origin, thin, filed, intakeCtx, filedFloors \}\)\)/)
     expect(resumeBody).toMatch(/;\(\{ origin, thin, filed, intakeCtx, filedFloors \} = identityIn\(resume, intakeCtx\)\)\r?\n\s*rules = rulesFor\(origin, thin\); evConfig\.events = rules\.eventWeights\(\)/)
     expect(resumeBody.indexOf('identityIn(resume, intakeCtx)')).toBeLessThan(resumeBody.indexOf('playT = Number(resume.playT) || 0'))
     expect(resumeBody).toMatch(/playT = Number\(resume\.playT\) \|\| 0\r?\n\s*const r = applyResume\(resume, \{/)
@@ -261,7 +261,7 @@ describe('I5: the file (origin-*.js) in game.js', () => {
     const fx = slice('function applyItemEffect(eff) {', "} else if (eff.type === 'glowstick') {")
     expect(fx).toMatch(/const r = rules\.itemEffect\(eff, dfloor\)\r?\n\s*if \(r && !r\.legacy\) \{/)
     expect(fx.indexOf('rules.itemEffect(eff, dfloor)')).toBeLessThan(fx.indexOf("if (eff.type === 'almond-water')"))
-    expect(fx).toMatch(/if \(eff\.sour\) \{\r?\n\s*level\.entitySys\.noise\(player\.x, player\.y, 6\)[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const sw = rules\.sourWater\(dfloor\)/)
+    expect(fx).toMatch(/if \(eff\.sour\) \{\r?\n\s*level\.entitySys\.noise\(player\.x, player\.y, 6\)[^\n]*\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*const sw = rules\.sourWater\(dfloor\)/)
     expect(fx).toMatch(/\} else if \(dfloor === 3\) \{/)
     const ballast = slice("} else if (eff.type === 'ballast') {", "} else if (eff.type === 'extension-slip') {")
     expect(ballast).toContain('if (thin) { thin = false; rules = rulesFor(origin, false); setTimeout(() => showMessage(CURE_LINE, PRIO.discovery), 2600); bus?.here(hereFields()) }')
@@ -275,13 +275,13 @@ describe('I5: the file (origin-*.js) in game.js', () => {
   })
   it('the thin ward recoils you along your own facing through the mover, marched under a cell a step, and says so', () => {
     const block = game.slice(at('let verbMul = 1'), at('let moved = false'))
-    expect(block).toMatch(/sanity = Math\.min\(100, sanity \+ 10 \* res\.dispelled\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(rules\.wardRecoil && res\.hit > 0\) \{\r?\n\s*for \(let i = 0; i < RECOIL_STEPS; i\+\+\) tryMove\(player\.x - Math\.cos\(player\.angle\) \* \(RECOIL_DIST \/ RECOIL_STEPS\), player\.y - Math\.sin\(player\.angle\) \* \(RECOIL_DIST \/ RECOIL_STEPS\)\)\r?\n\s*shake = Math\.max\(shake, RECOIL_SHAKE\)/)
+    expect(block).toMatch(/sanity = Math\.min\(100, sanity \+ 10 \* res\.dispelled\)\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(rules\.wardRecoil && res\.hit > 0\) \{\r?\n\s*for \(let i = 0; i < RECOIL_STEPS; i\+\+\) tryMove\(player\.x - Math\.cos\(player\.angle\) \* \(RECOIL_DIST \/ RECOIL_STEPS\), player\.y - Math\.sin\(player\.angle\) \* \(RECOIL_DIST \/ RECOIL_STEPS\)\)\r?\n\s*shake = Math\.max\(shake, RECOIL_SHAKE\)/)
     expect(game).toMatch(/const RECOIL_STEPS = 4\b/)
     expect(1.7 / 4).toBeLessThan(1)                                   // a step never clears a whole wall cell
     expect(block).toContain("rules.wardRecoil ? 'they recoil from you. so do you.' : 'they recoil from you.'")
   })
   it('the leash: the calm and the debt run down each frame beside the quiet timer', () => {
-    expect(game).toMatch(/if \(quietTimer > 0\) quietTimer -= dt\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(leashCalm > 0\) leashCalm -= dt\r?\n\s*leashDebt = leashDebtStep\(leashDebt, dt\)/)
+    expect(game).toMatch(/if \(quietTimer > 0\) quietTimer -= dt\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(leashCalm > 0\) leashCalm -= dt\r?\n\s*leashDebt = leashDebtStep\(leashDebt, dt\)/)
   })
   it('the here heartbeat says the column and the layer', () => {
     const body = slice('function hereFields() {', 'return hereObj')
@@ -324,7 +324,7 @@ describe('I5: the form, the doors, the soul, the console, the naming', () => {
   })
   it('/intake re-opens the form or refuses an amendment; the fallback names it', () => {
     const cmd = slice('async function handleCommand(t) {', '// desktop: a fetch that never reached the site')
-    expect(cmd).toMatch(/\} else if \(cmd === 'intake'\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const r = parseIntakeCommand\(arg\)\r?\n\s*if \(r\.refuse\) showMessage\(r\.refuse\)\r?\n\s*else openForm\(\)/)
+    expect(cmd).toMatch(/\} else if \(cmd === 'intake'\) \{\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*const r = parseIntakeCommand\(arg\)\r?\n\s*if \(r\.refuse\) showMessage\(r\.refuse\)\r?\n\s*else openForm\(\)/)
     expect(cmd).toContain("showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status or /invite.')")   // (the ONE string, I13; /invite since the way in)
   })
   it('the naming re-file: an unnamed player\'s naming wish closes the dialog and asks how it is spelled; only a confirm files the name', () => {
@@ -417,7 +417,7 @@ describe('I6: the file\'s reading of you, as the things perceive it (compose-per
     expect(count(/createStillness\(/g)).toBe(1)
     expect(at('const stillness = createStillness({ now: () => playT })')).toBeLessThan(loopAt)
     expect(at('const stillNote = { moving: false, flashlight: true, radioOn: false, t: 0 }')).toBeLessThan(loopAt)
-    expect(loop).toMatch(/player\.moving = moved\r?\n(\s*\/\/[^\n]*\r?\n)*\s*stillNote\.moving = moved; stillNote\.flashlight = flashlight; stillNote\.radioOn = radioWasOn; stillNote\.t = playT\r?\n\s*stillness\.note\(stillNote\)\r?\n\s*if \(moved && wantSprint\) stillness\.noise\(playT\)/)
+    expect(loop).toMatch(/player\.moving = moved\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*stillNote\.moving = moved; stillNote\.flashlight = flashlight; stillNote\.radioOn = radioWasOn; stillNote\.t = playT\r?\n\s*stillness\.note\(stillNote\)\r?\n\s*if \(moved && wantSprint\) stillness\.noise\(playT\)/)
     expect(game).not.toMatch(/stillness\.note\(\{/)                     // no literal per frame
     const ward = game.slice(at('let verbMul = 1'), at('let moved = false'))
     expect(ward).toMatch(/level\.entitySys\.noise\(player\.x, player\.y, 12\)[^\n]*\r?\n\s*stillness\.noise\(playT\); standHeld = 0/)
@@ -945,7 +945,7 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     expect(go(true, 2, 'ok', 'kneel')).toEqual({ down: 1, died: [], hp: 0 })        // kneeling by someone is still on their feet
   })
   it('die(d): the reset right after the core\'s invuln line, then the decision (its regenDelay wins), the veil cleared; its line third, at 7800 ms', () => {
-    expect(dieBody).toMatch(/invuln = 1\.6; regenDelay = 0; hurt = 0\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(down\.st === 'down'\) flashlight = savedLight\r?\n\s*down\.reset\(\); if \(kneel\.st\) \{ kneel\.stop\(\); flashlight = savedLight \}\r?\n\s*if \(d\) \{ if \(d\.mintThin && filed\) \{ thin = true; rules = rulesFor\(origin, thin\); thinFirstShot = true \} if \(d\.leashDebt > 0\) leashDebt = d\.leashDebt; if \(d\.sanity\) sanity = Math\.max\(0, Math\.min\(100, sanity \+ d\.sanity\)\); if \(d\.regenDelay\) regenDelay = d\.regenDelay \}\r?\n\s*if \(downEl\) downEl\.style\.opacity = '0'\r?\n\s*document\.body\.classList\.remove\('down'\)/)
+    expect(dieBody).toMatch(/invuln = 1\.6; regenDelay = 0; hurt = 0\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(down\.st === 'down'\) flashlight = savedLight\r?\n\s*down\.reset\(\); if \(kneel\.st\) \{ kneel\.stop\(\); flashlight = savedLight \}\r?\n\s*if \(d\) \{ if \(d\.mintThin && filed\) \{ thin = true; rules = rulesFor\(origin, thin\); thinFirstShot = true \} if \(d\.leashDebt > 0\) leashDebt = d\.leashDebt; if \(d\.sanity\) sanity = Math\.max\(0, Math\.min\(100, sanity \+ d\.sanity\)\); if \(d\.regenDelay\) regenDelay = d\.regenDelay \}\r?\n\s*if \(downEl\) downEl\.style\.opacity = '0'\r?\n\s*document\.body\.classList\.remove\('down'\)/)
     expect(dieBody).toMatch(/if \(r\.dropped\) later\(5200, r\.droppedLine, PRIO\.discovery\)\r?\n\s*if \(d\?\.line\) later\(7800, d\.line, PRIO\.discovery\)/)
     expect(game).not.toContain('you wake where you fell in.')
   })
@@ -1056,7 +1056,7 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     expect(DOWN_BEAT).toEqual({ intensity: 0.3, everyS: 2 })
     // Space while kneeling is your hands on them (the latch was dropped by modal), after the charger and its recoil
     const ward = game.slice(at('let verbMul = 1'), at('let moved = false'))
-    expect(ward).toMatch(/shake = Math\.max\(shake, RECOIL_SHAKE\)\r?\n\s*\}\r?\n\s*\}\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(kneel\.st && wardInput\.press !== kneel\.st\.press0\) stopKneel\(HANDS_LINE\)/)
+    expect(ward).toMatch(/shake = Math\.max\(shake, RECOIL_SHAKE\)\r?\n\s*\}\r?\n\s*\}\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(kneel\.st && wardInput\.press !== kneel\.st\.press0\) stopKneel\(HANDS_LINE\)/)
   })
   it('the verbs: lying down every verb key but C is swept just before the gate; the kneel\'s F heads the F chain; Esc and L while kneeling', () => {
     expect(loop).toContain(SWEEP)
@@ -1068,11 +1068,11 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     new Function('down', 'K', SWEEP)({ st: 'down' }, K)
     expect(Object.keys(K).filter((k) => K[k])).toEqual(['KeyC', 'KeyM', 'Enter', 'Tab', 'KeyW'])    // C still calls; the music, chat, map, the gaze stay
     const K2 = { KeyF: true }; new Function('down', 'K', SWEEP)({ st: 'ok' }, K2); expect(K2.KeyF).toBe(true)
-    expect(loop).toMatch(/if \(!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen\) \{\r?\n(\s*\/\/[^\n]*\r?\n)+\s*if \(K\['KeyF'\] && \(kneel\.st \|\| dnFront\)\) \{ K\['KeyF'\] = false; if \(kneel\.st\) stopKneel\(null\); else startKneel\(dnFront\) \}\r?\n\s*if \(K\['KeyF'\]\) \{/)
-    expect(loop).toMatch(/if \(kneel\.st && K\['Escape'\]\) \{ K\['Escape'\] = false; stopKneel\(null\) \}[^\n]*\r?\n(\s*\r?\n)?(\s*\/\/[^\n]*\r?\n)*\s*if \(mapOpen && \(K\['Escape'\] \|\| K\['Tab'\]\)\)/)
+    expect(loop).toMatch(/if \(!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen\) \{\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)+[ \t]*if \(K\['KeyF'\] && \(kneel\.st \|\| dnFront\)\) \{ K\['KeyF'\] = false; if \(kneel\.st\) stopKneel\(null\); else startKneel\(dnFront\) \}\r?\n\s*if \(K\['KeyF'\]\) \{/)
+    expect(loop).toMatch(/if \(kneel\.st && K\['Escape'\]\) \{ K\['Escape'\] = false; stopKneel\(null\) \}[^\n]*\r?\n(?:[ \t]*\r?\n)?(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(mapOpen && \(K\['Escape'\] \|\| K\['Tab'\]\)\)/)
     // (the off line is lightshare.js litOffLine since I12: today's 'flashlight off — the dark leans in.' when nobody's light reaches you)
     // (pulse T1-4: the plain lines once a run, the friend's always; the block's every time, as it was: the hold)
-    expect(loop).toMatch(/if \(K\['KeyL'\]\) \{\r?\n\s*K\['KeyL'\] = false\r?\n\s*if \(kneel\.st\) showMessage\(LIGHT_STAYS_LINE\)[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*else \{ flashlight = !flashlight; lightToggles\+\+; if \(cfg\.map \|\| !lightSaid \|\| \(!flashlight && litRec\)\) \{ if \(!cfg\.map\) lightSaid = true; showMessage\(flashlight \? 'flashlight on\.' : litOffLine\(litRec \? litRec\.name : null\)\) \} \}/)
+    expect(loop).toMatch(/if \(K\['KeyL'\]\) \{\r?\n\s*K\['KeyL'\] = false\r?\n\s*if \(kneel\.st\) showMessage\(LIGHT_STAYS_LINE\)[^\n]*\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*else \{ flashlight = !flashlight; lightToggles\+\+; if \(cfg\.map \|\| !lightSaid \|\| \(!flashlight && litRec\)\) \{ if \(!cfg\.map\) lightSaid = true; showMessage\(flashlight \? 'flashlight on\.' : litOffLine\(litRec \? litRec\.name : null\)\) \} \}/)
     expect(LIGHT_STAYS_LINE).toBe('your light stays on them.')
   })
   it('the prompt: who is down in front (the hoisted options, last frame\'s fill) heads the ladder, dimming as you count; the kneel ticks after the remote fill', () => {
@@ -1086,7 +1086,7 @@ describe('I9 (W4 / W5): down, not dead — the death decision, lying down, the k
     expect(tick).toBeLessThan(loop.indexOf('const th = creaturesOn ? level.entitySys.update('))
     expect(loop).toContain("if (kr === 'emit') { kneelOut.to = kneel.st.id; bus?.emit('kneel', kneelOut) }")
     expect(loop).toContain("else if (kr === 'ended') { flashlight = savedLight; bus?.here(hereFields()) }")
-    expect(buildBody).toMatch(/for \(const t of closingTimers\) clearTimeout\(t\);[^\n]*\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(kneel\.st\) \{ kneel\.stop\(\); flashlight = savedLight \}/)
+    expect(buildBody).toMatch(/for \(const t of closingTimers\) clearTimeout\(t\);[^\n]*\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(kneel\.st\) \{ kneel\.stop\(\); flashlight = savedLight \}/)
     expect(buildBody).not.toMatch(/down\.(reset|goDown)/)                       // lying down is not touched by a build (travel refuses; die resets)
   })
   it('here says kneel / down; the sanity step lies down (-1 flat); the veil is written on a change only', () => {
@@ -1498,7 +1498,7 @@ describe('I11 (W6): the caches — a thing set down with a word, read on the car
     expect(count(/mem\.setDropped\(/g)).toBe(4)
   })
   it('F on a cache, lifted and replayed: the word read on the card (whose, the arrow from where you stand), +4 for a stranger\'s, the ledger and the room let go of it', () => {
-    expect(game).toMatch(/if \(res\.ok\) \{ if \(ownSounds\(\)\) pickup\(\); showMessage\(`you take the \$\{ITEM_NAMES\[res\.item\.type\] \?\? res\.item\.type\}\.`\); if \(!nearItem\.key\.startsWith\('d:'\)\) mem\.noteTaken\(level\.index, nearItem\.key\) \}[^\n]*\r?\n\s*else if \(res\.reason === 'full'\) showMessage\('your hands are full\.'\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(res\.ok && res\.item\.cacheKey\) \{/)
+    expect(game).toMatch(/if \(res\.ok\) \{ if \(ownSounds\(\)\) pickup\(\); showMessage\(`you take the \$\{ITEM_NAMES\[res\.item\.type\] \?\? res\.item\.type\}\.`\); if \(!nearItem\.key\.startsWith\('d:'\)\) mem\.noteTaken\(level\.index, nearItem\.key\) \}[^\n]*\r?\n\s*else if \(res\.reason === 'full'\) showMessage\('your hands are full\.'\)\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(res\.ok && res\.item\.cacheKey\) \{/)
     expect(pickupSrc).toContain('if (!isMine(res.item)) sanity = Math.min(100, sanity + 4)')
     const run = new Function('res', 'isMine', 'st', 'ledger', 'relayLater', 'openCard', 'readText', 'PHRASES', 'arrowFor', 'player', `let { sanity } = st\n${pickupSrc}\nst.sanity = sanity`)
     const go = (rec, mine, angle = 0) => {
@@ -2007,7 +2007,7 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
   it('/status, lifted and replayed: the file in one line — the word, the column, the closing\'s steps; the fallback is the ONE string', () => {
     const cmd = slice('async function handleCommand(t) {', '// desktop: a fetch that never reached the site')
     // (since the way in, /invite sits between /status and the fallback, which names it)
-    expect(cmd).toMatch(/\} else if \(cmd === 'status'\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*showMessage\(fileLines\(\)\.slice\(0, -1\)\.join\(' · '\)\)\r?\n\s*\} else if \(cmd === 'invite'\) \{/)
+    expect(cmd).toMatch(/\} else if \(cmd === 'status'\) \{\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*showMessage\(fileLines\(\)\.slice\(0, -1\)\.join\(' · '\)\)\r?\n\s*\} else if \(cmd === 'invite'\) \{/)
     expect(cmd).toMatch(/\} else showMessage\('the file does not recognise that\. try \/recover, \/cases, \/file <answer>, \/intake, \/status or \/invite\.'\)/)
     expect(count(/const fileLines = /g)).toBe(1)
     const line = game.match(/const fileLines = \(\) => [^\n]*/)[0]
@@ -2025,7 +2025,7 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
     expect(html.indexOf('id="file-row"')).toBeLessThan(html.indexOf('id="locate-row"'))
     expect(html.indexOf('id="file-row"')).toBeLessThan(html.indexOf('<div class="modal-foot">'))
     const open = html.slice(html.indexOf("document.getElementById('btn-settings').onclick"), html.indexOf("document.getElementById('btn-locate').onclick"))
-    expect(open).toMatch(/settingsMod\.style\.display = 'flex'\r?\n(\s*\/\/[^\n]*\r?\n)*\s*document\.dispatchEvent\(new CustomEvent\('backrooms:settings-open'\)\)/)
+    expect(open).toMatch(/settingsMod\.style\.display = 'flex'\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*document\.dispatchEvent\(new CustomEvent\('backrooms:settings-open'\)\)/)
     expect(html).toContain("document.getElementById('btn-new-notice').onclick = (e) => { e.currentTarget.blur(); document.dispatchEvent(new CustomEvent('backrooms:new-notice')) }")
     expect(game).toContain("document.addEventListener('backrooms:settings-open', () => { noticeAsked = false; renderFileRow() })")
     expect(count(/document\.addEventListener\('backrooms:new-notice'/g)).toBe(1)
