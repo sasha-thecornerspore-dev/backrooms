@@ -80,23 +80,12 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             assets: "dist/*.AppImage dist/*.deb dist/latest-linux.yml dist/backrooms-web-*.zip"
-          # macOS builds are ad-hoc signed (no Apple Developer ID yet): they run after the player
-          # clears Gatekeeper once, and the app points mac players at the release page instead of
-          # self-installing. A mac-only failure must not hold back the Windows/Linux release.
-          # The Intel image, not macos-latest (arm64): on 2026-11-04 GitHub had no arm64 runner free and cancelled 2.0.4's mac
-          # leg three times ("not acquired ... capacity constraints"), and a cancelled leg holds the publish back. The app is a
-          # universal build (package.json build.mac arch: universal, no native modules), which electron-builder makes the same
-          # on either. GitHub retires its Intel images in August 2027 (actions/runner-images#13045): go back to an arm64 label
-          # before then.
-          - os: macos-15-intel
-            platform: mac
-            assets: "dist/*.dmg dist/*.zip dist/*.zip.blockmap dist/latest-mac.yml"
-            optional: true
+          # macOS is not a leg here: it is the next job (mac), which the publish waits for but does not need
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.optional == true }}
     permissions:
       contents: write
-    steps:
+    # one list of steps for every platform (each step picks its own with matrix.platform); the mac job runs this same list
+    steps: &installer-steps
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
@@ -185,11 +174,36 @@ jobs:
           path: ${{ steps.assets.outputs.files }}
           retention-days: 14
 
-  # Publish only after every required asset has landed. Until now the release was a draft, invisible
-  # to updaters. (macOS is optional — see the matrix — so a mac-only failure still publishes.)
+  # macOS builds are ad-hoc signed (no Apple Developer ID yet): they run after the player clears Gatekeeper once, and the app
+  # points mac players at the release page instead of self-installing. A mac-only failure must not hold back the Windows/Linux
+  # release, and neither may a mac job GitHub never starts. On 2026-11-04 GitHub had no arm64 runner free and cancelled 2.0.4's
+  # mac leg three times ("not acquired ... capacity constraints"); the leg was in the build matrix, and continue-on-error covers a
+  # leg that fails, not one that is cancelled, so the matrix came out cancelled and the publish was skipped. So macOS is a job of
+  # its own: the publish waits for it (its files land before the release goes public) and never asks how it went.
+  # The Intel image, not macos-latest (arm64), since that day. The app is a universal build (package.json build.mac arch:
+  # universal, no native modules), which electron-builder makes the same on either. GitHub retires its Intel images in August
+  # 2027 (actions/runner-images#13045): go back to an arm64 label before then.
+  mac:
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: macos-15-intel
+            platform: mac
+            assets: "dist/*.dmg dist/*.zip dist/*.zip.blockmap dist/latest-mac.yml"
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true   # a mac failure leaves the run green: the release is whole without it
+    permissions:
+      contents: write
+    steps: *installer-steps   # the build job's steps, the very same list (a YAML alias)
+
+  # Publish only after every required asset has landed. Until now the release was a draft, invisible to updaters.
+  # always() lets it wait for the mac job however that ends (failed, cancelled, never started) without needing it: GitHub skips a
+  # job when something it needs did not succeed, unless its if: says otherwise. The gate is the Windows/Linux build alone.
   publish:
-    needs: [prepare, build]
-    if: needs.prepare.outputs.publish == 'true' && needs.build.result == 'success'
+    needs: [prepare, build, mac]
+    if: always() && needs.prepare.outputs.publish == 'true' && needs.build.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -223,7 +237,8 @@ jobs:
   # once its checksum matches the one pinned below.
   itch:
     needs: [prepare, publish]
-    if: needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success'
+    # always(), as on publish: a mac job that did not succeed is behind publish, and would skip this job too
+    if: always() && needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read

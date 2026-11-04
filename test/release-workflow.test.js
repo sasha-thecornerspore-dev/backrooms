@@ -36,7 +36,7 @@ describe('build-release.yml: the itch.io job', () => {
   it('exists, last, and runs only once the GitHub release is public — the publish job\'s own gate, then its success', () => {
     expect(rel.indexOf('\n  itch:\n')).toBeGreaterThan(rel.indexOf('\n  publish:\n'))
     expect(itch).toContain('    needs: [prepare, publish]\n')
-    expect(itch).toContain("    if: needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success'\n")
+    expect(itch).toContain("    if: always() && needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success'\n")
     expect(itch).toMatch(/ {4}permissions:\n {6}contents: read\n/)
   })
   it('the key rides only the gate and the push, never the job (the download, the unzip and butler -V never see it) (review SEC-7)', () => {
@@ -92,11 +92,56 @@ describe('build-release.yml: the itch.io job', () => {
   })
   it.skipIf(!yaml)('parses as YAML, and the parse agrees with the text', () => {
     const doc = yaml.load(rel)
-    expect(Object.keys(doc.jobs)).toEqual(['prepare', 'build', 'publish', 'itch'])
+    expect(Object.keys(doc.jobs)).toEqual(['prepare', 'build', 'mac', 'publish', 'itch'])
     expect(doc.jobs.itch.needs).toEqual(['prepare', 'publish'])
     expect(doc.jobs.itch.steps.map((s) => s.name)).toEqual(['Is itch.io set up?', 'Fetch this release\'s files', 'Install butler (pinned)', 'Push to itch.io'])
     const linux = doc.jobs.build.strategy.matrix.include.find((m) => m.platform === 'linux')
     expect(linux.assets.split(' ')).toContain('dist/backrooms-web-*.zip')
+  })
+})
+
+// 2.0.4's mac leg was cancelled three times (GitHub had no runner free): continue-on-error covers a failed leg, not a cancelled one, so
+// the build matrix came out cancelled and the publish was skipped for Windows and Linux too. macOS is a job of its own since 2.0.5.
+describe('build-release.yml: macOS cannot hold the release back', () => {
+  const head = (name) => {   // the job's own keys (four spaces in), not its steps or its matrix
+    const lines = rel.split('\n')
+    const out = []
+    for (let i = lines.indexOf(`  ${name}:`) + 1; i < lines.length && !/^ {2}\S/.test(lines[i]); i++) if (/^ {4}\S/.test(lines[i])) out.push(lines[i])
+    return out.join('\n') + '\n'
+  }
+  it('the build matrix is Windows and Linux; macOS is the mac job, after it, on the same trigger', () => {
+    const build = rel.slice(rel.indexOf('\n  build:\n'), rel.indexOf('\n  mac:\n'))
+    expect(build).toContain('platform: win')
+    expect(build).toContain('platform: linux')
+    expect(build).not.toContain('platform: mac')
+    const mac = rel.slice(rel.indexOf('\n  mac:\n'), rel.indexOf('\n  publish:\n'))
+    expect(mac).toContain('platform: mac')
+    expect(mac).toContain('assets: "dist/*.dmg dist/*.zip dist/*.zip.blockmap dist/latest-mac.yml"')
+    expect(head('mac')).toContain('    needs: prepare\n')
+    expect(head('mac')).toContain("    if: needs.prepare.outputs.build == 'true'")
+    expect(head('build')).toContain("    if: needs.prepare.outputs.build == 'true'")
+  })
+  it('the mac job runs the build job\'s own steps (one list, a YAML alias), and only it may fail without failing the run', () => {
+    expect(head('build')).toContain('    steps: &installer-steps')
+    expect(head('mac')).toMatch(/^ {4}steps: \*installer-steps(\s|$)/m)
+    expect(head('mac')).toMatch(/^ {4}continue-on-error: true(\s|$)/m)
+    expect(head('build')).not.toContain('continue-on-error')
+    expect(rel).not.toContain('matrix.optional')
+    expect(rel.match(/^ {4}continue-on-error:/gm)).toHaveLength(1)
+  })
+  it('publish waits for mac but gates on the Windows/Linux build alone, with always(), so a mac job that is cancelled or fails skips nothing', () => {
+    expect(head('publish')).toContain('    needs: [prepare, build, mac]\n')
+    expect(head('publish')).toContain("    if: always() && needs.prepare.outputs.publish == 'true' && needs.build.result == 'success'")
+    expect(rel).not.toContain('needs.mac.')
+    expect(head('itch')).toContain("    if: always() && needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success'")
+  })
+  it.skipIf(!yaml)('parsed: the mac job\'s steps are the build job\'s, and the needs say the same as the text', () => {
+    const doc = yaml.load(rel)
+    expect(doc.jobs.build.strategy.matrix.include.map((m) => m.platform)).toEqual(['win', 'linux'])
+    expect(doc.jobs.mac.strategy.matrix.include.map((m) => m.platform)).toEqual(['mac'])
+    expect(doc.jobs.mac.steps).toEqual(doc.jobs.build.steps)
+    expect(doc.jobs.mac['continue-on-error']).toBe(true)
+    expect(doc.jobs.publish.needs).toEqual(['prepare', 'build', 'mac'])
   })
 })
 
