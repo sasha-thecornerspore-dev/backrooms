@@ -1151,7 +1151,8 @@ describe('I10 (W5): the whistle — the C edge, your call, a friend\'s, the roll
     expect([calls, K.KeyC]).toEqual([[true], false])
     // CALL: the dock's sixth button sets K['KeyC'] like the key; never an edge counter (only the ward's Space is)
     expect(ACTIONS[ACTIONS.length - 1]).toEqual({ code: 'KeyC', label: 'CALL', hint: 'whistle' })
-    expect(game).toContain('initTouchControls({ canvas, K, player, getPref, edges: { Space: wardInput } })')
+    // (I5 hands it TYPE's Enter as a tap too; the edges stay the ward's alone — touch-wiring.test.js pins the line)
+    expect(game).toContain('initTouchControls({ canvas, K, player, getPref, edges: { Space: wardInput }, taps: { Enter: touchLine } })')
   })
 
   // whistleOut lifted out of game.js, its world faked: the roll call is the real one on an injected ms clock
@@ -2191,7 +2192,8 @@ describe('I15: the factions wave, closed', () => {
     expect(ACTIONS.map((a) => a.label)).toEqual(['ACT', 'USE', 'WARD', 'SPEAK', 'LIGHT', 'CALL'])
     const touch = readme.slice(readme.indexOf('**on a phone or tablet**'), readme.indexOf('your **hit points** sit under'))
     for (const a of ACTIONS) expect(touch, a.label).toContain(`**${a.label}**`)
-    for (const k of ['(**b**)', '(**enter**)', '(**m**, **n**)']) expect(touch, k).toContain(k)
+    // I5: b and enter have their buttons now (TYPE, BEACON — docs-touch.test.js); the music is the one thing left to a keyboard
+    for (const k of ['**TYPE** (enter)', '**BEACON** (b)', '(**m**, **n**)']) expect(touch, k).toContain(k)
   })
 
   it('README controls: a row for every key the hint row names, the whistle, the set-down word, the kneel', () => {
