@@ -4,9 +4,11 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import { loadTree, WIRING, repeats, quietStretches, preceded, gaps, moments, pathTo, queueWaitS, matchSays } from '../tools/pacing/lib.mjs'
+import { loadTree, WIRING, repeats, quietStretches, preceded, gaps, moments, pathTo, replayQueue, queueBound, buildLevelClears, arrivalClears, matchSays } from '../tools/pacing/lib.mjs'
 import { patchGame, patchAudio, patchWish, patchContainers } from '../tools/pacing/bot/patch.mjs'
 import * as MSG from '../src/renderer/messages.js'
+import { closingLines } from '../src/renderer/closings.js'
+import { SIGHT_LINES } from '../src/renderer/sightpins.js'
 
 const R = path.join(import.meta.dirname, '..', 'src', 'renderer')
 const read = (f) => fs.readFileSync(path.join(R, f), 'utf8')
@@ -47,37 +49,96 @@ describe('pacing tools: the counts', () => {
 describe('pacing tools: a plate and the say that put it up (stats.mjs)', () => {
   // a queue built with these options, standing in for a tree's messages.js
   const made = (o) => ({ PRIO: MSG.PRIO, createMessageQueue: () => MSG.createMessageQueue(o) })
-  it('the window is the queue\'s longest wait, read off the queue itself: its discovery gap plus its hold', () => {
-    expect(queueWaitS(made({ holdS: 1, discoveryGapS: 2 }))).toBeCloseTo(3, 2)
-    expect(queueWaitS(made({ holdS: 3, discoveryGapS: 8 }))).toBeCloseTo(11, 2)
-    // this tree's queue, as game.js builds it (no options), keeps the wait the bot measured on seed 604's L3 arrival
-    expect(queueWaitS(MSG)).toBeGreaterThan(6.05)
+  const s = (t, text) => ({ t, text })
+  const P = MSG.PRIO
+  it('replayQueue feeds a tree\'s own queue as showMessage and the frame loop do, and logs what it put up as the bot does', () => {
+    const { plates, says } = replayQueue(MSG, [[0, 'b', P.discovery], [0, 'a', P.discovery], [1, 'c', P.ambient]], { untilS: 20 })
+    expect(says).toEqual([s(0, 'b'), s(0, 'a'), s(1, 'c')])                       // in time order, ties as given
+    expect(plates.map((p) => p.text)).toEqual(['b', 'a'])                        // the ambient line found the queue busy: dropped
+    expect(plates[1].t - plates[0].t).toBeCloseTo(6, 1)                         // the discovery gap
+    // a clear (buildLevel, in the fade's timeout) comes after its frame's tick, and the says logged at its instant come after it (the
+    // floor's line): what waited is dropped, and the floor's line goes up a frame later
+    const c = replayQueue(MSG, [[0, 'x', P.discovery], [1, 'y', P.discovery], [2, 'z', P.combat]], { untilS: 20, clears: [2] })
+    expect(c.plates.map((p) => p.text)).toEqual(['x', 'z'])
+    expect(c.plates[1].t).toBeGreaterThan(2)
+    expect(matchSays(c.plates, c.says, [2])).toEqual([c.says[0], c.says[2]])
+  })
+  it('no fixed window bounds a line\'s wait, read off the queue itself: it drops no discovery line, and only clear() ends a wait', () => {
+    // this tree's queue, as game.js builds it (no options): the last of 40 discovery lines said together waits 39 gaps, longer than a session
+    const q = queueBound(MSG)
+    expect(q.clears).toBe(true)
+    expect(q.keepsS).toBeGreaterThan(180)
+    expect(q.keepsS).toBeCloseTo(39 * 6, -1)
+    expect(queueBound(made({ discoveryGapS: 2 }), 10).keepsS).toBeCloseTo(9 * 2, 0)
+    // a queue whose clear() kept what waits would not end a wait at the arrival
+    const keeps = { PRIO: MSG.PRIO, createMessageQueue: () => ({ ...MSG.createMessageQueue(), clear() {} }) }
+    expect(queueBound(keeps).clears).toBe(false)
+  })
+  it('the extension closes: three closing lines, a landmark\'s sight line 0.4 s after the last, and the sight line keeps its say after 12.05 s', () => {
+    // game.js closeExtension: the closing's three lines at 0, 2.6 and 5.6 s, all discovery; walking up to a landmark just after says its
+    // first-sight line (sightpins.js SIGHT_LINES), discovery too. stats.mjs counts a sight line as the player's once it finds its say
+    const L = closingLines('extension'), sight = SIGHT_LINES.tvwall.line
+    const { plates, says } = replayQueue(MSG, [[0, L[0], P.discovery], [2.6, L[1], P.discovery], [5.6, L[2], P.discovery], [6.0, sight, P.discovery]], { untilS: 30 })
+    expect(plates.map((p) => p.text)).toEqual([...L, sight])
+    expect(plates[3].t - says[3].t).toBeCloseTo(12.05, 1)
+    expect(plates[3].t - says[3].t).toBeGreaterThan(6 + 4.2)                     // past review batch five's window (the gap plus the hold)
+    expect(matchSays(plates, says)).toEqual(says)
   })
   it('seed 604, L3: the drawer\'s line that went up 6.05 s after its say, behind a held result, is still that say\'s plate', () => {
-    const s = (t, text) => ({ t, text })
     const says = [s(167.67, 'a door humming with current — through it, the lobby waits again.'), s(167.85, 'empty. someone has been through here.'),
       s(167.85, 'something counts the drawers you open.')]
     const plates = [s(167.68, says[0].text), s(167.85, says[1].text), s(173.9, says[2].text)]
-    expect(matchSays(plates, says, queueWaitS(MSG))).toEqual(says)
-    expect(matchSays(plates, says, 6)[2]).toBeNull()                       // the old flat 6 s lost its cause
+    expect(matchSays(plates, says, [163.9])).toEqual(says)
   })
-  it('the latest say of its text that no earlier plate took, from the window before the plate to the log\'s frame after it', () => {
-    const s = (t, text) => ({ t, text })
+  it('the latest say of its text that no earlier plate took, however long before the plate, and no later than the log\'s frame after it', () => {
     const a0 = s(0, 'a'), a2 = s(2, 'a')
-    expect(matchSays([s(3, 'a')], [a0, a2], 10)).toEqual([a2])                       // the latest
-    expect(matchSays([s(0, 'a'), s(4, 'a')], [a0], 10)).toEqual([a0, null])         // one say puts up one plate
-    expect(matchSays([s(1, 'a'), s(4, 'a')], [a2, a0], 10)).toEqual([a0, a2])       // in time order, whatever order the says come in
-    expect(matchSays([s(10, 'a'), s(10.3, 'a')], [a0, s(0.2, 'a')], 10.2)).toEqual([s(0.2, 'a'), null])   // past the window: none
-    expect(matchSays([s(4.9, 'c')], [s(5, 'c')], 10)).toEqual([null])                // said after it went up: not its say
-    expect(matchSays([s(4.9, 'c')], [s(4.94, 'c')], 10)).toEqual([s(4.94, 'c')])     // ... but within the log's frame it is
-    expect(matchSays([s(1, 'x y')], [s(0, ' x \n y ')], 10)).toEqual([s(0, ' x \n y ')])   // the text as #msg shows it
-    expect(matchSays([s(1, 'b')], [a0], 10)).toEqual([null])
+    expect(matchSays([s(3, 'a')], [a0, a2])).toEqual([a2])                       // the latest
+    expect(matchSays([s(0, 'a'), s(4, 'a')], [a0])).toEqual([a0, null])         // one say puts up one plate
+    expect(matchSays([s(1, 'a'), s(4, 'a')], [a2, a0])).toEqual([a0, a2])       // in time order, whatever order the says come in
+    expect(matchSays([s(10, 'a'), s(240, 'a')], [a0, s(0.2, 'a')])).toEqual([s(0.2, 'a'), a0])   // however long it waited
+    expect(matchSays([s(4.9, 'c')], [s(5, 'c')])).toEqual([null])                // said after it went up: not its say
+    expect(matchSays([s(4.9, 'c')], [s(4.94, 'c')])).toEqual([s(4.94, 'c')])     // ... but within the log's frame it is
+    expect(matchSays([s(1, 'x y')], [s(0, ' x \n y ')])).toEqual([s(0, ' x \n y ')])   // the text as #msg shows it
+    expect(matchSays([s(1, 'b')], [a0])).toEqual([null])
   })
-  it('stats.mjs reads the wait off the measured tree\'s own messages.js and matches through matchSays: no flat window is left', () => {
+  it('a say before an arrival never matches a plate after it: buildLevel cleared the queue', () => {
+    const a0 = s(0, 'a')
+    expect(matchSays([s(10, 'a')], [a0], [5])).toEqual([null])                  // said on the floor before
+    expect(matchSays([s(10, 'a')], [a0, s(7, 'a')], [5])).toEqual([s(7, 'a')])  // said again on this one
+    expect(matchSays([s(5.3, 'a')], [s(5, 'a')], [5])).toEqual([s(5, 'a')])     // said at the clear's instant: after it, as the floor's line is
+    expect(matchSays([s(4.99, 'a')], [s(5.02, 'a')], [5])).toEqual([null])      // within the log's frame of the plate, but on the next floor
+    // a plate logged at the clear's instant was up before it: the bot read #msg at the head of the frame, before the game's frame ticked
+    // the queue (a bot that does not see the veil reads the old floor's line there)
+    expect(matchSays([s(5, 'a')], [s(3, 'a')], [5])).toEqual([s(3, 'a')])
+    expect(matchSays([s(5, 'a')], [s(5, 'a')], [5])).toEqual([null])
+    expect(matchSays([s(2, 'a'), s(12, 'a')], [a0, s(11, 'a')], [10, 5])).toEqual([a0, s(11, 'a')])
+    // the real queue agrees: a line still waiting at the clear never goes up, and what is said after it is matched to its own say
+    const { plates, says } = replayQueue(MSG, [[0, 'x', P.discovery], [1, 'a', P.discovery], [5, 'next', P.combat], [12, 'a', P.discovery]], { untilS: 30, clears: [3] })
+    expect(plates.map((p) => p.text)).toEqual(['x', 'next', 'a'])
+    expect(matchSays(plates, says, [3])).toEqual([says[0], says[2], says[3]])
+  })
+  it('the clears are the bot\'s \'level\' rows but its first (its own first frame, on the floor the game started on)', () => {
+    const r = (t, k, d = null) => ({ t, k, d })
+    // a travel F turned away (the way still closing) logs 'travel' and builds nothing; a wake on the floor you died on builds nothing either
+    expect(arrivalClears([{ k: 'start' }, r(0.07, 'level'), r(3, 'say'), r(83.1, 'travel'), r(83.68, 'say'), r(83.68, 'level'), r(84.1, 'travel'),
+      r(100, 'die'), r(120, 'die'), r(121.3, 'level')])).toEqual([83.68, 121.3])
+    expect(arrivalClears([r(0.1, 'say')])).toEqual([])
+  })
+  it('buildLevel clears the queue on this tree and on the bot\'s instrumented copy of it, the bound stats.mjs reads off the measured copy', () => {
+    const g = read('game.js')
+    expect(buildLevelClears(g)).toBe(true)
+    expect(buildLevelClears(patchGame(g).text)).toBe(true)
+    const body = /\n {2}function buildLevel\(/.exec(g).index
+    const cut = g.indexOf('msgQ.clear()', body)
+    expect(buildLevelClears(g.slice(0, cut) + 'void 0' + g.slice(cut + 'msgQ.clear()'.length))).toBe(false)
+    expect(buildLevelClears('')).toBe(false)
+  })
+  it('stats.mjs reads the bound off the measured tree\'s own messages.js and game.js and matches within the arrival: no window is left', () => {
     const stats = fs.readFileSync(path.join(import.meta.dirname, '..', 'tools', 'pacing', 'bot', 'stats.mjs'), 'utf8')
-    expect(stats).toMatch(/queueWaitS\(await import\(pathToFileURL\(path\.join\(R, 'messages\.js'\)\)\.href\)\)/)
-    expect(stats).toMatch(/matchSays\(plates, says, QUEUE_WAIT_S\)/)
-    expect(stats).not.toMatch(/r\.t - s\.t < \d/)
+    expect(stats).toMatch(/queueBound\(await import\(pathToFileURL\(path\.join\(R, 'messages\.js'\)\)\.href\)\)/)
+    expect(stats).toMatch(/buildLevelClears\(readFileSync\(path\.join\(R, 'game\.js'\), 'utf8'\)\)/)
+    expect(stats).toMatch(/matchSays\(plates, says, ARRIVAL_BOUND \? arrivalClears\(rows\) : \[\]\)/)
+    expect(stats).not.toMatch(/r\.t - s\.t < \d|QUEUE_WAIT_S|queueWaitS/)
   })
 })
 

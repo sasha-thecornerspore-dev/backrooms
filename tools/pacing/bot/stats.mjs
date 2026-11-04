@@ -6,8 +6,10 @@
 // How lines are told apart (the same rules on every tree, so 2.0.3 and 2.0.4 are measured alike):
 //   a plate          a new text on #msg once it is visible (the HUD, not the queue; bot.js dims it by the travel's or a death's
 //                    black veil, so a line put up while the screen is black is none)
-//   its say          the showMessage that put it up: the latest of its text no earlier plate took, within the queue's longest wait
-//                    before it (lib.queueWaitS, read off the measured tree's own messages.js: its discovery gap plus its hold)
+//   its say          the showMessage that put it up: the latest of its text no earlier plate took, said in the plate's own arrival,
+//                    however long before it (lib.matchSays). No fixed window bounds a line's wait in the queue, only the next arrival,
+//                    whose buildLevel clears it: lib.queueBound and lib.buildLevelClears read that off the measured tree's own copy.
+//                    A plate with no say is a boot line, said before the bot's hooks
 //   player-caused    its showMessage came within 2.5 s after a key the bot pressed to act (E, F, Q, L, Space, C): a search's result,
 //                    a soul's word, the light, an item; the plate budget never counts these
 //   a warning        a hunt line ('it has seen you.', 'it has you.', ...): never budgeted either
@@ -15,7 +17,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { parseArgs, repeats, quietStretches, preceded, gaps, moments, dist, r1, r2, queueWaitS, matchSays } from '../lib.mjs'
+import { parseArgs, repeats, quietStretches, preceded, gaps, moments, dist, r1, r2, queueBound, buildLevelClears, arrivalClears, matchSays } from '../lib.mjs'
 
 const { val } = parseArgs(process.argv.slice(2), ['dir'])
 const DIR = path.resolve(val.dir)
@@ -35,12 +37,16 @@ const UNPROMPTED = new Set()
 // and its bump lines (feedback.js BUMP_LINES), the lines for edging through clutter (placement.js CLUTTER_LINES) and landmarks'
 // first-sight lines (sightpins.js SIGHT_LINES): walking into furniture, through it or up to a landmark is yours, key or no key
 const BUMPS = new Set()
-// and how long a line can wait in its queue between its say and its plate (lib.queueWaitS): a plate is matched to its say within this
-let QUEUE_WAIT_S = null
+// and what bounds a line's wait in its queue between its say and its plate, read off the measured tree's own messages.js and game.js: no
+// fixed time (lib.queueBound: a discovery line waits out the gap of every one said before it), only the next arrival, when buildLevel
+// clears the queue and the queue's clear() drops what still waits. A plate is then matched to its say within its arrival; on a tree
+// where either fails, with no bound at all
+let QUEUE = null, ARRIVAL_BOUND = false
 {
   const R = path.join(DIR, 'src', 'renderer')
-  if (!existsSync(path.join(R, 'messages.js'))) throw new Error(`stats.mjs: no ${path.join(R, 'messages.js')} (run.mjs leaves the measured tree's copy beside the sessions)`)
-  QUEUE_WAIT_S = queueWaitS(await import(pathToFileURL(path.join(R, 'messages.js')).href))
+  for (const f of ['messages.js', 'game.js']) if (!existsSync(path.join(R, f))) throw new Error(`stats.mjs: no ${path.join(R, f)} (run.mjs leaves the measured tree's copy beside the sessions)`)
+  QUEUE = queueBound(await import(pathToFileURL(path.join(R, 'messages.js')).href))
+  ARRIVAL_BOUND = QUEUE.clears && buildLevelClears(readFileSync(path.join(R, 'game.js'), 'utf8'))
   const lv = path.join(R, 'levels.js'), wd = path.join(R, 'world.js'), fb = path.join(R, 'feedback.js'), sp = path.join(R, 'sightpins.js'), pl = path.join(R, 'placement.js')
   if (existsSync(sp)) { const SP = await import(pathToFileURL(sp).href); for (const v of Object.values(SP.SIGHT_LINES ?? {})) if (v?.line) BUMPS.add(v.line) }
   if (existsSync(pl)) { const PL = await import(pathToFileURL(pl).href); for (const v of Object.values(PL.CLUTTER_LINES ?? {})) BUMPS.add(v) }
@@ -79,9 +85,11 @@ function measure(S) {
   const hid = (d) => d === '(hidden)' || d === '(veiled)'
   const goesOn = (i) => i >= 2 && msgRows[i - 1].d === '(veiled)' && msgRows[i - 2].d === msgRows[i].d
   const moves = rows.filter((r) => r.k === 'travel' || r.k === 'die').map((r) => r.t)
-  // the plates, each with the say that put it up (a line that waited in the queue behind a held result still has its cause), each classified
+  // the plates, each with the say that put it up (a line that waited in the queue behind others still has its cause), each classified
   const plates = msgRows.filter((r, i) => !hid(r.d) && !goesOn(i)).map((r) => ({ t: r.t, text: r.d }))
-  const causes = matchSays(plates, says, QUEUE_WAIT_S)
+  const causes = matchSays(plates, says, ARRIVAL_BOUND ? arrivalClears(rows) : [])
+  // how long each waited between its say and its plate, the longest first (stats.txt)
+  const waits = plates.map((p, k) => causes[k] && [r2(p.t - causes[k].t), r2(p.t), p.text]).filter(Boolean).sort((a, b) => b[0] - a[0])
   const shows = []
   for (let k = 0; k < plates.length; k++) {
     const r = plates[k], say = causes[k]
@@ -140,7 +148,8 @@ function measure(S) {
     pagesRead: rows.filter((r) => r.k === 'dom:note-text' && !hid(r.d)).map((r) => Math.round(r.t)),
     taken: shows.filter((s) => /^you take the/.test(s.text)).map((s) => [Math.round(s.t), s.text]),
     consoleErrors: rows.filter((r) => r.k === 'console-error').length,
-    shows,
+    platesNoSay: causes.filter((c) => !c).length, sayWaitMaxS: waits.length ? waits[0][0] : null,
+    shows, waits,
   }
 }
 
@@ -185,7 +194,9 @@ function digest(S, M) {
 }
 
 const per = {}
-const all = [`plates matched to their say within ${QUEUE_WAIT_S} s (the measured tree's queue: its discovery gap plus its hold)`]
+const all = [ARRIVAL_BOUND
+  ? `plates matched to their say within their arrival, however long they waited (the measured tree's queue keeps the last of 40 discovery lines said together ${QUEUE.keepsS} s; its buildLevel clears the queue, and clear() drops what still waits)`
+  : `plates matched to their say with no bound (the measured tree's ${QUEUE.clears ? 'buildLevel does not clear its queue' : 'queue keeps a waiting line through clear()'})`]
 const lineCount = new Map()
 for (const name of SESSIONS) {
   const S = readSession(name)
@@ -196,6 +207,7 @@ for (const name of SESSIONS) {
   const rh = M.rollHist
   all.push(`\n== ${name} (${M.gameS} s, ${M.frames} frames, wall ${M.wallS} s${M.consoleErrors ? ', ' + M.consoleErrors + ' console errors' : ''})`,
     `  plates ${M.plates} (${M.platesPerMin}/min), on screen ${Math.round(100 * M.plateOnScreenShare)}% (${Object.entries(M.plateOnScreenBy).map(([k, v]) => `${k} ${Math.round(100 * v)}%`).join(', ')}), repeats ${Math.round(100 * M.repeatShare)}% (${Math.round(100 * M.repeatShareNoPlayer)}% without the player's own)`,
+    `  say to plate: ${M.platesNoSay} plates with no say (boot lines); the longest waits ${M.waits.slice(0, 3).map((w) => `${w[0]} s (up at ${w[1]} s, "${w[2].slice(0, 40)}")`).join(', ') || 'none'}`,
     `  first 45 s of each arrival: ${M.arrivals.map((a) => `${a.all} (${a.budgeted} budgeted) at ${r1(a.at)} s`).join('; ')}`,
     `  drawers searched ${M.searches}, rolled ${JSON.stringify(rh)}; 'you rummage.' ${M.rummage}; flashlight lines ${M.lightLines}; smiler lines ${M.smilerLines}`,
     `  pages read at ${JSON.stringify(M.pagesRead)}; taken ${JSON.stringify(M.taken)}; events ${JSON.stringify(M.events)}; haunts ${M.haunts}`,
@@ -230,6 +242,6 @@ const metrics = {
   quietPer5Min: Object.fromEntries(SESSIONS.map((n) => [n, per[n].quietStretchesPer5Min])),
   consoleErrors: vals('consoleErrors').reduce((s, v) => s + v, 0),
 }
-writeFileSync(path.join(DIR, 'metrics.json'), JSON.stringify({ metrics, per: Object.fromEntries(SESSIONS.map((n) => [n, { ...per[n], shows: undefined }])) }, null, 1))
+writeFileSync(path.join(DIR, 'metrics.json'), JSON.stringify({ metrics, per: Object.fromEntries(SESSIONS.map((n) => [n, { ...per[n], shows: undefined, waits: undefined }])) }, null, 1))
 console.log(all.join('\n'))
 console.log('\n' + JSON.stringify(metrics, null, 1))
