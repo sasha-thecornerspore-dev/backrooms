@@ -133,6 +133,20 @@ describe('createPlateBudget: after the window', () => {
     expect(b.drain(25)).toBe('b')
   })
 
+  it('settled: false inside an arrival\'s window, true from its end and before any arrival; a read that changes nothing', () => {
+    const b = createPlateBudget()
+    expect(b.settled(-1e9)).toBe(true)
+    b.arrive(100)
+    expect(b.settled(100)).toBe(false); expect(b.settled(144.9)).toBe(false)
+    expect(b.settled(145)).toBe(true)
+    expect(b.admit('arrival', 101, 'one')).toBe('show')                 // asking spent none of the window's two
+    expect(b.admit('arrival', 102, 'two')).toBe('show')
+    expect(b.admit('arrival', 103, 'three')).toBe('queue')
+    b.arrive(200)
+    expect(b.settled(244)).toBe(false); expect(b.settled(245)).toBe(true)
+    expect(createPlateBudget({ window: 10 }).settled(0)).toBe(true)
+  })
+
   it('custom window, max and gap', () => {
     const b = createPlateBudget({ window: 10, max: 3, gap: 5 })
     b.arrive(0)

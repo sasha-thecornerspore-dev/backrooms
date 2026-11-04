@@ -18,7 +18,9 @@
 //   run     when it loses the line, it keeps your last heading a few cells further (walls stop it), a moment longer, and searches there
 //   ward    its reel before the turning opening is shorter (the opening, its double count and the dispel count are untouched)
 //   flash   its blind reel is shorter; the smiler and the lurker run from it for less long
-// Each is said once per floor, the moment the floor learns it (game.js: a discovery plate, kind 'learn', through the plate budget).
+// Each is said once per floor (game.js: a discovery plate, kind 'learn', through the plate budget): the moment the floor learns it when
+// the budget has room, else once an arrival on that floor has settled, offered again until it shows. A death or a travel before then
+// does not lose it, nor does a quit: what each floor has said is its memory too (levelmem.toldOf / noteTold), so it is never said twice.
 //
 // Solo only. In a room each client runs its own things, but a friend's ward is relayed onto yours (game.js bus 'ward') and a room keeps
 // no save: the habits would be no one's. Never on the block (Level ∅: no hunts, and nothing changes there). With the creatures setting
@@ -55,14 +57,18 @@ export const METHOD_OF = f(Object.fromEntries(ESCAPE_METHODS.map((m) => [`escape
 // whether a floor learns at all: alone, and never on the block
 export function learnsHere({ room, block }) { return !room && !block }
 
-// createLearning({ mem, tune }) -> { refinements(level), escape(level, kind, t) }
+// createLearning({ mem, tune }) -> { refinements(level), escape(level, kind, t), unsaid(level), said(level, line) }
 //   refinements(level)  the ONE object the entity system reads ({ still, run, ward, flash }: tune's table, or null), filled for `level`.
 //                       game.js hands it to entities.setLearn at buildLevel; escape() refreshes it in place when it is that floor's
 //   escape(level, kind, t)  a getaway (the hunt's escape event `kind`) on `level` at play time t: counted unless it merges with the last
 //                       one of its method there -> the line to say when this one taught the floor, else null
+//   unsaid(level)       the line of a lesson the floor refinements was filled for has learned and not said yet, or null (another floor,
+//                       or none). A read: game.js asks it every frame once an arrival settles; it allocates nothing and writes nothing
+//   said(level, line)   the line showed: its method is said on that floor for good (levelmem.noteTold) -> whether it was a lesson line
 export function createLearning({ mem, tune = LEARN }) {
   const refine = { still: null, run: null, ward: null, flash: null }
-  let at = null                                                   // the floor refine was last filled for
+  let at = null, atLevel = null                                   // the floor refine was last filled for (its key, and as asked)
+  const pend = []                                                 // that floor's lessons learned and not yet said, by method
   const lastT = new Map()                                         // 'level:method' -> when its last getaway was counted (not saved)
 
   function fill(level) {
@@ -71,7 +77,9 @@ export function createLearning({ mem, tune = LEARN }) {
     refine.run = c.run >= tune.after ? tune.run : null
     refine.ward = c.ward >= tune.after ? tune.ward : null
     refine.flash = c.flash >= tune.after ? tune.flash : null
-    at = String(level)
+    at = String(level); atLevel = level
+    pend.length = 0
+    for (const m of ESCAPE_METHODS) if (c[m] >= tune.after && !mem.toldOf(level, m)) pend.push(m)
   }
 
   function refinements(level) { fill(level); return refine }
@@ -88,5 +96,15 @@ export function createLearning({ mem, tune = LEARN }) {
     return n === tune.after ? LEARN_LINES[method] : null
   }
 
-  return { refinements, escape }
+  function unsaid(level) { return level === atLevel && pend.length > 0 ? LEARN_LINES[pend[0]] : null }
+
+  function said(level, line) {
+    const method = ESCAPE_METHODS.find((m) => LEARN_LINES[m] === line)
+    if (method === undefined) return false
+    mem.noteTold(level, method)
+    if (at === String(level)) { const i = pend.indexOf(method); if (i !== -1) pend.splice(i, 1) }
+    return true
+  }
+
+  return { refinements, escape, unsaid, said }
 }

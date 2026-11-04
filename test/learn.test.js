@@ -165,6 +165,29 @@ describe('levelmem: the getaways each floor counts', () => {
     expect(mem.escapesFor(1)).toEqual({ still: 2, ward: 99, run: 1, flash: 0 })
     expect(mem.export()[1].escapes).toEqual({ still: 2, ward: 99, run: 1, flash: 0 })
   })
+  it('the lessons said: per floor and method, saved only once one is said, garbage read as none', () => {
+    const mem = createLevelMemory()
+    expect(mem.toldOf(2, 'still')).toBe(false)
+    expect(mem.get(2)).toBeNull()                                        // asking makes no record
+    expect(mem.noteTold(2, 'lure')).toBe(false)
+    expect(mem.get(2)).toBeNull()
+    expect(mem.noteTold(2, 'still')).toBe(true); expect(mem.noteTold(2, 'still')).toBe(true)
+    expect(mem.toldOf(2, 'still')).toBe(true); expect(mem.toldOf(2, 'run')).toBe(false); expect(mem.toldOf(3, 'still')).toBe(false)
+    mem.arrive(1, { cx: 0, cy: 0 }, 0)
+    const out = mem.export()
+    expect('told' in out[1]).toBe(false)
+    expect(out[2].told).toEqual(['still'])
+    const back = createLevelMemory(); back.import(JSON.parse(JSON.stringify(out)))
+    expect(back.export()).toEqual(out)
+    expect(back.toldOf(2, 'still')).toBe(true)
+    for (const bad of ['x', 5, null, {}, [7, 'lure', null]]) {
+      expect(() => mem.import({ 1: { told: bad } })).not.toThrow()
+      expect(mem.toldOf(1, 'still')).toBe(false)
+      expect('told' in mem.export()[1]).toBe(false)
+    }
+    mem.import({ 1: { told: ['run', 'lure', 'run', 'flash'] } })
+    expect(mem.export()[1].told).toEqual(['run', 'flash'])
+  })
 })
 
 // ── createLearning: counting, the third, the line once, the reused refinement object ────────────────────────────────
@@ -213,11 +236,56 @@ describe('createLearning', () => {
   })
   it('a resumed run keeps what each floor learned, and never says it again', () => {
     const mem = createLevelMemory(), L = createLearning({ mem })
+    L.refinements(2)
     for (const t of [0, 30, 60]) L.escape(2, 'escape-run', t)
+    expect(L.said(2, LEARN_LINES.run)).toBe(true)
     const back = createLevelMemory(); back.import(JSON.parse(JSON.stringify(mem.export())))
     const L2 = createLearning({ mem: back })
     expect(L2.refinements(2).run).toBe(LEARN.run)
+    expect(L2.unsaid(2)).toBeNull()
     expect(L2.escape(2, 'escape-run', 200)).toBeNull()
+  })
+  it('a lesson learned and not yet said waits for its floor until it is said, through a death, a travel and a quit', () => {
+    const mem = createLevelMemory(), L = createLearning({ mem })
+    L.refinements(2)
+    expect(L.unsaid(2)).toBeNull()
+    for (const t of [0, 30]) L.escape(2, 'escape-still', t)
+    expect(L.unsaid(2)).toBeNull()                                       // not learned yet: nothing to say
+    expect(L.escape(2, 'escape-still', 60)).toBe(LEARN_LINES.still)
+    expect(L.unsaid(2)).toBe(LEARN_LINES.still)                          // learned, not said: offered again
+    expect(L.unsaid(2)).toBe(LEARN_LINES.still)                          // asking says nothing
+    expect(L.unsaid(1)).toBeNull()                                       // another floor's lesson is not this one's
+    L.refinements(1)                                                     // you travel up: not said there
+    expect(L.unsaid(1)).toBeNull(); expect(L.unsaid(2)).toBeNull()
+    L.refinements(2)                                                     // and back: still waiting
+    expect(L.unsaid(2)).toBe(LEARN_LINES.still)
+    // a quit before it is said: the resume offers it, once
+    const back = createLevelMemory(); back.import(JSON.parse(JSON.stringify(mem.export())))
+    const L2 = createLearning({ mem: back })
+    L2.refinements(2)
+    expect(L2.unsaid(2)).toBe(LEARN_LINES.still)
+    expect(L2.said(2, 'a murmur.')).toBe(false)                          // not a lesson: nothing marked
+    expect(L2.unsaid(2)).toBe(LEARN_LINES.still)
+    expect(L2.said(2, LEARN_LINES.still)).toBe(true)
+    expect(L2.unsaid(2)).toBeNull()
+    expect(back.toldOf(2, 'still')).toBe(true)
+    // two learned and not said: offered one after the other
+    for (const t of [100, 130, 160]) L2.escape(2, 'escape-flash', t)
+    for (const t of [101, 131, 161]) L2.escape(2, 'escape-ward', t)
+    expect(L2.unsaid(2)).toBe(LEARN_LINES.ward)                          // (the methods' order: still, ward, run, flash)
+    L2.said(2, LEARN_LINES.ward)
+    expect(L2.unsaid(2)).toBe(LEARN_LINES.flash)
+    L2.said(2, LEARN_LINES.flash)
+    expect(L2.unsaid(2)).toBeNull()
+  })
+  it('unsaid is a read (game.js asks it every frame once an arrival settles): the same answer every ask, nothing written', () => {
+    const mem = createLevelMemory(), L = createLearning({ mem })
+    L.refinements(3)
+    for (const t of [0, 30, 60]) L.escape(3, 'escape-ward', t)
+    const before = JSON.stringify(mem.export())
+    for (let i = 0; i < 1000; i++) expect(L.unsaid(3)).toBe(LEARN_LINES.ward)
+    expect(L.unsaid(4)).toBeNull()
+    expect(JSON.stringify(mem.export())).toBe(before)
   })
 })
 

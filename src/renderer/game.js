@@ -492,8 +492,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       case 'watcher-dispelled': sanity = Math.min(100, sanity + 12); showMessage('it looks away first.', PRIO.interaction); break
       // 'arc': the jolt itself lands through th.dmg / th.dmgKind ('the current finds you.')
       // a thing that hunted you gave up (learn.js): the getaway counts on this floor, and the third by one method teaches its things and
-      // says so once, a discovery the plate budget holds like any unprompted line. None comes in a room, on the block or with the things off
-      case 'escape-still': case 'escape-ward': case 'escape-run': case 'escape-flash': { const l = learning.escape(level.index, ev.kind, playT); if (l) plate('learn', l, PRIO.discovery) } break
+      // says so once, a discovery plate like any unprompted line. When the budget has no room it is not held here (a death or a travel
+      // would clear it): the floor keeps it unsaid and the frame offers it again (learn.js unsaid). None comes in a room, on the block or
+      // with the things off
+      case 'escape-still': case 'escape-ward': case 'escape-run': case 'escape-flash': { const l = learning.escape(level.index, ev.kind, playT); if (l && plate('learn', l, PRIO.discovery, false)) learning.said(level.index, l) } break
     }
   }
 
@@ -2580,6 +2582,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       const murmur = cfg.map ? level.messages[Math.floor(Math.random() * level.messages.length)] : level.messages[murmurBag.next()]
       if (!hintHeld || murmur !== cfg.exit?.hint) plate('murmur', murmur, PRIO.ambient, false)
     }
+    // a lesson this floor learned and has not said (learn.js unsaid: no room when it learned, then perhaps a death or a travel): offered
+    // again each frame once an arrival has settled, an unprompted line like any other, until it shows; never in a later arrival's window,
+    // under a fade or with the things off. None in a room or on the block (buildLevel fills no learning there). It reads; it allocates nothing
+    if (creaturesOn && !transitioning && plates.settled(playT)) { const u = learning.unsaid(level.index); if (u !== null && plate('learn', u, PRIO.discovery, false)) learning.said(level.index, u) }
     // a plate the budget held back, once the arrival has settled (plates.js drain: the oldest, one a while; it allocates nothing)
     const held = plates.drain(playT)
     if (held) showMessage(held, PRIO.discovery)

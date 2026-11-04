@@ -765,7 +765,8 @@ describe('T1-4: the plate budget, and the plates that go', () => {
     expect(game).toMatch(/if \(fx\) \{ haunts\.fire\(h\.key\); applyHaunt\(fx\); dreadQuietT = 20;/)
   })
   it('a held plate comes back once the arrival has settled: drained every frame, right after the murmur', () => {
-    expect(game.slice(loopAt)).toMatch(/plate\('murmur', murmur, PRIO\.ambient, false\)\r?\n\s*\}\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const held = plates\.drain\(playT\)\r?\n\s*if \(held\) showMessage\(held, PRIO\.discovery\)/)
+    // (2.0.5: a floor's lesson not yet said, learn.js, is offered between the two; it holds no line here, learn-wiring pins it)
+    expect(game.slice(loopAt)).toMatch(/plate\('murmur', murmur, PRIO\.ambient, false\)\r?\n\s*\}\r?\n(\s*\/\/[^\n]*\r?\n)*(\s*if \(creaturesOn && !transitioning && plates\.settled\(playT\)\) \{ const u = learning\.unsaid\(level\.index\);[^\n]*\r?\n)?(\s*\/\/[^\n]*\r?\n)*\s*const held = plates\.drain\(playT\)\r?\n\s*if \(held\) showMessage\(held, PRIO\.discovery\)/)
     expect(count(/plates\.drain\(/g)).toBe(1)
   })
   it('replayed: two plates at most in an arrival\'s first 45 s; the kept ones after, one a while; the let-go ones never; what you do always', () => {

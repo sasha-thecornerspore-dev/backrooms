@@ -3,7 +3,8 @@
 //   - one arrival: the floor's feeling (feelings.js, said by travel() / die() through later()), the third getaway on a floor (learn.js,
 //     onEntityEvent's 'learn' plate) and a photo that develops a den (film.js, firePolaroid's developDen) in the same first 45 s, with the
 //     frame's unasked lines, through the real plates.js and the real message queue: never more than two budgeted plates in the window,
-//     the feeling at most once, the floor's lesson said once (held, never dropped), the den once a visit and never a plate;
+//     the feeling at most once, the floor's lesson said once (offered again until it shows, never dropped), the den once a visit and
+//     never a plate;
 //   - the radio's warning (radiostatic.js) under each feeling: the dark, the quiet and the passage leave dread and the hiss as they are
 //     (the dark rewrites the lights only; the quiet lowers the hum, which is not the hiss's road to the speakers);
 //   - Level ∅: every new road is shut there (no feeling, nothing learned, no den, no hiss, no hum change).
@@ -42,6 +43,7 @@ const VISIT = /function startVisit\(\) \{[\s\S]*?\r?\n {2}\}/
 const LATER = /function later\(ms, text, prio, keep = true\) \{[^\n]*\}/
 const DEN = /function developDen\(\) \{[\s\S]*?\r?\n {2}\}/
 const CASE = /case 'escape-still': case 'escape-ward': case 'escape-run': case 'escape-flash': \{[^\n]*\} break/
+const OFFER = /if \(creaturesOn && !transitioning && plates\.settled\(playT\)\) \{[^\n]*\}/
 const LOS = 'const frameLos = (ax, ay, bx, by) => lineOfSight(ax, ay, bx, by, level.grid.floor)'
 const OPTS = 'const DEN_OPTS = { cone: inViewCone, hf: HF, los: frameLos, home: (cx, cy) => level.entitySys.isSpawnChunk(cx, cy) }'
 const travelBody = slice('function travel(way) {', '// die(): death.js resolves it')
@@ -65,9 +67,10 @@ function arrival({ index = 1, feel, cfg = L(index), prior = 2 } = {}) {
   let now = 0
   const msgQ = createMessageQueue()
   const budget = createPlateBudget()
-  const plates = { arrive: (t) => budget.arrive(t), drain: (t) => budget.drain(t),
+  const plates = { arrive: (t) => budget.arrive(t), drain: (t) => budget.drain(t), settled: (t) => budget.settled(t),
     admit: (kind, t, line) => { const v = budget.admit(kind, t, line); if (v === 'show' && !FREE_KINDS.includes(kind)) admitted.push([t, kind, line]); return v } }
   const mem = createLevelMemory(), learning = createLearning({ mem })
+  learning.refinements(index)                                    // buildLevel: the floor's things are handed what it has learned
   // the floor's earlier getaways (a visit before this one): the next by the same way is the third, and teaches
   for (let k = 0; k < prior; k++) learning.escape(index, ESCAPE_KINDS.still, -1000 + k * (LEARN.merge + 5))
   const fog = Object.assign(createFogMap(), { countWays: () => ({ down: 1, up: 0, lift: 0, ring: 0 }) })
@@ -80,8 +83,8 @@ function arrival({ index = 1, feel, cfg = L(index), prior = 2 } = {}) {
   const h = new Function('plates', 'showMessage', 'setTimeout', 'PRIO', 'msgQ', 'level', 'player', 'film', 'fog', 'getPref', 'inViewCone', 'HF',
     'lineOfSight', 'learning',
     'let playT = 0, arrivalGen = 0, floorT0 = 0, floorHinted = false, pullPhase = 0, lostSaid = false, hintHeld = false\n' +
-    'let dreadQuietT = 0, sanity = 100, fieldOn = false, fxLeft = 0\nconst eventSched = { arrive() {} }, teller = { reset() {} }, dreadOut = { dread: 0 }\n' +
-    `${LOS}\n${OPTS}\n${lift(PLATE)}\n${lift(LATER)}\n${lift(VISIT)}\n${lift(DEN)}\nfunction drainFrame() {\n${drain}\n}\n` +
+    'let dreadQuietT = 0, sanity = 100, fieldOn = false, fxLeft = 0, creaturesOn = true, transitioning = false\nconst eventSched = { arrive() {} }, teller = { reset() {} }, dreadOut = { dread: 0 }\n' +
+    `${LOS}\n${OPTS}\n${lift(PLATE)}\n${lift(LATER)}\n${lift(VISIT)}\n${lift(DEN)}\nfunction drainFrame() {\n${lift(OFFER)}\n${drain}\n}\n` +
     `function onEsc(ev) { switch (ev.kind) { ${lift(CASE)} } }\n` +
     'function photo(cap) { showMessage(cap); developDen() }\n' +
     'return { plate, later, startVisit, photo, onEsc, drainFrame, set: (t) => { playT = t } }')(plates, show,

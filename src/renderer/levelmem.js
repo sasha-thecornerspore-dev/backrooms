@@ -2,7 +2,8 @@
 //
 // Per level (keyed by String(level)): where you last stood and which chunk you arrived in, how many times you have come, what you took
 // (item keys — they never respawn), which machines you emptied and when, which drawers you searched, what you set down, and how you got
-// away from its hunts (the getaways by method, M19 learn.js; a floor that counted none keeps no such field in the save). The one
+// away from its hunts (the getaways by method, M19 learn.js; a floor that counted none keeps no such field in the save) and which of
+// what its things learned it has said (the same: none said, no field). The one
 // owner of this state this release: game.js asks it on every buildLevel / travel / death and saves export() in the snapshot.
 //
 // A vended key expires only when VEND_RESTOCK_S have passed AND you have been away (visits advanced since the vend): restock needs an
@@ -19,7 +20,7 @@ const int = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? Math.fl
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 
 function fresh() {
-  return { x: null, y: null, angle: 0, cx: 0, cy: 0, visits: 0, lastT: 0, arrived: null, taken: new Set(), vended: [], searched: new Set(), dropped: [], escapes: null }
+  return { x: null, y: null, angle: 0, cx: 0, cy: 0, visits: 0, lastT: 0, arrived: null, taken: new Set(), vended: [], searched: new Set(), dropped: [], escapes: null, told: null }
 }
 
 // the getaways by method from anything (a save's field): all four, each a whole number 0..CAP.escapes; null when every one is zero
@@ -34,6 +35,13 @@ function escapesFrom(o) {
     if (n > 0) any = true
   }
   return any ? out : null
+}
+
+// the methods whose lesson a floor has said, from anything (a save's field): the known methods, each once, in order; null when none
+function toldFrom(a) {
+  if (!Array.isArray(a)) return null
+  const out = ESCAPE_METHODS.filter((m) => a.includes(m))
+  return out.length ? out : null
 }
 
 // a Set that forgets its oldest entry past the cap (insertion order is the age)
@@ -125,6 +133,19 @@ export function createLevelMemory() {
     r.escapes[method] = Math.min(CAP.escapes, r.escapes[method] + 1)
     return r.escapes[method]
   }
+  // whether this floor has said what its things learned against `method` (learn.js: said once, offered until then). Asking makes no
+  // record; noteTold marks it -> false for a method the hunt does not tell apart (nothing is written)
+  function toldOf(level, method) {
+    const t = get(level)?.told
+    return t ? t.includes(method) : false
+  }
+  function noteTold(level, method) {
+    if (!ESCAPE_METHODS.includes(method)) return false
+    const r = rec(level)
+    r.told ??= []
+    if (!r.told.includes(method)) r.told.push(method)
+    return true
+  }
 
   function droppedFor(level) { return rec(level).dropped.slice() }
   function setDropped(level, list) { rec(level).dropped = Array.isArray(list) ? list.slice(-CAP.dropped) : [] }
@@ -139,6 +160,7 @@ export function createLevelMemory() {
         taken: [...r.taken], vended: r.vended.map((e) => [e[0], e[1], e[2]]), searched: [...r.searched], dropped: r.dropped.slice(),
       }
       if (r.escapes) out[k].escapes = { ...r.escapes }                // additive and optional: only a floor that counted a getaway
+      if (r.told) out[k].told = r.told.slice()                        // the same: only a floor that has said a lesson
     }
     return out
   }
@@ -171,13 +193,14 @@ export function createLevelMemory() {
       }
       if (Array.isArray(s.dropped)) r.dropped = s.dropped.filter(isObj).slice(-CAP.dropped)
       r.escapes = escapesFrom(s.escapes)                              // a save from before M19 has none: zero everywhere
+      r.told = toldFrom(s.told)                                       // nor this: nothing said
       recs.set(String(k), r)
     }
   }
 
   return {
     leave, arrive, get, takenFor, noteTaken, vendedFor, noteVended, wasRestocked, searchedFor, noteSearched, droppedFor, setDropped,
-    escapesFor, noteEscape, export: exportAll, import: importAll,
+    escapesFor, noteEscape, toldOf, noteTold, export: exportAll, import: importAll,
   }
 }
 
