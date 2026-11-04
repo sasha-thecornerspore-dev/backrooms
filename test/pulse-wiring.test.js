@@ -95,7 +95,7 @@ describe('game.js: the imports and the one predicate for the small sounds', () =
 describe('T1-1: your own steps, and the small sounds', () => {
   const stepSrc = slice('if (echoT > 0 && (echoT -= dt) <= 0) footfall(1)', '// the walk\'s bob, plus the clutter step')
   it('the creatures still hear the held key (moved); your own step is on the stepped edge, right after the edge is read', () => {
-    expect(game).toMatch(/const stepN = Math\.floor\(player\.bob \/ Math\.PI\)\r?\n\s*const footstep = moved && stepN !== lastStepN\r?\n\s*lastStepN = stepN\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(echoT > 0 && \(echoT -= dt\) <= 0\) footfall\(1\)\r?\n\s*if \(footstep && stepped && ownSounds\(\)\) \{\r?\n\s*step\(STEP_MATERIAL\[level\.index\], \(wantSprint \? STEP_GAIN\.sprint : STEP_GAIN\.walk\) \* quiet\(quietTimer\)\)\r?\n\s*if \(echoSteps > 0\) \{ echoSteps--; echoT = FOOTSTEPS_ECHO\.delay \}\r?\n\s*\}\r?\n\s*if \(stepped\) echoStill = 0\r?\n\s*else if \(echoSteps > 0 && \(echoStill \+= dt\) >= FOOTSTEPS_ECHO\.still\) echoSteps = 0/)
+    expect(game).toMatch(/const stepN = Math\.floor\(player\.bob \/ Math\.PI\)\r?\n\s*const footstep = moved && stepN !== lastStepN\r?\n\s*lastStepN = stepN\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(echoT > 0 && \(echoT -= dt\) <= 0\) footfall\(1\)\r?\n\s*if \(footstep && stepped && ownSounds\(\)\) \{\r?\n\s*step\(STEP_MATERIAL\[level\.index\], \(wantSprint \? STEP_GAIN\.sprint : STEP_GAIN\.walk\) \* quiet\(quietTimer\)\)\r?\n\s*if \(echoSteps > 0\) \{ echoSteps--; echoT = FOOTSTEPS_ECHO\.delay \}\r?\n\s*\}\r?\n\s*if \(stepped\) echoStill = 0\r?\n\s*else if \(echoSteps > 0 && \(echoStill \+= dt\) >= FOOTSTEPS_ECHO\.still\) echoSteps = 0/)
     expect(game).toMatch(/if \(footstep && creaturesLive\) level\.entitySys\.noise\(player\.x, player\.y, \(aiCtx\.sprinting \? 7 : 3\) \* quiet\(quietTimer\)\)/)
   })
   it('the echo state is declared once, outside the loop; the footsteps event sets it', () => {
@@ -385,11 +385,11 @@ describe('w2: a visit begins', () => {
   it('travel, the wake and the start begin the visit, then say the floor\'s own plate through the budget (the lift\'s line first)', () => {
     const t = slice('function travel(way) {', '// die(): death.js resolves it')
     // (review batch six: no name plate on a lift ride back to a floor you know; the lift's line takes its place, the HUD has the name)
-    expect(t).toMatch(/persist\(true\)[^\n]*\r?\n\s*startVisit\(\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(way\.kind === 'lift'\) plate\('arrival', wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*if \(way\.kind !== 'lift' \|\| first\) plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)/)
+    expect(t).toMatch(/persist\(true\)[^\n]*\r?\n\s*startVisit\(\)\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(way\.kind === 'lift'\) plate\('arrival', wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*if \(way\.kind !== 'lift' \|\| first\) plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)/)
     const d = slice('function die(d = null) {', '// ── input ──')
     expect(d).toContain('const first = mem.arrive(level.index, spawnChunk, playT).visits === 1')
     // (review batch five: the wake's plate only on a floor new to you, or on the block as 2.0.3; its lines the arrival's, as they were)
-    expect(d).toMatch(/persist\(true\)\r?\n\s*startVisit\(\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(first \|\| level\.cfg\.map\) plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*later\(2600, r\.message, PRIO\.discovery\)/)
+    expect(d).toMatch(/persist\(true\)\r?\n\s*startVisit\(\)\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(first \|\| level\.cfg\.map\) plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*later\(2600, r\.message, PRIO\.discovery\)/)
     const boot = slice('if (resume) {', 'if (bus) mpClient.onEv(bus.receive)')
     expect(boot).toMatch(/startVisit\(\)\r?\n\s*plate\('floor', arrivalPlate\(level\.cfg, !resume\), PRIO\.combat\)/)
     expect(game).not.toContain('showMessage(level.cfg.levelName')
@@ -590,7 +590,7 @@ describe('T1-2: the compass earns its pull', () => {
   it('what frees the pull: a page read, a soul\'s word and a pinned trace (w3: the drawers\' pass); the visit clears it', () => {
     expect(slice('function revealScrap() {', 'function redactScrap() {')).toContain('floorHinted = true')
     const e = slice("if (K['KeyE']) {", "if (K['Escape'] && dialogOpen)")
-    expect(e).toMatch(/else \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*floorHinted = true\r?\n\s*const fl = firstRun\.onSoul\(nearNpc\.key\)/)
+    expect(e).toMatch(/else \{\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*floorHinted = true\r?\n\s*const fl = firstRun\.onSoul\(nearNpc\.key\)/)
     expect(count(/floorHinted = true/g)).toBe(3)
     expect((slice('function traceOne() {', 'function resolveSearch(p) {').match(/floorHinted = true/g) || []).length).toBe(1)
   })
@@ -698,7 +698,7 @@ describe('T1-3: the first run, authored', () => {
     expect(fr2.step()).toBe(1)
   })
   it('the room: its line the moment you step into it, on the cell change; the thread\'s lobby clock runs every frame', () => {
-    expect(game.slice(loopAt)).toMatch(/lastCellIx = cix; lastCellIy = ciy\r?\n(\s*\/\/[^\n]*\r?\n)*\s*firstRun\.tick\(dt\)\r?\n\s*if \(cellChanged\) \{ const rl = firstRun\.onEnter\(cix, ciy\); if \(rl\) showMessage\(rl, PRIO\.discovery\) \}/)
+    expect(game.slice(loopAt)).toMatch(/lastCellIx = cix; lastCellIy = ciy\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*firstRun\.tick\(dt\)\r?\n\s*if \(cellChanged\) \{ const rl = firstRun\.onEnter\(cix, ciy\); if \(rl\) showMessage\(rl, PRIO\.discovery\) \}/)
     expect(count(/firstRun\.tick\(/g)).toBe(1)
   })
   it('the save keeps the step while the thread can still advance; a resume takes it up there; an old save, a seed or a room run without', () => {
@@ -765,7 +765,7 @@ describe('T1-4: the plate budget, and the plates that go', () => {
     expect(game).toMatch(/if \(fx\) \{ haunts\.fire\(h\.key\); applyHaunt\(fx\); dreadQuietT = 20;/)
   })
   it('a held plate comes back once the arrival has settled: drained every frame, right after the murmur', () => {
-    expect(game.slice(loopAt)).toMatch(/plate\('murmur', murmur, PRIO\.ambient, false\)\r?\n\s*\}\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const held = plates\.drain\(playT\)\r?\n\s*if \(held\) showMessage\(held, PRIO\.discovery\)/)
+    expect(game.slice(loopAt)).toMatch(/plate\('murmur', murmur, PRIO\.ambient, false\)\r?\n\s*\}\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*const held = plates\.drain\(playT\)\r?\n\s*if \(held\) showMessage\(held, PRIO\.discovery\)/)
     expect(count(/plates\.drain\(/g)).toBe(1)
   })
   it('replayed: two plates at most in an arrival\'s first 45 s; the kept ones after, one a while; the let-go ones never; what you do always', () => {
@@ -919,12 +919,12 @@ describe('T1-5: events that carry their own effect, the arrival\'s event, the mu
   }
 
   it('the scheduler\'s event: kind \'event\', or none for the arrival\'s (heard, not read); the quiet; then the data event\'s repeats', () => {
-    expect(game).toMatch(/const evId = eventSched\.tick\(dt, \{ level: level\.index, sanity, canFire: evCanFire \}\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(evId\) \{ fireEvent\(evId, PRIO\.ambient, eventSched\.soundOnly \? null : 'event'\); dreadQuietT = 12 \}\r?\n\s*dreadQuietT = Math\.max\(0, dreadQuietT - dt\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(fxLeft > 0 && !transitioning && \(fxT -= dt\) <= 0\) \{ fxLeft--; fxT \+= fxEvery; call\(fxSound, FX_PLAY\.gain, fxPan\) \}/)
+    expect(game).toMatch(/const evId = eventSched\.tick\(dt, \{ level: level\.index, sanity, canFire: evCanFire \}\)\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(evId\) \{ fireEvent\(evId, PRIO\.ambient, eventSched\.soundOnly \? null : 'event'\); dreadQuietT = 12 \}\r?\n\s*dreadQuietT = Math\.max\(0, dreadQuietT - dt\)\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(fxLeft > 0 && !transitioning && \(fxT -= dt\) <= 0\) \{ fxLeft--; fxT \+= fxEvery; call\(fxSound, FX_PLAY\.gain, fxPan\) \}/)
     expect(count(/fireEvent\(evId/g)).toBe(1)
   })
   it('one generic branch, last, for the events that carry their effect as data (the six keep their own)', () => {
     const fe = lift(FE)
-    expect(fe).toMatch(/\} else if \(id === 'crosser'\) \{[\s\S]*?\} else \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const fx = eventFx\(id, evConfig\.events\)\r?\n\s*if \(fx\?\.sound\) \{/)
+    expect(fe).toMatch(/\} else if \(id === 'crosser'\) \{[\s\S]*?\} else \{\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*const fx = eventFx\(id, evConfig\.events\)\r?\n\s*if \(fx\?\.sound\) \{/)
     expect(fe).toContain('plate(kind, fx.line, prio, false)')
     expect(fe).not.toMatch(/setTimeout/)                                                  // the repeats ride the play clock
   })
@@ -986,7 +986,7 @@ describe('T1-5: events that carry their own effect, the arrival\'s event, the mu
     expect(s.said.length).toBeGreaterThan(0)                                               // the next event says its line
   })
   it('a visit starts the floor\'s events over (the procedural floors only) inside no quiet, and dread and the repeats start fresh', () => {
-    expect(lift(VISIT)).toMatch(/plates\.arrive\(playT\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*dreadQuietT = 0\r?\n\s*if \(level\.index >= 0 && level\.index <= 3\) eventSched\.arrive\(level\.index, sanity\)\r?\n\s*teller\.reset\(\); fieldOn = false; dreadOut\.dread = 0; fxLeft = 0/)
+    expect(lift(VISIT)).toMatch(/plates\.arrive\(playT\)\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*dreadQuietT = 0\r?\n\s*if \(level\.index >= 0 && level\.index <= 3\) eventSched\.arrive\(level\.index, sanity\)\r?\n\s*teller\.reset\(\); fieldOn = false; dreadOut\.dread = 0; fxLeft = 0/)
     for (const index of [0, 1, 2, 3]) {
       const r = rig({ index, quiet: 20 }); r.st.fxLeft = 3; r.st.sanity = 61; r.visit()
       expect(r.arrived).toEqual([[index, 61]])
@@ -1380,7 +1380,7 @@ describe('review batch five, two: the wake, the filing and the floor you come ba
     expect(said).toEqual([[0, L(2).levelSub], [3.8, L(2).exit.hint], [45, 'the floor remembers you less.']])
   })
   it('a floor you come back to says so at 3.8 s, with the ways down on your map; the way line after it is let go', () => {
-    expect(TAIL).toMatch(/\} else \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const s = arrivalSummary\(fog\.countWays\(way\.target\), rec\.visits\)\r?\n\s*const ringBack = way\.kind === 'ring' && !!wm\r?\n\s*if \(s\) later\(ringBack \? 7500 : 3800, s, PRIO\.discovery, false\)\r?\n\s*if \(wm\) later\(ringBack \? 3800 : 7500, wm, PRIO\.discovery, false\)\r?\n\s*\}/)
+    expect(TAIL).toMatch(/\} else \{\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*const s = arrivalSummary\(fog\.countWays\(way\.target\), rec\.visits\)\r?\n\s*const ringBack = way\.kind === 'ring' && !!wm\r?\n\s*if \(s\) later\(ringBack \? 7500 : 3800, s, PRIO\.discovery, false\)\r?\n\s*if \(wm\) later\(ringBack \? 3800 : 7500, wm, PRIO\.discovery, false\)\r?\n\s*\}/)
     const { said, run } = land({ first: false })
     run(80)
     expect(said).toEqual([[0, L(1).levelName], [3.8, arrivalSummary({ down: 2 }, 2)]])

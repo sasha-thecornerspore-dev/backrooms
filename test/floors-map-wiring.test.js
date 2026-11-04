@@ -85,7 +85,7 @@ describe('game.js: travel(way) replaces descend', () => {
     // plates (pulse T1-4), once the visit has begun; on a lift ride back to a floor you know the lift's line takes the name plate's place
     // (review batch six: the HUD carries the name)
     expect(body).not.toMatch(/before: true \}\), PRIO\.discovery\)/)
-    expect(body).toMatch(/persist\(true\)[^\n]*\r?\n\s*startVisit\(\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(way\.kind === 'lift'\) plate\('arrival', wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*if \(way\.kind !== 'lift' \|\| first\) plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)/)
+    expect(body).toMatch(/persist\(true\)[^\n]*\r?\n\s*startVisit\(\)\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(way\.kind === 'lift'\) plate\('arrival', wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*if \(way\.kind !== 'lift' \|\| first\) plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)/)
     expect(body.indexOf('buildLevel(way.target, fromC)')).toBeLessThan(body.indexOf("{ before: true }"))
     expect(body.indexOf('if (mapOpen) closeMap()')).toBeLessThan(body.indexOf('fadeThen('))
   })
@@ -108,8 +108,8 @@ describe('game.js: travel(way) replaces descend', () => {
     // review batch five: the filing line takes the hint's moment on the way that files you, and the summary the way line's on a return,
     // but for the ring's own line, a return's only: the follow-up)
     expect(body).toMatch(/plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)/)
-    expect(body).toMatch(/if \(first\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(level\.cfg\.exit\?\.hint && !followed\) \{ if \(freshLobby\(\)\) hintHeld = true; else later\(filing \? 7600 : 3800, level\.cfg\.exit\.hint, PRIO\.discovery\) \}\r?\n\s*if \(wm\) later\(7500, wm, PRIO\.discovery, false\)/)
-    expect(body).toMatch(/\} else \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const s = arrivalSummary\(fog\.countWays\(way\.target\), rec\.visits\)\r?\n\s*const ringBack = way\.kind === 'ring' && !!wm\r?\n\s*if \(s\) later\(ringBack \? 7500 : 3800, s, PRIO\.discovery, false\)\r?\n\s*if \(wm\) later\(ringBack \? 3800 : 7500, wm, PRIO\.discovery, false\)/)
+    expect(body).toMatch(/if \(first\) \{\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*if \(level\.cfg\.exit\?\.hint && !followed\) \{ if \(freshLobby\(\)\) hintHeld = true; else later\(filing \? 7600 : 3800, level\.cfg\.exit\.hint, PRIO\.discovery\) \}\r?\n\s*if \(wm\) later\(7500, wm, PRIO\.discovery, false\)/)
+    expect(body).toMatch(/\} else \{\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*const s = arrivalSummary\(fog\.countWays\(way\.target\), rec\.visits\)\r?\n\s*const ringBack = way\.kind === 'ring' && !!wm\r?\n\s*if \(s\) later\(ringBack \? 7500 : 3800, s, PRIO\.discovery, false\)\r?\n\s*if \(wm\) later\(ringBack \? 3800 : 7500, wm, PRIO\.discovery, false\)/)
     expect(body).toMatch(/if \(player\.maxHp > hp0\) later\(11000, 'the floor remembers you less\.', PRIO\.discovery\)/)
   })
   it('F takes the way through travel(nearExit); the prompt reads wayLabel, or the closing line for the way you came by', () => {

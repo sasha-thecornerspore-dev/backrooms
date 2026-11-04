@@ -95,7 +95,7 @@ describe('game.js: the events, drained once per frame into one reused array', ()
   it("'seen' near the fog says the seen line (combat, 8 s), far says 'something, far off, stops.' (ambient, 30 s) and re-arms the turning cue", () => {
     // (pulse T1-6: the line is compass.js seenLine — 'it has seen you.' on your screen, 'something has seen you.' off it, with its tell;
     // pulse-wiring.test.js replays it)
-    expect(body).toMatch(/case 'seen':\r?\n\s*turningSaid\.delete\(ev\.id\)\r?\n\s*if \(ev\.d <= fog \* 1\.1\) \{\r?\n\s*if \(playT - lastSeenLine > 8\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s*const onScreen = [^\n]*\r?\n\s*lastSeenLine = playT; showMessage\(seenLine\(onScreen\), PRIO\.combat\)\r?\n[^\n]*\r?\n\s*\}\r?\n\s*\}\r?\n\s*else if \(playT - lastFarLine > 30\) \{ lastFarLine = playT; showMessage\('something, far off, stops\.', PRIO\.ambient\) \}/)
+    expect(body).toMatch(/case 'seen':\r?\n\s*turningSaid\.delete\(ev\.id\)\r?\n\s*if \(ev\.d <= fog \* 1\.1\) \{\r?\n\s*if \(playT - lastSeenLine > 8\) \{\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*const onScreen = [^\n]*\r?\n\s*lastSeenLine = playT; showMessage\(seenLine\(onScreen\), PRIO\.combat\)\r?\n[^\n]*\r?\n\s*\}\r?\n\s*\}\r?\n\s*else if \(playT - lastFarLine > 30\) \{ lastFarLine = playT; showMessage\('something, far off, stops\.', PRIO\.ambient\) \}/)
   })
   it('the hunt events carry their lines and priorities', () => {
     expect(body).toContain("case 'lost': showMessage('you have lost it. it is still looking.', PRIO.discovery); break")

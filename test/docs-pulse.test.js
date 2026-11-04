@@ -255,14 +255,34 @@ describe('the compass, the first minute and the lines the budget lets go', () =>
 // it: the guard holds with it or without it, and asks only that nothing of it is left half-deleted (a stray DRAFT, <!-- or --> outside
 // a closed comment would show in the release, or hide the notes after it). The notes are found through package.json and no version is
 // pinned; the lines below are 2.0.4's own, so they read 2.0.4's notes by name, as docs-launch reads 2.0.0's.
-const draftLeftOpen = (s) => /DRAFT|<!--|-->/.test(s.replace(/<!--[^]*?-->/g, ''))
+// The comments are walked with indexOf, not taken out with a regex: a comment also ends at --!> (as a browser reads it), and an
+// opener with no end leaves the rest of the notes open, which is the half-deleted case
+const draftLeftOpen = (s) => {
+  let rest = ''
+  for (let i = 0; ;) {
+    const open = s.indexOf('<!--', i)
+    if (open < 0) { rest += s.slice(i); break }
+    rest += s.slice(i, open)
+    const ends = [s.indexOf('-->', open + 4), s.indexOf('--!>', open + 4)].filter((e) => e >= 0)
+    if (!ends.length) return true
+    const end = Math.min(...ends)
+    i = end + (s.startsWith('-->', end) ? 3 : 4)
+  }
+  return rest.includes('DRAFT') || rest.includes('<!--') || rest.includes('-->') || rest.includes('--!>')
+}
+const dropLeadingComment = (s) => {
+  if (!s.startsWith('<!--')) return s
+  const end = s.indexOf('-->\n')
+  return end < 0 ? s : s.slice(end + 4)
+}
 describe('the release notes for this version', () => {
   const file = `docs/release-notes/v${pkg.version}.md`
   it('exist for the version in package.json, and leave no draft marker open, with the draft comment or without it', () => {
     expect(fs.existsSync(path.join(root, file))).toBe(true)
     const notes = read(file)
     expect(draftLeftOpen(notes)).toBe(false)
-    expect(draftLeftOpen(notes.replace(/^<!--[^]*?-->\n/, ''))).toBe(false)
+    expect(draftLeftOpen(dropLeadingComment(notes))).toBe(false)
+    expect(draftLeftOpen('<!-- DRAFT for the owner. --!>\nnotes')).toBe(false)
     for (const half of ['DRAFT for the owner. -->\nnotes', '<!-- DRAFT for the owner.\nnotes', 'ready to publish. -->\nnotes']) {
       expect(draftLeftOpen(half), half).toBe(true)
     }

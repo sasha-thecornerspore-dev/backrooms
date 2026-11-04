@@ -31,11 +31,11 @@ describe('game.js: one voice (messages.js)', () => {
     // travel: the floor's plate wins at once (pulse T1-4: through the plate budget, the sub-line the first time); on a first visit the
     // way hint is a discovery line that follows it (held for the faint pull on the first run's lobby; after the filing line on the way
     // that files you: review batch five)
-    expect(game).toMatch(/plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s+const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)\r?\n\s+if \(first\) \{\r?\n(\s*\/\/[^\n]*\r?\n)*\s+if \(level\.cfg\.exit\?\.hint && !followed\) \{ if \(freshLobby\(\)\) hintHeld = true; else later\(filing \? 7600 : 3800, level\.cfg\.exit\.hint, PRIO\.discovery\) \}/)
+    expect(game).toMatch(/plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s+const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)\r?\n\s+if \(first\) \{\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]+if \(level\.cfg\.exit\?\.hint && !followed\) \{ if \(freshLobby\(\)\) hintHeld = true; else later\(filing \? 7600 : 3800, level\.cfg\.exit\.hint, PRIO\.discovery\) \}/)
     // dying: 'everything goes dark.' is combat; the wake line (death.js) follows as discovery
     expect(game).toMatch(/showMessage\('everything goes dark\.', PRIO\.combat\)/)
     expect(game).toMatch(/later\(2600, r\.message, PRIO\.discovery\)/)
-    expect(game).toMatch(/buildLevel\(entryLevel\(\{ online: !!mpClient, frontDoor \}\)\)[^\n]*\r?\n\s*if \(getPref\('solidBodies'\)\) level\.solid\.settlePlayer\(player\)[^\n]*\r?\n\s*\}\r?\n(\s*\/\/[^\n]*\r?\n)*\s*startVisit\(\)\r?\n\s*plate\('floor', arrivalPlate\(level\.cfg, !resume\), PRIO\.combat\)/)
+    expect(game).toMatch(/buildLevel\(entryLevel\(\{ online: !!mpClient, frontDoor \}\)\)[^\n]*\r?\n\s*if \(getPref\('solidBodies'\)\) level\.solid\.settlePlayer\(player\)[^\n]*\r?\n\s*\}\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*startVisit\(\)\r?\n\s*plate\('floor', arrivalPlate\(level\.cfg, !resume\), PRIO\.combat\)/)
     // (pulse T1-5: the murmurs come from the floor's bag, not a coin; the block keeps its coin, the hold)
     expect(game).toMatch(/const murmur = cfg\.map \? level\.messages\[Math\.floor\(Math\.random\(\) \* level\.messages\.length\)\] : level\.messages\[murmurBag\.next\(\)\]\r?\n\s*if \(!hintHeld \|\| murmur !== cfg\.exit\?\.hint\) plate\('murmur', murmur, PRIO\.ambient, false\)/)
     // event lines: fireEvent's prio — ambient by default (the scheduler passes none), interaction when a drawer fires them — except the two
