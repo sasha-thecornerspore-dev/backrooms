@@ -194,9 +194,10 @@ function makeHelpers(env) {
 // ── the threat record ───────────────────────────────────────────────────────────────────────────────────────────────
 // One per entity system, returned from every update. Events are pooled (32) and live until the next drain: begin()
 // drops last frame's but keeps anything emitted between frames (a ward's dispel), reset() clears everything.
+// An event is { kind, id, x, y, d, variant }: the variant says which thing it was, so a tell can be its own.
 export function createThreat() {
   const pool = []
-  for (let i = 0; i < 32; i++) pool.push({ kind: '', id: 0, x: 0, y: 0, d: 0 })
+  for (let i = 0; i < 32; i++) pool.push({ kind: '', id: 0, x: 0, y: 0, d: 0, variant: '' })
   let pi = 0
   const t = {
     hunted: false, nearest: Infinity, nearestEntity: null, gaze: false, gazeRate: 0, dmg: 0, dmgKind: null, arcPending: false,
@@ -216,6 +217,7 @@ export function createThreat() {
       if (t.events.length >= 32) return null
       const ev = pool[pi]; pi = (pi + 1) & 31
       ev.kind = kind; ev.id = e.id | 0; ev.x = e.x; ev.y = e.y; ev.d = d || 0
+      ev.variant = e.variant || 'shade'                        // a thing without one is a shade, as specFor reads it
       t.events.push(ev)
       return ev
     },

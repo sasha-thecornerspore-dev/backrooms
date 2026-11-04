@@ -37,7 +37,8 @@ export function lureWithin(lures, px, py, r) {
   return false
 }
 
-// Footstep loudness multiplier while the quiet timer runs.
+// Footstep loudness multiplier while the quiet timer runs: game.js scales by it both the noise
+// the things hear and the step you hear yourself, so the two stay one.
 export function quiet(timer) { return timer > 0 ? 0.5 : 1 }
 
 // A committed action: start() it, tick() it each frame; 'done' lands once at the

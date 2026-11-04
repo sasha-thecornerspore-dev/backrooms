@@ -21,4 +21,7 @@ export const CHANNELS = Object.freeze({
   containerSlot: C({ gate: [7489, 3251] }),
   containerRoll: C({ gate: [2113, 2251] }),
   haunts:        C({ gate: [9203, 1531], rng: [227, 43, 593, 89], pick: [467, 941] }),
+  // the first-run thread (firstrun.js): its note lies at an authored cell of the fixed lobby and draws nothing today; the stream is its
+  // own so anything the thread ever hashes (a jittered paper, a seeded thread) can never borrow another pass's
+  firstrun:      C({ gate: [6719, 2861], rng: [1103, 59, 863, 47] }),
 })

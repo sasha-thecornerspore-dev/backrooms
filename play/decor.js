@@ -166,6 +166,8 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
             sl.push(record)
           }
           else if (kind === 'haunt') haunts.set(key, record)
+          // an authored note (the first run's, firstrun.js): kept by its own key, never the chunk's, so the chunk's own page stays
+          else if (kind === 'scrap') scraps.set(record.key, record)
         },
       }
       for (let i = 0; i < passes.length; i++) passes[i](ctx)
@@ -347,6 +349,24 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
     anyWay.rec = best; anyWay.dist = Math.sqrt(bestD)
     return anyWay
   }
+  // the same, over the ways that lead on (the faint pull): never a stair up, nor a kind `skip(kind)` passes over; it writes the
+  // same reused record as nearestWayAny, so read it at once
+  function nearestWayOn(px, py, skip = null) {
+    let best = null, bestD = Infinity
+    for (const e of exits.values()) {
+      if (e.kind === 'up' || (skip && skip(e.kind))) continue
+      const d = (e.x - px) ** 2 + (e.y - py) ** 2
+      if (d < bestD) { bestD = d; best = e }
+    }
+    for (const sl of stairs.values()) for (const s of sl) {
+      if (s.kind === 'up' || (skip && skip(s.kind))) continue
+      const d = (s.x - px) ** 2 + (s.y - py) ** 2
+      if (d < bestD) { bestD = d; best = s }
+    }
+    if (!best) return null
+    anyWay.rec = best; anyWay.dist = Math.sqrt(bestD)
+    return anyWay
+  }
   function nearestProp(px, py, maxDist = 1.5, pred = TRUE) {
     let best = null, bestD = maxDist * maxDist
     for (const list of props.values()) for (const p of list) {
@@ -401,6 +421,6 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
 
   return {
     update, getProps, getExits, nearestExit, nearestExitAny, getNpcs, nearestNpc, getScraps, nearestScrap, getMachines, nearestMachine, getSights, enterLevel,
-    getStairs, wayAt, exitAt, nearestWay, nearestWayAny, nearestProp, getKind, getHaunts,
+    getStairs, wayAt, exitAt, nearestWay, nearestWayAny, nearestWayOn, nearestProp, getKind, getHaunts,
   }
 }

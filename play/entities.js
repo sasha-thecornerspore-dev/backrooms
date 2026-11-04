@@ -17,13 +17,28 @@ function hash(a, b) {
   return h
 }
 
-function entityRng(cx, cy) {
-  let s = hash(cx, cy) | 1
+// salt is the floor's maze salt, seed the world's: they move the creatures per floor and per world. Salt 0 and seed 0 are
+// the historic placement, draw for draw.
+function entityRng(cx, cy, salt = 0, seed = 0) {
+  let s = (hash(cx + salt, cy + salt) ^ Math.imul(seed, 0x9E3779B1)) | 1
   return () => { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 0xffffffff }
 }
 
-function shouldSpawn(cx, cy, spawnDenom) {
-  return hash(cx + 1000, cy + 2000) % spawnDenom === 0
+// a full 32-bit finaliser (murmur3's fmix32): every input bit reaches every output bit
+function fmix(h) {
+  h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b)
+  h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35)
+  h ^= h >>> 16
+  return h
+}
+
+// does this chunk roll a creature. Exported for a pass that marks where one began. hash() comes back signed (its last ^),
+// and so does this: an unsigned roll would divide a different number at salt 0 and seed 0, and move today's creatures.
+// A world seed is mixed after its XOR: XORed in bare, a power-of-two denominator (L2's 8) read only its low bits, and seeds
+// eight apart shared every creature chunk. Seed 0 skips the mix and keeps today's roll
+export function shouldSpawn(cx, cy, spawnDenom, salt = 0, seed = 0) {
+  const h = hash(cx + 1000 + salt, cy + 2000 + salt)
+  return (seed === 0 ? h : fmix(h ^ Math.imul(seed, 0x9E3779B1))) % spawnDenom === 0
 }
 
 // Advance one entity along e.dir at `speed`, sliding along walls (turn 90° on a
@@ -56,8 +71,8 @@ function huntShape(e) {
   return e
 }
 
-function makeEntity(cx, cy, stalkerDenom, variants) {
-  const rng = entityRng(cx, cy)
+function makeEntity(cx, cy, stalkerDenom, variants, salt, seed) {
+  const rng = entityRng(cx, cy, salt, seed)
   const type = rng() < 1 / stalkerDenom ? 'stalker' : 'wanderer'
   const list = (variants && variants[type] && variants[type].length) ? variants[type] : ['shade']
   const variant = list[(rng() * list.length) | 0]
@@ -77,7 +92,8 @@ function makeEntity(cx, cy, stalkerDenom, variants) {
 }
 
 // createEntitySystem(config, isWallFn, deps = null)
-//   deps = { obstacles: collide.forEntities | null, grid: { floor(ix, iy), setPlayerChunk } | null, now: () => seconds }
+//   deps = { obstacles: collide.forEntities | null, grid: { floor(ix, iy), setPlayerChunk } | null, now: () => seconds,
+//            seed: the world seed (null / 0: the unseeded world) }
 //   update(dt, player, pcx, pcy, ctxOrAggroMul) -> threat: a number or undefined fifth argument runs the legacy step
 //   verbatim (obstacles never consulted); an object (game.js's aiCtx) runs the hunt path (hunt.stepAI).
 export function createEntitySystem(config, isWallFn, deps = null) {
@@ -101,6 +117,9 @@ export function createEntitySystem(config, isWallFn, deps = null) {
   const fleeRange   = ent.fleeRange ?? 6
   const damage      = ent.damage ?? 16
   const variants    = { stalker: ent.stalkerVariants || ['shade'], wanderer: ent.wandererVariants || ['shade'] }
+  // the floor's maze salt and the world seed move the spawns (a fresh solo run's seed is 0: its floors differ by salt only)
+  const salt        = config?.maze?.salt | 0
+  const seed        = deps?.seed | 0
 
   const threat = createThreat()
   // one flood per ring slot: several noises in one frame (a ward, a bump, the lures, a footstep) are all heard
@@ -137,8 +156,8 @@ export function createEntitySystem(config, isWallFn, deps = null) {
         const until = dispelledUntil.get(key)
         if (until !== undefined && now < until) continue
         spawnedChunks.add(key)
-        if (shouldSpawn(cx, cy, spawnDenom)) {
-          const e = settleSpawn(makeEntity(cx, cy, stalkerDenom, variants))
+        if (shouldSpawn(cx, cy, spawnDenom, salt, seed)) {
+          const e = settleSpawn(makeEntity(cx, cy, stalkerDenom, variants, salt, seed))
           if (e !== null) entities.push(e)
         }
       }
@@ -458,6 +477,10 @@ export function createEntitySystem(config, isWallFn, deps = null) {
 
   function getThreat() { return threat }
 
+  // the chunk's roll on this floor in this world, before settling (a fixed map may still refuse the spawn); never on a floor
+  // without creatures
+  function isSpawnChunk(cx, cy) { return enabled && shouldSpawn(cx, cy, spawnDenom, salt, seed) }
+
   function getDispelled() {
     const out = []
     const now = clock()
@@ -480,5 +503,5 @@ export function createEntitySystem(config, isWallFn, deps = null) {
     }
   }
 
-  return { update, getEntities, ward, flash, noise, snapshotChasers, inject, takeWakeEvent, drainEvents, getThreat, getDispelled, restoreDispelled }
+  return { update, getEntities, ward, flash, noise, snapshotChasers, inject, takeWakeEvent, drainEvents, getThreat, getDispelled, restoreDispelled, isSpawnChunk }
 }

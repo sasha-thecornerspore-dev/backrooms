@@ -4,7 +4,7 @@
 // neither are the recovery-engine case manifests under /recover/ — those
 // must always be live so a case can change without a cache bump. world.json
 // is precached but fetched network-first: it changes with every granted wish.
-const CACHE = 'backrooms-play-v25'
+const CACHE = 'backrooms-play-v26'
 const SHELL = [
   './', 'index.html', 'world.json',
   'game.js', 'touch.js', 'scraps.js', 'events.js', 'anchor.js', 'items.js', 'tactics.js', 'save.js', 'world.js', 'decor.js',
@@ -20,6 +20,7 @@ const SHELL = [
   'origin-intake.js', 'origin-rules.js', 'origin-tenant.js', 'origin-anchored.js', 'origin-processed.js', 'origin-unnamed.js', 'origin-thin.js',
   'compose-perception.js', 'stillness.js', 'compose-sanity.js', 'rollcall.js', 'downed.js', 'status.js', 'closings.js', 'docket.js',
   'compose-polaroid.js', 'compose-radio.js', 'compose-wish.js', 'wish-post.js', 'compose-gates.js', 'evidence.js', 'caches.js', 'lightshare.js', 'site.js',
+  'dread.js', 'firstrun.js', 'plates.js', 'pathfield.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
 ]
 self.addEventListener('install', (e) => e.waitUntil((async () => {
