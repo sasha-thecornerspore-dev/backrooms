@@ -83,7 +83,12 @@ jobs:
           # macOS builds are ad-hoc signed (no Apple Developer ID yet): they run after the player
           # clears Gatekeeper once, and the app points mac players at the release page instead of
           # self-installing. A mac-only failure must not hold back the Windows/Linux release.
-          - os: macos-latest
+          # The Intel image, not macos-latest (arm64): on 2026-11-04 GitHub had no arm64 runner free and cancelled 2.0.4's mac
+          # leg three times ("not acquired ... capacity constraints"), and a cancelled leg holds the publish back. The app is a
+          # universal build (package.json build.mac arch: universal, no native modules), which electron-builder makes the same
+          # on either. GitHub retires its Intel images in August 2027 (actions/runner-images#13045): go back to an arm64 label
+          # before then.
+          - os: macos-15-intel
             platform: mac
             assets: "dist/*.dmg dist/*.zip dist/*.zip.blockmap dist/latest-mac.yml"
             optional: true
