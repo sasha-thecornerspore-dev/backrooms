@@ -58,6 +58,28 @@ describe('game.js: the touch line and beacon (I5)', () => {
     expect(b).toContain('const p = window.backrooms?.fireBeacon?.(b.payload)')
     expect(b).toContain('if (b.setBeaconFired) { beaconFired = true; tryFinale() }')
   })
+  it('a disc tapped while the line is up does not wait for it to close: closing the line lets go of every key, as opening it does', () => {
+    // TYPE leaves the six on screen; a plain disc sets its key on touch, and the verbs consume nothing while the line is up. closeChat
+    // drops what was pressed meanwhile, so LIGHT, ACT or USE never fires the moment the line goes away (a keyboard types into the line)
+    const close = game.slice(at('function closeChat() {'), at('function touchLine()'))
+    expect(close).toContain('for (const k in K) K[k] = false')
+    expect(close).toContain('charger.forceRelease()')
+    // replayed: the line opens, LIGHT is tapped under it, the line is sent empty and closes; the frame after sees no LIGHT
+    const open = game.slice(at('function openChat() {'), at('function closeChat() {'))
+    const K = {}, el = { style: {}, value: '', focus() {} }
+    let released = 0
+    const h = new Function('K', 'charger', 'document', 'chatInputEl', 'chatLogEl', 'mpClient', 'clearTimeout',
+      `let chatOpen = false, typingSent = false, typingStopT = 0\n${open}\n${close}\nreturn { openChat, closeChat, open: () => chatOpen }`)(
+      K, { forceRelease: () => { released++ } }, { exitPointerLock() {} }, el, null, null, () => {})
+    K.KeyW = true
+    h.openChat()
+    expect(h.open()).toBe(true); expect(K.KeyW).toBe(false)
+    K.KeyL = true; K.KeyF = true; K.KeyQ = true                                   // taps on LIGHT, ACT, USE under the open line
+    h.closeChat()
+    expect(h.open()).toBe(false)
+    expect(Object.values(K).some(Boolean)).toBe(false)
+    expect(released).toBe(2)
+  })
   it('Enter in the line sends as before, and so does the enter key of a phone\'s keyboard (which may carry no code); Esc still cancels', () => {
     const h = game.slice(at("chatInputEl?.addEventListener('keydown', (e) => {"), at('// ── the field console: the chat input doubles'))
     expect(h).toContain("if (e.code === 'Enter' || e.code === 'NumpadEnter' || (e.key === 'Enter' && !e.isComposing)) {")

@@ -1406,6 +1406,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   }
   function closeChat() {
     chatOpen = false
+    // and let go of whatever was pressed while it was up: on a touch screen the six discs stay tappable under the line, and a tap the
+    // verbs did not take (they are off while it is up) must not fire the moment it closes (a keyboard's keys went to the line)
+    for (const k in K) K[k] = false
+    charger.forceRelease()
     if (chatInputEl) chatInputEl.style.display = 'none'
     if (typingSent) { typingSent = false; clearTimeout(typingStopT); mpClient?.sendTyping(false) }
   }
