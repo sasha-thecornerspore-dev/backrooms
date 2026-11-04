@@ -10,14 +10,16 @@
 //                    however long before it (lib.matchSays). No fixed window bounds a line's wait in the queue, only the next arrival,
 //                    whose buildLevel clears it: lib.queueBound and lib.buildLevelClears read that off the measured tree's own copy.
 //                    A plate with no say is a boot line, said before the bot's hooks
-//   player-caused    its showMessage came within 2.5 s after a key the bot pressed to act (E, F, Q, L, Space, C): a search's result,
-//                    a soul's word, the light, an item; the plate budget never counts these
+//   player-caused    its showMessage came within 2.5 s after a key the bot pressed to act (E, F, Q, L, Space, C, Tab): a search's result,
+//                    a soul's word, the light, an item; the plate budget never counts these. Not a line the game says on its own timer
+//                    after an arrival (the filing line, the summary, a way's line: lib.timedArrivalLines), whatever key came between
+//                    (lib.sayCause holds the rules)
 //   a warning        a hunt line ('it has seen you.', 'it has you.', ...): never budgeted either
 //   budgeted         every other plate: the floor's line, the arrival lines, murmurs, events, haunts — what T1-4's budget governs
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { parseArgs, repeats, quietStretches, preceded, gaps, moments, dist, r1, r2, queueBound, buildLevelClears, arrivalClears, matchSays } from '../lib.mjs'
+import { parseArgs, repeats, quietStretches, preceded, gaps, moments, dist, r1, r2, queueBound, buildLevelClears, arrivalClears, matchSays, timedArrivalLines, sayCause } from '../lib.mjs'
 
 const { val } = parseArgs(process.argv.slice(2), ['dir'])
 const DIR = path.resolve(val.dir)
@@ -37,6 +39,10 @@ const UNPROMPTED = new Set()
 // and its bump lines (feedback.js BUMP_LINES), the lines for edging through clutter (placement.js CLUTTER_LINES) and landmarks'
 // first-sight lines (sightpins.js SIGHT_LINES): walking into furniture, through it or up to a landmark is yours, key or no key
 const BUMPS = new Set()
+// and the lines its game.js says on its own timer a few seconds into an arrival (later(): the filing line, the summary of a floor you
+// come back to, a way's line, the mercy, the ceiling's line, where you woke), read off its own modules: the arrival's, whatever key the bot
+// pressed just before (on 2.0.3 its light came back on, or it searched, just before the way's line and the filing line in every seeded fresh run)
+let TIMED = new Set()
 // and what bounds a line's wait in its queue between its say and its plate, read off the measured tree's own messages.js and game.js: no
 // fixed time (lib.queueBound: a discovery line waits out the gap of every one said before it), only the next arrival, when buildLevel
 // clears the queue and the queue's clear() drops what still waits. A plate is then matched to its say within its arrival; on a tree
@@ -47,6 +53,9 @@ let QUEUE = null, ARRIVAL_BOUND = false
   for (const f of ['messages.js', 'game.js']) if (!existsSync(path.join(R, f))) throw new Error(`stats.mjs: no ${path.join(R, f)} (run.mjs leaves the measured tree's copy beside the sessions)`)
   QUEUE = queueBound(await import(pathToFileURL(path.join(R, 'messages.js')).href))
   ARRIVAL_BOUND = QUEUE.clears && buildLevelClears(readFileSync(path.join(R, 'game.js'), 'utf8'))
+  const mod = async (f) => existsSync(path.join(R, f)) ? import(pathToFileURL(path.join(R, f)).href) : undefined
+  TIMED = timedArrivalLines({ intake: await mod('origin-intake.js'), compass: await mod('compass.js'), topology: await mod('topology.js'),
+    anchored: await mod('origin-anchored.js'), death: await mod('death.js'), game: readFileSync(path.join(R, 'game.js'), 'utf8') })
   const lv = path.join(R, 'levels.js'), wd = path.join(R, 'world.js'), fb = path.join(R, 'feedback.js'), sp = path.join(R, 'sightpins.js'), pl = path.join(R, 'placement.js')
   if (existsSync(sp)) { const SP = await import(pathToFileURL(sp).href); for (const v of Object.values(SP.SIGHT_LINES ?? {})) if (v?.line) BUMPS.add(v.line) }
   if (existsSync(pl)) { const PL = await import(pathToFileURL(pl).href); for (const v of Object.values(PL.CLUTTER_LINES ?? {})) BUMPS.add(v) }
@@ -93,11 +102,9 @@ function measure(S) {
   const shows = []
   for (let k = 0; k < plates.length; k++) {
     const r = plates[k], say = causes[k]
-    // whichever came last decides: a key you pressed after you arrived (the map's first opening) is yours; the travel your F started is not
-    const before = (list) => { let b = -Infinity; if (say) for (const x of list) if (x <= say.t + 0.05 && x > b) b = x; return b }
-    const lastKey = before(keys), lastMove = before(moves)
-    const arrival = !!say && lastMove >= lastKey && say.t - lastMove <= ARRIVAL_S
-    const player = !!say && (BUMPS.has(say.text) || (!arrival && !say.happening && !UNPROMPTED.has(say.text) && say.t - lastKey <= 2.5))
+    // whichever came last decides: a key you pressed after you arrived (the map's first opening) is yours; the travel your F started is
+    // not; and an arrival's timed line is the arrival's whatever key came between
+    const player = sayCause(say, { keys, moves, timed: TIMED, unprompted: UNPROMPTED, bumps: BUMPS, arrivalS: ARRIVAL_S }) === 'player'
     shows.push({ t: r.t, text: r.text, cls: WARNINGS.has(r.text) ? 'warning' : player ? 'player' : 'budgeted' })
   }
   // on screen: from each shown text to the next text, '(hidden)' or '(veiled)', and whose time it was

@@ -295,3 +295,48 @@ export function matchSays(plates, says, clears = []) {
     return null
   })
 }
+
+// timedArrivalLines(tree) -> Set: the lines game.js says on its own timer a few seconds into an arrival (later()), read off the measured
+// tree's own modules, so a key the bot pressed in the 2.5 s before one of them is not taken for its cause: the filing line for every column
+// and layer (origin-intake.js filingLine), a floor you come back to (compass.js arrivalSummary, with any count of ways down), each way's line
+// (topology.js wayMessage), the pin's mercy (origin-anchored.js MERCY_LINE), where you woke (death.js resolveDeath), and what game.js's
+// later() says as written ('the floor remembers you less.'). tree: { intake, compass, topology, anchored, death } the modules (any may be
+// missing), game its game.js text. The wake's other two (what your hands let go, by ITEM_NAMES in game.js; the file's word, compose-gates.js)
+// are not read: no measured bot has died
+export function timedArrivalLines({ intake, compass, topology, anchored, death, game = '' } = {}) {
+  const out = new Set()
+  const add = (s) => { if (typeof s === 'string' && s) out.add(s) }
+  if (typeof intake?.filingLine === 'function') for (const o of intake.ORIGINS ?? []) for (const thin of [false, true]) add(intake.filingLine(o, thin))
+  if (typeof compass?.arrivalSummary === 'function') for (let d = 0; d <= 16; d++) add(compass.arrivalSummary({ down: d }, 2))
+  if (typeof topology?.wayMessage === 'function') {
+    for (const kind of ['down', 'up', 'lift', 'ring']) {
+      add(topology.wayMessage({ kind, target: 0 }, { before: true }))
+      for (const partner of [null, {}]) for (const mem of [null, { x: 0, y: 0 }]) add(topology.wayMessage({ kind, target: 0 }, { partner, mem }))
+    }
+  }
+  add(anchored?.MERCY_LINE)
+  if (typeof death?.resolveDeath === 'function') add(death.resolveDeath({ level: 1, inventory: [], selected: 0, maxHp: 100, deaths: 0 }).message)
+  for (const m of String(game).matchAll(/\blater\(\s*\d+\s*,\s*'([^'\\\n]+)'/g)) add(m[1])
+  return out
+}
+
+// sayCause(say, ctx): whose a plate's say is, by the rules RESULTS.md's method gives (stats.mjs classes every plate by it). say { t, text,
+// happening } (happening: said in the instant an event or a haunt fired, no drawer rolled), or null; ctx.keys the times of the bot's act
+// keys, ctx.moves of its travels and deaths, ctx.timed timedArrivalLines, ctx.unprompted the tree's murmurs, hints and setting's line,
+// ctx.bumps its bump, clutter and landmark lines ->
+//   'player'      a bump, clutter or landmark line, key or no key; else a line said within playerS after an act key (a key logged in the
+//                 say's own frame, 0.05 s, came first), not an arrival's, an event's or a haunt's, and not one of the tree's unprompted
+//   'arrival'     one of the arrival's timed lines, whatever key came between and however late the budget let it go; or any line said
+//                 within arrivalS of a travel or a death with no act key since (whichever came last decides: a key you pressed after you
+//                 arrived is yours; the travel your F started is not)
+//   'unprompted'  anything else
+//   null          no say: a boot line, said before the bot's hooks
+export function sayCause(say, { keys = [], moves = [], timed = null, unprompted = null, bumps = null, arrivalS = 12, playerS = 2.5 } = {}) {
+  if (!say) return null
+  const before = (list) => { let b = -Infinity; for (const x of list) if (x <= say.t + 0.05 && x > b) b = x; return b }
+  const lastKey = before(keys), lastMove = before(moves)
+  if (bumps?.has(say.text)) return 'player'
+  if (timed?.has(say.text) || (lastMove >= lastKey && say.t - lastMove <= arrivalS)) return 'arrival'
+  if (!say.happening && !unprompted?.has(say.text) && say.t - lastKey <= playerS) return 'player'
+  return 'unprompted'
+}
