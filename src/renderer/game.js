@@ -57,6 +57,7 @@ import { depthOf, loadFile, saveFile, statusMods, npcLines, canFile, canRefile, 
 import { standConditions, standTick, closingOverlay, closingLines, isWishOpen, closingProgress, slipText, yourFileLines, CLOSED_OFFICE, STAND_STEADY_LINE } from './closings.js'
 import { standing, placementMods, applyPlacement, ambientMods, trayLean, rollCall } from './docket.js'
 import { polaroidCaption } from './compose-polaroid.js'
+import { createFilm } from './film.js'
 import { radioLine, RADIO_GROUPS } from './compose-radio.js'
 import { wishRoute } from './compose-wish.js'
 import { postWish } from './wish-post.js'
@@ -351,6 +352,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let seamHeld    = false // the counter-claim resolved — fire the finale only once
   let firstDeepHearing = true   // the processed hear the station's key once a run (rules.radio; radioLine's keyLineNow spends it)
   let shotOnLevel = false       // a photo taken on this floor yet (the anchored pin develops on a floor's first; buildLevel clears it)
+  const film = createFilm()     // the kinds the film has caught this visit, each with its den on your sheet (film.js; startVisit lets them go)
 
   // ── the file (origin-*.js): nobody chooses a column. The first way you take files you by how you arrived (travel()); until then — Level ∅,
   //    the lobby before the first way — rules is LEGACY and the game is what it always was. intakeCtx holds the title screen's facts (the
@@ -697,6 +699,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     dreadQuietT = 0
     if (level.index >= 0 && level.index <= 3) eventSched.arrive(level.index, sanity)
     teller.reset(); fieldOn = false; dreadOut.dread = 0; fxLeft = 0
+    film.arrive()                   // and every kind of thing may develop again, its den with it (the film: once a kind a visit)
   }
   // the nearest record of a list (die: the holes loaded), or null
   function nearestOf(list, x, y) {
@@ -1546,6 +1549,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // in it develops on the film, a lost soul in it shows the door behind them. Hoisted once: the photo allocates no options
   const frameLos = (ax, ay, bx, by) => lineOfSight(ax, ay, bx, by, level.grid.floor)
   const FRAME_OPTS = { pos: peerPos, cone: inViewCone, hf: HF, maxCells: SUBJECT_RANGE, los: frameLos }
+  // the film's den (film.js) reads the same frame at its own reach; a thing lives where its chunk rolls one on this floor (entities.js)
+  const DEN_OPTS = { cone: inViewCone, hf: HF, los: frameLos, home: (cx, cy) => level.entitySys.isSpawnChunk(cx, cy) }
   // a friend's light (lightshare.js): who lights you, by the same walls-only line of sight, six cells; hoisted, the per-frame ask allocates nothing
   const LIT_OPTS = { cells: LIT_RANGE, los: frameLos, pos: peerPos }
   // your ward on the wire (one reused payload: sendEv serialises it at once), and a friend's, re-run on YOUR things from where they stand
@@ -1759,6 +1764,18 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const flashEl = document.getElementById('flash')
   let flashAt = -1e9, flashT = 0
   const FLASH_OPTS = { range: 6, cone: FOV, stagger: 1.8 }, NO_FLASH = { hit: 0 }   // what the flash does to the things (entities.js flash)
+  // the film is worth what it shows (film.js): a creature in the frame, close, with a clear line to you, puts its den on your sheet and the
+  // film names it, once a kind a visit. A step of its own after the caption (compose-polaroid.js, the column's pins and the claim's letter
+  // are as they were). The photo's own result, so, as the caption, never a plate; said as what you found (discovery), never dropped: a third
+  // interaction line from the one shot would push the flash's line out of the queue (messages.js keeps two waiting) whenever a combat line
+  // is up. Yours alone: the sheet is never sent. Not on the block (it keeps no sheet); with the creatures pref off there is nothing to catch
+  function developDen() {
+    if (level.cfg.map || !getPref('creatures')) return
+    const d = film.develop(player, level.entitySys.getEntities(), DEN_OPTS)
+    if (!d) return
+    fog.pinThing(level.index, d.key, 'den', d.x, d.y, d.kind)
+    showMessage(d.line, PRIO.discovery)
+  }
   function firePolaroid() {
     let dataUrl = null
     // through the renderer: a WebGL canvas is only readable when re-drawn, and the GPU backend draws on a sibling canvas, not on #c
@@ -1806,6 +1823,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // still save the real evidence file on desktop; the caption shows regardless
     if (dataUrl && window.backrooms?.savePhoto) window.backrooms.savePhoto(dataUrl).catch(() => {})
     showMessage(r.cap)
+    developDen()                                               // then what it caught: a creature's den (film.js), a line after the caption
   }
   // the door a lost soul in the film stands before: the nearest way you have SEEN that leads on, as the compass would point it from here
   // (compass.js compassLines over the pencil sheet, no faint fallback); null when none is known, or on the block (it keeps no sheet)

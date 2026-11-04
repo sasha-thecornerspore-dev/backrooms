@@ -205,6 +205,7 @@ it holds only what you have actually walked, plus small marks for what you have 
 | ¶ | a page — faint until you read it |
 | ○ | where you arrived on this floor |
 | × | where you were hurt |
+| ⌂ | a den: where a thing you photographed lives |
 | ◌ | a way that was there |
 | · | something else — a soul, a place that was wrong |
 
@@ -268,7 +269,7 @@ the backrooms restocks itself. things are left lying around; walk close and pres
 | almond water | the main mend: your legs, your mind, the lights hold steady and the things hear your steps less for a while. from the pipes down, some of what the machines and drawers give is sour, and sour water takes instead of gives. *don't trust the almond water on the deeper floors.* |
 | glowstick | pushes the fog back — less the deeper you go. set one down and it is a breadcrumb until *the green light gutters out.* |
 | bandage | patches you up — restores hit points. where things hunt, wrapping it takes a still moment, and a hit makes it slip; you keep it. deeper down it holds better. carry a few before you go deep. |
-| polaroid camera | one shot each. the flash blinds what is in front of you, and the picture steadies you. the caption develops what the frame holds — sometimes more than you aimed at. photograph a lost soul and, faintly, there is a door behind them. point it at a friend and the film develops what the file wrote on them, and they will know. the desktop app keeps every shot in `Pictures/backrooms/`. |
+| polaroid camera | one shot each. the flash blinds what is in front of you, and the picture steadies you. the caption develops what the frame holds — sometimes more than you aimed at. photograph a lost soul and, faintly, there is a door behind them. catch one of the things close in the frame, with nothing between you, and the film develops it, and its den goes on your map (⌂): where it lives on this floor, once for each kind each time you come to a floor, and on your map only. point it at a friend and the film develops what the file wrote on them, and they will know. the desktop app keeps every shot in `Pictures/backrooms/`. |
 | radio | never used up. while it plays a presence can be found from much farther away — but you cannot hide with it on, and some things see you further. set it down still talking and they go to it instead of you. on levels 2 and 3 it reads a list aloud, one group of numbers at a time — the numbers station. |
 
 on the deepest floors the machines sometimes give stranger things. these you keep — you cannot put them down, and they are not lost when something has you:

@@ -10,7 +10,8 @@
 // touches the pointer lock; the gates (half pace, verbs off, a hit folds it) are game.js's.
 import { buildMapView } from './fogmap.js'
 
-export const GLYPHS = Object.freeze({ down: '▽', up: '△', lift: '◇', ring: '▽', machine: '⊟', sight: '✶', note: '¶', arrived: '○', hurt: '×' })
+// den: where a creature the film caught keeps to (film.js), in the same pencil glyph as the rest
+export const GLYPHS = Object.freeze({ down: '▽', up: '△', lift: '◇', ring: '▽', machine: '⊟', sight: '✶', note: '¶', arrived: '○', hurt: '×', den: '⌂' })
 const LOST = '◌'                                              // the hole is not where you drew it
 const VENDED = '⊠'                                            // the machine, struck through
 const INK = '#2b2418'

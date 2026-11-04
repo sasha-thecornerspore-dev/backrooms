@@ -173,7 +173,7 @@ describe('(4) polaroidCaption(legacy) is the three captions of firePolaroid', ()
     expect(fire).toMatch(/const r = polaroidCaption\(\{ rules, mods, subject, soul, doorArrow: soul \? knownWayArrow\(\) : null, thinNear, status: file\.status,\r?\n\s*index: level\.index, depth: level\.depth, sanity, origin, thin, thinFirstShot, anchor, pinTag: myPinTag, D: driftD\(\), firstShotOfLevel: !shotOnLevel,\r?\n\s*photoIdx, player, lvl: level\.index \}\)/)
     expect(fire.indexOf('polaroidCaption(')).toBeLessThan(fire.indexOf('sanity = Math.min(100, sanity + r.sanity); wardPulse()'))   // read before the +8, as finalizing was
     expect(fire).toContain('if (r.glyphAdvance) photoIdx++')
-    expect(fire).toMatch(/showMessage\(r\.cap\)\r?\n\s*\}/)
+    expect(fire).toMatch(/showMessage\(r\.cap\)\r?\n\s*developDen\(\)[^\n]*\r?\n\s*\}/)   // the caption is said last, but for the film's den: a step of its own after it (film-wiring.test.js)
     expect(game).not.toMatch(/const finalizing = /)
     expect(game).not.toMatch(/iwashere/)                                  // the letters are the composer's (glyph)
   })
