@@ -88,6 +88,7 @@ function makeEntity(cx, cy, stalkerDenom, variants, salt, seed) {
     wardHits: 0,    // wards it has absorbed; enough of them and it comes apart
     chunkCx: cx,
     chunkCy: cy,
+    follower: false,  // it lives in its chunk (film.js: its den is the chunk's hall crossing); inject's followers are placed, not homed
   })
 }
 
@@ -471,6 +472,7 @@ export function createEntitySystem(config, isWallFn, deps = null) {
         x: fx, y: fy, type: desc.type ?? 'stalker', variant: desc.variant ?? 'shade', state: 'chase',
         dir: Math.atan2(nearY - fy, nearX - fx), dirTimer: 3, stagger: 0, wardHits: desc.wardHits ?? 0,
         chunkCx: Math.floor(fx / CHUNK_SIZE), chunkCy: Math.floor(fy / CHUNK_SIZE),
+        follower: true,   // it followed you down: the chunk it landed in is not its home, even when another thing lives there
       })
       e.ai = 'hunt'; e.lastSeenX = nearX; e.lastSeenY = nearY; e.pending = delaySec
       pendingList.push(e)

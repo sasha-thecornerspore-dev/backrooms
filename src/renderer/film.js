@@ -10,12 +10,13 @@
 // THE DEN. entities.js keeps the chunk each creature was placed in (chunkCx, chunkCy). A chunk that rolls a creature on this floor
 // (entities.js isSpawnChunk: opts.home) is where it lives: each time the chunk streams back in, its creature stands up again by the chunk's
 // hall crossing (topology.js chunkMid, open at every epoch), so that cell is the den. A thing that followed you down was placed where it
-// arrived, not where it lives: its den is the cell it was caught in.
+// arrived, not where it lives (entities.inject marks it `follower`): its den is the cell it was caught in, even when it came down in a
+// chunk that is another thing's home.
 //
 // DEN_RANGE: the reach in cells, straight-line AND the frame's own (evidence.inFrame with the walls' line of sight; no line, no den).
 // KINDS: the creatures by the names the manual's bestiary gives them (variants.js's ids); a thing with no kind is a shade (as specFor reads it).
 // denLine(kind) -> the line the film develops (DEN_LINE, the kind's name filled in), or null for anything that is not a creature
-// denOf(e, home) -> { x, y }: the den's cell centre
+// denOf(e, home) -> { x, y }: the den's cell centre (home is never asked about a follower)
 // createFilm() -> { arrive(), develop(player, entities, opts) -> { key, kind, x, y, line } | null, caught(kind) -> boolean }
 //   arrive()   a visit begins (game.js startVisit): every kind may develop again
 //   develop    the nearest creature in frame within DEN_RANGE whose kind this visit has not developed yet, and that kind is spent; at most one
@@ -33,7 +34,7 @@ const known = (kind) => KINDS.indexOf(kind) !== -1
 export function denLine(kind) { return known(kind) ? DEN_LINE.replace('{kind}', () => kind) : null }
 
 export function denOf(e, home) {
-  if (home(e.chunkCx, e.chunkCy)) return chunkMid(e.chunkCx, e.chunkCy)
+  if (e.follower !== true && home(e.chunkCx, e.chunkCy)) return chunkMid(e.chunkCx, e.chunkCy)
   return { x: Math.floor(e.x) + 0.5, y: Math.floor(e.y) + 0.5 }
 }
 

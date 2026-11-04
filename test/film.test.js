@@ -60,6 +60,44 @@ describe('the den', () => {
     const seen = []
     denOf(thing('hound', 30.1, -4.2, 1, -1), (cx, cy) => { seen.push([cx, cy]); return true })
     expect(seen).toEqual([[1, -1]])                       // asked about the chunk it was placed in, not the one it stands in now
+    // one that followed you down (entities.inject marks it) lives nowhere here, even when it came down in a chunk that is another's home
+    const f = { ...thing('hound', 14.2, 9.7, 0, 0), follower: true }
+    const asked = []
+    expect(denOf(f, (cx, cy) => { asked.push([cx, cy]); return true })).toEqual({ x: 14.5, y: 9.5 })
+    expect(asked).toEqual([])
+  })
+  it('on a real floor: a thing that followed you down into a chunk where another lives is pinned where you caught it, not at that one\'s den', () => {
+    for (const lvl of [1, 2, 3]) {
+      const cfg = levelConfig(DEFAULT_CONFIG, lvl)
+      const cache = createChunkCache(cfg, null)
+      const isWall = (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy)
+      const grid = createGridReader(cache, isWall)
+      let found = 0
+      for (let k = 0; k < 400 && found < 3; k++) {
+        const pcx = (k % 20) * 3, pcy = Math.floor(k / 20) * 3
+        grid.setPlayerChunk(pcx, pcy); cache.preload(pcx, pcy)
+        const sys = createEntitySystem(cfg, isWall, { grid, seed: 12345 })
+        const nearX = pcx * CHUNK_SIZE + 11.5, nearY = pcy * CHUNK_SIZE + 11.5
+        if (!grid.floor(Math.floor(nearX), Math.floor(nearY))) continue
+        if (!sys.inject([{ type: 'stalker', variant: 'hound' }], nearX, nearY, 7, 10, 0)) continue
+        sys.update(0, { x: nearX, y: nearY, angle: 0 }, pcx, pcy)              // it arrives (no delay)
+        const f = sys.getEntities().find((e) => e.follower === true)
+        if (!f || !sys.isSpawnChunk(f.chunkCx, f.chunkCy)) continue             // only the case at issue: it came down in a home chunk
+        let v = null
+        for (let j = 0; j < 64 && !v; j++) {
+          const a = j / 64 * Math.PI * 2, r = 2.5 + (j % 5) * 0.5
+          const x = Math.floor(f.x + Math.cos(a) * r) + 0.5, y = Math.floor(f.y + Math.sin(a) * r) + 0.5
+          if (grid.floor(Math.floor(x), Math.floor(y)) && lineOfSight(x, y, f.x, f.y, grid.floor) && Math.hypot(f.x - x, f.y - y) <= DEN_RANGE) v = { x, y, angle: Math.atan2(f.y - y, f.x - x) }
+        }
+        if (!v) continue
+        const d = createFilm().develop(v, [f], opts({ los: losOn(grid.floor), home: (cx, cy) => sys.isSpawnChunk(cx, cy) }))
+        expect(d).not.toBeNull()
+        expect({ x: d.x, y: d.y }, `L${lvl} ${f.x},${f.y}`).toEqual({ x: Math.floor(f.x) + 0.5, y: Math.floor(f.y) + 0.5 })
+        expect(d.key).toBe(`den:${Math.floor(f.x)},${Math.floor(f.y)}`)
+        found++
+      }
+      expect(found, `L${lvl}`).toBeGreaterThan(0)
+    }
   })
   it('on a real floor: a spawned creature\'s den is its spawn chunk\'s hall crossing, open floor, a chunk that rolls a creature', () => {
     const cfg = levelConfig(DEFAULT_CONFIG, 1)
@@ -84,6 +122,7 @@ describe('the den', () => {
         const d = film.develop(v, [e], opts({ los: losOn(grid.floor), home: (cx, cy) => sys.isSpawnChunk(cx, cy) }))
         expect(d, JSON.stringify([e.x, e.y, e.variant])).not.toBeNull()
         expect(sys.isSpawnChunk(e.chunkCx, e.chunkCy)).toBe(true)
+        expect(e.follower).toBe(false)                    // the floor's own: it lives here
         expect({ x: d.x, y: d.y }).toEqual(chunkMid(e.chunkCx, e.chunkCy))
         expect(grid.floor(Math.floor(d.x), Math.floor(d.y))).toBe(true)
         expect([d.kind, d.line, d.key]).toEqual([e.variant, denLine(e.variant), `den:${Math.floor(d.x)},${Math.floor(d.y)}`])
