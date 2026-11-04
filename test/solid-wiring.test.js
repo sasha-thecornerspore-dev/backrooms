@@ -31,7 +31,8 @@ describe('game.js: buildLevel order (cache -> grid -> bodies -> decor(hooks) -> 
     const gfx = at('const gfx       = makeGfx(cfg, cache)')
     expect(cache).toBeLessThan(grid); expect(grid).toBeLessThan(bodies); expect(bodies).toBeLessThan(decor)
     expect(decor).toBeLessThan(solid); expect(solid).toBeLessThan(ents); expect(ents).toBeLessThan(gfx)
-    expect(game).toMatch(/onChunk: \(k, bundle\) => bodies\.setChunk\(k, bundle\.colliders\),\r?\n\s*onEvict: \(k\) => bodies\.dropChunk\(k\),/)
+    // (floor feelings: the passage marks the chunk's drawers and chairs after the colliders are set, feelings-wiring)
+    expect(game).toMatch(/onChunk: \(k, bundle\) => \{ bodies\.setChunk\(k, bundle\.colliders\); markPassage\(bundle\.props, feel, searchLog\) \},\r?\n\s*onEvict: \(k\) => bodies\.dropChunk\(k\),/)
     expect(game).toMatch(/level = \{ index, cfg, cache, grid, bodies, decor, solid, entitySys, gfx, messages \}/)
   })
   it('the contact sets are level-scoped (cleared next to the frame\'s vendedSet, which levelmem now hands out) and the passes run in the fixed order', () => {

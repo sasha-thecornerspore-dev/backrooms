@@ -37,6 +37,14 @@ describe('validateWorld', () => {
     for (const docket of bad) expect(validateWorld({ ...shipped(), docket })).toEqual({ ok: false, reason: DOCKET_BAD })
   })
 
+  it('the kill switch for the floor feelings is true or false (or absent); anything else is refused', () => {
+    expect(validateWorld({ ...shipped(), feelings: false })).toEqual({ ok: true })
+    expect(validateWorld({ ...shipped(), feelings: true })).toEqual({ ok: true })
+    const { feelings: _f, ...without } = shipped()
+    expect(validateWorld(without)).toEqual({ ok: true })
+    for (const feelings of ['false', 0, 1, null, {}, []]) expect(validateWorld({ ...shipped(), feelings })).toEqual({ ok: false, reason: 'feelings must be true or false' })
+  })
+
   it('accepts real counts', () => {
     const d = zeros(); d['2'].extension = 14; d['0'].compliance = 3
     expect(validateWorld({ ...shipped(), docket: d })).toEqual({ ok: true })

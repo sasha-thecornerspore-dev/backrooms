@@ -44,7 +44,8 @@ describe('game.js: one aiCtx object, mutated per frame, handed to one update', (
     expect(game.indexOf('const aiCtx = ')).toBeLessThan(game.indexOf('function loop(ts) {'))
   })
   it('every frame writes the live fields in place (no fresh object) and the lures only when the items changed or 0.5 s passed', () => {
-    expect(game).toMatch(/aiCtx\.flashlight = flashlight; aiCtx\.sprinting = moved && wantSprint; aiCtx\.dark = !cfg\.lights; aiCtx\.fog = cfg\.fogDistance/)
+    // (floor feelings: the things see by the floor's own light, kept on the level before a dark visit's overlay, feelings-wiring)
+    expect(game).toMatch(/aiCtx\.flashlight = flashlight; aiCtx\.sprinting = moved && wantSprint; aiCtx\.dark = level\.dark; aiCtx\.fog = cfg\.fogDistance/)
     expect(game).toMatch(/aiCtx\.radioOn = itemSys\.isRadioOn\(\); aiCtx\.t = playT; aiCtx\.playerAngle = player\.angle; aiCtx\.damage = cfg\.entities\?\.damage \?\? 16/)
     // fight-verbs reads isDirty() ONCE per frame (the read clears it) and shares it between the lures and the (floors) memory write
     expect(game).toMatch(/const itemsDirty = itemSys\.isDirty\(\)/)

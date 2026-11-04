@@ -185,6 +185,8 @@ descend and the world changes around you: the palette, the fog, the clutter, the
 
 **the floors remember.** what you took stays taken, the drawers you searched stay searched, what you set down lies where you left it, and an emptied machine clunks again only after you have been away a while — never while you watch. *the machine has been refilled. by whom.* come back and the floor says so: *you have been on this floor before.*
 
+**some visits feel different.** now and then a floor is not quite as you left it, for that visit only, and says so once: *the lights are out here.* (the panels dark, a few lamps still burning, your own light matters), *it is very quiet.* (the hum a little lower, the building's moods and murmurs further apart), *someone came through here before you.* (some drawers already searched, chairs moved). about one arrival in three, never the same way two visits running, never your first time in the lobby, never on the block and never in a shared room.
+
 **when something finally has you,** you do not wake where you fell in: you wake a floor above, beside the hole you fell through, lighter — whatever was in your hand is gone, your body's ceiling a little lower — the hp bar never quite fills again — the trays empty until you move on. on the lobby you wake where you are. every floor you reach for the first time gives a little of the ceiling back. online, with a friend on your floor, you may go [down instead](#multiplayer).
 
 ---
@@ -494,6 +496,8 @@ the browser build is a flat copy of `src/` for the site's `/play/`, `world.json`
 PLAY_SW_VERSION=<n> bash tools/build-play.sh src <gh-pages>/play          # the site's /play/ (PLAY_TARGET=site, the default)
 bash tools/build-itch.sh src dist/backrooms-web-<version>.zip               # the same bundle as a zip for itch.io, game jolt, newgrounds
 ```
+
+**the floor feelings' switch.** `world.json` ships `"feelings": true`. set it to `false` and no floor feels different on any visit: the browser follows on the next site deploy (world.json is fetched network-first), the desktop app with its next release. `node tools/validate-world.mjs` refuses anything but `true` or `false`.
 
 bump `<n>` on every site rebuild so installed copies fetch the new one (the site now ships 22; the next rebuild is 23). there is no default: the site target refuses to build without it, so a rebuild can never repeat a cache name by accident. the site target adds the GoatCounter tag (`GOATCOUNTER_CODE`, default `backrooms`, counting at `https://backrooms.goatcounter.com/count` with the path pinned to `/play/`) behind a line that takes `room` and `anchor` out of the address first, and a service worker. `build-itch.sh` runs the same script with `PLAY_TARGET=itch` — no counter, no service worker — and checks the zip before it writes it: `index.html` at the root, at most 1000 files, no path over 240 characters, no absolute paths, no `goatcounter`, no token, no `build-config.json`. both bundles carry `LICENSE` and `LICENSE-LORE.md`.
 

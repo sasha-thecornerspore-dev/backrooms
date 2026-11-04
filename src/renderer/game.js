@@ -5,7 +5,7 @@ import { createEntitySystem } from './entities.js'
 import { createItemSystem, KEPT } from './items.js'
 import { createDecorSystem } from './decor.js'
 import { createRenderer } from './renderer.js'
-import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, step, pickup, paper, panelsOut, call, STEP_MATERIAL, STEP_GAIN, CALL_LEN, drawerSlide, whistle, bump } from './audio.js'
+import { initAudio, setFlicker, setRadio, setMusic, setMood, setMusicEnabled, setMusicVolume, setAmbience, setAmbienceVolume, setHum, blip, heartbeat, whisper, wardPulse, doorSlam, footfall, humDuck, step, pickup, paper, panelsOut, call, STEP_MATERIAL, STEP_GAIN, CALL_LEN, drawerSlide, whistle, bump } from './audio.js'
 import { getPref, setPref, onPrefChange } from './prefs.js'
 import { readDeviceEnv, createQualityDirector, createFramePacer, createFlickerState, stepFlicker, flashFor, flashWait, noteFlash, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
 import { statsEnabled, createStatsOverlay } from './gfx-stats.js'
@@ -35,6 +35,7 @@ import { TELL, SEEN_TELL, DREAD_CLOCK, dreadFrom, dreadNear, createTeller } from
 import { createPathField } from './pathfield.js'
 import { PRESENCE_HUSH_S, FIRST_NOTE, createFirstRun, noteRecord } from './firstrun.js'
 import { createPlateBudget, arrivalPlate } from './plates.js'
+import { feelingFor, applyFeeling, markPassage, FEEL } from './feelings.js'
 import { lineOfSight, inViewCone } from './raycaster.js'
 import { dressPass } from './dress.js'
 import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, createSearchLog, searchingHint, NOT_NOW_LINE, SEARCHED_HINT } from './containers.js'
@@ -580,6 +581,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     spawnChunk  = at ?? { cx: 0, cy: 0 }
     lobbyFirst  = index === 0 && !mem.get(0)?.visits   // read before mem.arrive counts this arrival (a resume imports the memory first)
     firstRun.onLevel(index)         // the thread listens on the lobby, waits on the block, and lapses for good on any floor below
+    // the floor's feeling for this visit (feelings.js): the lights out, a quiet, or someone come through first. A roll of the world seed,
+    // the floor and the visit with this arrival counted (the session's first build is the boot's: a fresh start's, no visit counted yet and
+    // never felt, or a resume's, whose visit is counted already); never on the block, in a room, on the lobby's first visit or while its
+    // thread runs, with the kill switch off, nor the same twice running. The dark is laid over the cfg here, before anything reads it (the
+    // lights, the lighting recipe, the murmurs that would say the lights are on); the things go on seeing by the floor's own light
+    const dark  = !cfg.lights
+    const feel  = feelingFor({ seed: worldSeed, level: index, visit: (mem.get(index)?.visits ?? 0) + (level ? 1 : 0), room: !!mpClient, thread: firstRun.on(), on: cfg.feelings })
+    applyFeeling(cfg, feel)
     // HUD theme hook: index.html restyles body[data-level] ('0'..'3' | '∅') — light ink on dark plates below the lobby
     if (typeof document !== 'undefined' && document.body) document.body.dataset.level = String(cfg.levelIndex)
     // Level ∅ is a hand-authored fixed grid; the rest are procedural chunk worlds.
@@ -598,9 +607,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const decor     = createDecorSystem(cfg, isWall, worldSeed, {
       // the passes after the sights block, in the fixed order: the stairs up / the lift (topology.js; null on L0 and the block), the
       // room dressing (dress.js; null on the block), then the hauntings (haunts.js; AFTER the dressing, so its ctx.props sees the cabinets),
-      // and on the first run's lobby its note (placing nothing else, drawing on no stream)
+      // and on the first run's lobby its note (placing nothing else, drawing on no stream). As each chunk comes in, on a visit someone came
+      // through first, the drawers they searched are marked in this visit's log (never levelmem's: the floor does not remember a stranger's
+      // search) and the chairs they moved are turned where they stand (feelings.js markPassage; nothing on any other visit)
       passes: cfg.map ? [] : [stairsPass(cfg, cfg.ways), dressPass(cfg), hauntsPass(cfg), index === 0 && firstRun.on() ? firstNotePass : null].filter(Boolean),
-      onChunk: (k, bundle) => bodies.setChunk(k, bundle.colliders),
+      onChunk: (k, bundle) => { bodies.setChunk(k, bundle.colliders); markPassage(bundle.props, feel, searchLog) },
       onEvict: (k) => bodies.dropChunk(k),
     })
     const solid     = createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature })
@@ -662,6 +673,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // the floor's depth (∅ reads as 0), its file's standing (the tray, the radio's roll call) and what the room's files make of it now (the
     // tension, the far crosser's thinness, the stand's floor: re-read when the room changes); the literal above gains nothing
     level.depth = depthOf(index); level.st = st; level.amb = ambientMods(st, bus ? bus.roomStanding() : null); retension()
+    // the visit's feeling (its line is said by the arrival: a travel, a wake that built the floor, a resume) and the floor's own dark, which
+    // the things see by; a quiet spreads the floor's events (events.js spacing) and its murmurs (the loop) and lowers the hum, which every
+    // other floor glides home again (setHum(1, 1): its level as it always was)
+    level.feel = feel; level.dark = dark; evConfig.spacing = feel.events; setHum(1, feel.hum, FEEL.humS)
     // Morph the bed into this level's mood — unless the player has chosen an
     // alternate track with N, in which case their choice follows them down.
     playSong(trackIdx < 0 ? cfg.music : TRACKS[trackIdx].mood)
@@ -775,6 +790,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if (s) later(ringBack ? 7500 : 3800, s, PRIO.discovery, false)
         if (wm) later(ringBack ? 3800 : 7500, wm, PRIO.discovery, false)
       }
+      // the floor's feeling, said once (feelings.js): on a floor you come back to it is the arrival's second plate, ahead of the summary and
+      // the ring's own line (let go then); on a first visit, and on the way that files you, it comes after every line the arrival says of its
+      // own (the hint, the filing, the way you came), so it only takes a plate they leave free. Held back, it is let go: the feeling holds
+      if (level.feel.line) later(first || filing ? FEEL.afterMs : FEEL.aheadMs, level.feel.line, PRIO.discovery, false)
       if (player.maxHp > hp0) later(11000, 'the floor remembers you less.', PRIO.discovery)
       // a new floor sets you down beside the pin's drift origin again (buildLevel resets spawnX / spawnY): a mercy, said once per descent
       if (origin === 'anchored') later(9500, MERCY_LINE, PRIO.discovery)
@@ -799,6 +818,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     mem.setDropped(level.index, itemSys.getDropped())
     fadeThen(() => {
       const r = resolveDeath({ level: level.index, inventory: itemSys.inventory, selected: itemSys.selected, maxHp: player.maxHp, deaths, names: ITEM_NAMES })
+      const rebuilt = r.wakeLevel !== level.index
       if (r.wakeLevel !== level.index) buildLevel(r.wakeLevel, C)
       const mid = chunkMid(C.cx, C.cy)
       // the line says the hole you fell through: the nearest loaded hole first, any way only when no hole is loaded
@@ -838,6 +858,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       later(2600, r.message, PRIO.discovery)
       if (r.dropped) later(5200, r.droppedLine, PRIO.discovery)
       if (d?.line) later(7800, d.line, PRIO.discovery)   // the column's word on it ('nobody came.' first when nobody did); LEGACY has none
+      // the floor's feeling, when the wake built the floor (a wake where you fell keeps the visit's, said already): after the wake's own
+      // lines, so it only takes a plate they leave free, else it is let go
+      if (rebuilt && level.feel.line) later(FEEL.afterMs, level.feel.line, PRIO.discovery, false)
       bus?.here(hereFields())           // woken a floor above: the room learns it at once
     })
   }
@@ -2241,6 +2264,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // on the first run's lobby it waits with the faint pull, and the frame says it then; a resume before the soul has spoken waits the same
   // (the murmurs leave it out meanwhile), and a resume otherwise is not a first visit: nothing
   if (level.cfg.exit?.hint) { if (freshLobby() && !firstRun.unlocked()) hintHeld = true; else if (!resume) later(3800, level.cfg.exit.hint, PRIO.discovery) }
+  // a resumed visit's feeling, a few seconds after the floor's name (a fresh start's visit is never felt: the lobby's first, or the block)
+  if (level.feel.line) later(FEEL.aheadMs, level.feel.line, PRIO.discovery, false)
   // the room's frames reach the bus only now, with a floor to lay a cache on: what came before (the relay's kept caches, replayed straight
   // after welcome while the world was still loading) the client held, and hands over on the next tick
   if (bus) mpClient.onEv(bus.receive)
@@ -2510,9 +2535,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const fogMul = fogTimer > 0 ? 1.6 : 1
 
     // ── atmospheric messages: a floor murmur through the plate budget, let go when it is held back (the next comes soon enough); the
-    //    lobby's exit hint is not drawn while the first run holds it. The block draws by its coin, as it did (the hold) ──
+    //    lobby's exit hint is not drawn while the first run holds it. The block draws by its coin, as it did (the hold). A quiet floor's
+    //    murmurs come further apart (feelings.js: the visit's multiplier, 1 on every other visit) ──
     msgTimer += dt
-    if (msgTimer >= msgNext) {
+    if (msgTimer >= msgNext * level.feel.murmurs) {
       msgTimer = 0
       msgNext  = base.messageInterval[0] + Math.random() * (base.messageInterval[1] - base.messageInterval[0])
       const murmur = cfg.map ? level.messages[Math.floor(Math.random() * level.messages.length)] : level.messages[murmurBag.next()]
@@ -2864,7 +2890,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // ── the things: what they know about you this frame, then one update; the threat record it returns drives contact damage, the
     //    heartbeat and sanity (no second pass over the list). Creatures can be switched off entirely (pure liminal exploration;
     //    creaturesOn was read at the top of the frame): the record is then reset, so everything below reads zero. ──
-    aiCtx.flashlight = flashlight; aiCtx.sprinting = moved && wantSprint; aiCtx.dark = !cfg.lights; aiCtx.fog = cfg.fogDistance
+    aiCtx.flashlight = flashlight; aiCtx.sprinting = moved && wantSprint; aiCtx.dark = level.dark; aiCtx.fog = cfg.fogDistance
     aiCtx.radioOn = itemSys.isRadioOn(); aiCtx.t = playT; aiCtx.playerAngle = player.angle; aiCtx.damage = cfg.entities?.damage ?? 16
     // (aiCtx.lures was refreshed above, with the dropped things' clocks)
     // the file's reading of you (compose-perception.js over rules.perception): the four numbers copied onto aiCtx, never the object — LEGACY's

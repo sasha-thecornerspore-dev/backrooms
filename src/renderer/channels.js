@@ -24,4 +24,7 @@ export const CHANNELS = Object.freeze({
   // the first-run thread (firstrun.js): its note lies at an authored cell of the fixed lobby and draws nothing today; the stream is its
   // own so anything the thread ever hashes (a jittered paper, a seeded thread) can never borrow another pass's
   firstrun:      C({ gate: [6719, 2861], rng: [1103, 59, 863, 47] }),
+  // a floor's feeling for one visit (feelings.js): gate = whether the visit feels, pick = which feeling, rng = the passer's hand (which
+  // drawers someone searched before you, which chairs they moved). Keyed by the floor and the visit (and a prop's key), never by a chunk
+  feelings:      C({ gate: [6543, 7142], pick: [8270, 8596], rng: [1129, 71, 811, 37] }),
 })

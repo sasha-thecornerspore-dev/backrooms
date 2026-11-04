@@ -37,6 +37,7 @@ import { BLOCK, LOBBY, waysFor, stairsPass, chunkMid, findOpenNear, wayMessage }
 import { SCRAPS } from '../src/renderer/scraps.js'
 import { litOffLine } from '../src/renderer/lightshare.js'
 import { quiet, QUIET_SECONDS } from '../src/renderer/tactics.js'
+import { FEEL, NO_FEELING } from '../src/renderer/feelings.js'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8')
 const game = read('../src/renderer/game.js')
@@ -808,9 +809,12 @@ describe('T1-4: the plate budget, and the plates that go', () => {
     expect(t).toContain('if (wm) later(7500, wm, PRIO.discovery, false)')
     expect(t).toContain('if (s) later(ringBack ? 7500 : 3800, s, PRIO.discovery, false)')
     expect(t).toContain('if (wm) later(ringBack ? 3800 : 7500, wm, PRIO.discovery, false)')
-    // what stays true when it is read late is kept: the hint, the filing line, the raised ceiling, the mercy line, and the wake's lines
-    expect((t.match(/later\([^\n]*, false\)/g) || []).length).toBe(3)
-    expect(slice('function die(d = null) {', '// ── input ──')).not.toMatch(/later\([^\n]*, false\)/)
+    // what stays true when it is read late is kept: the hint, the filing line, the raised ceiling, the mercy line, and the wake's lines.
+    // (floor feelings: the feeling's line is the arrival's too, and let go when held back: the one let-go line a wake has)
+    expect((t.match(/later\([^\n]*, false\)/g) || []).length).toBe(4)
+    expect(t).toContain('if (level.feel.line) later(first || filing ? FEEL.afterMs : FEEL.aheadMs, level.feel.line, PRIO.discovery, false)')
+    const dieLetGo = slice('function die(d = null) {', '// ── input ──').match(/later\([^\n]*, false\)/g) || []
+    expect(dieLetGo).toEqual(['later(FEEL.afterMs, level.feel.line, PRIO.discovery, false)'])
     const { h, said, run } = arrival()
     h.startVisit()
     h.plate('floor', 'the floor.', PRIO.combat)
@@ -1288,10 +1292,11 @@ describe('review batch five, two: the wake, the filing and the floor you come ba
   const R = { message: 'you wake beside the hole you fell through.', dropped: 'almond-water', droppedLine: 'your hands opened.' }
 
   // die()'s lines from startVisit() on: the floor's plate, then the wake's three
+  // (floor feelings: the level carries its visit's feeling, none here — feelings-wiring replays the wake and the travel with one)
   const wake = ({ cfg = L(LOBBY), first = true, r = R, d = { line: 'nobody came.' } } = {}) => {
     const { h, said, run } = arrival({ cfg })
-    new Function('startVisit', 'plate', 'later', 'arrivalPlate', 'level', 'first', 'r', 'd', 'PRIO', WAKE)(
-      h.startVisit, h.plate, h.later, arrivalPlate, { cfg }, first, r, d, PRIO)
+    new Function('startVisit', 'plate', 'later', 'arrivalPlate', 'level', 'first', 'r', 'd', 'PRIO', 'rebuilt', 'FEEL', WAKE)(
+      h.startVisit, h.plate, h.later, arrivalPlate, { cfg, feel: NO_FEELING }, first, r, d, PRIO, true, FEEL)
     return { h, said, run }
   }
   // travel()'s lines from startVisit() on (the hint, the way line, the summary, the raised ceiling, the mercy line), and the filing line
@@ -1302,11 +1307,11 @@ describe('review batch five, two: the wake, the filing and the floor you come ba
     const cfg = L(index)
     const { h, said, run } = arrival({ cfg })
     const out = new Function('startVisit', 'plate', 'later', 'arrivalPlate', 'level', 'first', 'filing', 'followed', 'freshLobby', 'way', 'wayMessage',
-      'partner', 'mem', 'fog', 'arrivalSummary', 'rec', 'player', 'hp0', 'origin', 'thin', 'filingLine', 'MERCY_LINE', 'PRIO',
+      'partner', 'mem', 'fog', 'arrivalSummary', 'rec', 'player', 'hp0', 'origin', 'thin', 'filingLine', 'MERCY_LINE', 'PRIO', 'FEEL',
       `let hintHeld = false\nif (filing) ${FILE}\n${TAIL}\nreturn { hintHeld }`)(
-      h.startVisit, h.plate, h.later, arrivalPlate, { index, cfg }, first, filing, followed, () => fresh, way,
+      h.startVisit, h.plate, h.later, arrivalPlate, { index, cfg, feel: NO_FEELING }, first, filing, followed, () => fresh, way,
       wayMsg, null, { get: () => memRec }, { countWays: () => ({ down, up: 0, lift: 0, ring: 0 }) }, arrivalSummary, { visits },
-      { maxHp: first ? 105 : 100 }, 100, origin, false, filingLine, 'the mercy.', PRIO)
+      { maxHp: first ? 105 : 100 }, 100, origin, false, filingLine, 'the mercy.', PRIO, FEEL)
     return { h, said, run, out }
   }
 

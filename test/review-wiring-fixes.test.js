@@ -211,8 +211,8 @@ describe('FEEL-1 / FEEL-4: an arrival\'s delayed lines belong to that arrival', 
     expect(travelBody).toMatch(/transitioning = true\r?\n\s*arrivalGen\+\+/)
     expect(dieBody).toMatch(/transitioning = true\r?\n\s*arrivalGen\+\+/)
     for (const b of [travelBody, dieBody]) expect(b).not.toMatch(/setTimeout\(\(\) => showMessage/)
-    expect((travelBody.match(/later\(/g) || []).length).toBe(7)                    // + the filing line and the anchored mercy line (origins, I5)
-    expect((dieBody.match(/later\(/g) || []).length).toBe(3)                       // + the death decision's own line at 7800 ms (I9)
+    expect((travelBody.match(/later\(/g) || []).length).toBe(8)                    // + the filing line and the anchored mercy line (origins, I5), the floor's feeling
+    expect((dieBody.match(/later\(/g) || []).length).toBe(4)                       // + the death decision's own line at 7800 ms (I9), the floor's feeling
   })
   it('later() drops a line when a newer arrival has begun (replayed from game.js\'s own source)', () => {
     const src = game.match(/function later\(ms, text, prio, keep = true\) \{[^\n]*\}/)[0]
