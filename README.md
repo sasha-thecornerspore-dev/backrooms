@@ -185,7 +185,7 @@ descend and the world changes around you: the palette, the fog, the clutter, the
 
 **the floors remember.** what you took stays taken, the drawers you searched stay searched, what you set down lies where you left it, and an emptied machine clunks again only after you have been away a while — never while you watch. *the machine has been refilled. by whom.* come back by a hole, a stairwell or the lift and the floor says so: *you have been on this floor before.* climb out and the lobby says so in its own way: *the carpet remembers you.*
 
-**when something finally has you,** you do not wake where you fell in: you wake a floor above, beside the hole you fell through, lighter — whatever was in your hand is gone, your body's ceiling a little lower — the hp bar never quite fills again — the trays empty until you move on. on the lobby you wake where you are. every floor you reach for the first time gives a little of the ceiling back. online, with a friend on your floor, you may go [down instead](#multiplayer).
+**when something finally has you,** you do not wake where you fell in: you wake a floor above, beside the hole you fell through, lighter — whatever was in your hand is gone, your body's ceiling a little lower — the hp bar never quite fills again — the trays empty until you move on. on the lobby you wake where you are. every floor you first reach by a way gives a little of the ceiling back (one you first wake on does not). online, with a friend on your floor, you may go [down instead](#multiplayer).
 
 ---
 

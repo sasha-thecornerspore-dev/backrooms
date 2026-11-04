@@ -165,6 +165,31 @@ describe('the compass, the first minute and the lines the budget lets go', () =>
     expect(manual).toContain('It keeps quiet while something is hunting you, and while an unread page lies within reach')
     expect(manual).toContain('A floor plan from a <a href="#drawers">drawer</a> can mark one thing you have not seen yet.')
   })
+  // (review batch six) the wake's lines are its arrival's plates (game.js die; pulse-wiring replays every wake): on a floor you know no
+  // name, where you woke at 2.6 s and what your hands let go at 5.2 s; on a floor new to you its own line and where you woke, what your
+  // hands let go after the window; the third after the window, all of it lost to a way taken first. If the wake's order or its plates
+  // change, change these sentences with it
+  it('the docs say what a wake says and when, and no doc promises what your hands let go at once', () => {
+    const notes = read('docs/release-notes/v2.0.4.md')
+    expect(notes).not.toContain('told at once what your hands let go')
+    expect(notes).toContain('when you wake from a death, where you woke comes a few seconds in (after the floor\'s own line, on a floor new to you), and on a floor you know, what your hands let go comes next; the rest waits until the floor has settled, and goes unsaid if you take a way first.')
+    expect(manual).toContain('Waking from a death is an arrival too: on a floor you know it does not say its name (the level plate has it), only where you woke and then what your hands let go, or the file\'s word on your death if they held nothing; on a floor new to you, its line, then where you woke.')
+    expect(manual).toContain('Anything else waits until the floor has settled, about three quarters of a minute, or is let go; what waits goes unsaid if you take a way first.')
+    expect(manual).not.toContain('Anything else waits until later, or is let go.')
+    expect(manual).toContain('<li>Waking is an arrival: the floor says little at first, and the rest of what the death has to say waits. See <a href="#speaking">the building speaking</a>.</li>')
+    expect(manual).toContain('<h3 id="speaking">The building speaking</h3>')
+  })
+  // (review batch six, old since 2.0.3) a wake never gives the ceiling back (game.js die calls mem.arrive, not onArrive), and it counts
+  // the floor as set foot on, so a floor first reached by waking never gives it back. If die() ever calls onArrive, turn this round
+  it('both docs say only a floor first reached by a way gives the ceiling back, not one you first wake on', () => {
+    expect(manual).not.toContain('Every floor you set foot on for the first time gives some of it back.')
+    expect(manual).toContain('Every floor you first reach by a way gives some of it back; one you first wake on does not.')
+    expect(readme).not.toContain('every floor you reach for the first time gives a little of the ceiling back.')
+    expect(readme).toContain('every floor you first reach by a way gives a little of the ceiling back (one you first wake on does not).')
+    const game = read('src/renderer/game.js'), die = game.slice(game.indexOf('function die(d = null) {'), game.indexOf('// ── input ──'))
+    expect(die).not.toContain('onArrive(')
+    expect(die).toContain('const first = mem.arrive(level.index, spawnChunk, playT).visits === 1')
+  })
 })
 
 // The draft comment at the top of a version's notes is the owner's to delete when they are ready to publish, so nothing here asks for
