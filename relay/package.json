@@ -2,8 +2,11 @@
   "name": "backrooms-relay",
   "private": true,
   "type": "module",
-  "description": "The relay's deploy tool, pinned. The worker itself imports nothing from npm (only its own files, six from src/, and cloudflare:workers); this file exists so CI installs one exact wrangler from a lockfile, with no install scripts, before the Cloudflare token is in the environment.",
+  "description": "The relay's deploy tool, pinned. The worker itself imports nothing from npm (only its own files, six from src/, and cloudflare:workers); this file exists so CI installs one exact wrangler from a lockfile, with no install scripts, before the Cloudflare token is in the environment. The undici override clears Dependabot alert 104 (GHSA-4qv8-2p9j-2685 and others, fixed in 7.30.1) while wrangler stays on 4.149.0; drop it when wrangler moves to 4.157.0 or later, once that release is a week old.",
   "devDependencies": {
     "wrangler": "4.149.0"
+  },
+  "overrides": {
+    "undici": "7.30.1"
   }
 }
