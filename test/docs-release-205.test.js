@@ -22,6 +22,11 @@ describe('the 2.0.5 release notes', () => {
     expect(notes).toContain(`*${denLine('hound')}*`)
     for (const b of SITUATIONAL) expect(notes, b.label).toContain(`**${b.label}**`)
   })
+  it('say when a feeling\'s line is not said, and that the radio does not hear what is already after you', () => {
+    expect(notes).toContain('climbing out to the lobby it is said in place of *the carpet remembers you.*, and coming down in the lift there is no room for it: the feeling holds, unsaid.')
+    expect(notes).toContain('once something is coming for you the hiss does not die down, but it no longer rises for that thing, and one that followed you down brings none.')
+    expect(notes).not.toContain('once something is coming for you it does not die down.')
+  })
   it('say what a room and an old save see: nothing new on the wire, the feelings and the learning off in a room, a 2.0.4 save going on', () => {
     expect(notes).toContain('## the backrooms 2.0.5')
     expect(notes).toContain('### update together')

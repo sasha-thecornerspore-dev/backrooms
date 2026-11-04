@@ -152,7 +152,8 @@ describe('the compass, the first minute and the lines the budget lets go', () =>
   it('the manual\'s ways table quotes the ring\'s own line, which climbing out to the lobby says', () => {
     const ring = wayMessage({ kind: 'ring', target: 0 }, { mem: { x: 0, y: 0 } })
     expect(ring).toBe('the carpet remembers you.')
-    expect(manual).toContain(`<tr><td class="k">f · climb out — level 0</td><td data-label="from">3</td><td data-label="what it does">back to the lobby — <i>${ring}</i></td></tr>`)
+    // (2.0.5: on a visit the lobby feels different, its feeling takes that plate, and the row says so; docs-feelings pins the note)
+    expect(manual).toContain(`<tr><td class="k">f · climb out — level 0</td><td data-label="from">3</td><td data-label="what it does">back to the lobby — <i>${ring}</i> (on a visit the lobby <a href="#feelings">feels different</a>, its feeling is said instead)</td></tr>`)
   })
   it('the manual says the flashlight speaks once a run below the block, the presence keeps quiet while hunted or by an unread page, and a floor plan marks the map', () => {
     expect(manual).toContain('On the four floors below the block it says so once a run; after that only the light changes.')

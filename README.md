@@ -83,9 +83,9 @@ it is the same game everywhere, with fewer reaches outside the desktop app.
 |---|---|---|---|
 | look | click the view to grab the mouse | the same | drag anywhere on the view |
 | move | wasd or the arrow keys | the same | the left thumb-stick |
-| chat and the field console | **enter** | **enter** | needs a keyboard |
+| chat and the field console | **enter** | **enter** | the **TYPE** button |
 | wishes | posted, and a person reads each one | the same | the same |
-| the beacon | fires | stays quiet | no button |
+| the beacon | fires | stays quiet | the **BEACON** button, once one is set; stays quiet |
 | photographs | saved to `Pictures/backrooms/` | the caption only | the caption only |
 | an invite link | copied, opens in any browser | copied | the share sheet |
 | host lan · join lan | starts a server · joins one | not offered (an https page cannot reach your network) | not offered |
@@ -185,7 +185,7 @@ descend and the world changes around you: the palette, the fog, the clutter, the
 
 **the floors remember.** what you took stays taken, the drawers you searched stay searched, what you set down lies where you left it, and an emptied machine clunks again only after you have been away a while — never while you watch. *the machine has been refilled. by whom.* come back and the floor says so: *you have been on this floor before.*
 
-**some visits feel different.** now and then a floor is not quite as you left it, for that visit only, and says so once: *the lights are out here.* (the panels dark, a few lamps still burning, your own light matters), *it is very quiet.* (the hum a little lower, the building's moods and murmurs further apart), *someone came through here before you.* (some drawers already searched, chairs moved). about one arrival in three, never the same way two visits running, never your first time in the lobby, never on the block and never in a shared room.
+**some visits feel different.** now and then a floor is not quite as you left it, for that visit only, and says so once: *the lights are out here.* (the panels dark, a few lamps still burning, your own light matters), *it is very quiet.* (the hum a little lower, the building's moods and murmurs further apart), *someone came through here before you.* (some drawers already searched, and on the lobby some chairs moved). about one arrival in three, never the same way two visits running, never your first time in the lobby, never on the block and never in a shared room.
 
 **when something finally has you,** you do not wake where you fell in: you wake a floor above, beside the hole you fell through, lighter — whatever was in your hand is gone, your body's ceiling a little lower — the hp bar never quite fills again — the trays empty until you move on. on the lobby you wake where you are. every floor you reach for the first time gives a little of the ceiling back. online, with a friend on your floor, you may go [down instead](#multiplayer).
 
@@ -274,7 +274,7 @@ the backrooms restocks itself. things are left lying around; walk close and pres
 | glowstick | pushes the fog back — less the deeper you go. set one down and it is a breadcrumb until *the green light gutters out.* |
 | bandage | patches you up — restores hit points. where things hunt, wrapping it takes a still moment, and a hit makes it slip; you keep it. deeper down it holds better. carry a few before you go deep. |
 | polaroid camera | one shot each. the flash blinds what is in front of you, and the picture steadies you. the caption develops what the frame holds — sometimes more than you aimed at. photograph a lost soul and, faintly, there is a door behind them. catch one of the things close in the frame, with nothing between you, and the film develops it, and its den goes on your map (⌂): where it lives on this floor, once for each kind each time you come to a floor, and on your map only. point it at a friend and the film develops what the file wrote on them, and they will know. the desktop app keeps every shot in `Pictures/backrooms/`. |
-| radio | never used up. while it plays a presence can be found from much farther away — but you cannot hide with it on, and some things see you further. carried and on, it hisses when something is near you through the halls, louder as it closes by the way you would walk (a thing just behind a wall is only as loud as the long way round), and never says which way. set it down still talking and they go to it instead of you. on levels 2 and 3 it reads a list aloud, one group of numbers at a time — the numbers station. |
+| radio | never used up. while it plays a presence can be found from much farther away — but you cannot hide with it on, and some things see you further. carried and on, it hisses when something is near you through the halls, louder as it closes by the way you would walk (a thing just behind a wall is only as loud as the long way round), and never says which way; once a thing is after you the hiss no longer rises for it, and one that followed you down brings none. set it down still talking and they go to it instead of you. on levels 2 and 3 it reads a list aloud, one group of numbers at a time — the numbers station. |
 
 on the deepest floors the machines sometimes give stranger things. these you keep — you cannot put them down, and they are not lost when something has you:
 

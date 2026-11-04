@@ -43,6 +43,13 @@ describe('the README: on a phone or tablet', () => {
     const key = { KeyF: 'f', KeyQ: 'q', Space: 'space', KeyE: 'e', KeyL: 'l', KeyC: 'c', Enter: 'enter', KeyB: 'b' }
     for (const a of [...ACTIONS, ...SITUATIONAL]) expect(touch, a.label).toContain(`**${a.label}** (${key[a.code]}`)
   })
+  it('the platform table: the phone column names TYPE for the chat and the console, BEACON for the beacon (as the manual\'s does)', () => {
+    const table = section(readme, '| | desktop app | browser | phone / tablet |', '\n\n')
+    expect(table).toContain('| chat and the field console | **enter** | **enter** | the **TYPE** button |')
+    expect(table).toContain('| the beacon | fires | stays quiet | the **BEACON** button, once one is set; stays quiet |')
+    expect(table).not.toContain('needs a keyboard')
+    expect(table).not.toContain('no button')
+  })
   it('says when TYPE and BEACON come, and that only the music still needs a keyboard', () => {
     expect(touch).toContain('two more come only when they would do something: **TYPE** (enter) whenever the line can open — the chat in a room, the field console alone — and it brings up your phone\'s keyboard; **BEACON** (b) once a beacon is set in settings.')
     expect(touch).toContain('only the music (**m**, **n**) still needs a keyboard')

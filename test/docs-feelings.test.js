@@ -35,6 +35,12 @@ describe('the manual', () => {
     expect(section).toMatch(/never in a shared room/)
     expect(section).toMatch(/classic shading/)
   })
+  it('says when the line comes and when it does not: after the floor\'s name on a return, in place of the carpet\'s climbing out, none off the lift', () => {
+    expect(section).toContain('On a floor you come back to, the line comes just after the floor\'s name, in place of the line that says you have been there before; climbing out to the lobby, in place of <i>the carpet remembers you.</i>')
+    expect(section).toContain('Coming down in the lift there is no room for it after the lift\'s own line, and on a first visit the floor\'s own hint comes first: then the line may not come at all, though the floor still feels that way.')
+    // the ways table's ring row says the same
+    expect(manual).toContain('back to the lobby — <i>the carpet remembers you.</i> (on a visit the lobby <a href="#feelings">feels different</a>, its feeling is said instead)')
+  })
 })
 
 describe('the README', () => {
@@ -43,6 +49,10 @@ describe('the README', () => {
     for (const id of FEELING_IDS) expect(para, id).toContain(`*${FEELINGS[id].line}*`)
     expect(para).toMatch(/one arrival in three/)
     expect(para).toMatch(/never on the block and never in a shared room/)
+  })
+  it('says the chairs move on the lobby only, as the manual does (the lobby is the only floor with chairs)', () => {
+    expect(para).toContain('(some drawers already searched, and on the lobby some chairs moved)')
+    expect(para).not.toMatch(/searched, chairs moved\)/)
   })
   it('the maintainer notes name world.json\'s switch and what refuses a bad one', () => {
     expect(readme).toContain('`world.json` ships `"feelings": true`')
