@@ -129,19 +129,25 @@ describe('the compass, the first minute and the lines the budget lets go', () =>
     expect(manual).toContain('On the block it points at the gap at once, with its distance.')
     expect(manual).toContain('A presence waits close to where you arrive, and on a solo run without a pin someone has left a note a little way off.')
   })
-  it('a floor speaks its own line the first time and its name after, and says little while you arrive', () => {
+  // (review batch six) a lift ride back to a floor you know puts up no name plate: the lift's own line takes its place (game.js travel;
+  // pulse-wiring replays it)
+  it('a floor speaks its own line the first time and its name after (off the lift, the lift\'s line in its place), and says little while you arrive', () => {
     expect(manual).not.toContain('and the floor below says its name.')
-    expect(manual).toContain('the first time, a line of its own; after that, its name')
-    expect(manual).toContain('When you reach a floor it says little for the first while')
+    expect(manual).toContain('the first time, a line of its own; after that, its name, except off the lift, where the lift\'s own line takes its place (the level plate has the name).')
+    expect(manual).toContain('When you reach a floor it says little for the first while: its line or its name, and one more. Off the lift, on a floor you know, the lift\'s own line takes the name\'s place.')
   })
   // (review batch five) the summary takes an arrival's second plate on a floor you come back to, at 3.8 s, and the filing line takes it
   // on the way that files you (game.js travel): both say themselves a few seconds in again, so both docs promise them again, as they did
-  // before the docs step took them out. If the budget loses either line again, take it out of the docs and turn this guard round
-  it('both docs promise the summary on coming back, and the filing line a few seconds in, not within the first minute', () => {
+  // before the docs step took them out. If the budget loses either line again, take it out of the docs and turn this guard round.
+  // (review batch six) the lift's return says it too now (its name plate gives way), and climbing out says the ring's own line in its
+  // place, so the promise names the ways that keep it, and the lobby's own way (pulse-wiring replays every one)
+  it('both docs promise the summary on coming back by a hole, a stairwell or the lift, and the filing line a few seconds in, not within the first minute', () => {
     const summary = arrivalSummary({ down: 0 }, 2)
+    const ring = wayMessage({ kind: 'ring', target: 0 }, { mem: { x: 0, y: 0 } })
     for (const [k, d] of Object.entries(docs)) expect(d, k).toContain(summary)
-    expect(manual).toContain(`Come back to a floor and it says so: <i>${summary}</i> — and tells you how many ways down are on your map.`)
-    expect(readme).toContain(`come back and the floor says so: *${summary}*`)
+    expect(manual).toContain(`Come back to a floor by a hole, a stairwell or the lift and it says so: <i>${summary}</i> — and tells you how many ways down are on your map. Climb out to the lobby and it says so in its own way: <i>${ring}</i>`)
+    expect(readme).toContain(`come back by a hole, a stairwell or the lift and the floor says so: *${summary}* climb out and the lobby says so in its own way: *${ring}*`)
+    for (const [k, d] of Object.entries(docs)) expect(d, k).not.toMatch(/come back to a floor and it says so|come back and the floor says so/i)
     expect(manual).toContain('a few breaths after the floor has had its say, a line arrives: <i>the file has you now.</i>')
     expect(readme.match(/a few seconds after you land/g)).toHaveLength(2)
     for (const [k, d] of Object.entries(docs)) expect(d, k).not.toContain('within your first minute there')

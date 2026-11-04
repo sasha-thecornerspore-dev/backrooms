@@ -82,9 +82,10 @@ describe('game.js: travel(way) replaces descend', () => {
     expect(body).toMatch(/mem\.leave\(level\.index, player, fromC, playT\)\r?\n\s*mem\.setDropped\(level\.index, itemSys\.getDropped\(\)\)\r?\n\s*fadeThen\(/)
     // the lift's 'before' line is pushed UNDER the veil, after buildLevel's msgQ.clear() (which dropped it when said before the fade), at combat
     // (never queued behind a prompt result) and right before the floor's plate (combat queues FIFO: both read); both are the arrival's
-    // plates (pulse T1-4), once the visit has begun
+    // plates (pulse T1-4), once the visit has begun; on a lift ride back to a floor you know the lift's line takes the name plate's place
+    // (review batch six: the HUD carries the name)
     expect(body).not.toMatch(/before: true \}\), PRIO\.discovery\)/)
-    expect(body).toMatch(/persist\(true\)[^\n]*\r?\n\s*startVisit\(\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(way\.kind === 'lift'\) plate\('arrival', wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)/)
+    expect(body).toMatch(/persist\(true\)[^\n]*\r?\n\s*startVisit\(\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(way\.kind === 'lift'\) plate\('arrival', wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*if \(way\.kind !== 'lift' \|\| first\) plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)/)
     expect(body.indexOf('buildLevel(way.target, fromC)')).toBeLessThan(body.indexOf("{ before: true }"))
     expect(body.indexOf('if (mapOpen) closeMap()')).toBeLessThan(body.indexOf('fadeThen('))
   })

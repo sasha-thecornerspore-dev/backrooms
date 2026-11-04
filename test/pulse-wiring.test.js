@@ -384,7 +384,8 @@ describe('w2: a visit begins', () => {
   })
   it('travel, the wake and the start begin the visit, then say the floor\'s own plate through the budget (the lift\'s line first)', () => {
     const t = slice('function travel(way) {', '// die(): death.js resolves it')
-    expect(t).toMatch(/persist\(true\)[^\n]*\r?\n\s*startVisit\(\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(way\.kind === 'lift'\) plate\('arrival', wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)/)
+    // (review batch six: no name plate on a lift ride back to a floor you know; the lift's line takes its place, the HUD has the name)
+    expect(t).toMatch(/persist\(true\)[^\n]*\r?\n\s*startVisit\(\)\r?\n(\s*\/\/[^\n]*\r?\n)*\s*if \(way\.kind === 'lift'\) plate\('arrival', wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*if \(way\.kind !== 'lift' \|\| first\) plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)/)
     const d = slice('function die(d = null) {', '// ── input ──')
     expect(d).toContain('const first = mem.arrive(level.index, spawnChunk, playT).visits === 1')
     // (review batch five: the wake's plate only on a floor new to you, or on the block as 2.0.3; its lines the arrival's, as they were)
@@ -1402,5 +1403,62 @@ describe('review batch five, two: the wake, the filing and the floor you come ba
     const blank = land({ index: LOBBY, first: false, visits: 3, way: ring, wayMsg: wayMessage, memRec: null })
     blank.run(80)
     expect(blank.said).toEqual([[0, L(LOBBY).levelName], [3.8, arrivalSummary({ down: 2 }, 3)]])
+  })
+})
+
+// ── review batch six: the lift's return says it has been here ─────────────────────────────────────────────────────────────────────
+// the lift's own line (said under the veil, an arrival plate) and the floor's name plate spent a lift return's two plates at 0 s, so
+// 'you have been on this floor before.' was let go on every ride back down to a floor you knew. On a lift return the lift's line takes
+// the name's place (the HUD carries the name, as the wake's does); the first ride is as it was. Replayed with the real budget and the
+// real way lines (topology.js wayMessage), and every way's arrival is held to the window's two plates
+describe('review batch six: a lift ride back to a floor you know says so, and no arrival gains a plate', () => {
+  const travelBody = slice('function travel(way) {', '// die(): death.js resolves it')
+  const TAIL = travelBody.slice(travelBody.indexOf('startVisit()'), travelBody.lastIndexOf('bus?.here(hereFields())'))
+  const FILE = lift(/later\([0-9]+, filingLine\(origin, thin\), PRIO\.discovery\)/)
+  const L = (i) => levelConfig(DEFAULT_CONFIG, i)
+  const LIFT = { kind: 'lift', target: 3 }
+  const BEFORE = wayMessage(LIFT, { before: true })
+  const land = ({ index = 3, first = true, filing = false, followed = 0, fresh = false, visits = first ? 1 : 2, down = 2, origin = 'tenant',
+    way = LIFT, memRec = null, partner = null } = {}) => {
+    const cfg = L(index)
+    const { h, said, run } = arrival({ cfg })
+    new Function('startVisit', 'plate', 'later', 'arrivalPlate', 'level', 'first', 'filing', 'followed', 'freshLobby', 'way', 'wayMessage',
+      'partner', 'mem', 'fog', 'arrivalSummary', 'rec', 'player', 'hp0', 'origin', 'thin', 'filingLine', 'MERCY_LINE', 'PRIO',
+      `let hintHeld = false\nif (filing) ${FILE}\n${TAIL}`)(
+      h.startVisit, h.plate, h.later, arrivalPlate, { index, cfg }, first, filing, followed, () => fresh, way,
+      wayMessage, partner, { get: () => memRec }, { countWays: () => ({ down, up: 0, lift: 0, ring: 0 }) }, arrivalSummary, { visits },
+      { maxHp: first ? 105 : 100 }, 100, origin, false, filingLine, 'the mercy.', PRIO)
+    return { h, said, run }
+  }
+  const unasked = (h) => ({ 12: () => h.plate('murmur', 'a murmur.', PRIO.ambient, false), 20: () => h.plate('event', 'a door.', PRIO.ambient, false),
+    30: () => h.plate('murmur', 'another.', PRIO.ambient, false) })
+
+  it('on a lift return the floor\'s name plate stays off (the HUD has the name): the lift\'s line, then the floor saying so at 3.8 s', () => {
+    for (const visits of [2, 3]) {
+      const { h, said, run } = land({ first: false, visits })
+      run(80, unasked(h))
+      expect(said, String(visits)).toEqual([[0, BEFORE], [3.8, arrivalSummary({ down: 2 }, visits)]])
+    }
+    expect(BEFORE).toBe('the lift arrives without being called. it only goes one place.')
+    expect(arrivalSummary({ down: 2 }, 2)).toBe('you have been on this floor before. two ways down are on your map.')
+    expect(TAIL).toMatch(/if \(way\.kind === 'lift'\) plate\('arrival', wayMessage\(way, \{ before: true \}\), PRIO\.combat\)\r?\n\s*if \(way\.kind !== 'lift' \|\| first\) plate\('floor', arrivalPlate\(level\.cfg, first\), PRIO\.combat\)\r?\n\s*const wm = wayMessage\(way, \{ partner, mem: mem\.get\(way\.target\) \}\)/)
+    expect(slice('function updateHud() {', '// ── HP bar ──')).toContain('let text = level.cfg.levelName')
+  })
+  it('the first ride is as it was: the lift\'s line and the floor\'s own line; the hint and the raised ceiling wait out the window, the doors\' line is let go', () => {
+    const { h, said, run } = land()
+    run(80, unasked(h))
+    expect(said).toEqual([[0, BEFORE], [0, L(3).levelSub], [45, L(3).exit.hint], [45 + DRAIN_S, 'the floor remembers you less.']])
+    expect(wayMessage(LIFT)).toBe('the doors close behind you. the lift does not come back for you.')
+    expect(said.map((s) => s[1])).not.toContain(wayMessage(LIFT))
+  })
+  it('every way\'s arrival puts up two plates at most in its first 45 s, the murmurs and the events counted', () => {
+    const ways = [{ kind: 'down', target: 1 }, { kind: 'down', target: 2 }, { kind: 'up', target: 1 }, { kind: 'up', target: 2 }, LIFT,
+      { kind: 'ring', target: LOBBY }]
+    for (const way of ways) for (const first of [true, false]) for (const origin of ['tenant', 'anchored']) for (const followed of [0, 1]) for (const memRec of [null, { x: 3, y: 4 }]) {
+      const filing = first && way.target === 1 && way.kind === 'down'
+      const { h, said, run } = land({ index: way.target, first, filing, followed, origin, way, memRec })
+      run(80, unasked(h))
+      expect(said.filter((s) => s[0] < 45).length, JSON.stringify({ way, first, origin, followed, memRec })).toBeLessThanOrEqual(2)
+    }
   })
 })
