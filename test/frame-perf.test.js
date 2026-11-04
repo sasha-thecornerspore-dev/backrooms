@@ -14,6 +14,11 @@
 // its most (twice a second) into the one record dreadFrom refills.
 // The radio's static rides it after the hunt's report (M21): radiostatic.js's one record every frame, the radio on so it does its real
 // work, handed to audio.js (no context in node: a no-op, as on a machine with no audio); the frame's aiCtx is left as it was.
+// The things learn your habits (M19) as they do on every solo floor: buildLevel hands the entity system the floor's refinements
+// (learn.js, over the run's floor memory), so the hunt path runs its M19 branches every frame (the tag, the getaways, the gate's
+// letting go), and the frame answers each escape event as game.js does. The first run is an untaught floor; before the second, the floor
+// is taught against all four ways (the stillness wait, the run's heading, the ward's and the flash's shorter reels), so the warm run
+// carries them all, and the identities hold through both.
 import { describe, it, expect } from 'vitest'
 import { DEFAULT_CONFIG, CHUNK_SIZE, createChunkCache, createGridReader } from '../src/renderer/world.js'
 import { levelConfig } from '../src/renderer/levels.js'
@@ -41,6 +46,8 @@ import { createPathField } from '../src/renderer/pathfield.js'
 import { DREAD_CLOCK, dreadFrom, dreadNear, createTeller } from '../src/renderer/dread.js'
 import { createRadioStatic } from '../src/renderer/radiostatic.js'
 import { setRadioStatic } from '../src/renderer/audio.js'
+import { createLevelMemory, ESCAPE_METHODS } from '../src/renderer/levelmem.js'
+import { createLearning, LEARN } from '../src/renderer/learn.js'
 
 const FRAMES = 600, DT = 1 / 60, CREATURES = 20, BUDGET_MS = 150
 const SPEED = 0.05                      // game.js: const SPEED = 0.05; sp = SPEED * dt * 60 * mult
@@ -64,17 +71,21 @@ function buildLevel(index) {
   const solid = createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature })
   const clock = { playT: 0 }
   const entitySys = createEntitySystem(cfg, isWall, { obstacles: solid.forEntities, grid, now: () => clock.playT })
+  // game.js: one learning over the run's floor memory; alone, off the block, the floor's refinements handed over right after
+  const mem = createLevelMemory(), learning = createLearning({ mem })
+  const refine = learning.refinements(index)
+  entitySys.setLearn(refine)
   const itemSys = createItemSystem(cfg, isWall, worldSeed)
   itemSys.enterLevel(cfg, null, null)
   const mid = chunkMid(0, 0), m = findOpenNear(mid.x, mid.y, grid.floor) ?? mid
   const player = { x: m.x, y: m.y, angle: 0, hp: 100, maxHp: 100 }
   decor.update(0, 0); itemSys.update(0, 0)
-  return { index, cfg, cache, grid, bodies, decor, solid, entitySys, itemSys, player, clock }
+  return { index, cfg, cache, grid, bodies, decor, solid, entitySys, itemSys, player, clock, mem, learning, refine }
 }
 
 describe('the non-render frame on a real level 1 with twenty creatures (600 frames at 1/60)', () => {
   const L = buildLevel(1)
-  const { cfg, cache, grid, bodies, decor, solid, entitySys, itemSys, player, clock } = L
+  const { cfg, cache, grid, bodies, decor, solid, entitySys, itemSys, player, clock, mem, learning, refine } = L
   const epochOf = (cx, cy) => cache.epochOf(cx, cy)
   const fog = createFogMap()
   const haunts = createHauntTracker({ now: () => clock.playT })
@@ -109,7 +120,8 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
   // the walker's state across runs: the play clock, the cell / compass memos, the last hit, the identities seen so far
   const S = { playT: 0, lureT: 0, stepT: 0, hits: -Infinity, frame: 0, lastCellIx: NaN, lastCellIy: NaN, lastCompassAngle: -Infinity, lastWayCount: -1, lastCompassText: '', lastCompassT: -Infinity, pcx: NaN, pcy: NaN, threat: null, report: null, sameThreat: true, sameReport: true, maxEntities: 0, crossings: 0,
     sanity: 100, standHeld: 0, pf: null, san: null, stand: null, samePf: true, sameSan: true, sameStand: true, hiddenFrames: 0,
-    dreadT: 0, fieldT: -Infinity, fieldOn: false, builds: 0, reads: 0, sameDread: true, rs: null, sameRs: true, hissFrames: 0 }
+    dreadT: 0, fieldT: -Infinity, fieldOn: false, builds: 0, reads: 0, sameDread: true, rs: null, sameRs: true, hissFrames: 0,
+    tagged: 0, escapes: 0 }
 
   // ONE frame of game.js's loop below the renderer, in its order
   function frame(dt) {
@@ -198,9 +210,14 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
     if (S.stepT >= 0.45) { S.stepT = 0; entitySys.noise(player.x, player.y, 3 * quiet(0)) }
     const th = entitySys.update(dt, player, pcx, pcy, aiCtx)
     if (S.threat === null) S.threat = th; else if (th !== S.threat) S.sameThreat = false
-    entitySys.drainEvents(entEvents)
+    const ne = entitySys.drainEvents(entEvents)
+    for (let i = 0; i < ne; i++) {                                     // game.js onEntityEvent: a getaway counts on the floor (rare)
+      const k = entEvents[i].kind
+      if (k === 'escape-still' || k === 'escape-ward' || k === 'escape-run' || k === 'escape-flash') { S.escapes++; learning.escape(1, k, S.playT) }
+    }
     entitySys.takeWakeEvent()
     S.maxEntities = Math.max(S.maxEntities, entitySys.getEntities().length)
+    if (f % 60 === 0) { const ents = entitySys.getEntities(); for (let i = 0; i < ents.length; i++) if (ents[i].lrn !== undefined) { S.tagged++; break } }
     // ── the hauntings, only while calm ──
     const calm = !th.hunted && th.nearest >= 14 && S.playT - S.hits > 20
     const h = calm ? haunts.check(player.x, player.y, decor.getHaunts(), true) : null
@@ -245,7 +262,12 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
   })
 
   it(`steps the whole frame ${FRAMES} times in under ${BUDGET_MS} ms, with the same threat, report, perception, sanity and stand records every frame`, () => {
+    expect(Object.values(refine).every((t) => t === null), 'the first run: an untaught floor').toBe(true)
     const ms1 = run(FRAMES)
+    // the floor learns all four ways at once: the same refinement object the things hold, refilled in place
+    for (const m of ESCAPE_METHODS) for (let k = mem.escapesFor(1)[m]; k < LEARN.after; k++) mem.noteEscape(1, m)
+    expect(learning.refinements(1)).toBe(refine)
+    expect([refine.still, refine.run, refine.ward, refine.flash]).toEqual([LEARN.still, LEARN.run, LEARN.ward, LEARN.flash])
     const ms2 = run(FRAMES)
     const best = Math.min(ms1, ms2)
     console.info(`frame-perf: ${FRAMES} frames x ${CREATURES} creatures: ${ms1.toFixed(1)} ms cold, ${ms2.toFixed(1)} ms warm (${(best / FRAMES * 1000).toFixed(0)} us/frame best, ${S.crossings} chunk crossings, ${entitySys.getEntities().length} creatures left)`)
@@ -258,6 +280,7 @@ describe('the non-render frame on a real level 1 with twenty creatures (600 fram
     expect(S.sameDread, 'dreadFrom refills the one record every read').toBe(true)
     expect(S.sameRs, 'the radio static hands back the one record every frame').toBe(true)
     expect(S.hissFrames, 'the twenty in reach: the static hissed').toBeGreaterThan(0)
+    expect(S.tagged, 'M19 rode the hunt path: things hunting you were tagged').toBeGreaterThan(0)
     // 4 Hz reads over both runs; the field flooded at most twice a second, and flooded at all (the twenty are in reach)
     expect(Math.abs(S.reads - (2 * FRAMES * DT) / DREAD_CLOCK.tick)).toBeLessThanOrEqual(1)
     expect(S.builds).toBeGreaterThan(0); expect(S.builds).toBeLessThanOrEqual((2 * FRAMES * DT) / DREAD_CLOCK.build + 1)
