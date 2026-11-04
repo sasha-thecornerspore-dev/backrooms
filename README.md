@@ -220,6 +220,8 @@ nothing in the lobby hunts. below it, things do. they **hear** — a walk barely
 
 they go still when they hear something, come to the noise, hunt you once they see you (*it has seen you.* — or, when it is off your screen, *something has seen you.* and its sound comes from where it is), and search where they lost you. break the line and keep quiet, and they lose you. *you have lost it. it is still looking.* running down a hole does not shake one.
 
+**they learn your habits.** each floor remembers how you got away from its hunts. get away the same way three times on one floor — standing still, a ward, running, the flash — and every thing on that floor changes against it for the rest of the run: against stillness it waits longer where it lost you (*it has learned to wait.*), against running it keeps going the way you were heading, against a ward or the flash it recovers sooner. the building says so once for each. get away some other way and it works as it always did. only alone: the things in a room never learn.
+
 each kind keeps one rule. the wanderers wrote some of them on the walls long before you got here:
 
 - some things only move when you are not looking. *it stops when you look. do not look away.*
@@ -425,6 +427,7 @@ type your **name**, hit **PLAY ONLINE**, pick a **room code** — the box comes 
 - the first person into a room fixes its world; everyone else inherits it.
 - online, everyone starts in the lobby together, as a solo run does — the front door is for solo runs only — and the file writes each of you in on your first way down. how you arrive is written down: opening a room is not the same as dropping into one someone already walks (*not all of you arrived* — see **thin**, above).
 - online runs are not saved. the room keeps its world, and you fall back into it.
+- the things in a room do not learn your habits; only a solo run's floors remember how you got away.
 
 ### invite links
 
