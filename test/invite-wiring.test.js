@@ -37,6 +37,20 @@ describe('index.html: the title screen', () => {
     expect(html).toMatch(/#anchor-input \{[^}]*border: 1px solid #8a7a3a;/)
     expect(html).toMatch(/#anchor-input::placeholder \{ color: #c9bd8f; \}/)
   })
+  it('the build version: a quiet line on the title, filled at open and not only when settings opens; empty in the browser, where it hides', () => {
+    const status = at(html, '<div id="start-status"'), ver = at(html, '<div id="start-version"></div>'), after = at(html, '<div id="join-modal"')
+    expect(status).toBeLessThan(ver); expect(ver).toBeLessThan(after)            // the last thing in #start
+    expect(html).toMatch(/#start-version:empty \{ display: none; \}/)
+    // asked once, as the page opens: the title's line and the foot of settings are filled together
+    const open = slice(html, 'window.backrooms?.getVersion?.().then(', "document.getElementById('btn-settings').onclick")
+    expect(open).toContain("document.getElementById('start-version').textContent = `v${v}`")
+    expect(open).toContain("document.getElementById('version-line').textContent = `the backrooms v${v}`")
+    expect(open).toContain('.catch(')                                             // a dev run without the bridge's answer is not an error
+    const settings = slice(html, "document.getElementById('btn-settings').onclick", "document.getElementById('btn-locate').onclick")
+    expect(settings).not.toContain('getVersion')
+    expect(preload).toContain("getVersion: () => ipcRenderer.invoke('get-version')")
+    expect(main).toContain("ipcMain.handle('get-version', () => app.getVersion())")
+  })
 })
 
 describe('index.html: an invite link, ?room=CODE[&anchor=LAT,LNG]', () => {

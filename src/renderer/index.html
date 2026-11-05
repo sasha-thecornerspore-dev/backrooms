@@ -137,6 +137,11 @@
     }
     #start #btn-front-door:hover { color: var(--glow); background: none; }
     #front-door-hint { font: italic 11px var(--mono); letter-spacing: 0.04em; color: var(--text-dim); text-align: center; text-shadow: 0 1px 4px rgba(0,0,0,0.95); }
+    /* the build's version, a quiet line in the title's corner (the right one: the update toast takes the left), pinned to the window so
+       a short one that scrolls the title still shows it. The desktop fills it as the page opens; the browser build has no version to
+       give, and the empty line hides */
+    #start-version { position: fixed; right: 16px; bottom: 12px; font: 11px var(--mono); letter-spacing: 2px; color: var(--text-dim); text-shadow: 0 1px 4px rgba(0,0,0,0.95); pointer-events: none; }
+    #start-version:empty { display: none; }
     .btns { display:flex; flex-wrap:wrap; gap:14px 22px; justify-content:center; margin-top:26px; max-width:100%; padding:0 16px; box-sizing:border-box; }
     /* narrow screens: every start button stays on screen (they used to overflow both edges, hiding SOLO) */
     @media (max-width: 700px) { #start .btns { gap:12px; margin-top:16px; } #start .btns button { padding:12px 18px; letter-spacing:3px; font-size:14px; } #start .placard { letter-spacing: 0.2em; font-size: 10px; } }
@@ -620,6 +625,7 @@
       <div id="front-door-hint">a real block. read the form. find the gap.</div>
     </div>
     <div id="start-status" style="color:#a09060;font-family:monospace;font-size:13px;margin-top:16px;min-height:20px;text-align:center;"></div>
+    <div id="start-version"></div>
   </div>
 
   <div id="join-modal" style="display:none">
@@ -1103,15 +1109,19 @@
       document.getElementById('set-beacon-webhook').value = p.beaconWebhook
     }
 
+    // the build's version, asked once as the page opens: on the title's corner and at the foot of settings. The browser build has no
+    // bridge to ask, and both lines stay empty
+    window.backrooms?.getVersion?.().then((v) => {
+      if (!v) return
+      document.getElementById('start-version').textContent = `v${v}`
+      document.getElementById('version-line').textContent = `the backrooms v${v}`
+    }).catch(() => { /* dev mode */ })
+
     document.getElementById('btn-settings').onclick = async () => {
       const s = await window.backrooms?.getSettings?.() ?? { updateMode: 'auto', softwareRender: false }
       document.getElementById('set-updatemode').value = s.updateMode || (s.autoUpdate === false ? 'notify' : 'auto')
       document.getElementById('chk-software').checked = !!s.softwareRender
       loadPrefsIntoPanel()
-      try {
-        const v = await window.backrooms?.getVersion?.()
-        if (v) document.getElementById('version-line').textContent = `the backrooms v${v}`
-      } catch { /* dev mode */ }
       settingsMod.style.display = 'flex'
       // the 'your file' row is the running game's to draw (game.js listens; on the title screen nobody does, and the row stays hidden)
       document.dispatchEvent(new CustomEvent('backrooms:settings-open'))
