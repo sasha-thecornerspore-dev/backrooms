@@ -128,6 +128,21 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: npm run dist:win
 
+      # our installers are signed by our own CA, which no player's Windows trusts. A build that carries the publisher's name takes
+      # only an update Windows calls validly signed, and 2.0.3 to 2.0.5 refused every one (ERR_UPDATER_INVALID_SIGNATURE).
+      # package.json build.win.verifyUpdateCodeSignature: false keeps the name out; this looks at what was really built.
+      - name: The Windows build carries no publisher name
+        if: matrix.platform == 'win'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          found=( dist/*-unpacked/resources/app-update.yml )
+          if [ ${#found[@]} -eq 0 ]; then echo "::error title=updater::no app-update.yml under dist/*-unpacked/resources to check"; exit 1; fi
+          if grep -n "publisherName" "${found[@]}"; then
+            echo "::error title=updater::the build carries a publisher name: installs of it would refuse every update (docs/operations.md §5)"; exit 1
+          fi
+          echo "no publisher name in ${found[*]}"
+
       - name: Build installers (Linux)
         if: matrix.platform == 'linux'
         run: npm run dist:linux

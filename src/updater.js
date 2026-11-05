@@ -8,6 +8,11 @@
 // macOS builds are unsigned, and Squirrel.Mac refuses to install an unsigned update. There we still
 // check (latest-mac.yml) so the player hears about a new version, but "download" opens the release
 // page instead of downloading in-app.
+//
+// Windows installers are signed by the project's own CA, which no player's Windows trusts. The build
+// therefore carries no publisher name (package.json build.win.verifyUpdateCodeSignature: false) and
+// electron-updater goes by the installer's sha512 from latest.yml alone. 2.0.3 to 2.0.5 carried the
+// name and refused every update (ERR_UPDATER_INVALID_SIGNATURE): docs/operations.md §5.
 
 export const UPDATE_MODES = ['auto', 'notify', 'manual']
 export const RECHECK_MS = 4 * 60 * 60 * 1000
@@ -65,9 +70,11 @@ export function createUpdateController({
     // mid-download or already downloaded: a fresh check would only reset what the player sees
     if (status.state === 'downloading' || status.state === 'downloaded') return Promise.resolve(status)
     autoUpdater.autoDownload = canInstall && normalizeMode(getMode()) === 'auto'
+    // in auto mode the check starts the download and hands back its promise. A failure there (a refused signature, a dropped
+    // connection) has already come through the error event above, so the promise is caught here and never left unhandled
     return Promise.resolve()
       .then(() => autoUpdater.checkForUpdates())
-      .then(() => status, (e) => { failed(e); return status })
+      .then((r) => { r?.downloadPromise?.catch(() => {}); return status }, (e) => { failed(e); return status })
   }
 
   function download() {

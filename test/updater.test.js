@@ -1,7 +1,10 @@
 // src/updater.js: the auto / notify / manual update modes against a fake electron-updater.
 import { describe, it, expect, vi } from 'vitest'
 import { EventEmitter } from 'events'
+import fs from 'node:fs'
 import { createUpdateController, normalizeMode, RECHECK_MS } from '../src/updater.js'
+
+const read = (p) => { try { return fs.readFileSync(new URL(p, import.meta.url), 'utf8') } catch { return null } }
 
 function rig({ mode = 'auto', platform = 'win32', enabled = true, check } = {}) {
   const au = new EventEmitter()
@@ -120,6 +123,54 @@ describe('failures', () => {
     au.emit('update-available', { version: '3.0.0' })
     await ctl.check()
     expect(au.checkForUpdates).not.toHaveBeenCalled()
+  })
+
+  // in auto mode electron-updater starts the download inside the check and hands its promise back (downloadPromise). When the download
+  // fails it has already said so through the error event; on 2.0.3 nobody caught the promise, and each failure also landed in the log
+  // as an unhandled rejection, raw certificate and all
+  it('a download that fails after an auto check is told once, by the error event, and is never an unhandled rejection', async () => {
+    const err = Object.assign(new Error('New version 9.9.9 is not signed by the application owner'), { code: 'ERR_UPDATER_INVALID_SIGNATURE' })
+    const unhandled = []
+    const note = (e) => unhandled.push(e)
+    process.on('unhandledRejection', note)
+    try {
+      const r = rig({ mode: 'auto', check: () => { r.au.emit('error', err); return Promise.resolve({ downloadPromise: Promise.reject(err) }) } })
+      await expect(r.ctl.check()).resolves.toBeDefined()
+      await new Promise((done) => setTimeout(done, 0))                 // long enough for node to notice a rejection nobody holds
+      expect(unhandled).toEqual([])
+      expect(r.sent.filter((s) => s.state === 'error')).toEqual([{ state: 'error', error: 'ERR_UPDATER_INVALID_SIGNATURE' }])
+    } finally { process.off('unhandledRejection', note) }
+  })
+  it('a check that hands back no download (notify, manual, nothing new) is left alone', async () => {
+    for (const result of [undefined, null, {}, { downloadPromise: null }]) {
+      const { ctl } = rig({ mode: 'notify', check: () => Promise.resolve(result) })
+      await expect(ctl.check()).resolves.toBeDefined()
+    }
+  })
+})
+
+// 2.0.3 to 2.0.5 could not update themselves on Windows (ERR_UPDATER_INVALID_SIGNATURE). The installer is signed by the project's own CA,
+// which no player's Windows trusts; a build made with the publisher check on carries the publisher's name (app-update.yml), and such a
+// build takes only an update whose signature Windows calls Valid. With the check off no name is written, and the updater goes by the
+// installer's sha512 from latest.yml, as it does on Linux.
+describe('the Windows build does not ask its updater to check the publisher', () => {
+  const pkg = JSON.parse(read('../package.json'))
+  it('build.win.verifyUpdateCodeSignature is false, and no publisher name is set by hand anywhere', () => {
+    expect(pkg.build.win.verifyUpdateCodeSignature).toBe(false)
+    expect(JSON.stringify(pkg.build)).not.toContain('publisherName')
+  })
+  // the one line works only through these two rules of the libraries; a version that changes either fails here and is read again
+  const schema = read('../node_modules/app-builder-lib/scheme.json')
+  const packager = read('../node_modules/app-builder-lib/out/winPackager.js')
+  const publish = read('../node_modules/app-builder-lib/out/publish/PublishManager.js')
+  const nsis = read('../node_modules/electron-updater/out/NsisUpdater.js')
+  it.skipIf(!schema || !packager || !publish)('electron-builder knows the option on win, and writes the name only while it is not false', () => {
+    expect(JSON.parse(schema).definitions.WindowsConfiguration.properties.verifyUpdateCodeSignature.type).toBe('boolean')
+    expect(packager).toMatch(/get isForceCodeSigningVerification\(\) \{\s*return this\.platformSpecificBuildOptions\.verifyUpdateCodeSignature !== false;/)
+    expect(publish).toMatch(/const publisherName = winPackager\.isForceCodeSigningVerification \? [^:]+ : undefined;\s*if \(publisherName != null\) \{\s*publishConfig\.publisherName = publisherName;/)
+  })
+  it.skipIf(!nsis)('electron-updater checks no signature when the build carries no name', () => {
+    expect(nsis).toMatch(/publisherName = \(await this\.configOnDisk\.value\)\.publisherName;\s*if \(publisherName == null\) \{\s*return null;/)
   })
 })
 

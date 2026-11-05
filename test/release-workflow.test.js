@@ -19,6 +19,16 @@ try { yaml = createRequire(import.meta.url)('js-yaml') } catch { /* not installe
 // the steps of a job, one string each (from one `      - ` to the next)
 const steps = (job) => job.split('\n      - ').slice(1)
 
+// for the steps that are run here: a bare `bash` on Windows is WSL's (system32), so use Git's own, found beside git (as test/build-web.test.js does)
+const findBash = () => {
+  if (process.platform !== 'win32') return spawnSync('bash', ['-c', 'true']).status === 0 ? 'bash' : null
+  const ex = spawnSync('git', ['--exec-path'], { encoding: 'utf8' })
+  if (ex.status !== 0) return null
+  const gitRoot = path.resolve(ex.stdout.trim(), '..', '..', '..')
+  return [path.join(gitRoot, 'bin', 'bash.exe'), path.join(gitRoot, 'usr', 'bin', 'bash.exe')].find((p) => fs.existsSync(p)) || null
+}
+const BASH = findBash()
+
 describe('build-release.yml: the browser zip', () => {
   it('the Linux build makes it with build-itch.sh after the server bundle, before the assets are collected', () => {
     const at = rel.indexOf('- name: Build the browser zip (itch.io)')
@@ -184,14 +194,6 @@ describe('build-release.yml: a leftover draft from another commit is made again'
   })
 
   // the step itself, run: a stand-in gh answers `release view` from GH_STATE (missing | published | draft:<target>) and logs every call
-  const findBash = () => {   // a bare `bash` on Windows is WSL's (system32): use Git's own, found beside git (as test/build-web.test.js does)
-    if (process.platform !== 'win32') return spawnSync('bash', ['-c', 'true']).status === 0 ? 'bash' : null
-    const ex = spawnSync('git', ['--exec-path'], { encoding: 'utf8' })
-    if (ex.status !== 0) return null
-    const gitRoot = path.resolve(ex.stdout.trim(), '..', '..', '..')
-    return [path.join(gitRoot, 'bin', 'bash.exe'), path.join(gitRoot, 'usr', 'bin', 'bash.exe')].find((p) => fs.existsSync(p)) || null
-  }
-  const BASH = findBash()
   const fwd = (p) => p.replace(/\\/g, '/')
   const SHA = 'f'.repeat(40), OLD = '0'.repeat(40)
   const GH = [
@@ -323,6 +325,39 @@ describe('build-release.yml: every run step works in macOS bash 3.2', () => {
     const step = rel.slice(at, rel.indexOf('\n      - ', at + 1))
     expect(step).toContain('while IFS= read -r f; do [ -n "$f" ] && FILES+=( "$f" ); done <<<')
     expect(step).toContain('gh release upload "${{ needs.prepare.outputs.tag }}" "${FILES[@]}" --clobber')
+  })
+})
+
+// 2.0.3 to 2.0.5 refused every update on Windows (ERR_UPDATER_INVALID_SIGNATURE): they carried the publisher's name, and our own CA is
+// one no player's Windows trusts. package.json keeps the name out (test/updater.test.js); the workflow looks at what was really built.
+describe('build-release.yml: the Windows build is checked for a publisher name', () => {
+  const at = rel.indexOf('- name: The Windows build carries no publisher name')
+  const step = rel.slice(at, rel.indexOf('\n      - ', at + 1))
+  it('right after the Windows installer is built, before anything is collected or uploaded, on the Windows leg only', () => {
+    expect(at).toBeGreaterThan(rel.indexOf('- name: Build & sign installer (Windows)'))
+    expect(at).toBeLessThan(rel.indexOf('- name: Collect assets'))
+    expect(step).toContain("if: matrix.platform == 'win'")
+    expect(step).toContain('shell: bash')
+  })
+  it('a name in the built app-update.yml fails the build, and so does finding no app-update.yml to look at', () => {
+    expect(step).toContain('found=( dist/*-unpacked/resources/app-update.yml )')
+    expect(step).toMatch(/if \[ \$\{#found\[@\]\} -eq 0 \]; then echo "::error title=updater::[^"\n]*"; exit 1; fi/)
+    expect(step).toMatch(/if grep -n "publisherName" "\$\{found\[@\]\}"; then\n\s+echo "::error title=updater::[^"\n]*"; exit 1\n\s+fi/)
+  })
+  it.skipIf(!BASH)('the step, run: no file, a file with the name, a file without it', () => {
+    const script = step.slice(step.indexOf('        run: |\n') + '        run: |\n'.length).split('\n').map((l) => l.replace(/^ {10}/, '')).join('\n')
+    const run = (yml) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'backrooms-pub-'))
+      try {
+        if (yml !== null) { fs.mkdirSync(path.join(dir, 'dist', 'win-unpacked', 'resources'), { recursive: true }); fs.writeFileSync(path.join(dir, 'dist', 'win-unpacked', 'resources', 'app-update.yml'), yml) }
+        fs.writeFileSync(path.join(dir, 'step.sh'), script)
+        return spawnSync(BASH, ['--noprofile', '--norc', '-eo', 'pipefail', 'step.sh'], { cwd: dir, encoding: 'utf8' })   // as GitHub runs `shell: bash`
+      } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+    }
+    expect(run(null).status).not.toBe(0)
+    expect(run('owner: o\nrepo: r\nprovider: github\npublisherName:\n  - The Corner Spore Code Signing\n').status).not.toBe(0)
+    const ok = run('owner: o\nrepo: r\nprovider: github\nupdaterCacheDirName: backrooms-updater\n')
+    expect(ok.status, ok.stdout + ok.stderr).toBe(0)
   })
 })
 
