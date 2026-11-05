@@ -6,6 +6,7 @@ import { DISPEL_S, createThreat } from '../src/renderer/hunt.js'
 import { createChunkCache, createGridReader, CHUNK_SIZE } from '../src/renderer/world.js'
 import { creatureRadius } from '../src/renderer/collide.js'
 import { HF } from '../src/renderer/gfx-frame.js'
+import { budgetMs, note } from './perf-budget.js'
 
 const DT = 1 / 60
 const N = CHUNK_SIZE
@@ -484,9 +485,10 @@ describe('the legacy gate', () => {
 
 // The 600 updates are walked twice back to back (the second run is the warmed, steady state the game lives in); the better run
 // carries the 150 ms budget, both carry the identities and the getChunk accounting — a machine busy with the rest of the suite
-// must not fail a frame that is fast (frame-perf.test.js does the same for the whole frame).
+// must not fail a frame that is fast (frame-perf.test.js does the same for the whole frame). On a shared CI runner the budget is
+// four times wider (perf-budget.js): the whole machine is slower there, which the better of two runs cannot mend.
 describe('perf: 20 creatures x 600 updates on a real chunk cache and grid reader', () => {
-  it('runs under 150 ms (the better of two runs), returns the same threat object, and asks getChunk at most once per border crossed', () => {
+  it('runs under 150 ms, or four times that on CI (the better of two runs), returns the same threat object, and asks getChunk at most once per border crossed', () => {
     const cfg = { chunkEvictRadius: 3, maze: { corridor: 1 }, entities: { enabled: false, damage: 16 } }
     const cache = createChunkCache(cfg, 0)
     let gets = 0
@@ -527,9 +529,10 @@ describe('perf: 20 creatures x 600 updates on a real chunk cache and grid reader
     }
     gets = 0; crossings = 0
     const ms1 = run(), ms2 = run()
-    const best = Math.min(ms1, ms2)
+    const best = Math.min(ms1, ms2), budget = budgetMs(150)
+    note('entities-hunt', ms1, ms2, budget)                                  // onto the run's summary on GitHub Actions; nothing anywhere else
     expect(same, 'update() returns the one threat record every frame').toBe(true)
-    expect(best, `600 updates took ${ms1.toFixed(1)} / ${ms2.toFixed(1)} ms`).toBeLessThan(150)
+    expect(best, `600 updates took ${ms1.toFixed(1)} / ${ms2.toFixed(1)} ms`).toBeLessThan(budget)
     expect(gets).toBeLessThanOrEqual(crossings + 1)
     for (const e of list) expect(g[Math.floor(e.y) * N + Math.floor(e.x)] === 0 || Math.floor(e.x / N) !== 0 || Math.floor(e.y / N) !== 0).toBe(true)
   })

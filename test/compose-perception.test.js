@@ -10,6 +10,7 @@ import { createChunkCache, createGridReader, CHUNK_SIZE } from '../src/renderer/
 import { creatureRadius } from '../src/renderer/collide.js'
 import { HF } from '../src/renderer/gfx-frame.js'
 import { rulesFor } from '../src/renderer/origin-rules.js'
+import { budgetMs, note } from './perf-budget.js'
 
 const DT = 1 / 60
 const N = CHUNK_SIZE
@@ -355,7 +356,7 @@ describe('AI_CTX_KEYS / AI_CTX_DEFAULTS', () => {
 // the 20-creature 600-update fixture of test/entities-hunt.test.js, with the four fields present (and non-default, so every
 // new read runs): no allocation was added, the budget holds
 describe('perf: 20 creatures x 600 updates with a 15-key ctx', () => {
-  it('runs under 150 ms (the better of two runs)', () => {
+  it('runs under 150 ms, or four times that on CI (the better of two runs)', () => {
     const cfg = { chunkEvictRadius: 3, maze: { corridor: 1 }, entities: { enabled: false, damage: 16 } }
     const cache = createChunkCache(cfg, 0)
     const isWall = (wx, wy, pcx, pcy) => cache.isWall(wx, wy, pcx, pcy)
@@ -389,8 +390,9 @@ describe('perf: 20 creatures x 600 updates with a 15-key ctx', () => {
       }
       return performance.now() - t0
     }
-    const ms1 = go(), ms2 = go()
+    const ms1 = go(), ms2 = go(), budget = budgetMs(150)                      // four times wider on CI: perf-budget.js
+    note('compose-perception', ms1, ms2, budget)                             // onto the run's summary on GitHub Actions; nothing anywhere else
     expect(same).toBe(true)
-    expect(Math.min(ms1, ms2), `600 updates took ${ms1.toFixed(1)} / ${ms2.toFixed(1)} ms`).toBeLessThan(150)
+    expect(Math.min(ms1, ms2), `600 updates took ${ms1.toFixed(1)} / ${ms2.toFixed(1)} ms`).toBeLessThan(budget)
   })
 })
