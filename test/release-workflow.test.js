@@ -3,6 +3,7 @@
 // real parse when js-yaml is installed (it comes with electron-builder).
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { spawnSync } from 'node:child_process'
@@ -36,7 +37,7 @@ describe('build-release.yml: the itch.io job', () => {
   it('exists, last, and runs only once the GitHub release is public — the publish job\'s own gate, then its success', () => {
     expect(rel.indexOf('\n  itch:\n')).toBeGreaterThan(rel.indexOf('\n  publish:\n'))
     expect(itch).toContain('    needs: [prepare, publish]\n')
-    expect(itch).toContain("    if: always() && needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success'\n")
+    expect(itch).toContain("    if: ${{ !cancelled() && needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success' }}\n")
     expect(itch).toMatch(/ {4}permissions:\n {6}contents: read\n/)
   })
   it('the key rides only the gate and the push, never the job (the download, the unzip and butler -V never see it) (review SEC-7)', () => {
@@ -129,11 +130,21 @@ describe('build-release.yml: macOS cannot hold the release back', () => {
     expect(rel).not.toContain('matrix.optional')
     expect(rel.match(/^ {4}continue-on-error:/gm)).toHaveLength(1)
   })
-  it('publish waits for mac but gates on the Windows/Linux build alone, with always(), so a mac job that is cancelled or fails skips nothing', () => {
+  it('publish waits for mac but gates on the Windows/Linux build alone, with !cancelled(), so a mac job that fails or that GitHub cancels skips nothing', () => {
     expect(head('publish')).toContain('    needs: [prepare, build, mac]\n')
-    expect(head('publish')).toContain("    if: always() && needs.prepare.outputs.publish == 'true' && needs.build.result == 'success'")
+    expect(head('publish')).toContain("    if: ${{ !cancelled() && needs.prepare.outputs.publish == 'true' && needs.build.result == 'success' }}\n")
     expect(rel).not.toContain('needs.mac.')
-    expect(head('itch')).toContain("    if: always() && needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success'")
+    expect(head('itch')).toContain("    if: ${{ !cancelled() && needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success' }}\n")
+  })
+  // always() is true in a run a person cancelled too: with it, cancelling once Windows and Linux were green still published
+  it('a cancelled run publishes nothing: no always() anywhere, and the two jobs behind the builds each carry !cancelled()', () => {
+    const code = rel.split('\n').filter((l) => !l.trim().startsWith('#')).join('\n')
+    expect(code).not.toContain('always()')
+    // a status function has to be there: without one GitHub adds success(), and a mac job that did not succeed would skip the publish
+    for (const job of ['publish', 'itch']) expect(head(job), job).toMatch(/^ {4}if: \$\{\{ !cancelled\(\) && /m)
+    expect(code.match(/cancelled\(\)/g)).toHaveLength(2)
+    // a plain scalar that opens with ! is a YAML tag, so the whole condition sits inside ${{ }}
+    expect(code).not.toMatch(/^\s*if: !/m)
   })
   it.skipIf(!yaml)('parsed: the mac job\'s steps are the build job\'s, and the needs say the same as the text', () => {
     const doc = yaml.load(rel)
@@ -142,6 +153,129 @@ describe('build-release.yml: macOS cannot hold the release back', () => {
     expect(doc.jobs.mac.steps).toEqual(doc.jobs.build.steps)
     expect(doc.jobs.mac['continue-on-error']).toBe(true)
     expect(doc.jobs.publish.needs).toEqual(['prepare', 'build', 'mac'])
+    expect(doc.jobs.publish.if).toBe("${{ !cancelled() && needs.prepare.outputs.publish == 'true' && needs.build.result == 'success' }}")
+    expect(doc.jobs.itch.if).toBe("${{ !cancelled() && needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success' }}")
+  })
+})
+
+// 2.0.5's review: a draft a failed run left keeps that run's commit (the tag it will create when published) and that run's files. When
+// the fix is a new commit the guard deletes the draft and makes it again here; the same commit run again keeps it, so it stays repairable.
+describe('build-release.yml: a leftover draft from another commit is made again', () => {
+  const at = rel.indexOf('      - name: Check for existing release')
+  const step = rel.slice(at, rel.indexOf('\n  build:\n'))
+  const script = step.slice(step.indexOf('        run: |\n') + '        run: |\n'.length).split('\n').map((l) => l.replace(/^ {10}/, '')).join('\n')
+
+  it('reads the commit the draft points at, compares it with this run\'s, and deletes only a draft', () => {
+    expect(at).toBeGreaterThan(-1)
+    expect(step).toContain('AT=$(gh release view "$TAG" --repo "${{ github.repository }}" --json targetCommitish -q .targetCommitish)')
+    expect(step).toContain('if [ "$AT" != "${{ github.sha }}" ]; then')
+    expect(step).toContain('gh release delete "$TAG" --yes --repo "${{ github.repository }}"')
+    expect(step).not.toContain('--cleanup-tag')                     // a draft has no tag yet, and a tag is never this step's to remove
+    expect(step.match(/gh release delete /g)).toHaveLength(1)
+    // a published release has left the step (exit 0) before the delete is reached; the fresh draft is made after it
+    const published = step.indexOf('if [ "$IS_DRAFT" = "false" ]; then'), del = step.indexOf('gh release delete '), create = step.indexOf('gh release create ')
+    expect(published).toBeGreaterThan(-1)
+    expect(step.slice(published, del)).toMatch(/exit 0\n\s*fi\n/)
+    expect(del).toBeLessThan(create)
+    const creates = step.split('\n').filter((l) => l.includes('gh release create '))
+    expect(creates).toHaveLength(2)
+    for (const l of creates) { expect(l).toContain('--draft --title "$VER"'); expect(l).toContain('--target "${{ github.sha }}"') }
+    expect(step).toContain('gh release edit "$TAG" --notes-file "$NOTES" --repo "${{ github.repository }}"')   // a draft that is kept still picks up edited notes
+  })
+
+  // the step itself, run: a stand-in gh answers `release view` from GH_STATE (missing | published | draft:<target>) and logs every call
+  const findBash = () => {   // a bare `bash` on Windows is WSL's (system32): use Git's own, found beside git (as test/build-web.test.js does)
+    if (process.platform !== 'win32') return spawnSync('bash', ['-c', 'true']).status === 0 ? 'bash' : null
+    const ex = spawnSync('git', ['--exec-path'], { encoding: 'utf8' })
+    if (ex.status !== 0) return null
+    const gitRoot = path.resolve(ex.stdout.trim(), '..', '..', '..')
+    return [path.join(gitRoot, 'bin', 'bash.exe'), path.join(gitRoot, 'usr', 'bin', 'bash.exe')].find((p) => fs.existsSync(p)) || null
+  }
+  const BASH = findBash()
+  const fwd = (p) => p.replace(/\\/g, '/')
+  const SHA = 'f'.repeat(40), OLD = '0'.repeat(40)
+  const GH = [
+    '#!/usr/bin/env bash',
+    `printf '%s\\n' "$*" >> "$GH_LOG"`,
+    'if [ "$1 $2" = "release view" ]; then',
+    '  case "$GH_STATE" in',
+    '    missing) echo "release not found" >&2; exit 1 ;;',
+    '    published) case "$*" in *isDraft*) echo false ;; *) echo "$GH_STATE" ;; esac ;;',
+    '    draft:*) case "$*" in *isDraft*) echo true ;; *) [ -z "$GH_TARGET_FAILS" ] || exit 1; echo "${GH_STATE#draft:}" ;; esac ;;',
+    '  esac',
+    'fi',
+    'exit 0',
+    '',
+  ].join('\n')
+  function guard({ event = 'push', state, notes = true, targetFails = false }) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'backrooms-guard-'))
+    try {
+      fs.writeFileSync(path.join(dir, 'package.json'), '{ "version": "9.9.9" }')
+      if (notes) { fs.mkdirSync(path.join(dir, 'docs', 'release-notes'), { recursive: true }); fs.writeFileSync(path.join(dir, 'docs', 'release-notes', 'v9.9.9.md'), 'notes\n') }
+      fs.mkdirSync(path.join(dir, 'bin'))
+      fs.writeFileSync(path.join(dir, 'bin', 'gh'), GH, { mode: 0o755 })
+      const sh = script.replaceAll('${{ github.event_name }}', event).replaceAll('${{ github.repository }}', 'o/r').replaceAll('${{ github.sha }}', SHA)
+      expect(sh).not.toContain('${{')                                // every expression the step uses is one of those three
+      fs.writeFileSync(path.join(dir, 'guard.sh'), sh)
+      const pathKey = Object.keys(process.env).find((k) => k.toLowerCase() === 'path') || 'PATH'
+      const env = { ...process.env, [pathKey]: path.join(dir, 'bin') + path.delimiter + process.env[pathKey], GITHUB_OUTPUT: fwd(path.join(dir, 'out')), GH_LOG: fwd(path.join(dir, 'gh.log')), GH_STATE: state, GH_TARGET_FAILS: targetFails ? '1' : '' }
+      const r = spawnSync(BASH, ['-e', 'guard.sh'], { cwd: dir, encoding: 'utf8', env })   // GitHub runs a step that names no shell as `bash -e`
+      const text = (f) => { try { return fs.readFileSync(path.join(dir, f), 'utf8').trim() } catch { return '' } }
+      const calls = text('gh.log').split('\n').filter(Boolean)
+      const out = Object.fromEntries(text('out').split('\n').filter(Boolean).map((l) => l.split('=')))
+      return { status: r.status, log: r.stdout + r.stderr, calls, out, did: (verb) => calls.filter((c) => c.startsWith(`release ${verb} `)) }
+    } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+  }
+  const VIEW = 'release view v9.9.9 --repo o/r --json isDraft -q .isDraft'
+  const CREATE = `release create v9.9.9 --draft --title 9.9.9 --notes-file docs/release-notes/v9.9.9.md --target ${SHA} --repo o/r`
+
+  it.skipIf(!BASH)('not a push: builds, publishes nothing, and never asks about a release', () => {
+    const r = guard({ event: 'pull_request', state: 'draft:' + OLD })
+    expect(r.status, r.log).toBe(0)
+    expect(r.out).toEqual({ tag: 'v9.9.9', build: 'true', publish: 'false' })
+    expect(r.calls).toEqual([])
+  })
+  it.skipIf(!BASH)('no release yet: a draft is made at this commit', () => {
+    const r = guard({ state: 'missing' })
+    expect(r.status, r.log).toBe(0)
+    expect(r.out).toEqual({ tag: 'v9.9.9', build: 'true', publish: 'true' })
+    expect(r.calls).toEqual([VIEW, CREATE])
+  })
+  it.skipIf(!BASH)('already published: skipped exactly as before, and nothing is deleted, made or edited', () => {
+    const r = guard({ state: 'published' })
+    expect(r.status, r.log).toBe(0)
+    expect(r.out).toEqual({ tag: 'v9.9.9', build: 'false', publish: 'false' })
+    expect(r.calls).toEqual([VIEW])
+  })
+  it.skipIf(!BASH)('a draft at this very commit (the run, run again) is kept with its files, and picks up the notes', () => {
+    const r = guard({ state: 'draft:' + SHA })
+    expect(r.status, r.log).toBe(0)
+    expect(r.out).toEqual({ tag: 'v9.9.9', build: 'true', publish: 'true' })
+    expect(r.did('delete')).toEqual([])
+    expect(r.did('create')).toEqual([])
+    expect(r.did('edit')).toEqual(['release edit v9.9.9 --notes-file docs/release-notes/v9.9.9.md --repo o/r'])
+  })
+  it.skipIf(!BASH)('a draft at another commit (the fix was a new commit) is deleted, files and all, and made again at this one', () => {
+    const r = guard({ state: 'draft:' + OLD })
+    expect(r.status, r.log).toBe(0)
+    expect(r.out).toEqual({ tag: 'v9.9.9', build: 'true', publish: 'true' })
+    expect(r.calls).toEqual([VIEW, 'release view v9.9.9 --repo o/r --json targetCommitish -q .targetCommitish', 'release delete v9.9.9 --yes --repo o/r', CREATE])
+    expect(r.log).toContain(OLD)                                     // the run's log says which commit the old draft pointed at
+  })
+  it.skipIf(!BASH)('a draft that names a branch (made by hand) is not this commit either: made again, so the tag cannot land wherever the branch is by then', () => {
+    const r = guard({ state: 'draft:main', notes: false })
+    expect(r.status, r.log).toBe(0)
+    expect(r.did('delete')).toEqual(['release delete v9.9.9 --yes --repo o/r'])
+    expect(r.did('create')).toEqual([`release create v9.9.9 --draft --title 9.9.9 --notes  --target ${SHA} --repo o/r`])   // no notes file: empty notes
+    expect(r.did('edit')).toEqual([])
+  })
+  it.skipIf(!BASH)('when the draft\'s target cannot be read the step fails, and nothing is deleted or built', () => {
+    for (const r of [guard({ state: 'draft:' + OLD, targetFails: true }), guard({ state: 'draft:' })]) {
+      expect(r.status, r.log).not.toBe(0)
+      expect(r.did('delete')).toEqual([])
+      expect(r.did('create')).toEqual([])
+      expect(r.out).toEqual({ tag: 'v9.9.9' })                       // no build output: the build, mac and publish jobs are all skipped
+    }
   })
 })
 
