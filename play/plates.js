@@ -4,7 +4,8 @@
 // Pure, no imports. game.js wraps showMessage for the arrival and the unprompted kinds only (messages.js is untouched): admit() says
 // whether a line shows now or waits, drain() hands a waiting one back once the arrival has settled. Times are the play clock, in seconds.
 //
-// createPlateBudget({ window: 45, max: 2, gap: 20 }) -> { arrive(t), admit(kind, t, line) -> 'show' | 'queue', drain(t) -> line | null }
+// createPlateBudget({ window: 45, max: 2, gap: 20 }) -> { arrive(t), admit(kind, t, line) -> 'show' | 'queue', drain(t) -> line | null,
+//   settled(t) -> boolean }
 //   arrive(t)  a floor's arrival opens a window of `window` s; the old floor's waiting lines do not follow you down
 //   admit      inside the window at most `max` arrival or unprompted plates show, the floor's own line one of them (it always shows);
 //              outside it unprompted text shows at most once per `gap` s, and never ahead of an older line still waiting. Player-caused
@@ -14,10 +15,12 @@
 //              wake's lines are arrival plates (game.js die)
 //   drain(t)   after the window, the oldest waiting line: the window's own one per DRAIN_S, a line held after it once per `gap`. Allocates
 //              nothing (game.js asks every frame)
+//   settled(t) whether the open arrival's window has closed (true before any arrival). A read, for a line that is not held here but offered
+//              again until it shows (game.js: a floor's lesson, learn.js unsaid), so that it never takes a plate of a later arrival's window
 // arrivalPlate(cfg, first) -> the plate a floor arrives with: its sub-line the first time (never shown anywhere before), its name after
 //   (the HUD carries the name already). The block keeps its name.
 export const ARRIVAL_KINDS = Object.freeze(['floor', 'arrival'])
-export const UNPROMPTED_KINDS = Object.freeze(['event', 'murmur', 'haunt', 'beat', 'clock', 'vignette', 'sign'])
+export const UNPROMPTED_KINDS = Object.freeze(['event', 'murmur', 'haunt', 'beat', 'clock', 'vignette', 'sign', 'learn'])   // 'learn': a floor's things learned a habit of yours (learn.js)
 export const FREE_KINDS = Object.freeze(['read', 'search', 'speak', 'gate', 'combat'])
 export const DRAIN_S = 10
 export const QUEUE_CAP = 4
@@ -57,7 +60,9 @@ export function createPlateBudget({ window = 45, max = 2, gap = 20 } = {}) {
     return lines.shift()
   }
 
-  return { arrive, admit, drain }
+  function settled(t) { return t >= winEnd }
+
+  return { arrive, admit, drain, settled }
 }
 
 export function arrivalPlate(cfg, first) {

@@ -467,6 +467,9 @@
       #chat-input { bottom: 12px; width: calc(100vw - 32px); }
       #msg { top: 30%; letter-spacing: 0.06em; padding: 11px 16px 12px; }
     }
+    /* a phone on its side (the narrow rules, short): the dock under the gauges stops short of the right-hand side, which the touch discs
+       keep (touch.js lays them out clear of every control; a full-width dock left them one row) */
+    @media (pointer: coarse) and (max-width: 700px) and (orientation: landscape) { #hotbar-dock { width: min(calc(100vw - 24px), 380px); } }
     /* touch: the HUD (gauges, compass, item dock) sits above the on-screen controls (z 46) so the slots can be tapped */
     @media (pointer: coarse) { #hud-cluster { z-index: 47; } }
     /* touch.js injects its own rules at runtime (a .touch-btn is a 42%-dark disc: its cream label measured 2.5:1 over the bright lobby);
@@ -672,7 +675,7 @@
     <div id="chat-log"></div>
     <div id="chat-typing"></div>
   </div>
-  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file … · /intake · /status · /invite)" spellcheck="false" style="display:none"/>
+  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file … · /intake · /status · /invite)" spellcheck="false" enterkeyhint="send" autocapitalize="off" autocomplete="off" style="display:none"/>
   <div id="msg"></div>
   <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>space ward (hold to charge)</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x set down</span> · <span>c whistle</span><span class="k-map"> · tab map</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span></div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>

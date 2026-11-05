@@ -1,6 +1,6 @@
 import { CHUNK_SIZE } from './world.js'
 import { specFor } from './variants.js'
-import { stepAI, separate, createThreat, createNoiseField, floodNoise, lineOfSight, DISPEL_S, HUNTING } from './hunt.js'
+import { stepAI, separate, createThreat, createNoiseField, floodNoise, lineOfSight, letGo, huntsYou, DISPEL_S, TURNING_S, HUNTING } from './hunt.js'
 import { creatureRadius } from './collide.js'
 
 const MAX_ENTITIES = 20
@@ -88,6 +88,7 @@ function makeEntity(cx, cy, stalkerDenom, variants, salt, seed) {
     wardHits: 0,    // wards it has absorbed; enough of them and it comes apart
     chunkCx: cx,
     chunkCy: cy,
+    follower: false,  // it lives in its chunk (film.js: its den is the chunk's hall crossing); inject's followers are placed, not homed
   })
 }
 
@@ -96,6 +97,8 @@ function makeEntity(cx, cy, stalkerDenom, variants, salt, seed) {
 //            seed: the world seed (null / 0: the unseeded world) }
 //   update(dt, player, pcx, pcy, ctxOrAggroMul) -> threat: a number or undefined fifth argument runs the legacy step
 //   verbatim (obstacles never consulted); an object (game.js's aiCtx) runs the hunt path (hunt.stepAI).
+//   setLearn(refinements | null): M19 (learn.js), what this floor's things have learned of your habits, read live (the one object
+//   learn.refinements hands out, refreshed in place). null, the default, is the hunt, the ward and the flash as they always were.
 export function createEntitySystem(config, isWallFn, deps = null) {
   const entities = []
   const pendingList = []         // injected followers still arriving (not in getEntities())
@@ -127,7 +130,7 @@ export function createEntitySystem(config, isWallFn, deps = null) {
   for (let i = 0; i < NOISE_SLOTS; i++) { ring.push({ x: 0, y: 0, L: 0, t: 0, who: 'player' }); fields.push(createNoiseField()) }
   let ringN = 0, woke = 0, huntMode = false, rr = 0
   // the hunt path reads cells through the grid reader (no key string per ask); without one, isWallFn at the cell centre
-  const env = { dt: 0, now: 0, pcx: 0, pcy: 0, player: null, ctx: null, isWall: null, floor: null, obstacles, fields, losBudget: LOS_BUDGET, damage, helpers: null, threat }
+  const env = { dt: 0, now: 0, pcx: 0, pcy: 0, player: null, ctx: null, isWall: null, floor: null, obstacles, fields, losBudget: LOS_BUDGET, damage, helpers: null, threat, learn: null }
   env.floor = grid ? (ix, iy) => grid.floor(ix, iy) : (ix, iy) => !isWallFn(ix + 0.5, iy + 0.5, env.pcx, env.pcy)
   env.isWall = (ix, iy) => !env.floor(ix, iy)
 
@@ -231,8 +234,10 @@ export function createEntitySystem(config, isWallFn, deps = null) {
     moveEntity(e, speed, dt, isWallFn, playerCx, playerCy)
   }
 
-  // beyond the gate a thing only wanders: the legacy two-probe step at its roam speed, forgetting any hunt
+  // beyond the gate a thing only wanders: the legacy two-probe step at its roam speed, forgetting any hunt (M19: a hunt of you left
+  // this far behind is a getaway by the run, whatever was hunting you still)
   function farRoam(e, spec, dt, playerCx, playerCy) {
+    if (env.learn !== null && e.lrn !== undefined && e.lrn !== '') { if (e.lrn === 'hunt') e.lrn = 'run'; letGo(e, threat, 0) }
     e.ai = 'roam'
     if (e.stagger > 0) e.stagger = Math.max(0, e.stagger - dt)
     e.dirTimer -= dt
@@ -315,8 +320,11 @@ export function createEntitySystem(config, isWallFn, deps = null) {
   // enough times disperses it entirely — and the chunk it came from stays empty
   // for DISPEL_S. A creature caught in its turning opening takes the hit twice.
   // Returns the reused { hit, dispelled, opening }.
+  // M19 (env.learn set): a push on a thing that was hunting you breaks its hunt by the ward ('ward'), and taking it apart is that
+  // getaway at once; taught against the ward, its reel before the opening is x env.learn.ward[variant] (the opening is not)
   const wardRes = { hit: 0, dispelled: 0, opening: 0 }
   function ward(player, opts = EMPTY_OPTS) {
+    const L = env.learn
     const range       = opts.range       ?? 2.6
     const halfCone    = (opts.cone       ?? Math.PI * 0.7) / 2   // total arc, split L/R of facing
     const knockback   = opts.knockback   ?? 1.7
@@ -338,8 +346,10 @@ export function createEntitySystem(config, isWallFn, deps = null) {
       if (Math.abs(a) > halfCone) continue
 
       const spec        = specFor(e.variant)
-      const staggerTime = opts.staggerTime ?? spec.staggerT
+      let   staggerTime = opts.staggerTime ?? spec.staggerT
       const dispelAt    = opts.dispelAt    ?? spec.dispelAt
+      const hunting     = L !== null && ((e.lrn !== undefined && e.lrn !== '') || huntsYou(e))
+      if (L !== null && L.ward !== null && staggerTime > TURNING_S) staggerTime = TURNING_S + (staggerTime - TURNING_S) * (L.ward[e.variant] ?? 1)
       const kb          = knockback * (e.ai === 'windup' || e.ai === 'lunge' ? spec.wardMul : 1)
       const r           = Math.min(creatureRadius(e.variant), 0.22)
       // shove it away from the player, one axis at a time so walls (and bodies) stop it
@@ -353,6 +363,7 @@ export function createEntitySystem(config, isWallFn, deps = null) {
       e.stagger = staggerTime
       e.ai = 'stagger'; e.staggerBlockedT = 0; e.turnBurst = false
       e.wardHits = (e.wardHits || 0) + (turning ? 1 + hits : hits)
+      if (hunting) e.lrn = 'ward'
       if (turning) wardRes.opening++
       wardRes.hit++
       if (e.wardHits >= dispelAt) {
@@ -362,6 +373,7 @@ export function createEntitySystem(config, isWallFn, deps = null) {
         entities.splice(i, 1)
         wardRes.dispelled++
         if (spec.dispelEvent) threat.emit(spec.dispelEvent, e, d)
+        if (hunting) letGo(e, threat, d)
       }
     }
     return wardRes
@@ -369,12 +381,15 @@ export function createEntitySystem(config, isWallFn, deps = null) {
 
   // The polaroid's flash: everything in the cone with a line to you reels (no knockback, no wardHits); a smiler or a
   // lurker turns and runs instead. Returns the reused { hit }.
+  // M19 (env.learn set): a flash on a thing that was hunting you breaks its hunt by the flash ('flash'); taught against the flash, its
+  // blind reel is x env.learn.flash.reel[variant] and a smiler's or a lurker's run starts env.learn.flash.head[variant] s in
   const flashRes = { hit: 0 }
   function flash(player, opts = EMPTY_OPTS) {
     const range    = opts.range   ?? 6
     const halfCone = (opts.cone   ?? Math.PI / 2.4) / 2
     const stagger  = opts.stagger ?? 1.8
     const facing   = player.angle ?? 0
+    const L = env.learn, F = L !== null ? L.flash : null
     flashRes.hit = 0
     for (let i = 0; i < entities.length; i++) {
       const e = entities[i]
@@ -385,8 +400,10 @@ export function createEntitySystem(config, isWallFn, deps = null) {
       a = Math.atan2(Math.sin(a), Math.cos(a))
       if (Math.abs(a) > halfCone) continue
       if (!lineOfSight(player.x, player.y, e.x, e.y, env.floor)) continue
-      e.stagger = stagger; e.staggerBlockedT = 0; e.turnBurst = false
-      if (e.variant === 'smiler' || e.variant === 'lurker') { e.ai = 'retreat'; e.phaseT = 0 } else e.ai = 'stagger'
+      const hunting = L !== null && ((e.lrn !== undefined && e.lrn !== '') || huntsYou(e))
+      e.stagger = F !== null ? stagger * (F.reel[e.variant] ?? 1) : stagger; e.staggerBlockedT = 0; e.turnBurst = false
+      if (e.variant === 'smiler' || e.variant === 'lurker') { e.ai = 'retreat'; e.phaseT = F !== null ? (F.head[e.variant] ?? 0) : 0 } else e.ai = 'stagger'
+      if (hunting) e.lrn = 'flash'
       flashRes.hit++
     }
     return flashRes
@@ -455,6 +472,7 @@ export function createEntitySystem(config, isWallFn, deps = null) {
         x: fx, y: fy, type: desc.type ?? 'stalker', variant: desc.variant ?? 'shade', state: 'chase',
         dir: Math.atan2(nearY - fy, nearX - fx), dirTimer: 3, stagger: 0, wardHits: desc.wardHits ?? 0,
         chunkCx: Math.floor(fx / CHUNK_SIZE), chunkCy: Math.floor(fy / CHUNK_SIZE),
+        follower: true,   // it followed you down: the chunk it landed in is not its home, even when another thing lives there
       })
       e.ai = 'hunt'; e.lastSeenX = nearX; e.lastSeenY = nearY; e.pending = delaySec
       pendingList.push(e)
@@ -503,5 +521,7 @@ export function createEntitySystem(config, isWallFn, deps = null) {
     }
   }
 
-  return { update, getEntities, ward, flash, noise, snapshotChasers, inject, takeWakeEvent, drainEvents, getThreat, getDispelled, restoreDispelled, isSpawnChunk }
+  function setLearn(refinements) { env.learn = refinements ?? null }
+
+  return { update, getEntities, ward, flash, noise, snapshotChasers, inject, takeWakeEvent, drainEvents, getThreat, getDispelled, restoreDispelled, isSpawnChunk, setLearn }
 }

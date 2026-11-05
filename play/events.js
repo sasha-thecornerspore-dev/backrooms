@@ -109,6 +109,7 @@ export function eventInterval(level, sanity, tension = 0) {
 // there is no separate cooldown — the interval IS the gap between events.
 // `config` ({ events, tension }) is read at every tick and never rebuilt: game.js swaps the
 // catalogue at filing and its one retension() writes the lean; absent, one is built from `events`.
+// An optional `spacing` on it (default off) stretches every window drawn: buildLevel writes a quiet floor's there (feelings.js).
 export function createEventScheduler({ rng = Math.random, events = EVENTS, config = null } = {}) {
   const cfg = config ?? { events, tension: 0 }
   let timer = 0
@@ -116,9 +117,15 @@ export function createEventScheduler({ rng = Math.random, events = EVENTS, confi
   let arrival = false             // the pending event is the arrival's (arrive): fired, it is sound-only
   let soundOnly = false           // what the last tick returned was the arrival event
 
+  // config.spacing stretches a window drawn, the arrival's too. Absent, or anything but a finite number above 0 other than 1, the draw is
+  // returned untouched: the old windows exactly, on the same rng draws
+  function spaced(s) {
+    const k = cfg.spacing
+    return typeof k === 'number' && k > 0 && k < Infinity && k !== 1 ? s * k : s
+  }
   function pickWindow(level, sanity) {
     const [a, b] = eventInterval(level, sanity, cfg.tension)
-    return a + rng() * (b - a)
+    return spaced(a + rng() * (b - a))
   }
 
   // Weighted shuffle bag over the events eligible at this depth (an entry per point of weight), rebuilt only when that
@@ -159,7 +166,7 @@ export function createEventScheduler({ rng = Math.random, events = EVENTS, confi
     arrive(level = 0, sanity = 100) {
       timer = 0
       arrival = rng() < ARRIVAL.p
-      next = arrival ? ARRIVAL.min + rng() * (ARRIVAL.max - ARRIVAL.min) : pickWindow(level, sanity)
+      next = arrival ? spaced(ARRIVAL.min + rng() * (ARRIVAL.max - ARRIVAL.min)) : pickWindow(level, sanity)
     },
     // A beat asks for an event now: one from the bag, and the clock starts over from the floor's window. null if none.
     fireNow(level, sanity) {
@@ -172,6 +179,6 @@ export function createEventScheduler({ rng = Math.random, events = EVENTS, confi
     _pick: pick,                   // exposed for tests
     _next: () => next,
     _arrival: () => arrival,
-    config: cfg,   // the mutable { events, tension } every tick reads
+    config: cfg,   // the mutable { events, tension, spacing? } every tick reads
   }
 }

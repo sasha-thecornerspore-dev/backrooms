@@ -1,7 +1,9 @@
 // levelmem.js — what each floor remembers of you.
 //
 // Per level (keyed by String(level)): where you last stood and which chunk you arrived in, how many times you have come, what you took
-// (item keys — they never respawn), which machines you emptied and when, which drawers you searched, and what you set down. The one
+// (item keys — they never respawn), which machines you emptied and when, which drawers you searched, what you set down, and how you got
+// away from its hunts (the getaways by method, M19 learn.js; a floor that counted none keeps no such field in the save) and which of
+// what its things learned it has said (the same: none said, no field). The one
 // owner of this state this release: game.js asks it on every buildLevel / travel / death and saves export() in the snapshot.
 //
 // A vended key expires only when VEND_RESTOCK_S have passed AND you have been away (visits advanced since the vend): restock needs an
@@ -9,14 +11,37 @@
 import { CHUNK_SIZE } from './world.js'
 
 export const VEND_RESTOCK_S = 600
-const CAP = Object.freeze({ taken: 2000, searched: 2000, vended: 500, dropped: 24 })
+const CAP = Object.freeze({ taken: 2000, searched: 2000, vended: 500, dropped: 24, escapes: 99 })
+// how you can get away from a hunt, as the hunt tells it apart (hunt.js ESCAPE_KINDS; learn.js counts them and tunes what they teach)
+export const ESCAPE_METHODS = Object.freeze(['still', 'ward', 'run', 'flash'])
 
 const num = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d)
 const int = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? Math.floor(v) : d)
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 
 function fresh() {
-  return { x: null, y: null, angle: 0, cx: 0, cy: 0, visits: 0, lastT: 0, arrived: null, taken: new Set(), vended: [], searched: new Set(), dropped: [] }
+  return { x: null, y: null, angle: 0, cx: 0, cy: 0, visits: 0, lastT: 0, arrived: null, taken: new Set(), vended: [], searched: new Set(), dropped: [], escapes: null, told: null }
+}
+
+// the getaways by method from anything (a save's field): all four, each a whole number 0..CAP.escapes; null when every one is zero
+function escapesFrom(o) {
+  if (!isObj(o)) return null
+  const out = {}
+  let any = false
+  for (const m of ESCAPE_METHODS) {
+    const v = o[m]
+    const n = typeof v === 'number' && Number.isFinite(v) ? Math.min(CAP.escapes, Math.max(0, Math.floor(v))) : 0
+    out[m] = n
+    if (n > 0) any = true
+  }
+  return any ? out : null
+}
+
+// the methods whose lesson a floor has said, from anything (a save's field): the known methods, each once, in order; null when none
+function toldFrom(a) {
+  if (!Array.isArray(a)) return null
+  const out = ESCAPE_METHODS.filter((m) => a.includes(m))
+  return out.length ? out : null
 }
 
 // a Set that forgets its oldest entry past the cap (insertion order is the age)
@@ -95,6 +120,33 @@ export function createLevelMemory() {
     return false
   }
 
+  // the getaways from this floor's hunts, by method (M19): a fresh copy of all four, zero for a floor that counted none (reading makes
+  // no record). noteEscape counts one -> the method's new count, or 0 for a method the hunt does not tell apart (nothing is written)
+  function escapesFor(level) {
+    const e = get(level)?.escapes
+    return { still: e ? e.still : 0, ward: e ? e.ward : 0, run: e ? e.run : 0, flash: e ? e.flash : 0 }
+  }
+  function noteEscape(level, method) {
+    if (!ESCAPE_METHODS.includes(method)) return 0
+    const r = rec(level)
+    r.escapes ??= { still: 0, ward: 0, run: 0, flash: 0 }
+    r.escapes[method] = Math.min(CAP.escapes, r.escapes[method] + 1)
+    return r.escapes[method]
+  }
+  // whether this floor has said what its things learned against `method` (learn.js: said once, offered until then). Asking makes no
+  // record; noteTold marks it -> false for a method the hunt does not tell apart (nothing is written)
+  function toldOf(level, method) {
+    const t = get(level)?.told
+    return t ? t.includes(method) : false
+  }
+  function noteTold(level, method) {
+    if (!ESCAPE_METHODS.includes(method)) return false
+    const r = rec(level)
+    r.told ??= []
+    if (!r.told.includes(method)) r.told.push(method)
+    return true
+  }
+
   function droppedFor(level) { return rec(level).dropped.slice() }
   function setDropped(level, list) { rec(level).dropped = Array.isArray(list) ? list.slice(-CAP.dropped) : [] }
 
@@ -107,6 +159,8 @@ export function createLevelMemory() {
         arrived: r.arrived ? { cx: r.arrived.cx, cy: r.arrived.cy } : null,
         taken: [...r.taken], vended: r.vended.map((e) => [e[0], e[1], e[2]]), searched: [...r.searched], dropped: r.dropped.slice(),
       }
+      if (r.escapes) out[k].escapes = { ...r.escapes }                // additive and optional: only a floor that counted a getaway
+      if (r.told) out[k].told = r.told.slice()                        // the same: only a floor that has said a lesson
     }
     return out
   }
@@ -138,13 +192,15 @@ export function createLevelMemory() {
         r.vended = v.slice(-CAP.vended)
       }
       if (Array.isArray(s.dropped)) r.dropped = s.dropped.filter(isObj).slice(-CAP.dropped)
+      r.escapes = escapesFrom(s.escapes)                              // a save from before M19 has none: zero everywhere
+      r.told = toldFrom(s.told)                                       // nor this: nothing said
       recs.set(String(k), r)
     }
   }
 
   return {
     leave, arrive, get, takenFor, noteTaken, vendedFor, noteVended, wasRestocked, searchedFor, noteSearched, droppedFor, setDropped,
-    export: exportAll, import: importAll,
+    escapesFor, noteEscape, toldOf, noteTold, export: exportAll, import: importAll,
   }
 }
 

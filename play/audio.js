@@ -100,6 +100,40 @@ export function setRadio(on) {
   }
 }
 
+// ── the radio's static: the warning under its tune (radiostatic.js says how loud, from the dread you feel through the halls). The one
+//    second of noise initAudio built, looped, its pitch drifting slowly (so the one second never repeats the same), through one
+//    band-pass into one gain, and into the destination beside the radio's notes: one channel and no panner, so it says near and never
+//    where, and no ambience setting silences it, as none silences the tune. Built the first time a hiss is asked for, then kept; every
+//    change is one glide on that gain (setTargetAtTime: it never zippers), an unchanged ask touches nothing, and it is capped like
+//    everything above ──
+const HISS = Object.freeze({ band: 1800, q: 0.7, drift: 0.13, cents: 300, tc: 0.05 })
+let hiss = null       // the hiss's gain, once built
+let hissTo = 0        // the level it was last asked to glide to
+
+export function setRadioStatic(gain = 0, tc = HISS.tc) {
+  if (!actx || !noiseBuf) return
+  const g = gain > 0 ? cap(gain) : 0
+  if (g === hissTo) return
+  try {
+    if (!hiss) {
+      const src = actx.createBufferSource(); src.buffer = noiseBuf; src.loop = true
+      const lfo = actx.createOscillator(); lfo.frequency.value = HISS.drift
+      const depth = actx.createGain(); depth.gain.value = HISS.cents
+      const bp = filter('bandpass', HISS.band, HISS.q)
+      const out = actx.createGain(); out.gain.value = 0
+      lfo.connect(depth); depth.connect(src.detune)
+      src.connect(bp); bp.connect(out); out.connect(actx.destination)
+      src.start(); lfo.start()
+      hiss = out
+    }
+    hiss.gain.setTargetAtTime(g, actx.currentTime, tc > 0 ? tc : HISS.tc)
+    hissTo = g
+  } catch { /* ignore */ }
+}
+
+// what the hiss is gliding to (0 before it is built)
+export function radioStaticLevel() { return hissTo }
+
 // ── generative weirdcore music ────────────────────────────────────────────
 // No files, no loops — a self-generating ambient bed. Detuned breathing pads
 // under a "wrong" music-box melody drawn from a per-level scale, washed through
