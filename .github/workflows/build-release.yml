@@ -28,8 +28,10 @@ jobs:
       - uses: actions/checkout@v5
 
       # Skip only when this version is already fully PUBLISHED.
-      # A leftover draft from a failed run is NOT skipped — the build re-uploads into the same
-      # draft (--clobber), so releases stay repairable. Docs-only pushes after a good release
+      # A leftover draft from a failed run is NOT skipped. When it points at this very commit (the run, run again) the build
+      # re-uploads into it (--clobber), so releases stay repairable. When it points anywhere else (the fix was a new commit, or
+      # the draft was made by hand on a branch) it is deleted, files and all, and made again here: a draft keeps the commit it
+      # was made with as the tag it will create, and whatever a failed run uploaded. Docs-only pushes after a good release
       # just skip cleanly.
       - name: Check for existing release
         id: guard
@@ -51,6 +53,17 @@ jobs:
             echo "build=false" >> "$GITHUB_OUTPUT"
             echo "publish=false" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+          if [ "$IS_DRAFT" = "true" ]; then
+            # a leftover draft: the commit it will tag, against this run's. A target that cannot be read stops the step (bash -e):
+            # nothing is deleted on a guess
+            AT=$(gh release view "$TAG" --repo "${{ github.repository }}" --json targetCommitish -q .targetCommitish)
+            if [ -z "$AT" ]; then echo "::error title=release::could not read which commit the draft $TAG points at"; exit 1; fi
+            if [ "$AT" != "${{ github.sha }}" ]; then
+              echo "Draft $TAG points at $AT, not at ${{ github.sha }} — deleting it and its files; a fresh draft follows."
+              gh release delete "$TAG" --yes --repo "${{ github.repository }}"
+              IS_DRAFT="missing"
+            fi
           fi
           # release notes: docs/release-notes/<tag>.md when it exists (written with the version bump), else empty
           NOTES="docs/release-notes/$TAG.md"
@@ -114,6 +127,21 @@ jobs:
           CSC_LINK:         ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: npm run dist:win
+
+      # our installers are signed by our own CA, which no player's Windows trusts. A build that carries the publisher's name takes
+      # only an update Windows calls validly signed, and 2.0.3 to 2.0.5 refused every one (ERR_UPDATER_INVALID_SIGNATURE).
+      # package.json build.win.verifyUpdateCodeSignature: false keeps the name out; this looks at what was really built.
+      - name: The Windows build carries no publisher name
+        if: matrix.platform == 'win'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          found=( dist/*-unpacked/resources/app-update.yml )
+          if [ ${#found[@]} -eq 0 ]; then echo "::error title=updater::no app-update.yml under dist/*-unpacked/resources to check"; exit 1; fi
+          if grep -n "publisherName" "${found[@]}"; then
+            echo "::error title=updater::the build carries a publisher name: installs of it would refuse every update (docs/operations.md §5)"; exit 1
+          fi
+          echo "no publisher name in ${found[*]}"
 
       - name: Build installers (Linux)
         if: matrix.platform == 'linux'
@@ -199,11 +227,18 @@ jobs:
     steps: *installer-steps   # the build job's steps, the very same list (a YAML alias)
 
   # Publish only after every required asset has landed. Until now the release was a draft, invisible to updaters.
-  # always() lets it wait for the mac job however that ends (failed, cancelled, never started) without needing it: GitHub skips a
-  # job when something it needs did not succeed, unless its if: says otherwise. The gate is the Windows/Linux build alone.
+  # !cancelled() lets it wait for the mac job however that ends (failed, cancelled by GitHub, never started) without needing it:
+  # GitHub skips a job when something it needs did not succeed, unless its if: carries a status function. The gate is the
+  # Windows/Linux build alone. It was always() until 2.0.5, which is true in a run a person cancelled too: cancelling once Windows
+  # and Linux were green still published. cancelled() is true when the workflow run is cancelled (docs.github.com, "Evaluate
+  # expressions": the status check functions, which name !cancelled() for a job that runs whether or not the ones before it
+  # succeeded), not when one job in it is: the four 2.0.4 attempts whose mac leg GitHub cancelled for want of a runner ended
+  # `failure`, never `cancelled`. Should a mac job GitHub cancelled ever skip the publish all the same, re-run that job (the
+  # publish runs again with it) and put always() back here and on itch.
+  # The whole condition sits in ${{ }}: a plain YAML value may not open with `!`.
   publish:
     needs: [prepare, build, mac]
-    if: always() && needs.prepare.outputs.publish == 'true' && needs.build.result == 'success'
+    if: ${{ !cancelled() && needs.prepare.outputs.publish == 'true' && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -237,8 +272,8 @@ jobs:
   # once its checksum matches the one pinned below.
   itch:
     needs: [prepare, publish]
-    # always(), as on publish: a mac job that did not succeed is behind publish, and would skip this job too
-    if: always() && needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success'
+    # !cancelled(), as on publish: a mac job that did not succeed is behind publish, and would skip this job too
+    if: ${{ !cancelled() && needs.prepare.outputs.publish == 'true' && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
