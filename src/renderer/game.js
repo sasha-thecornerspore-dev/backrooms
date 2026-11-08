@@ -1481,7 +1481,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    Level ∅ surfaces its key); /file <answer> reads the next instrument
   //    against the case manifest — the SAME salted hash and the SAME
   //    same-origin keyring the web board at /recover/ uses, so a task done in
-  //    the maze shows as read on the board, and vice versa. ──
+  //    the maze shows as read on the board, and vice versa — in the browser
+  //    copy at /play/ only (same origin): the desktop app and itch keep their own. ──
   // the open case is remembered per browser (cs.case.open); /recover <case> switches it.
   const RECOVER_DEFAULT = 'case-d8'
   const rOpenCase = () => { try { return localStorage.getItem('cs.case.open') || RECOVER_DEFAULT } catch (e) { return RECOVER_DEFAULT } }
