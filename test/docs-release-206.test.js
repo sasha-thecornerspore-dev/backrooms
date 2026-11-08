@@ -42,6 +42,20 @@ describe('the 2.0.6 release notes (a draft)', () => {
     expect(notes).toContain('**the closing key no longer appears on the screen**')
     expect(notes).toContain('a solo run saved on 2.0.5 continues where you left it.')
   })
+  it('say the rest: vertical look in its own words, sealed notes, the Windows install by hand, the cache, the site', () => {
+    const settings = fs.readFileSync(new URL('../src/renderer/index.html', import.meta.url), 'utf8')
+    for (const l of ['Vertical look', 'look up and down too', 'Invert vertical look', 'push up to look down']) {
+      expect(settings, l).toContain(l)
+      expect(notes, l).toContain(l)
+    }
+    expect(notes).toContain('**a case\'s notes are sealed.**')
+    expect(notes).toContain('**on windows with 2.0.3, 2.0.4 or 2.0.5:**')
+    expect(notes).toContain('`The-Backrooms-Setup-2.0.6.exe`')
+    expect(notes).toContain('backrooms-pwa-v14')
+    expect(fs.readFileSync(new URL('../src/sw.js', import.meta.url), 'utf8')).toContain("const CACHE = 'backrooms-pwa-v14'")
+    expect(notes).toContain('put `docs/manual.html` at `manual/index.html` on gh-pages')
+    expect(JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version).toBe('2.0.6')
+  })
 })
 
 describe('the manual and the README say it too', () => {

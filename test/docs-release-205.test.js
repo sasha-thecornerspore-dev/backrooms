@@ -54,7 +54,6 @@ describe('the 2.0.5 release notes', () => {
     expect(notes).toMatch(/a room can mix 2\.0\.4 and 2\.0\.5/)
     expect(notes).toMatch(/never feels different there, and the things never learn/)
     expect(notes).toMatch(/saved on 2\.0\.4 continues where you left it/)
-    expect(notes).toContain('backrooms-pwa-v13')
-    expect(fs.readFileSync(new URL('../src/sw.js', import.meta.url), 'utf8')).toContain("const CACHE = 'backrooms-pwa-v13'")
+    expect(notes).toContain('backrooms-pwa-v13')   // (the cache moved on in 2.0.6: docs-release-206.test.js pins it now)
   })
 })
