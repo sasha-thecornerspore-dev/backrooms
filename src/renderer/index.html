@@ -254,6 +254,41 @@
     #chat-input:focus { border-color: #9fd0ff; }
     #chat-input::placeholder { color: #9aa6ba; }
 
+    /* the field terminal (terminal.js createTermCard; game.js opens it): held, not modal, on the right where the chat stack is on the left,
+       so friends' lines stay readable in a room. Dim amber phosphor on near-black: apart from the chat's blue and the card's yellow */
+    #term {
+      position: fixed; right: 16px; bottom: 150px; width: min(560px, 46vw); max-height: 52vh; z-index: 61;
+      display: none; flex-direction: column; background: rgba(8,9,6,0.94); border: 1px solid #5a5230; color: #d9cf9c;
+      font: 13px/1.45 var(--mono); outline: 1px solid rgba(217,207,156,0.14); outline-offset: -4px; box-shadow: 0 4px 18px rgba(0,0,0,0.6);
+    }
+    #term-head {
+      display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 12px 6px;
+      font-size: 11px; letter-spacing: 2px; border-bottom: 1px solid rgba(217,207,156,0.22); color: #b8ad7c;
+    }
+    #term-close { cursor: pointer; white-space: nowrap; }
+    #term-out {
+      flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
+      white-space: pre-wrap; overflow-wrap: anywhere; padding: 8px 12px; user-select: text; -webkit-user-select: text;
+    }
+    #term-out .t-in { color: #8f875f; }
+    #term-out .t-out { color: #d9cf9c; }
+    #term-out .t-page { color: #e6dcaa; margin-left: 4px; padding-left: 10px; border-left: 2px solid #5a5230; }
+    #term-out .t-dim { color: #9d9468; }
+    #term-out .t-sys { color: #9d9468; font-style: italic; }
+    #term-row { display: flex; align-items: center; gap: 8px; padding: 6px 12px 8px; border-top: 1px solid rgba(217,207,156,0.12); }
+    #term-prompt { color: #b8ad7c; white-space: nowrap; }
+    #term-input {
+      flex: 1 1 auto; min-width: 0; background: none; border: none; outline: none; color: #f0e6b8; font: 13px var(--mono);
+      caret-color: #f0e6b8; padding: 2px 0;
+    }
+    #term-input::placeholder { color: #6f6848; }
+    #term-input:focus { animation: term-caret 1.1s step-end infinite; }
+    @keyframes term-caret { 50% { caret-color: transparent; } }
+    @media (prefers-reduced-motion: reduce) { #term-input:focus { animation: none; } }
+    /* touch: at the top, above the phone's keyboard and clear of the discs (it is display: none at layout time, so touch.js keeps no
+       keep-out rect for it) */
+    @media (pointer: coarse) { #term { top: 12px; left: 16px; right: 16px; bottom: auto; width: auto; max-height: 42vh; } }
+
     /* centre messages — the building speaking. A notice, not a caption. */
     #msg {
       position: fixed; top: 34%; left: 50%; transform: translateX(-50%);
@@ -349,6 +384,8 @@
     /* while the sheet is up, the building's line reads over it (game.js sets body.map-open): #msg sits at 34%, the card rises from 38vh.
        Only then — the base #msg keeps no z-index, so the modal note card still covers a murmur */
     body.map-open #msg { z-index: 56; }
+    /* and over the field terminal while it is up (game.js sets body.term-open) */
+    body.term-open #msg { z-index: 62; }
     /* the paper corner under the HUD plate: the map's tab on touch only (the keyboard has Tab); a tap reads as Tab (game.js) */
     #map-tab {
       display: none; width: 36px; height: 36px; align-items: center; justify-content: center;
@@ -381,6 +418,9 @@
     #file-lines .file-line:first-child { color:#c9ba72; }
     #btn-new-notice { background:none; border:1px solid #8a7a3a; color:#c9ba72; font-family:monospace; font-size:13px; padding:8px 16px; cursor:pointer; letter-spacing:2px; }
     #btn-new-notice:hover { background:rgba(58,44,23,0.88); }
+    #btn-term-forget { background:none; border:1px solid #8a7a3a; color:#c9ba72; font-family:monospace; font-size:12px; padding:6px 14px; cursor:pointer; letter-spacing:1px; margin-top:14px; }
+    #btn-term-forget:hover { background:rgba(58,44,23,0.88); }
+    #term-forget-hint { margin-top:6px; color:#c9ba72; font-family:monospace; max-width:420px; }
     #file-reply { margin-top:8px; color:#c9ba72; font-family:monospace; min-height:12px; }
     /* the anchor field sits above the ways in (launch-fixes F7): the pin is the hook, so it reads before the buttons, at full contrast */
     #anchor-wrap { display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:4px; }
@@ -584,6 +624,9 @@
         <p id="file-lines"></p>
         <button id="btn-new-notice">request a new notice</button>
         <div id="file-reply" class="set-hint"></div>
+        <!-- the field terminal's record on this device (game.js writes the label and the hint; the first press asks) -->
+        <button id="btn-term-forget"></button>
+        <div id="term-forget-hint" class="set-hint"></div>
       </div>
       <div id="locate-row" style="display:none;margin-top:12px;">
         <button id="btn-locate" style="background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:13px;padding:8px 16px;cursor:pointer;letter-spacing:2px;">locate your body ⌖</button>
@@ -679,9 +722,15 @@
     <div id="chat-log"></div>
     <div id="chat-typing"></div>
   </div>
-  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /recover · /cases · /file … · /intake · /status · /invite)" spellcheck="false" enterkeyhint="send" autocapitalize="off" autocomplete="off" style="display:none"/>
+  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /term · /recover · /cases · /file … · /intake · /status · /invite)" spellcheck="false" enterkeyhint="send" autocapitalize="off" autocomplete="off" style="display:none"/>
+  <!-- the field terminal (terminal.js createTermCard writes its labels; game.js opens it): rows are made only when something prints -->
+  <div id="term" role="dialog" aria-label="field terminal">
+    <div id="term-head"><span id="term-title"></span><span id="term-close" role="button"></span></div>
+    <div id="term-out" role="log" aria-live="polite"></div>
+    <div id="term-row"><span id="term-prompt"></span><input id="term-input" type="text" maxlength="120" spellcheck="false" autocapitalize="off" autocomplete="off" enterkeyhint="go"/></div>
+  </div>
   <div id="msg"></div>
-  <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>space ward (hold to charge)</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x set down</span> · <span>c whistle</span><span class="k-map"> · tab map</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span></div>
+  <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>space ward (hold to charge)</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x set down</span> · <span>c whistle</span><span class="k-map"> · tab map</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span> · <span>` terminal</span></div>
   <div id="presence-hint" style="opacity:0">• • •  e · speak  • • •</div>
   <div id="item-hint" style="opacity:0"></div>
   <div id="stamina-wrap"><div id="stamina-fill"></div></div>
@@ -1132,6 +1181,8 @@
     // request a new notice: the game re-files you under the notice nobody answered (once a day, like any filing) and redraws the row.
     // The button lets go of the focus at once, so an Enter meant for the chat later can never press it again
     document.getElementById('btn-new-notice').onclick = (e) => { e.currentTarget.blur(); document.dispatchEvent(new CustomEvent('backrooms:new-notice')) }
+    // forget what the field terminal kept on this device: the game asks on the first press and forgets on the second
+    document.getElementById('btn-term-forget').onclick = (e) => { e.currentTarget.blur(); document.dispatchEvent(new CustomEvent('backrooms:term-forget')) }
     // one save-and-close path for the CLOSE button, Esc and a click on the dimmed backdrop
     async function closeSettings() {
       const updateMode = document.getElementById('set-updatemode').value
