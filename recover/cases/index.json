@@ -1,6 +1,21 @@
 {
   "cases": [
     {
+      "id": "case-r14",
+      "code": "CASE R-14",
+      "title": "the paper house",
+      "blurb": "six instruments: the referral, the stamps, the note, the sale, the badge, the books.",
+      "surfaced": "2026-11-08",
+      "stations": [
+        "referral",
+        "stamps",
+        "note",
+        "sale",
+        "badge",
+        "books"
+      ]
+    },
+    {
       "id": "case-f95",
       "code": "CASE F-95",
       "title": "the lookout",

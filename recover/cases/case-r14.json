@@ -1,0 +1,111 @@
+{
+  "id": "case-r14",
+  "title": "CASE R-14 — the paper house",
+  "intro": "Field Recovery reopened the file on the houses that were taken by paper. Not by fire or flood: by forms. A loan the government alleged was priced and steered by race, two generations after the 1937 map graded this city. Sworn statements signed by the stack. A defense that asked for one sheet of paper, and court rules that will take a sworn copy in its place. A city sale for a family's unpaid bills. And some of the people in the offices sworn to stand between the block and the machine, keeping false books of their own. Six instruments, every one in print. Read them in order; each reading opens the next. Every instrument in this file is paper. None of them is a place, and there is no house to go to. The file will not tell you that you can win. It will only show you how the machine works.",
+  "stations": [
+    {
+      "id": "referral",
+      "title": "i · the referral",
+      "where": "the public record · 2012",
+      "clue": "Two generations after the red line kept the money out, the money came back, and the government alleged it came back priced by race. In 2012 the Justice Department settled with the country's largest home mortgage originator over claims that Black and Hispanic borrowers who qualified for better loans were charged more or put into subprime ones. The bank denied it, and no court ruled on it. Case D-8 read this release for its figure; read it again for a name. The Department was not the only office looking: find the federal regulator that ran its own parallel investigation of the bank's lending in the Baltimore and Washington metro areas, then referred what it found.",
+      "link": {
+        "label": "U.S. Department of Justice — the 2012 fair lending settlement (archived copy)",
+        "href": "https://web.archive.org/web/20261028033415/https://www.justice.gov/archives/opa/pr/justice-department-reaches-settlement-wells-fargo-resulting-more-175-million-relief"
+      },
+      "prompt": "one word: the official the regulator is named for (the first word of the title, not its initials)",
+      "gate": {
+        "type": "sha256",
+        "hash": "92d9be063285bfa54504ebd4b79fccb9fc0856985931c5b7690fd6f9245fbd79"
+      },
+      "onSolve": "the Office of the Comptroller of the Currency, a federal bank regulator, found reason to believe the bank had engaged in a pattern or practice of discrimination by race or color in those two metro areas. the settlement resolved what the Department alleged; no court ruled on it. in a separate matter in 2020 the same bank agreed to pay three billion dollars and admitted that employees had opened accounts in customers' names without their consent; the Justice Department says staff called it gaming. next: the paper that took the houses."
+    },
+    {
+      "id": "stamps",
+      "title": "ii · the stamps",
+      "where": "the trade press · 2010",
+      "clue": "In the autumn of 2010 the country learned that foreclosure paper had been signed by the stack, and some of it stamped by notaries alleged to have notarized without watching anyone sign. Maryland went after the stamps. A trade paper reported what the Maryland Secretary of State did to the notaries it found, and in which months. The headline gives the total. Read past it: how many lost their commissions in August?",
+      "link": {
+        "label": "HousingWire — Maryland's notaries and the foreclosure probe (October 2010)",
+        "href": "https://www.housingwire.com/articles/maryland-removes-six-notaries-office-foreclosure-probe/"
+      },
+      "prompt": "digits only: how many notaries were removed in August",
+      "gate": {
+        "type": "sha256",
+        "hash": "ab2f577d4a4fd692bc2a31049c6364f8ffea5b6cbe0f6db771da97909a43faba"
+      },
+      "onSolve": "three in August, two in September, one in October: six commissions revoked when none of the notaries asked for a hearing. the practice had a name by then: robo-signing. in 2012 the five largest mortgage servicers, Wells Fargo among them, settled with the federal government and forty-nine state attorneys general over robo-signed affidavits and other foreclosure abuses. next: the one sheet of paper the homeowners asked to see."
+    },
+    {
+      "id": "note",
+      "title": "iii · the note",
+      "where": "the encyclopedia · the mortgage note",
+      "clue": "Some homeowners answered with four words: show me the note. The original promise to pay, signed at the closing table, had passed from lender to lender, and some attorneys, quoted in a 2009 news report the encyclopedia cites, estimated that the papers behind as many as half the mortgages made from 2001 through 2008 were lost or destroyed. Read the encyclopedia's section on that defense (on a phone, tap its heading to open it). It names, in a single word, the question the whole strategy rests on: who has the legal right to sue.",
+      "link": {
+        "label": "Wikipedia — the produce-the-note defense (the version checked for this case)",
+        "href": "https://en.wikipedia.org/w/index.php?title=Mortgage_note&oldid=1375675106"
+      },
+      "prompt": "one word: the question of who may sue",
+      "gate": {
+        "type": "sha256",
+        "hash": "9bd94aecc142e07809fbb144036c55709be94df0fa12dd80d680ccf8842b4f2c"
+      },
+      "onSolve": "standing: the right to ask at all. in Maryland a foreclosure can be filed with a sworn copy of the note instead of the original, and when no copy can be found, a sworn lost-note affidavit that says why can take its place. a homeowner's motion to stop the sale must be sworn, must state every defense with particularity, and is due fifteen days after the last of several later steps in the case. next: the sale the city runs itself."
+    },
+    {
+      "id": "sale",
+      "title": "iv · the sale",
+      "where": "the public record · the city",
+      "clue": "The city has a sale of its own. Each year it sells the unpaid city bills on homes to outside bidders, and the bidders then charge the owner interest and fees, as state law allows. The city's housing department publishes the line a home must cross before it can be put up for that sale. Open its tax sale page and read the figure for a home its owner lives in.",
+      "link": {
+        "label": "Baltimore City housing department — tax sale prevention",
+        "href": "https://www.baltimorecity.gov/dhcd/resources-for-homeowners/tax-sale-prevention",
+        "archive": "https://web.archive.org/web/20260402002200/https://www.baltimorecity.gov/dhcd/resources-for-homeowners/tax-sale-prevention"
+      },
+      "prompt": "digits only, no cents: the dollar line for an owner-occupied home",
+      "gate": {
+        "type": "sha256",
+        "hash": "a8c6e2cafbabdf2c76c765cdf8ca54b2a5f3c9dd91d06a61993c34fa36623f86"
+      },
+      "onSolve": "a thousand dollars in city bills, by the housing department's count (another city page still gives a lower figure), and the debt on a home its owner lives in can be sold to a bidder who charges interest on it. since 2020 the water bill no longer counts toward that line, and in recent years the mayor has pulled many owner-occupied homes off the list. the same page lists the credits and the deferral that can keep a home off the sale. next: the people sworn to protect the block."
+    },
+    {
+      "id": "badge",
+      "title": "v · the badge",
+      "where": "the public record · 2019",
+      "clue": "Some of the people sworn to protect the block were robbing it. Members of a specialized unit of the city's police department, named for tracing guns, robbed people they stopped and wrote false reports to hide it. Read the U.S. Attorney's release on one detective's sentencing. Besides the robberies, he admitted cheating the city on his timesheets. Find the kind of pay he claimed for hours he did not work.",
+      "link": {
+        "label": "U.S. Attorney, District of Maryland — a detective's sentencing (archived copy)",
+        "href": "https://web.archive.org/web/20260808020900/https://www.justice.gov/usao-md/pr/former-baltimore-city-police-gun-trace-task-force-detective-sentenced-12-years-federal"
+      },
+      "prompt": "one word: the kind of pay he faked",
+      "gate": {
+        "type": "sha256",
+        "hash": "21765dbbb36e4cefcb31ec15c0f792b0b49c8c3caf53994fb70438cf9f66da00"
+      },
+      "onSolve": "overtime: paid for hours that never happened. eight members of the unit were convicted, by plea or at trial, and their sergeant was sentenced to twenty-five years. he also pleaded guilty to planting evidence and writing a false police report that led to two Baltimore men being convicted and imprisoned in 2010. next: the ledger at the top."
+    },
+    {
+      "id": "books",
+      "title": "vi · the books",
+      "where": "the public record · 2020",
+      "clue": "In 2020 a former mayor of Baltimore was sentenced to three years in federal prison. She had sold the University of Maryland Medical System tens of thousands of her own children's books, kept some of the books it paid for, and sold copies to other buyers who did not know. The U.S. Attorney's release describes how the money was disguised: a contract, a business ledger, and fake invoices made at her urging. Find the one word the release uses for what was done to the dates on those invoices.",
+      "link": {
+        "label": "U.S. Attorney, District of Maryland — the former mayor's sentencing (archived copy)",
+        "href": "https://web.archive.org/web/20260706153648/https://www.justice.gov/usao-md/pr/former-baltimore-mayor-catherine-pugh-sentenced-three-years-federal-prison-fraud"
+      },
+      "prompt": "one word: what was done to the dates on the invoices",
+      "gate": {
+        "type": "sha256",
+        "hash": "20dc67791c7f6d01d8a327cd6a7b878679c8de5031d944059109e396bf7c2cda"
+      },
+      "onSolve": "backdated: paper that lies about when it was made. kin to the robo-signed affidavit and the unwitnessed stamp: paper that says something happened the way it did not. the file is read."
+    }
+  ],
+  "reward": {
+    "title": "the paper house is read.",
+    "text": "Six instruments, one machine. Loans the government alleged were priced and steered by race, referred by the federal Comptroller of the Currency and settled without a ruling. Commissions pulled from notaries alleged to have stamped what they never watched. A defense that asks one question, standing, and rules that will take a sworn copy of the note, or a sworn page saying why there is none. A city that sells the unpaid bills on a home once they reach a line its own pages do not agree on, and that lists, on the same page, the help that can keep a home off the sale. A police unit billing overtime while some of its members robbed the block. Invoices backdated at a mayor's urging. Field Recovery does not say how this ends for you. It shows you how the machine works, from the loan to the ledger at the top. Keep the file open.",
+    "key": "R-14 · THE NOTE · FILED",
+    "href": "../codex/#loans",
+    "linkLabel": "▸ the map came back — the fourth instrument"
+  }
+}
