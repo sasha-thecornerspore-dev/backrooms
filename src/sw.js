@@ -12,7 +12,7 @@ const SHELL = [
   '/renderer/levels.js', '/renderer/raycaster.js', '/renderer/renderer.js', '/renderer/entities.js',
   '/renderer/gfx-util.js', '/renderer/gfx-textures.js', '/renderer/gfx-world.js', '/renderer/gfx-sprites.js', '/renderer/gfx-post.js', '/renderer/gfx-cpu.js', '/renderer/gfx-sky.js', '/renderer/gfx-light.js', '/renderer/gfx-quality.js', '/renderer/gfx-attract.js',
   '/renderer/gfx-frame.js', '/renderer/gfx-gl-g4-validate.js', '/renderer/gfx-gl-post-math.js', '/renderer/gfx-gl-post-particles.js', '/renderer/gfx-gl-post-shaders.js', '/renderer/gfx-gl-sprites-atlas.js', '/renderer/gfx-gl-sprites-plan.js', '/renderer/gfx-gl.js', '/renderer/gfx-gl-util.js', '/renderer/gfx-gl-world.js', '/renderer/gfx-gl-world-data.js', '/renderer/gfx-gl-world-shader.js', '/renderer/gfx-gl-sprites.js', '/renderer/gfx-gl-post.js', '/renderer/gfx-stats.js', '/renderer/gfx-bench.js',
-  '/renderer/audio.js', '/renderer/prefs.js', '/renderer/messages.js', '/renderer/input.js',
+  '/renderer/audio.js', '/renderer/prefs.js', '/renderer/messages.js', '/renderer/input.js', '/renderer/look.js',
   '/renderer/collide.js', '/renderer/placement.js', '/renderer/reach.js', '/renderer/feedback.js',
   '/renderer/hunt.js', '/renderer/variants.js', '/renderer/ward.js', '/renderer/tension.js',
   '/renderer/topology.js', '/renderer/levelmem.js', '/renderer/death.js', '/renderer/channels.js',

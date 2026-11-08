@@ -16,6 +16,7 @@ import { SCRAPS } from './scraps.js'
 import { createEventScheduler, EVENTS, FOOTSTEPS_ECHO, FX_PLAY, eventFx, createBag } from './events.js'
 import { createMessageQueue, PRIO } from './messages.js'
 import { takeKey } from './input.js'
+import { lookInput, lookStep, lookLevel, MOUSE_PITCH } from './look.js'
 import { createSolidWorld, createColliderIndex, movePoint, PLAYER_R } from './collide.js'
 import { bumpKindFor, bumpIntensity, isHardBump, createBumpGate, BUMP_LINES } from './feedback.js'
 import { CLUTTER_LINES } from './placement.js'
@@ -252,6 +253,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const player = {
     x: HALF + 0.5, y: HALF + 0.5,
     angle: 0, bob: 0, bobOffset: 0, moving: false,
+    pitch: 0, pitchIn: 0,          // vertical look (look.js): what the renderer draws, and the input gathered since the last frame
     hp: 100, maxHp: 100,
   }
   let spawnX = player.x, spawnY = player.y
@@ -772,6 +774,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (m?.x != null) { level.cache.preload(m.cx, m.cy); level.grid.setPlayerChunk(m.cx, m.cy) }
       const a = arrivalFor({ way, fromCx: fromC.cx, fromCy: fromC.cy, partner, mem: m, floorFn: level.grid.floor, angle: player.angle })
       player.x = a.x; player.y = a.y
+      lookLevel(player)                 // you arrive looking straight ahead (the view eased toward level under the veil: look.js)
       spawnChunk = chunkUnder()         // where you actually stand (a.chunk is the from-chunk; a ring arrival or the offset can land you one over)
       invuln = 1.6
       closing = { key: partner?.key ?? null, until: playT + 5 }
@@ -846,6 +849,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       const spot = exit ? wakeSpot(exit, level.grid.floor) : null
       if (spot) { player.x = spot.x; player.y = spot.y; player.angle = spot.angle }
       else { const m = findOpenNear(mid.x, mid.y, level.grid.floor) ?? mid; player.x = m.x; player.y = m.y }
+      lookLevel(player)                 // and you wake looking straight ahead at it
       spawnChunk = chunkUnder()
       closing = { key: exit?.key ?? null, until: playT + 5 }
       itemSys.inventory.length = 0
@@ -908,7 +912,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // drive movement + look instead (initTouchControls, below).
   if (!isTouchDevice()) canvas.addEventListener('click', () => canvas.requestPointerLock())
   document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; if (!locked) charger.forceRelease() })
-  document.addEventListener('mousemove', e => { if (locked) player.angle += e.movementX * 0.002 * (getPref('mouseSensitivity') / 100) })
+  // the mouse looks left and right on the angle, up and down on the pitch (look.js: gathered here, spent by the loop's lookStep)
+  document.addEventListener('mousemove', e => {
+    if (locked) player.angle += e.movementX * 0.002 * (getPref('mouseSensitivity') / 100)
+    if (locked) lookInput(player, e.movementY, MOUSE_PITCH, getPref('mouseSensitivity'))
+  })
 
   // ── touch controls (phones / ChromeOS tablets) — feeds K + player.angle, and the WARD button feeds the ward's edge counters;
   //    a no-op on desktop, so keyboard play is unchanged. CALL is a plain key button: it sets K['KeyC'] and the loop edge-consumes the
@@ -2570,6 +2578,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const bobBase = (moved && getPref('headBob')) ? Math.sin(player.bob) * 4 : 0
     player.bobOffset = bobBase + (bobPulse > 0 ? Math.sin((0.35 - bobPulse) / 0.35 * Math.PI) * 5 : 0)
     bobPulse = Math.max(0, bobPulse - dt)
+    // vertical look (look.js): the mouse's and the drag's gathered input, 1:1 and held where you leave it; off in settings, a level view
+    // exactly as before. Lying down, and under a fall's or a death's veil, the view eases back to level (the input dropped): you come to,
+    // arrive and wake looking straight ahead. A page, the map, the chat and a kneel leave it alone, as they leave the yaw
+    lookStep(player, dt, getPref('verticalLook'), getPref('invertVerticalLook'), transitioning || down.st === 'down')
 
     // ── the message line: the queue decides what shows; one reused result or null (messages.js) ──
     const mq = msgQ.tick(dt)
