@@ -206,7 +206,8 @@ describe('game.js: the map, held not modal', () => {
     expect(game).toMatch(/if \(!transitioning && !dialogOpen && !chatOpen && !noteOpen && !mapOpen\) \{\r?\n\s*\/\/ F/)
     expect(game).toMatch(/if \(mapOpen\) closeMap\(\); if \(noteOpen\) closeNoteCard\(\)/)
     expect(game).toMatch(/const evCanFire = !transitioning && !dialogOpen && !chatOpen && !noteOpen && level\.index >= 0 && level\.index <= 3/)   // not gated on the map
-    expect(game).toMatch(/if \(locked\) player\.angle \+= e\.movementX/)
+    // mouse-look is gated on the pointer lock alone (look.js lookMouse: `if (!locked) return`), never on the map
+    expect(game).toContain("document.addEventListener('mousemove', e => lookMouse(player, e, locked, getPref('mouseSensitivity')))")
     const card = slice('const mapCard = createMapCard(', 'const mapTabEl')
     expect(card).not.toContain('exitPointerLock')
   })

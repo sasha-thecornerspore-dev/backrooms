@@ -1,9 +1,9 @@
 // look.js — vertical look's state: the pitch the renderer draws (player.pitch) and the input gathered since the last frame (player.pitchIn).
 // 1:1 with the mouse and the drag (the yaw's rate), clamped to a third of the view each way, held where it is left (no drift), level at
 // once with the pref off, eased back to exactly level while the view is held (lying down, a fall's or a death's veil), and allocation-free:
-// the two fields are written in place and nothing else is touched.
+// the two fields are written in place and nothing else is touched. lookMouse is the game's mousemove handler, replayed with event shapes.
 import { describe, it, expect } from 'vitest'
-import { lookInput, lookStep, lookLevel, PITCH_MAX, MOUSE_PITCH, TOUCH_PITCH, LEVEL_TAU, LEVEL_SNAP } from '../src/renderer/look.js'
+import { lookInput, lookMouse, lookStep, lookLevel, PITCH_MAX, MOUSE_YAW, MOUSE_PITCH, TOUCH_PITCH, LEVEL_TAU, LEVEL_SNAP } from '../src/renderer/look.js'
 import { lookYaw } from '../src/renderer/touch.js'
 
 const fresh = () => ({ x: 1, y: 2, angle: 0.5, bobOffset: 0, pitch: 0, pitchIn: 0 })
@@ -54,11 +54,41 @@ describe('lookInput / lookStep: the mouse and the drag', () => {
     for (let i = 0; i < 20000; i++) step(p, { dt: (i % 7 + 1) / 240 })
     expect(Object.is(p.pitch, v)).toBe(true)
   })
-  it('the touch drag tilts under its own yaw rate, so a sideways swipe barely tilts', () => {
+  it('the touch drag tilts at TOUCH_PITCH a px, a little under its yaw rate (whether a step tilts at all is touch.js tiltWeight)', () => {
     expect(TOUCH_PITCH).toBeLessThan(lookYaw(1, 100))
     const p = fresh()
     lookInput(p, 25, TOUCH_PITCH, 100)
     expect(step(p)).toBeCloseTo(-25 * TOUCH_PITCH, 12)
+  })
+})
+
+describe('lookMouse: one mousemove, as game.js hands it over', () => {
+  const ev = (movementX, movementY) => ({ movementX, movementY })
+  it('locked: x turns at the yaw the game always had, y is gathered at the same rate; both at the sensitivity', () => {
+    for (const sens of [100, 35, 250]) {
+      const p = fresh(), a0 = p.angle
+      lookMouse(p, ev(40, -25), true, sens)
+      expect(p.angle).toBe(a0 + 40 * 0.002 * (sens / 100))                 // to the bit: the old handler's arithmetic
+      expect(p.pitchIn).toBeCloseTo(-25 * MOUSE_PITCH * (sens / 100), 12)
+      expect(p.pitch).toBe(0)                                                // drawn only at the loop's step
+      expect(step(p)).toBeCloseTo(25 * MOUSE_PITCH * (sens / 100), 12)      // pushed away from you: up
+    }
+    expect(MOUSE_YAW).toBe(0.002)
+  })
+  it('not locked: the mouse does nothing at all, either axis', () => {
+    const p = fresh()
+    for (let i = 0; i < 20; i++) lookMouse(p, ev(30, 30), false, 100)
+    expect(p.angle).toBe(0.5); expect(p.pitchIn).toBe(0); expect(step(p)).toBe(0)
+  })
+  it('one axis at a time, and a bogus movementY adds no tilt (the turn still lands)', () => {
+    const p = fresh()
+    lookMouse(p, ev(0, 12), true, 100)
+    expect(p.angle).toBe(0.5); expect(p.pitchIn).toBeCloseTo(12 * MOUSE_PITCH, 12)
+    step(p)
+    for (const bad of [NaN, undefined, Infinity]) lookMouse(p, ev(10, bad), true, 100)
+    expect(p.angle).toBeCloseTo(0.5 + 30 * 0.002, 12); expect(p.pitchIn).toBe(0)
+    lookMouse(p, ev(-10, 0), true, 100)
+    expect(p.angle).toBeCloseTo(0.5 + 20 * 0.002, 12); expect(p.pitchIn).toBe(0)
   })
 })
 

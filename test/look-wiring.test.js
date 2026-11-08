@@ -1,11 +1,12 @@
 // Vertical look, wired (look.js is the state, gfx-frame.js the y-shear): the mouse's movementY and the look-drag's vertical part are gathered
-// on the player (player.pitchIn) and the loop's lookStep spends them once a frame, under the two prefs; lying down and under a fall's or a
-// death's veil the view eases level, and every arrival and wake sets you down level. The pitch stays off the wire, out of the save and out
+// on the player (player.pitchIn) and the loop's lookStep spends them once a frame, under the two prefs; lying down, under a fall's or a
+// death's veil and while the arrow keys turn you (the mouse loose) the view eases level, and every arrival and wake sets you down level.
+// Only the part of a look-drag that is mostly up and down tilts (touch.js tiltWeight): a turning swipe's drift does not. The pitch stays off the wire, out of the save and out
 // of the map: the position heartbeat, the ward's payload and the snapshot carry exactly what they carried. The settings panel has the two
 // rows, persisted like every other pref (prefs.js).
 import { describe, it, expect, afterEach } from 'vitest'
 import fs from 'node:fs'
-import { initTouchControls } from '../src/renderer/touch.js'
+import { initTouchControls, tiltWeight, lookYaw } from '../src/renderer/touch.js'
 import { TOUCH_PITCH, lookStep } from '../src/renderer/look.js'
 import { PREF_DEFAULTS, normalizePref, getPref, setPref } from '../src/renderer/prefs.js'
 
@@ -14,18 +15,34 @@ const game = read('../src/renderer/game.js'), html = read('../src/renderer/index
 
 describe('game.js', () => {
   it('the player carries the pitch beside the angle, from the start', () => {
-    expect(game).toContain("import { lookInput, lookStep, lookLevel, MOUSE_PITCH } from './look.js'")
+    expect(game).toContain("import { lookMouse, lookStep, lookLevel } from './look.js'")
     expect(game).toMatch(/angle: 0, bob: 0, bobOffset: 0, moving: false,\n\s*pitch: 0, pitchIn: 0, /)
   })
-  it('the mouse: movementY is gathered while the pointer is locked, at the yaw\'s rate and the same sensitivity', () => {
-    expect(game).toContain("if (locked) player.angle += e.movementX * 0.002 * (getPref('mouseSensitivity') / 100)\n    if (locked) lookInput(player, e.movementY, MOUSE_PITCH, getPref('mouseSensitivity'))")
+  it('the mouse: the handler is look.js lookMouse (replayed there with event shapes), handed the lock and the sensitivity', () => {
+    expect(game).toContain("document.addEventListener('mousemove', e => lookMouse(player, e, locked, getPref('mouseSensitivity')))")
+    expect(game.split("addEventListener('mousemove'").length).toBe(2)
+    expect(game).not.toContain('e.movementX'); expect(game).not.toContain('e.movementY')
   })
-  it('the loop spends it once a frame, before the render, under the two prefs; lying down and a fade hold it', () => {
+  it('the loop spends it once a frame, before the render, under the two prefs; lying down, a fade and an arrow-key turn hold it', () => {
     const at = (s) => { const i = game.indexOf(s); expect(i, s).toBeGreaterThan(-1); return i }
-    const step = "lookStep(player, dt, getPref('verticalLook'), getPref('invertVerticalLook'), transitioning || down.st === 'down')"
+    const step = "lookStep(player, dt, getPref('verticalLook'), getPref('invertVerticalLook'), transitioning || down.st === 'down' || (keyTurn && !touchUi))"
     expect(game.split(step).length).toBe(2)
     expect(at(step)).toBeGreaterThan(at('function loop(ts) {'))
     expect(at(step)).toBeLessThan(at('level.gfx.render(player, wallFn, flicker, allEntities, fogMul,'))
+  })
+  it('turning by the arrow keys (the mouse loose) brings the view back level: no key tilts it, and the one that turns you levels it', () => {
+    const at = (s) => { const i = game.indexOf(s); expect(i, s).toBeGreaterThan(-1); return i }
+    const turn = "keyTurn = !locked && !!(K['ArrowLeft'] || K['ArrowRight'])"
+    expect(game.split(turn).length).toBe(2)
+    // set where the arrows turn you (inside the walking block: not lying down, not in the chat or a page), after the turn, before the step
+    expect(at(turn)).toBeGreaterThan(at("if (!locked && K['ArrowRight']) player.angle += 0.04 * dt * 60"))
+    expect(at(turn)).toBeGreaterThan(at("if (!transitioning && !chatOpen && !noteOpen && down.st !== 'down' && !kneel.st) {"))
+    expect(at(turn)).toBeLessThan(at('player.moving = moved'))
+    expect(at('let keyTurn = false')).toBeLessThan(at(turn))
+    // and the hold is lookStep's own ease: a tilt left from before the mouse was let go comes back to exactly level
+    const p = { pitch: 0.24, pitchIn: 0 }
+    for (let i = 0; i < 240; i++) lookStep(p, 1 / 60, true, false, true)
+    expect(p.pitch).toBe(0)
   })
   it('a travel and a death set you down level, under the veil', () => {
     expect(game).toMatch(/player\.x = a\.x; player\.y = a\.y\n\s*lookLevel\(player\)/)
@@ -87,9 +104,47 @@ describe('touch.js: the look-drag tilts as well as turns', () => {
     win.listeners.touchmove[0](ev(300, 900))                    // that finger is gone: nothing more
     expect(player.pitchIn).toBeCloseTo(-10 * TOUCH_PITCH * 1.5, 12)
   })
-  it('source: the same gathering as the mouse, from the drag\'s last y', () => {
+  it("source: the same gathering as the mouse, from the drag's last y, weighed by how vertical the drag has been", () => {
     expect(touch).toContain("import { lookInput, TOUCH_PITCH } from './look.js'")
-    expect(touch).toContain('lookInput(player, t.clientY - lookY, TOUCH_PITCH, s); lookY = t.clientY')
+    expect(touch).toContain('lookInput(player, dy * tiltWeight(lookGX, lookGY), TOUCH_PITCH, s); lookY = t.clientY')
+    expect(touch).toContain('lookId = t.identifier; lookX = t.clientX; lookY = t.clientY; lookGX = 0; lookGY = 0')
+  })
+  // a drag replayed through the real handler: n moves of `step` px, the i-th deg(i) degrees off the level (+ = down the glass)
+  function replay(n, step, deg, sensPct = 100) {
+    for (const k of ['window', 'document']) if (!(k in saved)) saved[k] = globalThis[k]      // (the real ones, not a previous replay's)
+    const win = { ontouchstart: null, listeners: Object.create(null), addEventListener(t, f) { (this.listeners[t] || (this.listeners[t] = [])).push(f) }, matchMedia: () => ({ matches: true }) }
+    globalThis.window = win
+    const { document, made } = fakeDom()
+    globalThis.document = document
+    const player = { angle: 0, pitch: 0, pitchIn: 0 }
+    initTouchControls({ canvas: {}, K: Object.create(null), player, getPref: () => sensPct })
+    const look = made.find((el) => el.id === 'touch-look')
+    const ev = (x, y) => ({ changedTouches: [{ identifier: 5, clientX: x, clientY: y }], preventDefault() {} })
+    let x = 300, y = 300, tilt = 0
+    look.listeners.touchstart[0](ev(x, y))
+    for (let i = 0; i < n; i++) {
+      const a = (deg(i) * Math.PI) / 180
+      x += step * Math.cos(a); y += step * Math.sin(a)
+      win.listeners.touchmove[0](ev(x, y))
+      tilt = lookStep(player, 1 / 60, true, false, false)
+    }
+    win.listeners.touchend[0](ev(x, y))
+    return { tilt, angle: player.angle }
+  }
+  it('a turning swipe does not tilt: 200 px drifting 15 degrees, or a thumb arc curving to 20, turns the full way and tilts under 0.03', () => {
+    const straight = replay(20, 10, () => 15), arc = replay(20, 10, (i) => i, 150), up = replay(20, 10, () => -15)
+    for (const r of [straight, arc, up]) expect(Math.abs(r.tilt)).toBeLessThan(0.03)
+    expect(straight.angle).toBeCloseTo(lookYaw(200 * Math.cos(Math.PI / 12), 100), 9)   // the turn itself is untouched
+  })
+  it('a drag mostly up or down tilts at the full TOUCH_PITCH; a diagonal too', () => {
+    expect(replay(10, 4, () => 90).tilt).toBeCloseTo(-40 * TOUCH_PITCH, 9)              // straight down the glass: looks down
+    expect(replay(10, 4, () => -90).tilt).toBeCloseTo(40 * TOUCH_PITCH, 9)
+    expect(replay(10, 4, () => 45).tilt).toBeCloseTo(-40 * Math.sin(Math.PI / 4) * TOUCH_PITCH, 9)
+  })
+  it('tiltWeight: 0 for a sideways drag, 1 for an up-and-down one, a ramp between', () => {
+    expect(tiltWeight(0, 0)).toBe(0); expect(tiltWeight(100, 0)).toBe(0); expect(tiltWeight(100, 30)).toBe(0)
+    expect(tiltWeight(100, 60)).toBe(1); expect(tiltWeight(0, 5)).toBe(1); expect(tiltWeight(100, 45)).toBeCloseTo(0.5, 6)
+    for (let r = 0; r < 2; r += 0.01) { const w = tiltWeight(100, 100 * r); expect(w).toBeGreaterThanOrEqual(0); expect(w).toBeLessThanOrEqual(1) }
   })
 })
 

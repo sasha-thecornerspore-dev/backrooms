@@ -43,11 +43,13 @@ describe('game.js: the touch line and beacon (I5)', () => {
     expect(game).toContain('if (!chatInputEl || chatOpen) return')                 // openChat's own guard
     expect(SHOW).toContain(`beaconShown(getPref('beaconEffect'), ${VERBS.slice(4, -3)} && down.st !== 'down')`)
   })
-  it('desktop and keyboard: touchUi is null off a touch screen, and the show line is the only other place it is read', () => {
+  it('desktop and keyboard: touchUi is null off a touch screen, and the show line and the look\'s level hold are the only other places it is read', () => {
     const code = game.split('\n').map((l) => l.replace(/^\s*\/\/.*$|\s\/\/ .*$/, '')).join('\n')   // (a name in a comment is not a use)
-    expect(code.split('touchUi').length - 1).toBe(3)                               // const touchUi = …, if (touchUi) touchUi.show(…)
+    expect(code.split('touchUi').length - 1).toBe(4)                               // const touchUi = …, if (touchUi) touchUi.show(…), (keyTurn && !touchUi)
     expect(code).toContain(INIT)
     expect(code).toContain(SHOW)
+    // an arrow-key turn levels the view off a touch screen only (look-wiring.test.js): on one, the drag tilts and the arrows leave it alone
+    expect(code.split('(keyTurn && !touchUi)').length - 1).toBe(1)
     expect(touch).toMatch(/if \(!isTouchDevice\(\) \|\| typeof document === 'undefined'\) return null/)
   })
   it('what B does is unchanged: the same decision, the same push, the same seam', () => {
