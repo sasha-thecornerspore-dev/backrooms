@@ -288,6 +288,9 @@
     /* touch: at the top, above the phone's keyboard and clear of the discs (it is display: none at layout time, so touch.js keeps no
        keep-out rect for it) */
     @media (pointer: coarse) { #term { top: 12px; left: 16px; right: 16px; bottom: auto; width: auto; max-height: 42vh; } }
+    /* there the settings gear (38 px, top right, above everything) sits on the header's corner: the header's words keep clear of it
+       and wrap rather than run under it */
+    @media (pointer: coarse) { #term-head { padding-right: 58px; flex-wrap: wrap; row-gap: 2px; } }
 
     /* centre messages — the building speaking. A notice, not a caption. */
     #msg {
