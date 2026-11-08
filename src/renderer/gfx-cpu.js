@@ -4,7 +4,11 @@
 // order — world pass (gfx-world.js), sprite pass (gfx-sprites.js), then the screen-space stages (gfx-post.js).
 //
 // Frame state `fs` (read-only for the stages):
-//   W, H, HH        low-res world buffer size and the horizon row (HH includes the head-bob offset)
+//   W, H, HH        low-res world buffer size and the horizon row (HH includes the head-bob offset and the view's pitch)
+//   HC, tilt        the centre row (the head-bob only: where the view axis meets the screen) and the pitch drawn, (HH - HC) / H. With
+//                   vertical look (a y-shear, gfx-frame.js) the horizon moves and the centre does not: a stage measures the camera's
+//                   height (the floor / ceiling span), the hand-held flashlight and the sky's gradient from HC, and places what is in
+//                   the world around HH. A hand-built fs without HC is a level view (HC = HH).
 //   OW, OH          visible canvas size (the upscale target)
 //   fog, fogRgb, fogMul, frame
 //   flicker         the game's flicker scalar AFTER the comfort clamp (gfx-quality.js effectiveFlicker): use this to dim

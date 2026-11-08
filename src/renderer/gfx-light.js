@@ -365,6 +365,7 @@ export function createLight(config, worldHooks) {
     floorTileMax: floorT.S.reduce((a, b) => (b > a ? b : a), 0), ceilTileMax: ceilT.S.reduce((a, b) => (b > a ? b : a), 0), lmMax: 0,
     lampCol: S.color.map((v) => Math.round(v + (255 - v) * 0.4)),      // the glowing core of a lamp fixture
     gdip: 1, eS: 0, dimS: 1,
+    tilt: 0,                                                   // the view's pitch drawn this frame (fs.tilt): the hand-held beam follows it
     floorS: floorT.S, floorA: floorT.A, floorB: floorT.B,
     ceilS: ceilT.S, ceilA: ceilT.A, ceilB: ceilT.B,
     wallP: wallPanel.P, wallK0: wallPanel.K[0], wallK1: wallPanel.K[1], wallK2: wallPanel.K[2],
@@ -634,7 +635,9 @@ export function createLight(config, worldHooks) {
   }
   const nearestPanelCell = (wx, wy) => ({ i: Math.floor((wx - 0.5) / PERIOD + 0.5), j: Math.floor((wy - 0.5) / PERIOD + 0.5) })
 
-  // the player's flashlight / glowstick light at a floor point, of the last prepared frame (same falloffs as the world pass)
+  // the player's flashlight / glowstick light at a floor point, of the last prepared frame (same falloffs as the world pass). The beam is
+  // held in the hand: a floor point at distance d is drawn 0.5 / d of the frame below the horizon, and the horizon F.tilt below the view's
+  // centre, so looking up takes the beam off the floor and looking down puts it nearer (the world pass measures the same from fs.HC)
   function dynamicAt(wx, wy) {
     if (!F.active || !F.lights) return 0
     let v = 0
@@ -643,7 +646,7 @@ export function createLight(config, worldHooks) {
     if (F.flash && d > 0.05) {
       const th = Math.atan2(dy, dx) - Math.atan2(F.sa, F.ca)
       const a = Math.atan2(Math.sin(th), Math.cos(th))
-      const dv = 0.5 / Math.max(0.5, d) - FLASH_PITCH
+      const dv = 0.5 / Math.max(0.5, d) + F.tilt - FLASH_PITCH
       v += F.flashK * 0.85 * Math.exp(-(a * a) / (FLASH_SX * FLASH_SX) - (dv * dv) / (FLASH_SY * FLASH_SY)) * flashAtt(d)
     }
     if (F.glow) v += F.glowK * glowAtt(d * d + 0.25)
@@ -742,6 +745,7 @@ export function createLight(config, worldHooks) {
     }
     const p = fs.player
     F.px = p.x; F.py = p.y; F.ca = Math.cos(p.angle); F.sa = Math.sin(p.angle); F.fog = fs.fog; F.t = fs.t || 0
+    F.tilt = fs.tilt > 0 || fs.tilt < 0 ? fs.tilt : 0
     F.lights = fs.lights || null
 
     // Event intensity. First a dwell gate: once it has risen it may not fall for HOLD_HIGH seconds, and once it has fallen it may not

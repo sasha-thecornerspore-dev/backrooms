@@ -16,6 +16,12 @@
 // azimuth index per column (a linear ramp, no trig), one strip row per screen row, a fixed-point lerp in azimuth, and
 // three multiply-adds. Colours are computed per 2x2 block (clouds are soft and the buffer is bilinear-upscaled after).
 // The strip depends on constants only (a fixed seed): every player sees the same sky.
+//
+// VERTICAL LOOK (a y-shear, gfx-frame.js): the sky rows are 0..HH, the pitched horizon, and both looks are anchored to the ELEVATION, not to
+// the top of the screen: the gradient runs over the un-pitched sky height HC (the rows above the horizon over HC, clamped: looking up shows
+// more of the top colour, looking down less of it), and the clouds' strip row is already the elevation (rows above the horizon / focal).
+// Level (HH === HC) both are byte for byte what they were. The strip covers up to tan(elevation) S_MAX: above it (a narrow screen's top rows
+// today; a wide screen's top tenth looking all the way up) the last strip row carries on, as it always has.
 import { hash2 } from './gfx-util.js'
 
 export const CLOUD_W = 1024                // azimuth texels around the full circle (power of two: masked, not modded)
@@ -123,9 +129,9 @@ export function skyBase(q, sky, fog, cfg, out = [0, 0, 0]) {
 
 // ── scratch (grow-only): the sky is filled every frame, these just avoid allocating ──
 let S = { W: 0, HH: 0, col0: null, col1: null, colF: null, cb0: null, cb1: null, cbF: null, rowJ: null, rowJ2: null, rowR: null, rowG: null, rowB: null, rowA: null }
-function scratch(W, HH) {
-  if (S.W >= W && S.HH >= HH) return S
-  const cw = Math.max(S.W, W) + 2, rh = Math.max(S.HH, HH) + 2
+function scratch(W, rows) {
+  if (S.W >= W && S.HH >= rows) return S
+  const cw = Math.max(S.W, W) + 2, rh = Math.max(S.HH, rows) + 2
   S = {
     W: cw, HH: rh,
     col0: new Int32Array(cw), col1: new Int32Array(cw), colF: new Int32Array(cw),
@@ -138,10 +144,12 @@ function scratch(W, HH) {
 
 function renderSkyLegacy(fs, buf32) {
   const { W, H, HH, skyRgb, fogRgb, flicker } = fs
+  const HC = fs.HC ?? HH, P = HH - HC              // the pitch in rows: the gradient follows the elevation (y - P is the level view's row)
   const F0 = fogRgb[0], F1 = fogRgb[1], F2 = fogRgb[2]
   const last = Math.min(HH, H - 1)
   for (let y = 0; y <= last; y++) {
-    const t = HH > 0 ? y / HH : 1                 // 0 top → 1 horizon
+    let t = HC > 0 ? (y - P) / HC : 1             // 0 top → 1 horizon
+    if (t < 0) t = 0; else if (t > 1) t = 1
     const sr = (skyRgb[0] * (1 - t) + F0 * t) * flicker
     const sg = (skyRgb[1] * (1 - t) + F1 * t) * flicker
     const sb = (skyRgb[2] * (1 - t) + F2 * t) * flicker
@@ -176,7 +184,7 @@ export function renderSky(fs, buf32, nlo = null) {
   const hf = fs.hf || 0.6545
   const angle = fs.player ? fs.player.angle : 0
   const strip = cloudStrip()
-  const s = scratch(W, HH)
+  const s = scratch(W, H)                                        // (sized by the frame, so looking up never regrows it)
   const { col0, col1, colF, cb0, cb1, cbF, rowJ, rowJ2, rowR, rowG, rowB, rowA } = s
 
   // ── per-column azimuth indices (fixed point, incl. the slow drift) for both layers ──
@@ -199,10 +207,11 @@ export function renderSky(fs, buf32, nlo = null) {
   // ── per-row: strip row, base colour, cloud amplitude ──
   const focal = (W * 0.5) / Math.tan(hf)                          // pixels from the eye to the screen plane
   const baseTmp = [0, 0, 0]
-  const invHH = HH > 0 ? 1 / HH : 1
+  const HC = fs.HC ?? HH
+  const invHC = HC > 0 ? 1 / HC : 1                               // the gradient over the un-pitched sky height: anchored to the elevation
   for (let y = 0; y <= last; y++) {
     const e = HH - y                                              // rows above the horizon
-    const q = Math.min(1, Math.max(0, e * invHH))
+    const q = Math.min(1, Math.max(0, e * invHC))
     skyBase(q, skyRgb, fogRgb, cfg, baseTmp)
     let j = ((e / focal) / S_MAX * CLOUD_H) | 0                   // tan(elev) → strip row
     if (j < 0) j = 0; else if (j >= CLOUD_H) j = CLOUD_H - 1

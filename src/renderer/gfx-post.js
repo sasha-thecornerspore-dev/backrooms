@@ -850,6 +850,10 @@ export function drawParticlesModern(ctx, fs, post, sc = 1) {
     post.camA = pl.angle; post.camX = pl.x; post.camY = pl.y
   }
   const turnPx = -dAng * (OW / (fs.fov || 1.3))
+  // tilting the view (vertical look) slides the field up or down with the horizon: the dust hangs in the room, not on the glass
+  const tilt = fs.tilt > 0 || fs.tilt < 0 ? fs.tilt : 0
+  const tiltPx = post.camT != null ? (tilt - post.camT) * OH : 0
+  post.camT = tilt
   const cx = OW * 0.5, cy = OH * 0.5
   const frame = post.bloom && post.bloomLive ? post.bloom : null
   const lightGlow = lights && lights.glow
@@ -872,6 +876,7 @@ export function drawParticlesModern(ctx, fs, post, sc = 1) {
     const mvx = Math.sin(p.ph * (0.8 + 0.4 * p.w)) * sway * z, mvy = (rise ? -1 : 1) * speed * (0.5 + z) * (0.85 + 0.3 * p.w)   // px/s
     p.x += mvx * dt + turnPx
     p.y += mvy * dt
+    if (tiltPx !== 0) p.y += tiltPx
     if (fwd !== 0) { p.x += (p.x - cx) * 0.22 * fwd * z2 * dt; p.y += (p.y - cy) * 0.22 * fwd * z2 * dt }
     if (p.y < -12 || p.y > OH + 12 || p.x < -12 || p.x > OW + 12) {
       // recycle. Walking forward, motes stream out past the edges: they re-form in the middle distance. Otherwise a mote that

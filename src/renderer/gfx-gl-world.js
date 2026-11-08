@@ -254,7 +254,7 @@ export function createWorldPass(env) {
     const ca0 = Math.cos(angle - HF), sa0 = Math.sin(angle - HF), ca1 = Math.cos(angle + HF), sa1 = Math.sin(angle + HF)
     gl.uniform1i(u.uTiles, UNIT.tiles); gl.uniform1i(u.uCols, UNIT.cols)
     gl.uniform2f(u.uRes, W, H)
-    gl.uniform1f(u.uHH, fs.HH)
+    gl.uniform1f(u.uHH, fs.HH); gl.uniform1f(u.uHC, fs.HC ?? fs.HH)     // the horizon and the centre row (vertical look: gfx-frame.js)
     gl.uniform1f(u.uFog, fog)
     gl.uniform1f(u.uAng0, angle - HF); gl.uniform1f(u.uAngStep, FOV / W)
     gl.uniform2f(u.uPFrac, px - pxi, py - pyi); gl.uniform2i(u.uPInt, pxi, pyi)
