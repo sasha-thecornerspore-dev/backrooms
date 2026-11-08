@@ -101,12 +101,14 @@ export function closingReply(closing) {
 }
 
 // ── progress (the settings row, /status) ────────────────────────────────────────────────────
+// the extension's first step, as the row says it (the field terminal's radio readout says it too)
+export const LEDGER_LABEL = 'the station has read its last group to you'
 export function closingProgress(status, st) {
   const s = st || {}
   const closing = s.closing ?? null
   if (status === 'extension') {
     return { done: closing === 'extension', steps: [
-      { label: 'the station has read its last group to you', met: s.ledgerHeard === true },
+      { label: LEDGER_LABEL, met: s.ledgerHeard === true },
       { label: 'standing in the dark on the deepest floor', met: closing === 'extension' },
     ] }
   }
@@ -117,10 +119,12 @@ export function closingProgress(status, st) {
       { label: 'the file, closed', met: closing === 'compliance' },
     ] }
   }
+  // a litigation file that has reached its closing has met both steps, whatever this run holds: the claim and the beacon are a run's
+  // flags (game.js claimFiled / beaconFired, never saved), the closing is the file's, so a later run read 'not done' under a closed file
   if (status === 'litigation') {
     return { done: closing === 'litigation', steps: [
-      { label: 'the claim, typed', met: s.claimFiled === true },
-      { label: 'the beacon, pushed', met: s.beaconFired === true },
+      { label: 'the claim, typed', met: s.claimFiled === true || closing === 'litigation' },
+      { label: 'the beacon, pushed', met: s.beaconFired === true || closing === 'litigation' },
     ] }
   }
   return { done: false, steps: [] }
