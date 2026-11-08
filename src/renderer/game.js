@@ -69,6 +69,7 @@ import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame, createEvidence, pho
 import { PHRASES, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from './caches.js'
 import { LIT_RANGE, litFriendNear, inCone, wardOutcome, wardLine, litOffLine } from './lightshare.js'
 import { inviteFor, roomPinLine, recoverBase, RECOVER_LOCAL } from './site.js'
+import { createSeal } from './recover-seal.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -1441,14 +1442,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const RECOVER_DEFAULT = 'case-d8'
   const rOpenCase = () => { try { return localStorage.getItem('cs.case.open') || RECOVER_DEFAULT } catch (e) { return RECOVER_DEFAULT } }
   const rSetOpenCase = (id) => { try { localStorage.setItem('cs.case.open', id) } catch (e) {} }
-  const RECOVER_SALT = 'cornerspore:'
   const rNorm = (s) => String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]/g, '')
-  async function rHash(s) {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(RECOVER_SALT + rNorm(s)))
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
-  }
-  const rKey = (c, s) => 'cs.case.' + c + '.' + s
-  const rSolved = (c, s) => { try { return localStorage.getItem(rKey(c, s)) === '1' } catch (e) { return false } }
+  // the note seal (recover-seal.js): a sealed case's notes and closing file open only with the keys a right filing derives, kept
+  // beside the read mark under the board's own names, so a note read here opens on the board and the other way round
+  const recoverSeal = createSeal()
+  const rSolved = (c, s) => recoverSeal.isSolved(c, s)
   let recoverManifest = null, recoverIndex = null
   // Only the public site serves /recover/ beside /play/: the desktop app (file://), itch's CDN (where ../ escapes the project folder and
   // itch answers 403) and localhost read the live manifests from the site itself (GitHub Pages sends Access-Control-Allow-Origin: *).
@@ -1508,11 +1506,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         const m = await loadCase()
         const next = m.stations.find(s => !rSolved(m.id, s.id))
         if (!next) { showMessage('the case is already read.'); return }
-        if ((await rHash(arg)) === String((next.gate && next.gate.hash) || '').toLowerCase()) {
-          try { localStorage.setItem(rKey(m.id, next.id), '1') } catch (e) {}
-          blip(); showMessage('filed. ' + next.title + ' — read. ' + (next.onSolve || ''))
-          if (!m.stations.some(s => !rSolved(m.id, s.id)))
-            setTimeout(() => showMessage(((m.reward && m.reward.key) || 'the case is read.') + ' — open the board at /recover/.'), 3000)
+        if ((await recoverSeal.fileAnswer(m, next, arg)).ok) {
+          const note = await recoverSeal.openStation(m, next)
+          blip(); showMessage('filed. ' + next.title + ' — read. ' + (note ? note.text : ''))
+          if (!m.stations.some(s => !rSolved(m.id, s.id))) {
+            const closing = await recoverSeal.openReward(m)
+            const key = closing && closing.reward && closing.reward.key
+            setTimeout(() => showMessage((key || 'the case is read.') + ' — open the board at /recover/.'), 3000)
+          }
         } else showMessage('the file does not answer to that.')
       } else if (cmd === 'intake') {
         // the form again, read-only; anything typed after it is an amendment, and the file does not take those

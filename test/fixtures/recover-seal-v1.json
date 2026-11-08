@@ -1,0 +1,98 @@
+{
+  "about": "recover note seal v1 test vectors. Made by an independent node:crypto implementation (HKDF-SHA-256, salt cornerspore:seal:1; AES-256-GCM, ct = ciphertext || tag). The game (src/renderer/recover-seal.js) and the board (recover/engine.js on the site) must both open them. The case and answers are made up.",
+  "answers": {
+    "first": "The Ledger",
+    "second": "1937",
+    "third": "paper-weight"
+  },
+  "typed": {
+    "first": "  the  LEDGER!",
+    "second": "1,937",
+    "third": "Paper Weight"
+  },
+  "wrong": {
+    "first": "ledger",
+    "second": "1938",
+    "third": "paper weigh"
+  },
+  "secrets": {
+    "first": "xhfz-pyhwqzm5z0qz1rgcD6mKfjY4Zm6QVySxYI_X8s",
+    "second": "bxaK4m8icdumn9AlbdmNJP2xmETW-h6AbarZiSUTKT0",
+    "third": "fWHkHDntTBh8klDu1bwBSPs_JJPjJ7F-MZOajKdMJV0"
+  },
+  "textKeys": {
+    "first": "ljiJ9ixvRLZk7cAwjsQSKGnMY1-_925geF6lbyp7fVA",
+    "second": "oNQj0dPpUbLJY8OzwLeHrXEU8CrrFs-89HP3A3X1aFI",
+    "third": "OXS-F_5VL1ztEP5AKovxqn9iKsb_NDZDWh6LeZnAs10"
+  },
+  "rewardKey": "cwOL7evxIdDJHiu_kv0WTlq4qdsfB2U2QpSUzOm5QIk",
+  "notes": {
+    "first": "the first note — with a dash, “quotes” and an é.",
+    "second": "the second note.",
+    "third": "the third note."
+  },
+  "reward": {
+    "title": "the vector is read.",
+    "text": "closing text.",
+    "key": "V-1 · KEY",
+    "href": "../codex/",
+    "linkLabel": "▸ a link"
+  },
+  "manifest": {
+    "id": "case-vector",
+    "title": "CASE V-1 — the vector",
+    "intro": "a test case. none of it is real.",
+    "stations": [
+      {
+        "id": "first",
+        "title": "I · the first",
+        "where": "nowhere",
+        "clue": "a clue",
+        "prompt": "one word",
+        "gate": {
+          "type": "sha256",
+          "hash": "573a50cfbb4625f81579c8ce6f4e48a6276470552bbcb1d056e5cd2f37c1152f"
+        },
+        "onSolveSealed": {
+          "iv": "AQEBAQEBAQEBAQEB",
+          "ct": "vO_cMo7L3_A660VS3x-ZrO6-zvEqRI_hMQs6UDdW3dnYlUGmAiKF9dCoo8Z_KcWRrUPOFtL7Bf518uMXSu5gLCqBerdEfnE"
+        }
+      },
+      {
+        "id": "second",
+        "title": "II · the second",
+        "where": "nowhere",
+        "clue": "a clue",
+        "prompt": "digits",
+        "gate": {
+          "type": "sha256",
+          "hash": "e83cac2069bcb13cdbe703ca58c3789c29314d59a939ccc934d68df2d3d6e320"
+        },
+        "onSolveSealed": {
+          "iv": "AgICAgICAgICAgIC",
+          "ct": "JC6wF1VoyaHqLcWEwv6J_m0IcP2Rks2ogZ0ThuoI8ik"
+        }
+      },
+      {
+        "id": "third",
+        "title": "III · the third",
+        "where": "nowhere",
+        "clue": "a clue",
+        "prompt": "one word",
+        "gate": {
+          "type": "sha256",
+          "hash": "43f1edcdc02aa8bd6425e1ca1979eb51a82cb6b5f651539046112d8efeba06fd"
+        },
+        "onSolveSealed": {
+          "iv": "AwMDAwMDAwMDAwMD",
+          "ct": "smlynRxofkH_fN_RFm5Dwib8dERe3qYGa4JDgrqvWA"
+        }
+      }
+    ],
+    "seal": 1,
+    "rewardSealed": {
+      "iv": "BAQEBAQEBAQEBAQE",
+      "ct": "q5k_0Uy4nvQq4xN_Q59XI1SHKBhjmQvV7SXMkX_kbFu3H_Dl1ejmeDJRJI9ubqmw4bW38LGQfd0YUhaXlrCMrBnffKJ3o7922mPTYcfuXscmd5CyxQQH_npCGtXXmALXJhx_9L3zDLhxU1qV7ny6i2_FPzkqAktUfd1CHj5Nn9AHLHSLNg"
+    }
+  }
+}
