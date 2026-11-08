@@ -77,3 +77,13 @@ describe('applyResume', () => {
     expect(calls.map((c) => c[0])).toEqual(['mem.import', 'buildLevel', 'applyPlayer', 'updateAt', 'settlePlayer'])
   })
 })
+// v2.0.6: the field terminal's record (casebook.js) is per device, under its own key: never a field of the save
+describe('the save carries no casebook', () => {
+  it('snapshot() writes no casebook field, nor anything of the terminal', async () => {
+    const fs = await import('node:fs')
+    const game = fs.readFileSync(new URL('../src/renderer/game.js', import.meta.url), 'utf8')
+    const a = game.indexOf('function snapshot(full = false) {'), b = game.indexOf('let saveTimer = 0', a)
+    expect(a).toBeGreaterThan(0); expect(b).toBeGreaterThan(a)
+    expect(game.slice(a, b)).not.toMatch(/casebook|margin|heardMask|logRing|notesSeen/)
+  })
+})

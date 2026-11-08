@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import fs from 'node:fs'
-import { createSeal, stationSecret, textKey, rewardKey, openBlob, b64u, unb64u, checkGate, isSealed, sealKnown, SEAL } from '../src/renderer/recover-seal.js'
+import { createHash } from 'node:crypto'
+import { createSeal, stationSecret, textKey, rewardKey, openBlob, b64u, unb64u, checkGate, isSealed, sealKnown, SEAL, normalize, gateHash,
+  HONOUR_KEY, HONOUR_VALUE } from '../src/renderer/recover-seal.js'
 
 // made by an independent node:crypto implementation (the case builder's), so passing here means the maze and the builder agree
 const V = JSON.parse(fs.readFileSync(new URL('./fixtures/recover-seal-v1.json', import.meta.url), 'utf8'))
@@ -108,5 +110,82 @@ describe('recover-seal: the keyring', () => {
     expect(await checkGate(V.wrong.first, M.stations[0].gate)).toBe(false)
     expect(await checkGate('', M.stations[0].gate)).toBe(false)
     expect(await checkGate(V.answers.first, null)).toBe(false)
+  })
+})
+
+describe('recover-seal: what the field terminal leans on (v2.0.6)', () => {
+  // a storage that records the order of its writes
+  const recording = () => { const m = new Map(), order = []; return { m, order, getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { order.push(k); m.set(k, String(v)) } } }
+  it('a right filing writes the key BEFORE the read mark; a wrong one writes nothing', async () => {
+    const st = recording(), seal = createSeal({ storage: st })
+    await seal.fileAnswer(M, M.stations[0], V.wrong.first)
+    expect(st.order).toEqual([])
+    await seal.fileAnswer(M, M.stations[0], V.typed.first)
+    expect(st.order).toEqual(['cs.case.' + M.id + '.first.key', 'cs.case.' + M.id + '.first'])
+  })
+  it('a browser that cannot derive keys still files: kept is false and the read mark is set', async () => {
+    const st = fakeStorage(), seal = createSeal({ storage: st })
+    const real = crypto.subtle.importKey.bind(crypto.subtle)
+    const spy = vi.spyOn(crypto.subtle, 'importKey').mockImplementation((fmt, key, alg, ...rest) => (alg === 'HKDF' ? Promise.reject(new Error('no hkdf')) : real(fmt, key, alg, ...rest)))
+    try { expect(await seal.fileAnswer(M, M.stations[1], V.answers.second)).toEqual({ ok: true, kept: false }) } finally { spy.mockRestore() }
+    expect(seal.isSolved(M.id, 'second')).toBe(true)
+    expect(st.m.has('cs.case.' + M.id + '.second.key')).toBe(false)
+  })
+  it('openStation: plain, by key, by copy, or null; a plain note is copied only once it is read', async () => {
+    const st = fakeStorage(), seal = createSeal({ storage: st })
+    const plain = { id: M.id, stations: M.stations.map((s) => ({ id: s.id, gate: s.gate, onSolve: V.notes[s.id] })), reward: V.reward }
+    expect(await seal.openStation(plain, plain.stations[2])).toEqual({ text: V.notes.third, from: 'plain' })
+    expect(st.m.has('cs.case.' + M.id + '.third.note')).toBe(false)                // not read: no copy kept
+    await seal.fileAnswer(plain, plain.stations[2], V.answers.third)
+    await seal.openStation(plain, plain.stations[2])
+    expect(st.m.get('cs.case.' + M.id + '.third.note')).toBe(V.notes.third)
+    expect(await seal.openStation(M, M.stations[0])).toBeNull()
+  })
+  it('openReward: none, plain, missing, copy, error', async () => {
+    const seal = createSeal({ storage: fakeStorage() })
+    expect(await seal.openReward({ id: 'x', stations: [] })).toEqual({ none: true })
+    expect(await seal.openReward({ ...M, rewardSealed: undefined })).toEqual({ none: true })
+    expect(await seal.openReward({ id: M.id, stations: [], reward: V.reward })).toEqual({ reward: V.reward, from: 'plain' })
+    expect((await seal.openReward(M)).missing.map((s) => s.id)).toEqual(['first', 'second', 'third'])
+    const st = fakeStorage(), copied = createSeal({ storage: st })
+    st.setItem('cs.case.' + M.id + '.reward.seen', JSON.stringify(V.reward))
+    expect(await copied.openReward(M)).toEqual({ reward: V.reward, from: 'copy' })
+    const broken = createSeal({ storage: fakeStorage() })
+    for (const s of M.stations) await broken.fileAnswer(M, s, V.answers[s.id])
+    expect(await broken.openReward({ ...M, rewardSealed: { iv: M.rewardSealed.iv, ct: M.rewardSealed.ct.slice(0, -4) + 'AAAA' } })).toEqual({ error: true })
+  })
+  it('markHonour writes the dotted maze flag, never a read mark and never a bare key; honoured reads it back', () => {
+    const st = recording(), seal = createSeal({ storage: st })
+    expect([HONOUR_KEY, HONOUR_VALUE]).toEqual(['maze', 'floor'])
+    seal.markHonour(M.id, 'second')
+    expect(st.order).toEqual(['cs.case.' + M.id + '.second.maze'])
+    expect([...st.m.values()]).toEqual(['floor'])
+    for (const k of st.m.keys()) expect(k.split('.').length).toBeGreaterThan(4)   // cs.case.<case>.<station>.maze: never cs.case.<case>.<station>
+    expect(seal.isSolved(M.id, 'second')).toBe(false)
+    expect(seal.honoured(M.id, 'second')).toBe(true); expect(seal.honoured(M.id, 'first')).toBe(false)
+  })
+  it("the board's field flags are read, never written: fieldComplete when every place-read instrument was walked", () => {
+    const st = recording(), seal = createSeal({ storage: st })
+    const m = { id: 'c', stations: [{ id: 'a', geo: { lat: 0, lng: 0 } }, { id: 'b' }, { id: 'd', geo: { lat: 1, lng: 1 } }] }
+    expect(seal.fieldComplete(m)).toBe(false)
+    st.m.set('cs.case.c.a.field', '1')
+    expect([seal.isFieldRead('c', 'a'), seal.fieldComplete(m)]).toEqual([true, false])
+    st.m.set('cs.case.c.d.field', '1')
+    expect(seal.fieldComplete(m)).toBe(true)
+    expect(seal.fieldComplete({ id: 'c', stations: [{ id: 'b' }] })).toBe(false)     // no place-read instrument: never
+    expect(st.order).toEqual([])
+  })
+  it('in Node without localStorage it imports and works; a storage that throws falls back to memory', async () => {
+    expect(() => createSeal()).not.toThrow()
+    const seal = createSeal({ storage: throwing })
+    seal.markHonour('c', 's')
+    expect(seal.honoured('c', 's')).toBe(true)
+  })
+  it("normalize and gateHash are the board's: lowercase letters and digits only, salted sha256 (an independent node:crypto check)", async () => {
+    expect(normalize('  The LEDGER! 1,937 — é')).toBe('theledger1937')
+    expect(normalize(null)).toBe('')
+    const want = createHash('sha256').update('cornerspore:' + 'theledger').digest('hex')
+    expect(await gateHash('The Ledger')).toBe(want)
+    expect(want).toBe(M.stations[0].gate.hash)
   })
 })

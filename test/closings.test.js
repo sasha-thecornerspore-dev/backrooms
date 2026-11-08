@@ -249,6 +249,13 @@ describe('closingProgress', () => {
     expect(p.done).toBe(false)
     expect(closingProgress('litigation', { claimFiled: true, beaconFired: true, closing: 'litigation' }).done).toBe(true)
   })
+  it('litigation closed: both steps read done on a later run, whose claim and beacon flags start false', () => {
+    const p = closingProgress('litigation', { claimFiled: false, beaconFired: false, closing: 'litigation' })
+    expect(p.steps).toEqual([{ label: 'the claim, typed', met: true }, { label: 'the beacon, pushed', met: true }])
+    expect(p.done).toBe(true)
+    // an open litigation file still reads each flag as it is
+    expect(closingProgress('litigation', { claimFiled: false, beaconFired: false, closing: null }).steps.map((x) => x.met)).toEqual([false, false])
+  })
   it('the unaffiliated have no steps', () => {
     expect(closingProgress('notice-mailed', {})).toEqual({ done: false, steps: [] })
     expect(closingProgress('notice-mailed')).toEqual({ done: false, steps: [] })

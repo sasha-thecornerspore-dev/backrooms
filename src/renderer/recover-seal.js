@@ -7,6 +7,8 @@
 //   cs.case.<case>.<station>.key  = '1:' + base64url(secret)  the kept key (dotted, never '1', so no counter counts it)
 //   cs.case.<case>.<station>.note = the note text              this browser's copy of a note it read while the case shipped plain
 //   cs.case.<case>.reward.seen    = the closing file as JSON   the same, for the closing file
+//   cs.case.<case>.<station>.maze = 'floor'                    filed from the field terminal on the floor the manifest names (markHonour;
+//                                                              the maze's own honour flag, beside the board's .field = '1', which it only reads)
 // The closing file opens only with the keys of every instrument. This stops READING a file, not SEARCHING it: a short answer can still
 // be found offline against the public gate hash.
 //
@@ -18,6 +20,7 @@
 // for the tests and for anything that wants to read a case without a keyring.
 
 export const SEAL = 1
+export const HONOUR_KEY = 'maze', HONOUR_VALUE = 'floor'     // cs.case.<case>.<station>.maze = 'floor'
 const SEAL_SALT = 'cornerspore:seal:1'
 const GATE_SALT = 'cornerspore:'
 const REWARD_FIELDS = ['title', 'text', 'fieldText', 'key', 'href', 'linkLabel']
@@ -170,5 +173,14 @@ export function createSeal({ storage = defaultStorage() } = {}) {
     } catch (e) {}
     return { error: true }
   }
-  return { isSolved, markSolved, keepSecret, secretOf, noteCopy, rewardCopy, complete, fileAnswer, openStation, openReward }
+  // the board's field-read flags (cs.case.<case>.<station>.field = '1', set by the relay's door check-in): read only here. A case whose
+  // place-read instruments were all walked reads its closing file's fieldText
+  const isFieldRead = (c, s) => get(kkey(c, s) + '.field') === '1'
+  const fieldComplete = (m) => { const geo = ((m && m.stations) || []).filter((s) => s.geo); return geo.length > 0 && geo.every((s) => isFieldRead(m.id, s.id)) }
+  // the field terminal's honour flag: an instrument filed from the terminal on the floor its manifest names. Dotted and never '1', so no
+  // counter of read marks counts it, and it gates nothing
+  const markHonour = (c, s) => set(kkey(c, s) + '.' + HONOUR_KEY, HONOUR_VALUE)
+  const honoured = (c, s) => get(kkey(c, s) + '.' + HONOUR_KEY) === HONOUR_VALUE
+  return { isSolved, markSolved, keepSecret, secretOf, noteCopy, rewardCopy, complete, fileAnswer, openStation, openReward,
+    isFieldRead, fieldComplete, markHonour, honoured }
 }
