@@ -127,6 +127,7 @@ describe('the unlock rule (§3.4)', () => {
   it('help lists the unlocked words only, in its order', () => {
     const b = book(); b.page(3, 0)
     const rows = texts(say('help', viewOf(b))).slice(1)
+    expect(rows.slice(-2)).toEqual(['clear · empty the screen', 'exit · put it away'])
     expect(rows[0]).toBe(TERM.HELP_HEAD)
     const want = TERM_CHROME.HELP.filter(([w]) => known(viewOf(b)).includes(w)).map(([, l]) => l)
     expect(rows.slice(1)).toEqual(want)
@@ -158,6 +159,11 @@ describe('the readouts', () => {
     expect(after(say('read', v))).toEqual([{ t: TERM.READ_WHICH, cls: 't-out' }])
     expect(after(say('read ' + NAMES[3], v))).toEqual([{ t: TERM.NO_NAME, cls: 't-out' }])
     expect(after(say('read no-such-page', v))).toEqual([{ t: TERM.NO_NAME, cls: 't-out' }])
+    // a page given up that the record does not hold answers as any unfound name: guessing names never tells which were given up
+    const g = viewOf(b, { redacted: [9, 5] })
+    expect(after(say('read ' + NAMES[5], g))).toEqual(after(say('read ' + NAMES[3], g)))
+    expect(after(say('read ' + NAMES[5], g))).toEqual([{ t: TERM.NO_NAME, cls: 't-out' }])
+    expect(after(say('read ' + NAMES[9], g))).toEqual([{ t: SEALED_TEXT, cls: 't-page' }, { t: REDACTED_FOOT, cls: 't-dim' }])
   })
   it('no unread page\'s text ever appears, whatever is typed', () => {
     const b = book(); b.page(0, 0); b.page(1, 1)
@@ -321,11 +327,14 @@ describe('the case (notes)', () => {
     }
     expect(mazeFloors(M().stations[1])).toEqual([2, 3]); expect(mazeFloors({ maze: { level: 4 } })).toEqual([4]); expect(mazeFloors(null)).toEqual([])
   })
-  it('a geo station: the place line instead of its clue', async () => {
+  it('a geo station: the place line instead of its clue, and no parity (it names the place too, as the live marker\'s does)', async () => {
     const m = M(); m.stations[0].geo = { lat: 1, lng: 2 }
+    m.stations[0].parity = ['in the record · the inscription, transcribed', "in the world · the marker at the park's corner, in daylight"]
     const rows = await reviewCase(m, spies([]).deps)
     expect(all(rows)).toContain(TERM.NOTES_PLACE)
     expect(all(rows)).not.toContain('the first clue.')
+    expect(all(rows)).not.toMatch(/read it by|in the world|the marker|the inscription/)
+    expect(all(rows)).toContain('it asks for · a word')
   })
   it('the closing file only when every instrument is read: the title, the text (fieldText only when every place was walked), the key; never href or linkLabel', async () => {
     const { calls, deps } = spies(['a', 'b', 'c'])
@@ -451,7 +460,12 @@ describe('the strings (VOICE REVIEW)', () => {
     expect(fill(TERM_CHROME.PROMPT, { floor: 'pipe dreams' })).toBe('pipe dreams ›')
     expect(fill('{a} $& {b}', { a: '$1', b: null })).toBe('$1 $& {b}')
     expect(TERM_CHROME.HELP.map(([w]) => w)).toEqual(['pages', 'read', 'radio', 'words', 'voices', 'sights', 'floors', 'where', 'grep', 'notes', 'file', 'recover',
-      'jot', 'margin', 'strike', 'log', 'clear'])
+      'jot', 'margin', 'strike', 'log', 'clear', 'exit'])
+    // each row reads 'word · what it does', the word its own: clear empties the screen, exit puts it away
+    for (const [w, l] of TERM_CHROME.HELP) expect(l.startsWith(w + ' '), w).toBe(true)
+    expect(TERM_CHROME.HELP.slice(-2).map(([, l]) => l)).toEqual(['clear · empty the screen', 'exit · put it away'])
+    // the settings row reads as the panel's other buttons and hints do: lowercase
+    for (const k of ['SETTINGS_FORGET', 'SETTINGS_FORGET_HINT', 'SETTINGS_FORGET_AGAIN', 'SETTINGS_FORGOTTEN']) expect(TERM_CHROME[k], k).toBe(TERM_CHROME[k].toLowerCase())
     for (const [, l] of TERM_CHROME.HELP) expect(l).toBe(l.toLowerCase())
   })
 })

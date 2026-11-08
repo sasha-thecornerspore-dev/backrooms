@@ -265,7 +265,9 @@
       display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 12px 6px;
       font-size: 11px; letter-spacing: 2px; border-bottom: 1px solid rgba(217,207,156,0.22); color: #b8ad7c;
     }
-    #term-close { cursor: pointer; white-space: nowrap; }
+    /* the hint is a button (Enter or Space on it folds the panel too), drawn as the header's words */
+    #term-close { cursor: pointer; white-space: nowrap; background: none; border: 0; margin: 0; padding: 0; font: inherit; letter-spacing: inherit; color: inherit; }
+    #term-close:focus-visible { outline: 1px solid #b8ad7c; outline-offset: 2px; }
     #term-out {
       flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
       white-space: pre-wrap; overflow-wrap: anywhere; padding: 8px 12px; user-select: text; -webkit-user-select: text;
@@ -282,15 +284,18 @@
       caret-color: #f0e6b8; padding: 2px 0;
     }
     #term-input::placeholder { color: #6f6848; }
-    #term-input:focus { animation: term-caret 1.1s step-end infinite; }
-    @keyframes term-caret { 50% { caret-color: transparent; } }
-    @media (prefers-reduced-motion: reduce) { #term-input:focus { animation: none; } }
+    /* (the caret blinks as the system's does: no blink of its own on top of it) */
     /* touch: at the top, above the phone's keyboard and clear of the discs (it is display: none at layout time, so touch.js keeps no
-       keep-out rect for it) */
-    @media (pointer: coarse) { #term { top: 12px; left: 16px; right: 16px; bottom: auto; width: auto; max-height: 42vh; } }
+       keep-out rect for it), inside the notch and the rounded corners of an installed app (viewport-fit=cover), as the gear and the
+       cluster keep */
+    @media (pointer: coarse) { #term { top: max(12px, env(safe-area-inset-top)); left: max(16px, env(safe-area-inset-left)); right: max(16px, env(safe-area-inset-right)); bottom: auto; width: auto; max-height: 42vh; } }
     /* there the settings gear (38 px, top right, above everything) sits on the header's corner: the header's words keep clear of it
        and wrap rather than run under it */
     @media (pointer: coarse) { #term-head { padding-right: 58px; flex-wrap: wrap; row-gap: 2px; } }
+    /* a thumb's target: the hint's hit box grows, the layout does not move (the header's right padding keeps it off the gear) */
+    @media (pointer: coarse) { #term-close { padding: 12px 10px; margin: -12px -10px; } }
+    /* a phone zooms the page into a focused field under 16 px, and stays zoomed: both text fields are 16 px on touch */
+    @media (pointer: coarse) { #term-input, #chat-input { font-size: 16px; } }
 
     /* centre messages — the building speaking. A notice, not a caption. */
     #msg {
@@ -387,8 +392,10 @@
     /* while the sheet is up, the building's line reads over it (game.js sets body.map-open): #msg sits at 34%, the card rises from 38vh.
        Only then — the base #msg keeps no z-index, so the modal note card still covers a murmur */
     body.map-open #msg { z-index: 56; }
-    /* and over the field terminal while it is up (game.js sets body.term-open) */
-    body.term-open #msg { z-index: 62; }
+    /* and over the field terminal while it is up (game.js sets body.term-open) — and off it: centred in the room left of the panel on
+       a desktop, just under it on touch (the panel spans the top there), so a line never covers the rows and the prompt it is copied to */
+    body.term-open #msg { z-index: 62; left: calc((100vw - min(560px, 46vw) - 32px) / 2); max-width: min(640px, calc(100vw - min(560px, 46vw) - 64px)); }
+    @media (pointer: coarse) { body.term-open #msg { left: 50%; max-width: min(92vw, 640px); top: calc(max(12px, env(safe-area-inset-top)) + 42vh + 10px); } }
     /* the paper corner under the HUD plate: the map's tab on touch only (the keyboard has Tab); a tap reads as Tab (game.js) */
     #map-tab {
       display: none; width: 36px; height: 36px; align-items: center; justify-content: center;
@@ -423,7 +430,7 @@
     #btn-new-notice:hover { background:rgba(58,44,23,0.88); }
     #btn-term-forget { background:none; border:1px solid #8a7a3a; color:#c9ba72; font-family:monospace; font-size:12px; padding:6px 14px; cursor:pointer; letter-spacing:1px; margin-top:14px; }
     #btn-term-forget:hover { background:rgba(58,44,23,0.88); }
-    #term-forget-hint { margin-top:6px; color:#c9ba72; font-family:monospace; max-width:420px; }
+    #term-forget-hint { margin-top:6px; color:#c9ba72; font-family:monospace; max-width:420px; opacity:1; }
     #file-reply { margin-top:8px; color:#c9ba72; font-family:monospace; min-height:12px; }
     /* the anchor field sits above the ways in (launch-fixes F7): the pin is the hook, so it reads before the buttons, at full contrast */
     #anchor-wrap { display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:4px; }
@@ -628,8 +635,8 @@
         <button id="btn-new-notice">request a new notice</button>
         <div id="file-reply" class="set-hint"></div>
         <!-- the field terminal's record on this device (game.js writes the label and the hint; the first press asks) -->
-        <button id="btn-term-forget"></button>
-        <div id="term-forget-hint" class="set-hint"></div>
+        <button id="btn-term-forget" aria-describedby="term-forget-hint"></button>
+        <div id="term-forget-hint" class="set-hint" aria-live="polite"></div>
       </div>
       <div id="locate-row" style="display:none;margin-top:12px;">
         <button id="btn-locate" style="background:none;border:1px solid #8a7a3a;color:#c9ba72;font-family:monospace;font-size:13px;padding:8px 16px;cursor:pointer;letter-spacing:2px;">locate your body ⌖</button>
@@ -725,12 +732,12 @@
     <div id="chat-log"></div>
     <div id="chat-typing"></div>
   </div>
-  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (Enter sends · Esc cancels · /me to emote · /term · /recover · /cases · /file … · /intake · /status · /invite)" spellcheck="false" enterkeyhint="send" autocapitalize="off" autocomplete="off" style="display:none"/>
+  <input id="chat-input" type="text" maxlength="200" placeholder="say something…  (/term · Enter sends · Esc cancels · /me to emote · /recover · /cases · /file … · /intake · /status · /invite)" spellcheck="false" enterkeyhint="send" autocapitalize="off" autocomplete="off" autocorrect="off" style="display:none"/>
   <!-- the field terminal (terminal.js createTermCard writes its labels; game.js opens it): rows are made only when something prints -->
   <div id="term" role="dialog" aria-label="field terminal">
-    <div id="term-head"><span id="term-title"></span><span id="term-close" role="button"></span></div>
+    <div id="term-head"><span id="term-title"></span><button id="term-close" type="button"></button></div>
     <div id="term-out" role="log" aria-live="polite"></div>
-    <div id="term-row"><span id="term-prompt"></span><input id="term-input" type="text" maxlength="120" spellcheck="false" autocapitalize="off" autocomplete="off" enterkeyhint="go"/></div>
+    <div id="term-row"><span id="term-prompt"></span><input id="term-input" type="text" maxlength="120" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" enterkeyhint="go" aria-labelledby="term-title"/></div>
   </div>
   <div id="msg"></div>
   <div id="hint"><span>wasd move</span> · <span>shift run</span> · <span>mouse look</span> · <span>space ward (hold to charge)</span> · <span>f take / no-clip</span> · <span>q use</span> · <span>x set down</span> · <span>c whistle</span><span class="k-map"> · tab map</span> · <span>1-6 slots</span> · <span>e speak</span> · <span>enter chat</span> · <span>l light</span> · <span>m music</span> · <span>b beacon</span> · <span>` terminal</span></div>
@@ -1184,8 +1191,9 @@
     // request a new notice: the game re-files you under the notice nobody answered (once a day, like any filing) and redraws the row.
     // The button lets go of the focus at once, so an Enter meant for the chat later can never press it again
     document.getElementById('btn-new-notice').onclick = (e) => { e.currentTarget.blur(); document.dispatchEvent(new CustomEvent('backrooms:new-notice')) }
-    // forget what the field terminal kept on this device: the game asks on the first press and forgets on the second
-    document.getElementById('btn-term-forget').onclick = (e) => { e.currentTarget.blur(); document.dispatchEvent(new CustomEvent('backrooms:term-forget')) }
+    // forget what the field terminal kept on this device: the game asks on the first press (the button says so) and forgets on the
+    // second. The button keeps the focus, so a second Enter confirms; a press once the panel is hidden does nothing (game.js)
+    document.getElementById('btn-term-forget').onclick = () => document.dispatchEvent(new CustomEvent('backrooms:term-forget'))
     // one save-and-close path for the CLOSE button, Esc and a click on the dimmed backdrop
     async function closeSettings() {
       const updateMode = document.getElementById('set-updatemode').value

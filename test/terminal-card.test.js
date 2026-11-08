@@ -51,6 +51,14 @@ describe('createTermCard', () => {
     const { doc, card, input } = rig()
     expect(doc.els['term-title'].textContent).toBe(TERM_CHROME.TITLE)
     expect(doc.els['term-close'].textContent).toBe(TERM_CHROME.CLOSE_HINT)
+    // the hint names a hand's own ways: a coarse pointer has no Esc and no `; a page that cannot ask gets the keyboard's
+    const touch = fakeDoc(); touch.defaultView = { matchMedia: (q) => ({ matches: q === '(pointer: coarse)' }) }
+    createTermCard(touch, {})
+    expect(touch.els['term-close'].textContent).toBe(TERM_CHROME.CLOSE_HINT_TOUCH)
+    expect(TERM_CHROME.CLOSE_HINT).not.toMatch(/tap/); expect(TERM_CHROME.CLOSE_HINT_TOUCH).not.toMatch(/esc|`/)
+    const odd = fakeDoc(); odd.defaultView = { matchMedia: () => { throw new Error('no') } }
+    createTermCard(odd, {})
+    expect(odd.els['term-close'].textContent).toBe(TERM_CHROME.CLOSE_HINT)
     expect(input.placeholder).toBe(TERM_CHROME.PLACEHOLDER)
     card.open('pipe dreams ›')
     expect([doc.els.term.style.display, doc.els['term-prompt'].textContent, input.focused, card.isOpen()]).toEqual(['flex', 'pipe dreams ›', true, true])
@@ -86,6 +94,15 @@ describe('createTermCard', () => {
     input.value = 'radio'; press('', { key: 'Enter', isComposing: true })
     expect(got.submit[got.submit.length - 1]).toBe('help')
   })
+  it('an IME keeps its keys: Enter and Esc while composing (or the 229 of a composition\'s commit) neither submit nor fold', () => {
+    const { got, input, press } = rig()
+    input.value = 'ねこ'
+    for (const e of [press('Enter', { isComposing: true }), press('Enter', { keyCode: 229 }), press('Escape', { isComposing: true }), press('Escape', { keyCode: 229 })])
+      expect([e.stopped, e.prevented]).toEqual([true, false])
+    expect([got.submit, got.close, input.value]).toEqual([[], 0, 'ねこ'])
+    press('Enter', { keyCode: 13 })
+    expect(got.submit).toEqual(['ねこ'])
+  })
   it('Esc and ` close, with preventDefault (no ` typed); a held key does not close again; Tab calls onTab and takes its line', () => {
     const r = rig({ tab: 'floors ' })
     const a = r.press('Escape'), b = r.press('Backquote'), c = r.press('Backquote', { repeat: true })
@@ -119,6 +136,11 @@ describe('createTermCard', () => {
     const ev = { preventDefault() {}, stopPropagation() {} }
     r.doc.els['term-close'].listeners.pointerdown(ev)
     expect(r.got.close).toBe(2)
+    // a button: Enter or Space on it (a click no pointer made, detail 0) folds it; a pointer's own click was its pointerdown
+    r.doc.els['term-close'].listeners.click({ detail: 1 })
+    expect(r.got.close).toBe(2)
+    r.doc.els['term-close'].listeners.click({ detail: 0 })
+    expect(r.got.close).toBe(3)
   })
   it('a click in the panel that selects nothing gives the keys back to the input; a selection is left alone', () => {
     const r = rig()
@@ -131,12 +153,30 @@ describe('createTermCard', () => {
     r.doc.els.term.listeners.pointerup({ target: r.out })
     expect(r.input.focused).toBe(false)
   })
-  it('the scrollback keeps to the bottom unless it was scrolled up', () => {
+  it('the scrollback keeps to the bottom unless it was scrolled up; a line typed brings it back down', () => {
     const r = rig()
     for (let i = 0; i < 20; i++) r.card.print([{ t: 'row ' + i }])
     expect(r.out.scrollTop).toBe(r.out.scrollHeight)
-    r.out.scrollTop = 0                                            // the player scrolled up
-    r.card.print([{ t: 'c' }])
-    expect(r.out.scrollTop).toBe(0)
+    r.out.scrollTop = 0; r.out.listeners.scroll()                  // the player scrolled up
+    r.card.print([{ t: 'c' }]); r.card.mirror('a line the building said.')
+    expect(r.out.scrollTop).toBe(0)                                // a copied line or a late reply does not pull the view down
+    r.input.value = 'read the-carpet'
+    const card = r.card
+    r.press('Enter')
+    expect(r.out.scrollTop).toBe(r.out.scrollHeight)               // Enter: to the foot, before the rows print
+    card.print([{ t: '› read the-carpet', cls: 't-in' }, { t: 'the page.', cls: 't-page' }])
+    expect(r.out.scrollTop).toBe(r.out.scrollHeight)               // and the rows that answer it stay in view
+    r.out.scrollTop = 5; r.out.listeners.scroll()                  // scrolled up again; clear and open both go back to the foot
+    card.clear(); card.print([{ t: 'x' }])
+    expect(r.out.scrollTop).toBe(r.out.scrollHeight)
+  })
+  it('a print reads the layout to go to the foot only: whether it is at the foot is kept by the scroll events, never read in print', () => {
+    const r = rig()
+    let reads = 0, top = 0
+    Object.defineProperty(r.out, 'scrollTop', { get() { reads++; return top }, set(v) { top = v }, configurable: true })
+    Object.defineProperty(r.out, 'clientHeight', { get() { reads++; return 100 }, configurable: true })
+    for (let i = 0; i < 5; i++) { r.card.print([{ t: 'row ' + i }]); r.card.mirror('a line.') }
+    expect(reads).toBe(0)
+    expect(top).toBe(r.out.scrollHeight)
   })
 })

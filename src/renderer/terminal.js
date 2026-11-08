@@ -19,7 +19,7 @@
 // with the line: createFilingGate).
 import { SEALED_TEXT, REDACTED_FOOT } from './papercard.js'
 import { pagesGiven } from './status.js'
-import { words as countWord } from './compose-radio.js'
+import { words as countWord, radioLine } from './compose-radio.js'
 import { LEDGER_LABEL } from './closings.js'
 
 // ── the strings ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ export const TERM = Object.freeze({
   REWARD_NOCRYPTO: 'this machine cannot open a sealed file.',
   REWARD_ERR: 'the closing file would not open.',
   FILE_READING: 'reading it against the record.',                                          // HUD
-  FILE_WAIT: 'the office is still reading your last filing.',                              // HUD
+  FILE_WAIT: 'the office takes no filing from you yet.',                                  // HUD, busy or in the back-off: one line, whatever was typed
   FILE_NOKEY: 'filed. this machine could not keep the key.',                               // HUD, after the filed line
   FILE_HONOUR: 'filed where it was meant to be read. the file notes where.',               // HUD
   CASE_CLOSED: 'the case is read. the terminal keeps its closing file.',                   // HUD, in place of the closing key
@@ -80,18 +80,20 @@ export const TERM = Object.freeze({
   FILM: 'the file does not keep your film. you were asked to transcribe it.',              // only after a letter developed this session
 })
 
-// VOICE REVIEW: the chrome — labels, readout templates ({name} slots), the help rows and the settings row (out of fiction, sentence case).
+// VOICE REVIEW: the chrome — labels, readout templates ({name} slots), the help rows and the settings row (out of fiction; lowercase, as the
+// settings panel's other buttons and hints are).
 // Templates and labels, so outside the prose lint; index.html carries the hint span and the line's placeholder addition (a test holds
 // them equal to these).
 export const TERM_CHROME = Object.freeze({
   TITLE: 'field terminal',
-  CLOSE_HINT: 'tap · ` · esc — put it away',
+  CLOSE_HINT: 'esc · ` — put it away',
+  CLOSE_HINT_TOUCH: 'tap here — put it away',                // (a coarse pointer: no Esc, no `)
   PLACEHOLDER: 'help · notes · status · log',
   PROMPT: '{floor} ›',
   ECHO: '› {line}',
   ECHO_FILE: '› file · · ·',
   HINT_SPAN: '` terminal',
-  CHAT_PLACEHOLDER: ' · /term',
+  CHAT_PLACEHOLDER: '/term · ',                              // (first in the line's brackets: a phone's narrow line shows it)
   BOARD: 'the board at /recover/ keeps the rest.',
   PAGE_COUNT: '{n} of twenty-six pages in the file.',
   PAGE_EARLIER: '{name} · an earlier walk',
@@ -128,12 +130,13 @@ export const TERM_CHROME = Object.freeze({
     Object.freeze(['margin', 'margin · your lines']),
     Object.freeze(['strike', 'strike <word> · a line out of the margin']),
     Object.freeze(['log', 'log · what the building said lately']),
-    Object.freeze(['clear', 'clear · exit']),
+    Object.freeze(['clear', 'clear · empty the screen']),
+    Object.freeze(['exit', 'exit · put it away']),
   ]),
-  SETTINGS_FORGET: 'Forget what the terminal kept',
-  SETTINGS_FORGET_HINT: "Clears the terminal's record on this device. Your file, your save and your case marks stay.",
-  SETTINGS_FORGET_AGAIN: 'Press again to forget it.',
-  SETTINGS_FORGOTTEN: 'Forgotten.',
+  SETTINGS_FORGET: 'forget what the terminal kept',
+  SETTINGS_FORGET_HINT: "clears the terminal's record on this device. your file, your save and your case marks stay.",
+  SETTINGS_FORGET_AGAIN: 'press again to forget it.',                 // (the button's own label while it asks, as the new notice's is)
+  SETTINGS_FORGOTTEN: 'forgotten.',
 })
 
 // a template's {slots} filled; a value is spliced verbatim (a function replacer: no `$` pattern in a name is read)
@@ -175,6 +178,15 @@ export function parseTermLine(raw) {
     echo = fill(C.ECHO, { line: shown })
   }
   return { cmd, arg, echo, line: cmd === 'file' ? '' : line }
+}
+
+// the station's ledger lines, each as radioLine says it (compose-radio.js, byte for byte), -> its group's index: game.js keeps a group
+// as its line shows (keepShown), never as it is pushed. Built once, at load; the rules a block reads are not asked (no follow-up here)
+const NO_RADIO_RULE = Object.freeze({ radio: () => ({}) })
+export function ledgerLines(groups) {
+  const out = new Map()
+  for (let i = 0; i < groups.length; i++) out.set(radioLine({ on: true, mode: 'ledger', stationIdx: i, groups, rules: NO_RADIO_RULE }).message, i)
+  return out
 }
 
 // 'level 2 — pipe dreams' -> 'pipe dreams' (no digit in the prompt)
@@ -248,7 +260,9 @@ function readRows(view, arg) {
   if (!want) return [row(TERM.READ_WHICH)]
   const frag = view.names.indexOf(want)
   const red = view.redacted || []
-  if (frag < 0 || !(view.book.pages.some((p) => p.frag === frag) || red.includes(frag))) return [row(TERM.NO_NAME)]
+  // only a page the record holds answers: a given-up page it does not hold reads as any unfound name (its name is never shown, so a
+  // guessed one must not tell which pages were given up); one it holds and gave up stays sealed
+  if (frag < 0 || !view.book.pages.some((p) => p.frag === frag)) return [row(TERM.NO_NAME)]
   if (red.includes(frag)) return [row(SEALED_TEXT, 't-page'), row(REDACTED_FOOT, 't-dim')]
   return [row(view.scraps[frag], 't-page'), row(TERM.READ_FOOT, 't-dim')]
 }
@@ -433,7 +447,8 @@ export function whereCaseRows(m, solved, floor, onBlock) {
 }
 // `notes [case]`: the case as far as it is read. The read marks and the completion are checked HERE, before either seal call: an unsealed
 // manifest's openStation answers whatever the read state, and so does its openReward (recover-seal.js). It stops at the first instrument
-// not read; what lies past it is only caseLine's n of m. Never read: where, link, geo, a reward's href or linkLabel.
+// not read; what lies past it is only caseLine's n of m. Never read: where, link, geo (nor a geo station's clue or parity), a reward's
+// href or linkLabel.
 export async function reviewCase(m, { solved, openStation, openReward, fieldComplete = () => false, honour = () => false, floor = null, onBlock = false,
   site = false, onNote = null } = {}) {
   const st = m && Array.isArray(m.stations) ? m.stations : []
@@ -443,7 +458,8 @@ export async function reviewCase(m, { solved, openStation, openReward, fieldComp
     if (!solved(m.id, s.id)) {
       open = true
       rows.push(row(TERM.NOTES_OPEN), row(s.title))
-      if (Array.isArray(s.parity) && s.parity.length) rows.push(row(fill(C.READ_BY, { parity: s.parity.join(' · ') }), 't-dim'))
+      // (a station read at a place: its parity names the place, as its clue does, so neither is read here)
+      if (!s.geo && Array.isArray(s.parity) && s.parity.length) rows.push(row(fill(C.READ_BY, { parity: s.parity.join(' · ') }), 't-dim'))
       if (s.prompt) rows.push(row(fill(C.ASKS_FOR, { prompt: s.prompt }), 't-dim'))
       if (s.geo) rows.push(row(TERM.NOTES_PLACE, 't-dim'))
       else if (s.clue) rows.push(row(s.clue, 't-page'))
@@ -552,19 +568,28 @@ export function createTermCard(doc, { onSubmit = null, onClose = null, onTab = n
   if (!el) return NOOP_CARD
   const out = doc.getElementById('term-out'), input = doc.getElementById('term-input'), prompt = doc.getElementById('term-prompt')
   const title = doc.getElementById('term-title'), hint = doc.getElementById('term-close')
+  // the hint names the ways a hand has: a coarse pointer has no Esc and no `
+  let coarse = false
+  try { coarse = !!doc.defaultView?.matchMedia?.('(pointer: coarse)')?.matches } catch (e) { coarse = false }
   if (title) title.textContent = C.TITLE
-  if (hint) hint.textContent = C.CLOSE_HINT
+  if (hint) hint.textContent = coarse ? C.CLOSE_HINT_TOUCH : C.CLOSE_HINT
   if (input) { input.placeholder = C.PLACEHOLDER; input.maxLength = 120 }
   let open = false
+  // whether the scrollback is at its foot: kept by its own scroll events, so a print reads the layout once (to go to the foot), not twice
+  let pinned = true
   const close = () => { if (onClose) onClose() }
 
   input?.addEventListener('keydown', (e) => {
     e.stopPropagation()                                           // the game never reads a key typed here
+    if (e.isComposing || e.keyCode === 229) return                // an IME's keys are its own: Enter commits, Esc cancels, the composition
     const code = e.code
-    if (code === 'Enter' || code === 'NumpadEnter' || (e.key === 'Enter' && !e.isComposing)) {
+    if (code === 'Enter' || code === 'NumpadEnter' || e.key === 'Enter') {
       e.preventDefault()
       const v = input.value
       input.value = ''
+      // a terminal follows the line you typed: what it prints lands in view, even after a scroll up to reread
+      pinned = true
+      if (out) out.scrollTop = out.scrollHeight
       if (onSubmit) onSubmit(v)
     } else if (code === 'Escape' || code === 'Backquote') { e.preventDefault(); if (!e.repeat) close() }   // (a held key does not fold it again)
     else if (code === 'Tab') { e.preventDefault(); const r = onTab ? onTab(input.value) : null; if (typeof r === 'string') input.value = r }
@@ -578,6 +603,9 @@ export function createTermCard(doc, { onSubmit = null, onClose = null, onTab = n
     }
   })
   hint?.addEventListener('pointerdown', (e) => { e.preventDefault?.(); e.stopPropagation?.(); close() })
+  // a button: Enter or Space on it (a click with no pointer behind it, detail 0) folds it too; a pointer's click was its pointerdown
+  hint?.addEventListener('click', (e) => { if (!e || e.detail === 0) close() })
+  out?.addEventListener('scroll', () => { pinned = out.scrollTop + (out.clientHeight || 0) >= out.scrollHeight - 4 }, { passive: true })
   // a mouse press outside the panel folds it; a touch press does not (a thumb on the discs is play, not leaving)
   doc.addEventListener?.('pointerdown', (e) => {
     if (!open || e.pointerType !== 'mouse') return
@@ -593,7 +621,6 @@ export function createTermCard(doc, { onSubmit = null, onClose = null, onTab = n
 
   function print(rows) {
     if (!out || !rows || !rows.length) return
-    const stick = !out.scrollHeight || out.scrollTop + (out.clientHeight || 0) >= out.scrollHeight - 4
     for (const r of rows) {
       const d = doc.createElement('div')
       d.className = r.cls || 't-out'
@@ -601,7 +628,7 @@ export function createTermCard(doc, { onSubmit = null, onClose = null, onTab = n
       out.appendChild(d)
     }
     while (out.children.length > MAX_ROWS) out.removeChild(out.children[0])
-    if (stick) out.scrollTop = out.scrollHeight
+    if (pinned) out.scrollTop = out.scrollHeight
   }
   return {
     ok: true,
@@ -610,12 +637,13 @@ export function createTermCard(doc, { onSubmit = null, onClose = null, onTab = n
       el.style.display = 'flex'
       if (p != null && prompt) prompt.textContent = p
       if (input) { input.value = ''; input.focus?.() }
+      pinned = true
       if (out) out.scrollTop = out.scrollHeight
     },
     close() { open = false; el.style.display = 'none'; input?.blur?.() },
     print,
     mirror(text) { print([row(text, 't-sys')]) },
-    clear() { if (out) while (out.children.length) out.removeChild(out.children[0]) },
+    clear() { pinned = true; if (out) while (out.children.length) out.removeChild(out.children[0]) },
     setPrompt(p) { if (prompt) prompt.textContent = p },
     isOpen: () => open,
     focus() { input?.focus?.() },

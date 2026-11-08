@@ -72,7 +72,7 @@ import { inviteFor, roomPinLine, recoverBase, RECOVER_LOCAL } from './site.js'
 import { createSeal, normalize } from './recover-seal.js'
 // the field terminal (terminal.js) and the record it reads back (casebook.js): a find is kept as an index into the game's own tables
 import { TERM, TERM_CHROME, fill, termWord, isOpener, parseTermLine, floorWord, pageNames, run as runTermLine, complete as completeTerm, reviewCase,
-  whereCaseRows, mazeFloors, caseLine, createFilingGate, createHistory, createLogRing, createTermCard, loggable, jotRows, strikeRows } from './terminal.js'
+  whereCaseRows, mazeFloors, caseLine, createFilingGate, createHistory, createLogRing, createTermCard, loggable, jotRows, strikeRows, ledgerLines } from './terminal.js'
 import { createCasebook } from './casebook.js'
 import { LEVELS } from './levels.js'
 import { STATUSES } from './status.js'
@@ -146,6 +146,12 @@ const PAGE_NAMES = pageNames(SCRAPS)
 const SOUL_OF = new Map()
 NPC_LINES.forEach((t, i) => SOUL_OF.set(t, [0, i]))
 STATUSES.forEach((st, k) => npcLines(st).forEach((t, i) => { if (!SOUL_OF.has(t)) SOUL_OF.set(t, [k + 1, i]) }))
+// the same for a drawer's note and the station's groups: kept as they SHOW, never as they are pushed (the line queue can drop a line that
+// waited: past two behind a combat line, under a higher push, at a travel's clear; and a drawer searched is gone for good). A group's
+// line is radioLine's own ledger line for it (terminal.js ledgerLines), so this is the text the radio says, byte for byte
+const DRAWER_OF = new Map()
+DRAWER_NOTES.forEach((t, i) => { if (!DRAWER_OF.has(t)) DRAWER_OF.set(t, i) })
+const RADIO_OF = ledgerLines(RADIO_GROUPS)
 
 // ── per-frame plumbing that must not allocate (pure, exported for test/gfx-hc-game.test.js) ──
 
@@ -459,6 +465,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    push as a line shows ──
   let termOpen = false, termGreeted = false
   let heardMask = 0, heardAt = file.at
+  let threadAt = 0                                           // how far the first run's thread is recorded this session (keepThread)
   const filingGate = createFilingGate()
   const termHistory = createHistory(12)
   const logRing = createLogRing(24), logOut = []
@@ -1466,7 +1473,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // a phone's on-screen keyboard may send its enter key with no code: its key is 'Enter' all the same (a keyboard's Enter is unchanged)
     if (e.code === 'Enter' || e.code === 'NumpadEnter' || (e.key === 'Enter' && !e.isComposing)) {
       const t = chatInputEl.value.trim()
-      if (termWord(t)) { closeChat(); openTerm(t); return }               // a terminal word opens the field terminal and runs there
+      // a terminal word opens the field terminal and runs there. The line opens over the map (both are held): the map folds for it.
+      // Kneeling, the terminal waits, and says so, as it does lying down (openTerm), rather than drop the word
+      if (termWord(t)) { closeChat(); if (mapOpen) closeMap(); if (!openTerm(t) && kneel.st) showMessage(TERM.NOT_STANDING); return }
       if (t.startsWith('/') && !t.startsWith('/me ')) handleCommand(t)   // the field console
       else if (t && mpClient) mpClient.sendChat(t)
       else if (t) showMessage('no one is here to hear it.')
@@ -1585,6 +1594,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   async function fileNext(arg, { viaTerm = false } = {}) {
     if (!arg) { showMessage('file what? /file <answer>'); return }
     if (!filingGate.ask(performance.now()).ok) { showMessage(TERM.FILE_WAIT); return }
+    // the floor it was filed from, taken at the ask: a way taken while the office reads swaps the floor under the answer
+    const filedOn = viaTerm && level && !level.cfg.map ? level.index : null
     showMessage(TERM.FILE_READING)
     let settled = false
     try {
@@ -1596,9 +1607,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       filingGate.settle(r.ok, performance.now()); settled = true
       if (!r.ok) { showMessage('the file does not answer to that.'); return }
       const note = await recoverSeal.openStation(m, next)
-      blip(); showMessage('filed. ' + next.title + ' — read. ' + (note ? note.text : ''))
-      if (!r.kept) showMessage(TERM.FILE_NOKEY)
-      if (viaTerm && level && !level.cfg.map && mazeFloors(next).includes(level.index)) { recoverSeal.markHonour(m.id, next.id); showMessage(TERM.FILE_HONOUR) }
+      // (the key's line rides on the filed one: the line queue keeps two results waiting, and the filed line carries the note)
+      blip(); showMessage('filed. ' + next.title + ' — read. ' + (note ? note.text : '') + (r.kept ? '' : '\n' + TERM.FILE_NOKEY))
+      if (filedOn !== null && mazeFloors(next).includes(filedOn)) { recoverSeal.markHonour(m.id, next.id); showMessage(TERM.FILE_HONOUR) }
       if (!m.stations.some(s => !rSolved(m.id, s.id))) {
         await recoverSeal.openReward(m)                                         // (keeps this machine's copy of a plain closing file)
         setTimeout(() => showMessage(TERM.CASE_CLOSED), 3000)
@@ -1609,12 +1620,14 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── the field terminal (terminal.js): opened by ` (the loop), by a terminal word on the line, or TYPE then /term on touch. openTerm sets
   //    chatOpen, so every gate the line holds holds for it: no movement, verbs, ward, map or events, the Enter line shut, the TYPE disc
   //    hidden. Open and close drop every held key and a ward being held, as the line does; the pointer lock is let go and not taken back
-  //    (you click the view, as after a paper card). A hit, a travel, a death and the settings panel fold it ──
+  //    (you click the view, as after a paper card). A travel, a death and the settings panel fold it; a hit does not, as it does not
+  //    fold the line: both hold the keys, and a fold under the fingers would hand the rest of a typed word to the verbs (F, Q, X, E,
+  //    the digits). The hurt and its line, copied in, say it. openTerm -> whether it opened ──
   const floorPrompt = () => fill(TERM_CHROME.PROMPT, { floor: floorWord(level.cfg.levelName) })
   function openTerm(line = null) {
-    if (termOpen || !term.ok) return
-    if (transitioning || dialogOpen || chatOpen || noteOpen || mapOpen || kneel.st || !settingsHidden()) return
-    if (down.st === 'down') { showMessage(TERM.NOT_STANDING); return }
+    if (termOpen || !term.ok) return false
+    if (transitioning || dialogOpen || chatOpen || noteOpen || mapOpen || kneel.st || !settingsHidden()) return false
+    if (down.st === 'down') { showMessage(TERM.NOT_STANDING); return false }
     termOpen = chatOpen = true
     for (const k in K) K[k] = false
     charger.forceRelease()
@@ -1623,6 +1636,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     term.open(floorPrompt())
     if (!termGreeted) { termGreeted = true; term.print([{ t: TERM.BANNER, cls: 't-dim' }]) }
     if (line && !isOpener(parseTermLine(line).cmd)) runTerm(line)
+    return true
   }
   function closeTerm() {
     if (!termOpen) return
@@ -1642,16 +1656,24 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       site: !RECOVER_REMOTE, notes: notesSeen }
   }
   // the finds that are said as lines, kept as they show (the souls' branch and the first run's sites are pinned and replayed whole by the
-  // wiring tests): a lost soul's line, and how far the first run's thread came. Once per line shown; a Map read and an integer compare
+  // wiring tests; a line the queue dropped was never seen): the station's group (heard on any floor, the block too: the mask is not the
+  // record), a lost soul's line, a drawer's note, and how far the first run's thread came. Once per line shown; Map reads and integer
+  // compares, nothing made
   function keepShown(text) {
+    const rk = RADIO_OF.get(text)
+    if (rk !== undefined) noteHeard(rk)
     if (level.cfg.map) return
     const sk = SOUL_OF.get(text)
     if (sk && !level.cfg.map) casebook.soul(sk[0], sk[1], level.index)
+    const dk = DRAWER_OF.get(text)
+    if (dk !== undefined && !level.cfg.map) casebook.drawer(dk, level.index)
     keepThread()
   }
   // a group the station read to you, under this file (a new filing starts the station over: the mask goes with it)
   function noteHeard(i) { if (heardAt !== file.at) { heardAt = file.at; heardMask = 0 } heardMask |= 1 << i }
-  function keepThread() { if (!level.cfg.map) casebook.thread(firstRun.step()) }
+  // the thread, recorded only as it moves past what this session has recorded (threadAt): Forget sets that to where the thread stands,
+  // so a thread already walked is not written straight back (nor the first find's line said again), only a step taken after it
+  function keepThread() { const s = firstRun.step(); if (s > threadAt && !level.cfg.map) { threadAt = s; casebook.thread(s) } }
   function runTerm(raw) {
     const p = parseTermLine(raw)
     if (!p.cmd) return
@@ -1661,7 +1683,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const fx = r.effect
     if (!fx) return
     if (fx.kind === 'pass') {
-      if (p.cmd === 'intake') closeTerm()                                       // the form is a card: it wants the keys the terminal holds
+      if (p.cmd === 'intake' && !fx.arg) closeTerm()                            // the form is a card: it wants the keys the terminal holds
+                                                                                // (an amendment opens none: its refusal is said, it stays up)
       handleCommand('/' + p.cmd + (fx.arg ? ' ' + fx.arg : ''))                 // answered on the HUD as on the line; the copy lands here
     } else if (fx.kind === 'notes') notesFor(fx.arg)
     else if (fx.kind === 'file') termFile(fx.arg)
@@ -1734,16 +1757,19 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // groups heard, the history. The file, the save and the case marks stay
   const forgetEl = document.getElementById('btn-term-forget'), forgetHintEl = document.getElementById('term-forget-hint')
   let forgetAsked = false
-  function renderForget(hint) {
-    if (forgetEl) forgetEl.textContent = TERM_CHROME.SETTINGS_FORGET
+  function renderForget(label, hint) {
+    if (forgetEl) forgetEl.textContent = label
     if (forgetHintEl) forgetHintEl.textContent = hint
   }
-  document.addEventListener('backrooms:settings-open', () => { if (termOpen) closeTerm(); forgetAsked = false; renderForget(TERM_CHROME.SETTINGS_FORGET_HINT) })
+  document.addEventListener('backrooms:settings-open', () => { if (termOpen) closeTerm(); forgetAsked = false; renderForget(TERM_CHROME.SETTINGS_FORGET, TERM_CHROME.SETTINGS_FORGET_HINT) })
   document.addEventListener('backrooms:term-forget', () => {
-    if (!forgetAsked) { forgetAsked = true; renderForget(TERM_CHROME.SETTINGS_FORGET_AGAIN); return }
+    // a press the panel did not see (an Enter on a button the hidden panel left focused) forgets nothing and asks nothing
+    if (settingsHidden()) { forgetAsked = false; forgetEl?.blur?.(); return }
+    // the first press relabels the button itself (the new notice's way); the hint keeps saying what goes and what stays
+    if (!forgetAsked) { forgetAsked = true; renderForget(TERM_CHROME.SETTINGS_FORGET_AGAIN, TERM_CHROME.SETTINGS_FORGET_HINT); return }
     forgetAsked = false
-    casebook.forget(); heardMask = 0; logRing.clear(); notesSeen.length = 0; termHistory.clear(); term.clear(); termGreeted = false
-    renderForget(TERM_CHROME.SETTINGS_FORGOTTEN)
+    casebook.forget(); threadAt = firstRun.step(); heardMask = 0; logRing.clear(); notesSeen.length = 0; termHistory.clear(); term.clear(); termGreeted = false
+    renderForget(TERM_CHROME.SETTINGS_FORGET, TERM_CHROME.SETTINGS_FORGOTTEN)
   })
   document.addEventListener('backrooms:new-notice', () => {
     const r = fileStatus(file, 'notice-mailed', Date.now(), true)
@@ -2137,9 +2163,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       firePolaroid()
       if (!level.cfg.map) for (const k of KINDS) if (!caughtBefore.includes(k) && film.caught(k)) casebook.den(k, level.index)
     } else if (eff.type === 'radio') {
-      const at = stationIdx
-      readRadio(eff.on)
-      if (stationIdx !== at) noteHeard(at)                  // the group read goes in the terminal's mask only when the station moved
+      readRadio(eff.on)                                      // (a group read goes in the terminal's mask as its line shows: keepShown)
     } else if (eff.type === 'plumb') {
       // the strain gauge: a grain reading that tightens with depth. A tool — it is
       // read on every press and never consumed (items.js useSelected).
@@ -2272,7 +2296,6 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const roll = searchLog.held(p.key) ?? rollContainer(p.key, cx, cy, level.index, worldSeed | 0, level.cfg.maze?.salt | 0)
     opening = p
     if (!applyRoll(roll, searchApi)) { searchLog.hold(p.key, roll); return }   // an item with no hand free: the key stays unsearched
-    if (roll.kind === 'note' && !level.cfg.map) casebook.drawer(DRAWER_NOTES.indexOf(roll.text), level.index)
     searchLog.markSearched(p.key); mem.noteSearched(level.index, p.key)
     level.entitySys.noise(p.x, p.y, 4)
     if (level.index >= DRAWER_COST.minLevel) {                        // the deep floors count the drawers you open
@@ -3170,7 +3193,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (mapOpen) closeMap(); if (noteOpen) closeNoteCard()
       cancelCommit('the bandage slips.')
       fog.pinThing(level.index, 'hurt:' + frameCount, 'hurt', player.x, player.y)   // where it hurt you, on the map (the last 12 kept)
-      if (termOpen) closeTerm()                                                        // and the terminal folds, as the map and the card do
+      // (the terminal stays up, as the line does: a fold under typing fingers hands the rest of the word to the verbs; openTerm)
     }
     if (regenDelay > 0) regenDelay -= dt
     else if (player.hp < player.maxHp && down.st !== 'down') player.hp = Math.min(player.maxHp, player.hp + 3.5 * dt)

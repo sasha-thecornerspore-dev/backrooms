@@ -32,8 +32,8 @@ describe('the 2.0.6 release notes (a draft)', () => {
   it('quote every new line in italics, as the game says it', () => {
     for (const [k, l] of Object.entries(TERM)) expect(notes, k).toContain(`*${l}*`)
     expect(notes).toContain('`› file · · ·`')
-    expect(notes).toContain('**Forget what the terminal kept**')
-    expect(TERM_CHROME.SETTINGS_FORGET).toBe('Forget what the terminal kept')
+    expect(notes).toContain('**forget what the terminal kept**')
+    expect(TERM_CHROME.SETTINGS_FORGET).toBe('forget what the terminal kept')
   })
   it('say what a room and an old save see, and that the closing key left the screen', () => {
     expect(notes).toContain('### update together')
@@ -56,6 +56,12 @@ describe('the manual and the README say it too', () => {
     expect(manual).toContain('of the browser copy at <code>/play/</code> only: the desktop app and the itch.io copy keep their own.')
     expect(manual).not.toContain('In a browser, the case board on the site reads the same record; the desktop app keeps its own.')
     expect(manual).toContain(`<i>${TERM.BANNER}</i>`)
+    expect(manual).toContain(`<i>${TERM.FILE_WAIT}</i>`)
+    expect(manual).toContain('<b>forget what the terminal kept</b>')
+    // a hit does not fold the terminal (it folds the map, as before); the notes and the manual say so
+    expect(manual).not.toContain('It also folds the map and the terminal')
+    expect(manual).toContain('A hit does not, as it does not fold the line')
+    expect(notes).toContain('a hit does not, as it does not fold the line')
     expect(LEDGER_LABEL).toBe('the station has read its last group to you')
   })
   it('the README: the console\'s board holds on the site only, the terminal\'s paragraph and its key', () => {
