@@ -1,8 +1,8 @@
 // Vertical look, wired (look.js is the state, gfx-frame.js the y-shear): the mouse's movementY and the look-drag's vertical part are gathered
 // on the player (player.pitchIn) and the loop's lookStep spends them once a frame, under the two prefs; lying down and under a fall's or a
 // death's veil the view eases level, and every arrival and wake sets you down level. The pitch stays off the wire, out of the save and out
-// of the map: the position heartbeat, the ward's payload and the snapshot carry exactly what they carried. The two prefs persist like
-// every other (prefs.js).
+// of the map: the position heartbeat, the ward's payload and the snapshot carry exactly what they carried. The settings panel has the two
+// rows, persisted like every other pref (prefs.js).
 import { describe, it, expect, afterEach } from 'vitest'
 import fs from 'node:fs'
 import { initTouchControls } from '../src/renderer/touch.js'
@@ -10,7 +10,7 @@ import { TOUCH_PITCH, lookStep } from '../src/renderer/look.js'
 import { PREF_DEFAULTS, normalizePref, getPref, setPref } from '../src/renderer/prefs.js'
 
 const read = (p) => fs.readFileSync(new URL(p, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
-const game = read('../src/renderer/game.js'), touch = read('../src/renderer/touch.js')
+const game = read('../src/renderer/game.js'), html = read('../src/renderer/index.html'), touch = read('../src/renderer/touch.js')
 
 describe('game.js', () => {
   it('the player carries the pitch beside the angle, from the start', () => {
@@ -93,7 +93,7 @@ describe('touch.js: the look-drag tilts as well as turns', () => {
   })
 })
 
-describe('the prefs', () => {
+describe('the prefs and the settings panel', () => {
   it('vertical look starts on, the invert off; both are booleans whatever is stored', () => {
     expect(PREF_DEFAULTS.verticalLook).toBe(true)
     expect(PREF_DEFAULTS.invertVerticalLook).toBe(false)
@@ -111,5 +111,17 @@ describe('the prefs', () => {
     setPref('verticalLook', 'garbage')
     expect(getPref('verticalLook')).toBe(true)                  // an invalid value is the default
     setPref('verticalLook', was[0]); setPref('invertVerticalLook', was[1])
+  })
+  it('two rows under the mouse sensitivity, in the panel\'s own style, saved and loaded like the rest', () => {
+    const sens = html.indexOf('id="set-sens"'), v = html.indexOf('id="set-vlook"'), inv = html.indexOf('id="set-vlook-invert"'), cre = html.indexOf('id="set-creatures"')
+    expect(sens).toBeGreaterThan(-1); expect(v).toBeGreaterThan(sens); expect(inv).toBeGreaterThan(v); expect(cre).toBeGreaterThan(inv)
+    expect(html).toContain('<label class="toggle-row"><span>Vertical look <span class="set-hint">look up and down too</span></span><input type="checkbox" id="set-vlook"/></label>')
+    expect(html).toContain('<label class="toggle-row"><span>Invert vertical look <span class="set-hint">push up to look down</span></span><input type="checkbox" id="set-vlook-invert"/></label>')
+    expect(html).toContain("prefChk('set-vlook', 'verticalLook'); prefChk('set-vlook-invert', 'invertVerticalLook')")
+    expect(html).toContain("document.getElementById('set-vlook').checked      = p.verticalLook")
+    expect(html).toContain("document.getElementById('set-vlook-invert').checked = p.invertVerticalLook")
+    expect(html).toContain('syncVLook(p.verticalLook)')
+    // the hints keep the house style: lowercase, no digits, no exclamation marks
+    for (const h of ['look up and down too', 'push up to look down']) { expect(h).toBe(h.toLowerCase()); expect(h).not.toMatch(/[0-9!]/) }
   })
 })

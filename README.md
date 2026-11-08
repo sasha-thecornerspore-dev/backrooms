@@ -121,7 +121,7 @@ what follows is what is known. the rest is in the pages m. left lying around.
 ## the first ten minutes
 
 1. **the title.** type a name, or leave it blank — the office writes down what you give it. above the buttons, the anchor field takes a place if you want one ([anchors](#anchors--no-clip-from-a-real-place)); leave it empty and the maze is nobody's. **SOLO ▶** starts a fresh run in the lobby. **CONTINUE ▶** appears once a solo run is saved; starting SOLO (or the front door) over it replaces it, and there is no second slot. the gear ⚙ opens settings — creatures, damage and flicker can all be switched off there.
-2. **grab the mouse.** click the view. the mouse turns you left and right; there is no looking up or down. a page, the chat or the wish box lets the mouse go — click again to take it back. while it is loose, **←** and **→** turn you.
+2. **grab the mouse.** click the view. the mouse turns you left and right and tilts your view up and down — the ceiling tiles, the carpet, whatever stands at the end of the hall. nothing up there is in reach; you look, that is all. a page, the chat or the wish box lets the mouse go — click again to take it back. while it is loose, **←** and **→** turn you.
 3. **the lobby.** walk with **wasd**; **shift** runs. safe; nothing hunts here. learn it. pick things up (**f**), draw from a vending machine (**f**), search a cabinet (**f**, then keep still), read a page lying on the floor (**e**), open the map (**tab**). the plate above your items always says what **f** and **e** will do where you stand. before long, `• • •  e · speak  • • •` will appear over your items though there is nothing to see. that is a presence. [say something to it](#the-wish-system).
 4. **the way down.** a torn doorway with a cold blue rim and a beam that carries through the fog. the compass under your gauges points at the nearest one you have seen. **f** takes it — and this is when the file writes you in. a line, a few seconds after you land, says how it has you.
 5. **level 1.** things live here now. read the lines that fade in mid-screen: the building talks, and the important lines push in front. when your heart comes into your ears, something is near: slow, it has not found you yet; quick, it has. badly hurt, you hear it with nothing near at all. **space** pushes it back. a still body in the dark is hard to see. and if it catches you anyway, you wake a floor up, a little lighter.
@@ -365,7 +365,7 @@ the lost souls know which word you are under, and so does the room — *entered 
 | wasd | move / strafe |
 | arrow keys | ↑ ↓ walk · ← → turn (while the mouse is loose) |
 | shift | run — loud, and it spends your legs |
-| click | grab the mouse to look (left and right only) |
+| click | grab the mouse to look — left and right, and up and down (no key tilts the view) |
 | space (hold to charge) | **ward** — tap to shove the things back; hold it and your steps slow while the air tightens, then a narrower, longer push throws them farther (costs your legs) |
 | f | take an item · draw from a machine · take a way — no-clip through an exit, climb a stairwell, step into the lift |
 | f · search a cabinet | by a cabinet, crate, box, toolbox, drum, panel, cart or couch: press once and keep still a moment, and the drawer gives up what it holds — a step away leaves it; not while something is close |
@@ -387,7 +387,7 @@ while you are down you cannot move or use anything; **c**, **enter** and **tab**
 
 **the beacon (b)** pushes a signal out of the maze to a phone or a channel you set up — settings ⚙ → **signal / beacon**; desktop app only. it is the one thing in here that reaches out there. some files say it can carry more than a cry for help. [the beacon, in the manual →](https://backrooms.thecornerspore.dev/manual/#beacon)
 
-**on a phone or tablet** the left thumb has a stick (push it forward to the rim to run) and a drag anywhere else looks around. the buttons on the right are **ACT** (f), **USE** (q), **WARD** (space — hold it to charge), **SPEAK** (e), **LIGHT** (l) and **CALL** (c). two more come only when they would do something: **TYPE** (enter) whenever the line can open — the chat in a room, the field console alone — and it brings up your phone's keyboard; **BEACON** (b) once a beacon is set in settings. on a short screen the buttons carry on up a second column, clear of the gauges and the slots. tap a slot to select it, **✕** to set it down, and the paper corner marked *map* for the map. tap a page to put it back. only the music (**m**, **n**) still needs a keyboard; its switch is in settings.
+**on a phone or tablet** the left thumb has a stick (push it forward to the rim to run) and a drag anywhere else looks around — sideways to turn, up and down to tilt. the buttons on the right are **ACT** (f), **USE** (q), **WARD** (space — hold it to charge), **SPEAK** (e), **LIGHT** (l) and **CALL** (c). two more come only when they would do something: **TYPE** (enter) whenever the line can open — the chat in a room, the field console alone — and it brings up your phone's keyboard; **BEACON** (b) once a beacon is set in settings. on a short screen the buttons carry on up a second column, clear of the gauges and the slots. tap a slot to select it, **✕** to set it down, and the paper corner marked *map* for the map. tap a page to put it back. only the music (**m**, **n**) still needs a keyboard; its switch is in settings.
 
 your **hit points** sit under the level name, top-left — [your instruments](#your-instruments) reads the rest of the screen.
 
@@ -405,6 +405,8 @@ hit the gear ⚙ (top-right) for the control panel — on the title screen or mi
 | ambience | the fluorescent hum, drone, distant events, your own steps and the sounds of things nearby, plus a volume slider |
 | film grain / particles / crosshair / head-bob | visual feel — the particles are the dust, the steam and the sparks |
 | mouse sensitivity | look speed (the touch drag follows it too) |
+| vertical look | the mouse and the touch drag tilt your view up and down too. off, the view stays level, the way it always was. lying down, and on every fall and every waking, it comes back level by itself |
+| invert vertical look | push up to look down. greyed out while vertical look is off |
 | creatures | below level 0: turn every entity off for pure liminal exploration |
 | solid furniture | walk around things — the chairs, crates, cabinets and machines have bodies, and so do the things in the fog; off, you pass through everything but the walls |
 | can take damage | off for a peaceful, no-stakes wander: the things still come, and cannot hurt you |

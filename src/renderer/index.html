@@ -537,6 +537,8 @@
       <label class="toggle-row"><span>Crosshair</span><input type="checkbox" id="set-crosshair"/></label>
       <label class="toggle-row"><span>Head-bob</span><input type="checkbox" id="set-headbob"/></label>
       <label class="toggle-row"><span>Mouse sensitivity</span><input type="range" id="set-sens" min="25" max="250" step="5"/></label>
+      <label class="toggle-row"><span>Vertical look <span class="set-hint">look up and down too</span></span><input type="checkbox" id="set-vlook"/></label>
+      <label class="toggle-row"><span>Invert vertical look <span class="set-hint">push up to look down</span></span><input type="checkbox" id="set-vlook-invert"/></label>
       <label class="toggle-row"><span>Creatures <span class="set-hint">below level 0</span></span><input type="checkbox" id="set-creatures"/></label>
       <label class="toggle-row"><span>Solid furniture <span class="set-hint">walk around things</span></span><input type="checkbox" id="set-solid"/></label>
       <label class="toggle-row"><span>Can take damage <span class="set-hint">peaceful = off</span></span><input type="checkbox" id="set-damage"/></label>
@@ -1073,6 +1075,10 @@
     prefRange('set-ambiencevol', 'ambienceVolume')
     prefChk('set-grain', 'grain');       prefChk('set-particles', 'particles');    prefChk('set-crosshair', 'crosshair');    prefChk('set-headbob', 'headBob')
     prefRange('set-sens', 'mouseSensitivity'); prefChk('set-creatures', 'creatures'); prefChk('set-solid', 'solidBodies'); prefChk('set-damage', 'damage')
+    prefChk('set-vlook', 'verticalLook'); prefChk('set-vlook-invert', 'invertVerticalLook')
+    // the invert means nothing while vertical look is off: dimmed and disabled there (the choice is kept for when it comes back on)
+    const syncVLook = (on) => { const chk = document.getElementById('set-vlook-invert'); chk.disabled = !on; chk.parentElement.style.opacity = on ? '' : '0.5' }
+    document.getElementById('set-vlook').addEventListener('change', e => syncVLook(e.target.checked))
     // graphics & comfort — prefs.js validates every value; game.js applies them live (quality, fps cap, DPR, flicker)
     document.getElementById('set-quality').addEventListener('change', e => setPref('graphicsQuality', e.target.value))
     document.getElementById('set-fpscap').addEventListener('change', e => setPref('fpsCap', +e.target.value))
@@ -1097,6 +1103,9 @@
       document.getElementById('set-crosshair').checked  = p.crosshair
       document.getElementById('set-headbob').checked    = p.headBob
       document.getElementById('set-sens').value         = p.mouseSensitivity
+      document.getElementById('set-vlook').checked      = p.verticalLook
+      document.getElementById('set-vlook-invert').checked = p.invertVerticalLook
+      syncVLook(p.verticalLook)
       document.getElementById('set-creatures').checked  = p.creatures
       document.getElementById('set-solid').checked      = p.solidBodies
       document.getElementById('set-damage').checked     = p.damage
