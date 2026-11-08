@@ -161,7 +161,8 @@ export function fillWallTable(F, ts, width, out) {
 // ── the overcast sky ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 // Per screen row (0..HH): row 0 texel = (r, g, b, cloudAmplitude) with the colour in 0..1 (the sky / fog blend, stratification band and the flicker
 // multiplier folded in, exactly as renderSky builds rowR/G/B/A), row 1 texel = (strip row of layer A, strip row of layer B, 0, 0). `width` = the
-// table's width (H). Returns the number of rows filled.
+// table's width (H). Returns the number of rows filled. The rows run to the pitched horizon HH and the gradient over the un-pitched sky height
+// HC, exactly as renderSky does (vertical look: gfx-frame.js).
 const smoothstep = (a, b, x) => { const t = x <= a ? 0 : x >= b ? 1 : (x - a) / (b - a); return t * t * (3 - 2 * t) }
 const BASE = [0, 0, 0]
 export function buildSkyRows(fs, out, width) {
@@ -172,10 +173,11 @@ export function buildSkyRows(fs, out, width) {
   const k = fs.light && fs.light.enabled ? 1 : (fs.flicker == null ? 1 : fs.flicker)
   const hf = fs.hf || 0.6545
   const focal = (W * 0.5) / Math.tan(hf)
-  const invHH = HH > 0 ? 1 / HH : 1
+  const HC = fs.HC ?? HH
+  const invHC = HC > 0 ? 1 / HC : 1
   for (let y = 0; y <= last; y++) {
     const e = HH - y
-    const q = Math.min(1, Math.max(0, e * invHH))
+    const q = Math.min(1, Math.max(0, e * invHC))
     skyBase(q, skyRgb, fogRgb, cfg, BASE)
     let j = ((e / focal) / S_MAX * CLOUD_H) | 0
     if (j < 0) j = 0; else if (j >= CLOUD_H) j = CLOUD_H - 1

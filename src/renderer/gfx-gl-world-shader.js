@@ -15,7 +15,8 @@ precision highp sampler2DArray;
 uniform sampler2DArray uTiles;   // every surface tile (walls, wall variants, floor / ceiling variants, the light panel), RGBA8, mipmapped
 uniform sampler2D uCols;         // W x 2 RGBA32F: row 0 (corr|FAR, wallX, layer, side), row 1 (pool share, dist, draw corr, 0)
 uniform vec2  uRes;              // internal W, H
-uniform float uHH;               // horizon row (from the top)
+uniform float uHH;               // horizon row (from the top): the head-bob and the view's pitch
+uniform float uHC;               // centre row: the head-bob only (vertical look is a y-shear: the span, the flashlight and the sky's gradient)
 uniform float uFog;              // fog distance in world units
 uniform vec3  uFogL;             // the fog colour 0..1, already scaled by the frame's light (legacy: x flicker; lit: x fogGain x dip)
 uniform float uAng0, uAngStep;   // view angle of column 0, and per column
@@ -106,7 +107,7 @@ const SKY = `
 #ifdef SKY
 vec3 skyPixel(float x, float y) {
   if (uSkyMode < 0.5) {                                  // legacy: sky colour at the top to the fog colour at the horizon (uFogL carries the flicker)
-    float t = uHH > 0.0 ? y / uHH : 1.0;
+    float t = uHC > 0.0 ? clamp((y - (uHH - uHC)) / uHC, 0.0, 1.0) : 1.0;   // anchored to the elevation (renderSkyLegacy)
     vec3 fogRaw = uFogL;
     return (uSkyRgb * (1.0 - t) + fogRaw * t);
   }
@@ -140,7 +141,7 @@ vec3 wallPixel(float x, float y, vec4 c0, vec4 c1, float corr, float whF, float 
 // (the sky rows never reach here: main() sends y <= uHH to skyPixel, so flatPixel has no early return in the SKY variants and FXC sees every path set c)
 vec3 flatPixel(float x, float y) {
   bool isFloor = y > uHH;
-  float span = isFloor ? uRes.y - uHH : uHH;
+  float span = isFloor ? uRes.y - uHC : uHC;            // the camera's height in rows: the pitch moves the horizon, never the span
   float rowDist = span / max(1.0, isFloor ? y - uHH : uHH - y);
   if (rowDist > uFog) return uFogL;
   float df = min(1.0, rowDist / uFog);
@@ -170,7 +171,7 @@ const LIT = `
 float flashAtt(float d) { return 1.0 / (1.0 + d * d / 9.0) * (1.0 - smoothstep(7.0, 12.5, d)); }
 float glowAtt(float d2) { return 1.0 / (1.0 + d2 / 2.2) * (1.0 - smoothstep(9.0, 38.0, d2)); }
 float sxAt(float x) { float a = ((x + 0.5) / uRes.x - 0.5) * uFov; return exp(-(a * a) / (uFlashSxy.x * uFlashSxy.x)); }
-float syAt(float y) { float dv = (y - uHH) / uRes.y - uFlashPitch; return exp(-(dv * dv) / (uFlashSxy.y * uFlashSxy.y)); }
+float syAt(float y) { float dv = (y - uHC) / uRes.y - uFlashPitch; return exp(-(dv * dv) / (uFlashSxy.y * uFlashSxy.y)); }   // held in the hand
 const vec3 FLASH_COL = vec3(1.0, 0.93, 0.76);
 
 vec3 wallPixel(float x, float y, vec4 c0, vec4 c1, float corr, float whF, float wtF) {
@@ -212,7 +213,7 @@ float levelAt(ivec2 g) {
 vec3 flatPixel(float x, float y) {
   bool isFloor = y > uHH;
   bool ceiling = !isFloor;
-  float span = isFloor ? uRes.y - uHH : uHH;
+  float span = isFloor ? uRes.y - uHC : uHC;            // the camera's height in rows: the pitch moves the horizon, never the span
   float rowDist = span / max(1.0, isFloor ? y - uHH : uHH - y);
   if (rowDist > uFog) return uFogL;
   float df = min(1.0, rowDist / uFog);
@@ -334,7 +335,7 @@ export function worldFragmentSource({ lit, sky }) {
   return COMMON.replace('#version 300 es\n', `#version 300 es\n${lit ? '#define LIT\n' : ''}${sky ? '#define SKY\n' : ''}`) + SKY + LEGACY + LIT + MAIN
 }
 
-const BASE_UNIFORMS = ['uTiles', 'uCols', 'uRes', 'uHH', 'uFog', 'uFogL', 'uAng0', 'uAngStep', 'uPFrac', 'uPInt', 'uDir0', 'uDDir', 'uFloorLayers',
+const BASE_UNIFORMS = ['uTiles', 'uCols', 'uRes', 'uHH', 'uHC', 'uFog', 'uFogL', 'uAng0', 'uAngStep', 'uPFrac', 'uPInt', 'uDir0', 'uDDir', 'uFloorLayers',
   'uCeilLayers', 'uLightLayer', 'uLightsOn', 'uGradScale', 'uIso', 'uSharp', 'uNear', 'uTSf']
 const SKY_UNIFORMS = ['uSkyRows', 'uCloud', 'uSkyRgb', 'uSkyMode', 'uSkyA0', 'uSkyB0', 'uSkyDu', 'uSkyAmpB']
 const LEGACY_UNIFORMS = ['uFlicker']

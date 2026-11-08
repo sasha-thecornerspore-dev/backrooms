@@ -11,6 +11,11 @@ describe('renderSky with clamp-free rows draws what the reference draws', () => 
   it('random frames, stock and extreme sky looks, with and without a cover row', () => {
     const r = rng(0x51c7)
     const looks = [undefined, { sky: { amp: 0.9, ampB: 1.4 } }, { sky: { amp: 2.5, ampB: -0.8, glow: 0.6 } }, { sky: { amp: 0.1, ampB: 0.42, band: 0.3 } }]
+    // The reference sized its row scratch by the horizon and held it against the PADDED size, so a frame whose horizon sat exactly two rows
+    // past the largest so far read past the arrays (its top rows came out black). renderSky sizes the scratch by the frame now (vertical
+    // look moves the horizon every frame; look-render.test.js pins the fix, on a fresh module): grown once here, past any frame below, the
+    // reference is held to the pixels alone.
+    refRenderSky({ W: 400, H: 260, HH: 259, skyRgb: [0, 0, 0], fogRgb: [0, 0, 0], flicker: 1, t: 0, hf: 0.6, player: { angle: 0 }, levelKey: 'x', quality: { lightDetail: 1 }, light: null }, new Uint32Array(400 * 260))
     let frames = 0
     for (let n = 0; n < 160; n++) {
       const W = 7 + ((r() * 300) | 0), H = 5 + ((r() * 200) | 0)

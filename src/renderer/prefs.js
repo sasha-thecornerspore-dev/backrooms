@@ -2,9 +2,10 @@
 //
 // Renderer-only, persisted to localStorage. These are the knobs that make every
 // added system optional: music, ambience, grain, crosshair, head-bob, mouse
-// sensitivity, whether creatures spawn, and whether they can hurt you. The
-// main-process settings.js keeps only the launch-critical flags (auto-update,
-// software rendering) that must be read before the window exists.
+// sensitivity, vertical look (and its invert), whether creatures spawn, and
+// whether they can hurt you. The main-process settings.js keeps only the
+// launch-critical flags (auto-update, software rendering) that must be read
+// before the window exists.
 //
 // Everything is lazy + guarded so importing this in a non-browser (test) context
 // never throws — localStorage access simply falls back to defaults.
@@ -22,6 +23,8 @@ export const PREF_DEFAULTS = {
   crosshair:        true,   // centre dot
   headBob:          true,   // walking view bob
   mouseSensitivity: 100,    // % — 100% == the classic 0.002 rad/px
+  verticalLook:     true,   // the mouse / the look-drag tilts the view up and down too (look.js); off = the level view, exactly as before
+  invertVerticalLook: false, // pushing the mouse / the drag up looks down
   creatures:        true,   // do things spawn below level 0 at all
   damage:           true,   // can they hurt you (peaceful mode == false)
   solidBodies:      true,   // furniture, machines and lost souls are bodies you walk around (off = the old point-vs-wall mover)
@@ -43,7 +46,7 @@ export const PREF_CHOICES = {
   fpsCap:          [0, 30, 60],
   renderer:        ['auto', 'gpu', 'cpu'],
 }
-const BOOL_PREFS = ['reduceFlicker', 'hiDpi', 'solidBodies']
+const BOOL_PREFS = ['reduceFlicker', 'hiDpi', 'solidBodies', 'verticalLook', 'invertVerticalLook']
 
 // Defaults that depend on the device rather than being constants. Guarded: importing this in Node (tests) or before
 // matchMedia exists must never throw.

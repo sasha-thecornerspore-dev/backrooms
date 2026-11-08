@@ -29,6 +29,7 @@ import { register as regC } from './scenes-c.js'
 import { register as regD } from './scenes-d.js'
 import { register as regE } from './scenes-e.js'
 import { register as regInt } from './scenes-int.js'
+import { register as regLook } from './scenes-look.js'
 
 export const DEFAULT_SIZE = { w: 960, h: 540 }
 // 0 is the canonical unseeded world: createChunkCache(cfg, 0) yields epoch 0 (the maze a fresh game
@@ -301,11 +302,13 @@ const KIT = {
   asProp, asExit, asNpc, asItem, asNote, asMachine, asSight, asRemote, asApparition,
   makeEnemy, makePlayer, buildWorld, populate, levelScene, openGrid, rad,
 }
-for (const register of [regA1, regA2, regB, regC, regD, regE, regInt]) register(KIT)
+for (const register of [regA1, regA2, regB, regC, regD, regE, regInt, regLook]) register(KIT)
 
-// benchmark poses: [name in bench.json, scene id] — run at 1280x720
+// benchmark poses: [name in bench.json, scene id] — run at 1280x720. lnull-down is vertical look's dearest view: the yard looking down,
+// where the level view's cheap sky rows are lit ground (scenes-look.js)
 export const BENCH = [
   ['l0-corridor', 'l0-corridor'],
   ['l2-pipes', 'l2-pipes'],
   ['lnull-yard', 'lnull-yard'],
+  ['lnull-down', 'look-lnull-down'],
 ]

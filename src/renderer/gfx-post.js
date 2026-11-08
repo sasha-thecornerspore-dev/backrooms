@@ -443,7 +443,7 @@ function ensureBloom(post, RW, RH, mk) {
   if (!bl) {
     const cOut = mk(BW, BH)
     bl = post.bloom = {
-      RW, RH, BW, BH, wW, wH, have: false, t: 0, ang: 0,
+      RW, RH, BW, BH, wW, wH, have: false, t: 0, ang: 0, pr: 0,
       c1: mk(w1, h1), c2: mk(w2, h2), c3: mk(BW, BH), cOut, gOut: cOut.getContext('2d'), imgOut: null,
       up1: mk(BW * 2, BH * 2), up2: mk(BW * 4, BH * 4),
       P: null, tmp: null, luma: null, W: null, wtmp: null, L: null, M: null, Mt: null,
@@ -453,7 +453,7 @@ function ensureBloom(post, RW, RH, mk) {
     bl.g1 = bl.c1.getContext('2d'); bl.g2 = bl.c2.getContext('2d'); bl.g3 = bl.c3.getContext('2d', { willReadFrequently: true })
     bl.gu1 = bl.up1.getContext('2d'); bl.gu2 = bl.up2.getContext('2d')
   } else {
-    bl.RW = RW; bl.RH = RH; bl.have = false; bl.t = 0; bl.ang = 0
+    bl.RW = RW; bl.RH = RH; bl.have = false; bl.t = 0; bl.ang = 0; bl.pr = 0
     fitCanvas(bl.c1, w1, h1); fitCanvas(bl.c2, w2, h2); fitCanvas(bl.c3, BW, BH); fitCanvas(bl.cOut, BW, BH)
     fitCanvas(bl.up1, BW * 2, BH * 2); fitCanvas(bl.up2, BW * 4, BH * 4)
   }
@@ -580,14 +580,14 @@ export function bloomField(bl, px, A) {
   return true
 }
 
-// Where the halo can touch the RW x RH frame when drawn shifted by dx: its support in the tiny grid, grown by what the two smoothed doublings and
-// the final smoothed scale can spread it (under 2 tiny pixels at the far side), in frame pixels, clamped. A pixel outside it gets a fully
-// transparent halo, and SCREEN with transparent black leaves a pixel exactly as it was, so the composite only needs this rectangle.
+// Where the halo can touch the RW x RH frame when drawn shifted by (dx, dy): its support in the tiny grid, grown by what the two smoothed
+// doublings and the final smoothed scale can spread it (under 2 tiny pixels at the far side), in frame pixels, clamped. A pixel outside it
+// gets a fully transparent halo, and SCREEN with transparent black leaves a pixel exactly as it was, so the composite only needs this rectangle.
 // -> [x, y, w, h] (w or h 0: nothing to draw)
-export function haloRect(box, BW, BH, RW, RH, dx, out = [0, 0, 0, 0]) {
+export function haloRect(box, BW, BH, RW, RH, dx, dy = 0, out = [0, 0, 0, 0]) {
   const kx = RW / BW, ky = RH / BH
   const x0 = Math.max(0, Math.floor((box[0] - 1) * kx + dx) - 2), x1 = Math.min(RW, Math.ceil((box[2] + 2) * kx + dx) + 2)
-  const y0 = Math.max(0, Math.floor((box[1] - 1) * ky) - 2), y1 = Math.min(RH, Math.ceil((box[3] + 2) * ky) + 2)
+  const y0 = Math.max(0, Math.floor((box[1] - 1) * ky + dy) - 2), y1 = Math.min(RH, Math.ceil((box[3] + 2) * ky + dy) + 2)
   out[0] = x0; out[1] = y0; out[2] = Math.max(0, x1 - x0); out[3] = Math.max(0, y1 - y0)
   return out
 }
@@ -598,7 +598,8 @@ const HALO_RECT = [0, 0, 0, 0]
 // blended back over the low-res frame — before the bilinear upscale, so it is as soft as the upscale makes it and costs a low-res blend,
 // not a full-res one. Because it works from the pixels it needs no geometry: it blooms ceiling panels, lit windows, the exit beam and a
 // lamp-lit prop alike, and is occluded by walls for free. It is recomputed at 25 Hz (a halo is soft and slow) and the frames in
-// between reuse it, shifted by the camera's turn since, so it never trails a fast look.
+// between reuse it, shifted by the camera's turn since and by the view's tilt since (the pitch's rows, fs.HH - fs.HC: the head-bob is left
+// out, so a level or bobbing frame is drawn exactly as before), so it never trails a fast look either way.
 export function drawBloom(wctx, world, fs, post) {
   const A = post.atmos.bloom
   if (A.off || fs.opts.bloom === false || !fs.quality.bloom || A.gain <= 0) return
@@ -609,6 +610,7 @@ export function drawBloom(wctx, world, fs, post) {
   const RW = fs.W, RH = fs.H
   const bl = ensureBloom(post, RW, RH, mk)
   const ang = fs.player ? fs.player.angle : 0
+  const pr = fs.HH - (fs.HC ?? fs.HH)                             // the pitch in rows (0 level): the halo rides the horizon
   if (!bl.have || fs.t - bl.t >= BLOOM_PERIOD || fs.t < bl.t) {
     const { BW, BH, g1, g2, g3 } = bl
     g1.drawImage(world, 0, 0, RW, RH, 0, 0, bl.c1.width, bl.c1.height)
@@ -625,11 +627,11 @@ export function drawBloom(wctx, world, fs, post) {
     bl.gu1.globalCompositeOperation = 'copy'; bl.gu2.globalCompositeOperation = 'copy'
     bl.gu1.drawImage(bl.cOut, 0, 0, BW, BH, 0, 0, bl.up1.width, bl.up1.height)
     bl.gu2.drawImage(bl.up1, 0, 0, bl.up1.width, bl.up1.height, 0, 0, bl.up2.width, bl.up2.height)
-    bl.have = true; bl.t = fs.t; bl.ang = ang
+    bl.have = true; bl.t = fs.t; bl.ang = ang; bl.pr = pr
   } else post.bloomLive = true
-  const dx = -wrapPi(ang - bl.ang) * (RW / (fs.fov || 1.3))
+  const dx = -wrapPi(ang - bl.ang) * (RW / (fs.fov || 1.3)), dy = pr - bl.pr
   if (!bl.boxOn) return                                           // an all-transparent halo: the composite would change nothing
-  const hr = haloRect(bl.box, bl.BW, bl.BH, RW, RH, dx, HALO_RECT)
+  const hr = haloRect(bl.box, bl.BW, bl.BH, RW, RH, dx, dy, HALO_RECT)
   if (!(hr[2] > 0 && hr[3] > 0)) return
   const clip = hr[2] < RW || hr[3] < RH                           // (the whole frame: no clip needed)
   wctx.save()
@@ -639,7 +641,7 @@ export function drawBloom(wctx, world, fs, post) {
   // and lost its texture; screen (1-(1-frame)(1-halo)) brightens the dark surroundings almost like an add and leaves a bright pixel's
   // detail alone. (It was source-over first, which replaced the frame with the halo colour: an opaque pale-yellow cloud.)
   wctx.globalCompositeOperation = 'screen'
-  wctx.drawImage(bl.up2, 0, 0, bl.up2.width, bl.up2.height, dx, 0, RW, RH)
+  wctx.drawImage(bl.up2, 0, 0, bl.up2.width, bl.up2.height, dx, dy, RW, RH)
   wctx.restore()
 }
 
@@ -790,8 +792,13 @@ const wrapPi = (a) => { a = (a + Math.PI) % (2 * Math.PI); if (a < 0) a += 2 * M
 // How lit the air is at a screen point: an ambient term, the ceiling fixtures overhead, the player's flashlight cone, a glowstick
 // radius — and, when the bloom pass has measured the frame, the frame's own brightness there (dust glows where the scene does).
 // Writes { L, g } into `out`: light amount and how much of it is the glowstick's (for tinting). Pure given its inputs.
-export function airLight(x, y, OW, OH, A, lights, frameLuma, out) {
-  let L = A.ambient + A.top * (1 - y / OH)
+// tilt (fs.tilt, + = looking up): the fixtures' term is the room's, so it rides the horizon (tilt of the height down the screen), held
+// between none and all of it; the flashlight and the glowstick are in your hand and stay where they are on the glass. Level (0) the
+// arithmetic is exactly what it always was.
+export function airLight(x, y, OW, OH, A, lights, frameLuma, out, tilt = 0) {
+  let up = 1 - y / OH
+  if (tilt > 0 || tilt < 0) { up += tilt; up = up < 0 ? 0 : up > 1 ? 1 : up }
+  let L = A.ambient + A.top * up
   if (lights && lights.flashlight) {
     const dx = (x - OW * 0.5) / (OW * 0.24), dy = (y - OH * 0.52) / (OH * 0.32)
     L += A.flash * Math.exp(-(dx * dx + dy * dy) * 0.5)
@@ -850,7 +857,13 @@ export function drawParticlesModern(ctx, fs, post, sc = 1) {
     post.camA = pl.angle; post.camX = pl.x; post.camY = pl.y
   }
   const turnPx = -dAng * (OW / (fs.fov || 1.3))
-  const cx = OW * 0.5, cy = OH * 0.5
+  // tilting the view (vertical look) slides the field up or down with the horizon: the dust hangs in the room, not on the glass
+  const tilt = fs.tilt > 0 || fs.tilt < 0 ? fs.tilt : 0
+  const tiltPx = post.camT != null ? (tilt - post.camT) * OH : 0
+  post.camT = tilt
+  // the middle of the view: walking forward, the motes stream out of the vanishing point (the horizon: tilt below the centre) and re-form in
+  // the middle distance there (level: the centre, the field it always was)
+  const cx = OW * 0.5, cy = OH * (0.5 + tilt)
   const frame = post.bloom && post.bloomLive ? post.bloom : null
   const lightGlow = lights && lights.glow
   const glowCol = lightGlow ? lights.glow : null
@@ -872,6 +885,7 @@ export function drawParticlesModern(ctx, fs, post, sc = 1) {
     const mvx = Math.sin(p.ph * (0.8 + 0.4 * p.w)) * sway * z, mvy = (rise ? -1 : 1) * speed * (0.5 + z) * (0.85 + 0.3 * p.w)   // px/s
     p.x += mvx * dt + turnPx
     p.y += mvy * dt
+    if (tiltPx !== 0) p.y += tiltPx
     if (fwd !== 0) { p.x += (p.x - cx) * 0.22 * fwd * z2 * dt; p.y += (p.y - cy) * 0.22 * fwd * z2 * dt }
     if (p.y < -12 || p.y > OH + 12 || p.x < -12 || p.x > OW + 12) {
       // recycle. Walking forward, motes stream out past the edges: they re-form in the middle distance. Otherwise a mote that
@@ -882,7 +896,7 @@ export function drawParticlesModern(ctx, fs, post, sc = 1) {
       else p.x -= OW + 24
     }
     const fl = frame ? frame.luma[Math.max(0, Math.min(frame.BH - 1, (p.y / OH * frame.BH) | 0)) * frame.BW + Math.max(0, Math.min(frame.BW - 1, (p.x / OW * frame.BW) | 0))] / 255 : null
-    const lit = airLight(p.x, p.y, OW, OH, A, lights, fl, LIT)
+    const lit = airLight(p.x, p.y, OW, OH, A, lights, fl, LIT, tilt)
     let alpha, r
     if (spark) {
       // sparks: a hot dot that swells and fades on its own slow clock (never a strobe: the envelope is smooth, ~1 Hz)

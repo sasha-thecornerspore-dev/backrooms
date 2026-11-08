@@ -354,10 +354,10 @@
 <section id="hands">
   <div class="tag">§ 03 — your hands</div>
   <h2>Everything you can do, and the key that does it.</h2>
-  <p><b>Click the view first.</b> That grabs the mouse; without it the mouse does nothing. You look left and right only — there is no looking up or down, and the mouse buttons and wheel do nothing. Chat, a card, a request, a fall between floors or being laid down (online) will release the mouse; click again to take it back. <kbd>Esc</kbd> releases it too.</p>
+  <p><b>Click the view first.</b> That grabs the mouse; without it the mouse does nothing. The mouse turns you left and right and tilts your view up and down — the ceiling tiles, the carpet, the thing at the end of the hall — though nothing above or below you is in reach, and the mouse buttons and wheel do nothing. Chat, a card, a request or a fall between floors will release the mouse; click again to take it back. <kbd>Esc</kbd> releases it too. Lying down (online) it stays grabbed and still turns you, but your view settles level.</p>
   <div class="keys">
     <div class="krow"><div class="cap"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · <kbd>↑</kbd><kbd>↓</kbd></div><div class="kdesc"><b>Move.</b> Forward, back, strafe. Backing up and sidestepping are slower than walking forward. The carpet is soft; your footsteps aren't.</div></div>
-    <div class="krow"><div class="cap"><kbd>MOUSE</kbd> · <kbd>←</kbd><kbd>→</kbd></div><div class="kdesc"><b>Look.</b> Mouse once it is grabbed. The arrow keys turn you only while the mouse is <em>not</em> grabbed. Sensitivity is in settings.</div></div>
+    <div class="krow"><div class="cap"><kbd>MOUSE</kbd> · <kbd>←</kbd><kbd>→</kbd></div><div class="kdesc"><b>Look.</b> Mouse once it is grabbed: left and right, and up and down about a third of the view each way. The arrow keys turn you only while the mouse is <em>not</em> grabbed, and turning with them brings your view back level; no key tilts the view. Sensitivity, <b>vertical look</b> and its invert are in settings. Your light is in your hand: it points where you look.</div></div>
     <div class="krow"><div class="cap"><kbd>SHIFT</kbd></div><div class="kdesc"><b>Run.</b> Faster, and loud, and it spends your legs — the same stamina a ward costs. Run dry and you walk until it comes back. You cannot run with the map up.</div></div>
     <div class="krow"><div class="cap"><kbd>SPACE</kbd></div><div class="kdesc"><b>Ward.</b> Tap for a quick, wide shove. <b>Hold</b> to charge a narrow, longer one; let go to fire it — hold too long and it fires itself. See <a href="#ward">the ward</a>.</div></div>
     <div class="krow"><div class="cap"><kbd>F</kbd></div><div class="kdesc"><b>Act.</b> One key, whichever applies first: <b>kneel</b> by a friend who is down, take an item, draw from a machine, <b>search</b> a drawer, go through a way. <b>Read the prompt</b> above your hands — it always says which.</div></div>
@@ -385,7 +385,7 @@
   <p>Touch controls appear only on touch screens, and they feed the same actions.</p>
   <ul class="plain">
     <li><b>The stick</b>, bottom left. Push it a little to walk; push it all the way to the rim going forward and you <b>run</b>.</li>
-    <li><b>Look</b> by dragging anywhere on the open view. Left and right only.</li>
+    <li><b>Look</b> by dragging anywhere on the open view: sideways to turn, up and down to tilt your view (a little slower than turning). A swipe that is mostly sideways only turns you, so the arc of your thumb does not tip the view. The mouse sensitivity setting applies here too.</li>
     <li><b>Buttons</b> on the right, from the bottom up: <b>ACT</b> (F — <i>take · descend</i>), <b>USE</b> (Q), <b>WARD</b> (Space — tap, or hold to charge exactly like the key), <b>SPEAK</b> (E — <i>talk · wish</i>), <b>LIGHT</b> (L), <b>CALL</b> (C). Where the screen runs short they carry on up a second column to the left, clear of your gauges, your slots and the gear.</li>
     <li><b>Two more come and go</b>, there only while they would do something. <b>TYPE</b> (Enter — <i>chat · console</i>) is there whenever the line can open: the chat in a room, the <a href="#console">console</a> alone. Tap it and the line opens with your phone's keyboard; its enter key sends, and sending it empty puts it away. <b>BEACON</b> (B — <i>send a signal</i>) appears once a beacon is set in settings — see <a href="#beacon">the beacon</a>; on a phone, as in any browser, it goes quiet.</li>
     <li><b>The map</b> is the folded paper corner under your gauges. Tap it to open; tap the sheet to fold it away.</li>
@@ -1076,7 +1076,7 @@
   </div>
 
   <h3 id="down">Down, not dead</h3>
-  <p>Online, with a friend on your floor who is not down themselves, a blow that would kill you lays you <b>down</b> instead. <i>everything goes dark. you are still here. somewhere, someone may notice.</i> Your light goes out, a black veil comes over the screen, your heart beats slowly. You cannot move or use anything, and your mind slips. <b>You can still whistle, chat and read the map</b> — calling is how someone finds you.</p>
+  <p>Online, with a friend on your floor who is not down themselves, a blow that would kill you lays you <b>down</b> instead. <i>everything goes dark. you are still here. somewhere, someone may notice.</i> Your light goes out, your view sinks back level, a black veil comes over the screen, your heart beats slowly. You cannot move or use anything, and your mind slips. <b>You can still whistle, chat and read the map</b> — calling is how someone finds you.</p>
   <p>You have <b>25 seconds</b>. If nobody comes, it is a death, and a hard one: <i>nobody came.</i> If everyone on the floor is down, nobody can come.</p>
   <p><b>To count a friend back:</b> face them, close, and read <code>f · stay with them</code>. Press <kbd>F</kbd> to kneel. Your light comes on — it is theirs now — and you hold still while you count them back; the veil over their screen lifts as you do. <i>your hands are on them.</i> A step, <kbd>Space</kbd>, <kbd>Esc</kbd> or <kbd>F</kbd> again lets go, and the count starts over. You are the one in danger while you kneel. Stay. A photograph does it faster.</p>
   <p class="say">you stayed. you counted them back.</p>
@@ -1193,6 +1193,8 @@
     <tr><td class="k">Crosshair</td><td data-label="choices">on / off</td><td data-label="starts as">on</td><td data-label="notes">a small centre dot</td></tr>
     <tr><td class="k">Head-bob</td><td data-label="choices">on / off</td><td data-label="starts as">on</td><td data-label="notes"></td></tr>
     <tr><td class="k">Mouse sensitivity</td><td data-label="choices">25–250</td><td data-label="starts as">100</td><td data-label="notes">touch look too</td></tr>
+    <tr><td class="k">Vertical look</td><td data-label="choices">on / off</td><td data-label="starts as">on</td><td data-label="notes">the mouse and the touch drag tilt your view up and down; off keeps it level. A fall, a waking and lying down set it level by themselves</td></tr>
+    <tr><td class="k">Invert vertical look</td><td data-label="choices">on / off</td><td data-label="starts as">off</td><td data-label="notes">push up to look down; greyed out while vertical look is off</td></tr>
     <tr><td class="k">Creatures</td><td data-label="choices">on / off</td><td data-label="starts as">on</td><td data-label="notes">off: nothing hunts anywhere</td></tr>
     <tr><td class="k">Solid furniture</td><td data-label="choices">on / off</td><td data-label="starts as">on</td><td data-label="notes">off: only walls stop you</td></tr>
     <tr><td class="k">Can take damage</td><td data-label="choices">on / off</td><td data-label="starts as">on</td><td data-label="notes">off is <b>peaceful</b>: things still hunt, but cannot hurt you</td></tr>
@@ -1215,10 +1217,10 @@
 <section id="comfort">
   <div class="tag">§ 22 — comfort &amp; consent</div>
   <h2>You set the terms of your own descent.</h2>
-  <p>This is meant to unsettle, not to harm. Everything that could frighten you is yours to turn down. In settings you can switch off the <b>creatures</b> entirely, switch off <b>damage</b> so nothing can hurt your body, turn on <b>reduce flicker</b> for softer light dips, a gentler flash and less shaking, turn off <b>film grain</b>, <b>particles</b> and <b>head-bob</b>, quiet the <b>ambience</b> and <b>music</b>, and tune <b>mouse sensitivity</b> until it sits right. None of it changes the story. All of it changes how hard the story leans on you.</p>
+  <p>This is meant to unsettle, not to harm. Everything that could frighten you is yours to turn down. In settings you can switch off the <b>creatures</b> entirely, switch off <b>damage</b> so nothing can hurt your body, turn on <b>reduce flicker</b> for softer light dips, a gentler flash and less shaking, turn off <b>film grain</b>, <b>particles</b> and <b>head-bob</b>, switch off <b>vertical look</b> if a tilting view swims, quiet the <b>ambience</b> and <b>music</b>, and tune <b>mouse sensitivity</b> until it sits right. None of it changes the story. All of it changes how hard the story leans on you.</p>
   <div class="cards">
     <div class="card"><div class="h">peaceful</div><p>Damage off, creatures off. Walk the whole maze as a place, not a threat.</p></div>
-    <div class="card"><div class="h">comfort</div><p>Flicker down, grain off, head-bob off, sensitivity to taste. The dread is optional; the record is not.</p></div>
+    <div class="card"><div class="h">comfort</div><p>Flicker down, grain off, head-bob off, the view held level, sensitivity to taste. The dread is optional; the record is not.</p></div>
   </div>
   <p>What is in it, plainly: dark rooms, sudden sounds, a heartbeat that quickens as something closes in, creatures that chase you and can catch you, flickering light, and a real place with a real and painful history. This page loads nothing from anyone else — no ads, no trackers, no analytics.</p>
 </section>

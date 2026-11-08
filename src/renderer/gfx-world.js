@@ -3,7 +3,10 @@
 // zbuffer (which the sprite pass depth-tests against). No DOM: import-safe in Node.
 //
 // renderWorld(fs, tex, light, isWallFn, materialAt, buf32, zbuffer)
-//   fs         frame state (see gfx-cpu.js): W/H/HH are the low-res buffer dims and horizon row
+//   fs         frame state (see gfx-cpu.js): W/H/HH are the low-res buffer dims and horizon row, HC the centre row. Vertical look is a
+//              y-shear: a floor / ceiling row's distance is the camera's height in rows (the span, H - HC below, HC above: the pitch never
+//              moves it) over the row's distance from the HORIZON (y - HH), so the rows meet the walls (centred on HH) at any pitch; the
+//              flashlight's beam is measured from HC (it is in your hand). Level (HH === HC), every byte is what it was before.
 //   tex        TexSet from gfx-textures.js — the tile size is read from tex.ts / tex.tmask
 //   light      the light model (gfx-light.js) or null. With fs.quality.lightDetail >= 1 and a light that has a recipe for the
 //              level, the LIT path below shades the frame (light pools, contact shading, spatial flicker, the player's own
@@ -151,6 +154,12 @@ function setMax(tiles) {
   return m
 }
 
+// The distance of floor / ceiling row y (rows from the top) of an H-row frame with the horizon at HH and the centre row at HC (gfx-frame.js):
+// the camera's height in rows (the span: H - HC below the horizon, HC above it; the view's pitch never moves it) over the row's distance from
+// the HORIZON. A wall is a slice of H / corr rows centred on HH, so its last row and the floor row under it lie at the same distance at any
+// pitch (test/look-render.test.js). Level (HC === HH) it is the arithmetic the passes always did; the GPU shader's flatPixel is the same.
+export function rowDistance(y, H, HH, HC) { return y > HH ? (H - HC) / Math.max(1, y - HH) : HC / Math.max(1, HH - y) }
+
 export function renderWorld(fs, tex, light, isWallFn, materialAt, buf32, zbuffer) {
   if (light && light.prepare && fs.quality && fs.quality.lightDetail >= 1 && tex.ts >= 32 && tex.ts <= 128 && fs.fog <= 120 &&
       light.prepare(fs, tex, isWallFn, materialAt)) {
@@ -167,7 +176,7 @@ export function renderWorld(fs, tex, light, isWallFn, materialAt, buf32, zbuffer
 // the legacy pass's frame context: renderLegacy sets the frame up, then draws one row (legacyRow) and one wall column (legacyColumn) at a
 // time, each a function of its own for the same reason as the lit path's (see LC)
 const LGC = {
-  W: 0, H: 0, HH: 0, fog: 0, flicker: 0, fogPacked: 0, ca0: 0, sa0: 0, ca1: 0, sa1: 0, px0: 0, py0: 0, TS: 0, TMASK: 0, F0: 0, F1: 0, F2: 0,
+  W: 0, H: 0, HH: 0, HC: 0, fog: 0, flicker: 0, fogPacked: 0, ca0: 0, sa0: 0, ca1: 0, sa1: 0, px0: 0, py0: 0, TS: 0, TMASK: 0, F0: 0, F1: 0, F2: 0,
   hasSky: false, lightsOn: false, fogRgb: null, floorVar: null, ceilVar: null, wallVar: null, lt: null, tex: null, buf32: null, materialAt: null,
 }
 
@@ -197,7 +206,7 @@ function renderLegacy(fs, tex, light, isWallFn, materialAt, buf32, zbuffer) {
   // open sky (outdoor levels): rows 0..HH are filled by gfx-sky.js and skipped below
   if (hasSky) renderSky(fs, buf32, C.oneSided ? C.nlo : null)
   const L = LGC
-  L.W = W; L.H = H; L.HH = HH; L.fog = fog; L.flicker = flicker; L.fogPacked = fogPacked; L.ca0 = ca0; L.sa0 = sa0; L.ca1 = ca1; L.sa1 = sa1
+  L.W = W; L.H = H; L.HH = HH; L.HC = fs.HC ?? HH; L.fog = fog; L.flicker = flicker; L.fogPacked = fogPacked; L.ca0 = ca0; L.sa0 = sa0; L.ca1 = ca1; L.sa1 = sa1
   L.px0 = player.x; L.py0 = player.y; L.TS = TS; L.TMASK = TMASK; L.F0 = F0; L.F1 = F1; L.F2 = F2; L.hasSky = hasSky; L.lightsOn = lightsOn
   L.fogRgb = fogRgb; L.floorVar = floorVar; L.ceilVar = ceilVar; L.wallVar = wallVar; L.lt = lt; L.tex = tex; L.buf32 = buf32; L.materialAt = materialAt
   for (let y = 0; y < H; y++) legacyRow(y)
@@ -212,13 +221,11 @@ function releaseContext(ctx) { for (const k in ctx) { const v = ctx[k]; if (v !=
 
 // one row of the legacy floor / ceiling pass (renderLegacy set LGC up for this frame)
 function legacyRow(y) {
-  const { W, H, HH, fog, flicker, fogPacked, ca0, sa0, ca1, sa1, px0, py0, TS, TMASK, F0, F1, F2, hasSky, lightsOn, floorVar, ceilVar, lt, tex, buf32 } = LGC
+  const { W, H, HH, HC, fog, flicker, fogPacked, ca0, sa0, ca1, sa1, px0, py0, TS, TMASK, F0, F1, F2, hasSky, lightsOn, floorVar, ceilVar, lt, tex, buf32 } = LGC
   const C = COL
   const isFloor = y > HH
   if (!isFloor && hasSky) return
-  const rowDist = isFloor
-    ? (H - HH) / Math.max(1, y - HH)
-    : HH       / Math.max(1, HH - y)
+  const rowDist = rowDistance(y, H, HH, HC)
   const rowOff = y * W
 
   if (rowDist > fog) {
@@ -460,6 +467,7 @@ const GLOW_K = 256 / GLOW_D2
 
 function prepDynamic(fs, F) {
   const { W, H, HH, fov: FOV } = fs
+  const HC = fs.HC ?? HH                                   // the beam is held in the hand: it follows the view, not the horizon
   if (dyn.W !== W || dyn.H !== H) {
     dyn.W = W; dyn.H = H
     dyn.sx = new Float32Array(W); dyn.sy = new Float32Array(H); dyn.u2 = new Float32Array(W)
@@ -467,7 +475,7 @@ function prepDynamic(fs, F) {
   }
   if (F.flash) {
     for (let x = 0; x < W; x++) { const a = ((x + 0.5) / W - 0.5) * FOV; dyn.sx[x] = Math.exp(-(a * a) / (FLASH_SX * FLASH_SX)) }
-    for (let y = 0; y < H; y++) { const dv = (y - HH) / H - FLASH_PITCH; dyn.sy[y] = Math.exp(-(dv * dv) / (FLASH_SY * FLASH_SY)) }
+    for (let y = 0; y < H; y++) { const dv = (y - HC) / H - FLASH_PITCH; dyn.sy[y] = Math.exp(-(dv * dv) / (FLASH_SY * FLASH_SY)) }
   }
 }
 
@@ -477,7 +485,7 @@ function prepDynamic(fs, F) {
 // frame-long function's hot inner loops on the stack (which it left again at a cost on every row, and fell back to whenever a rarely taken
 // path ran for the first time, for the first dozens of frames of a level and after every new situation). Same code, same order: same bytes.
 const LC = {
-  W: 0, H: 0, HH: 0, fog: 0, TS: 0, TMASK: 0, LG: 0, FB: 0, SH: 0, CU: 0, XS: 0, PS: 0, LSH: 0, gdip: 0, F0: 0, F1: 0, F2: 0,
+  W: 0, H: 0, HH: 0, HC: 0, fog: 0, TS: 0, TMASK: 0, LG: 0, FB: 0, SH: 0, CU: 0, XS: 0, PS: 0, LSH: 0, gdip: 0, F0: 0, F1: 0, F2: 0,
   fogPacked: 0, ca0: 0, sa0: 0, ca1: 0, sa1: 0, sx: 0, sy: 0, ppx: 0, ppy: 0, tR: 0, tG: 0, tB: 0, fBase: 0, fGlow: 0, lmR: 0,
   levN: 0, levI0: 0, levJ0: 0, HT: 0, LG1: 0, panelInv: 0, lampInv: 0, subMask: 0, subInv: 0, lightBaseX: 0, lightBaseY: 0,
   ppxT: 0, ppyT: 0, fadeA: 0, fadeInv: 0, maxMip: 0, stepLen0: 0, boundFloor: 0, boundCeil: 0, fogMax: 0, fcR: 0, fcG: 0, fcB: 0,
@@ -570,7 +578,7 @@ function renderLit(fs, tex, light, isWallFn, materialAt, buf32, zbuffer) {
   FR.useLamps = useLamps; FR.useEmit = useEmit; FR.usePanels = usePanels; FR.lightsOn = lightsOn; FR.lampLev = lampLev
 
   const L = LC
-  L.W = W; L.H = H; L.HH = HH; L.fog = fog; L.TS = TS; L.TMASK = TMASK; L.LG = LG; L.FB = FB; L.SH = SH; L.CU = CU; L.XS = XS
+  L.W = W; L.H = H; L.HH = HH; L.HC = fs.HC ?? HH; L.fog = fog; L.TS = TS; L.TMASK = TMASK; L.LG = LG; L.FB = FB; L.SH = SH; L.CU = CU; L.XS = XS
   L.PS = PS; L.LSH = LSH; L.gdip = gdip; L.F0 = F0; L.F1 = F1; L.F2 = F2; L.fogPacked = fogPacked; L.ca0 = ca0; L.sa0 = sa0
   L.ca1 = ca1; L.sa1 = sa1; L.sx = sx; L.sy = sy; L.ppx = ppx; L.ppy = ppy; L.tR = tR; L.tG = tG; L.tB = tB; L.fBase = fBase
   L.fGlow = fGlow; L.lmR = lmR; L.levN = levN; L.levI0 = levI0; L.levJ0 = levJ0; L.HT = HT; L.LG1 = LG1; L.panelInv = panelInv
@@ -602,7 +610,7 @@ function renderLit(fs, tex, light, isWallFn, materialAt, buf32, zbuffer) {
 // one row of the lit floor / ceiling pass (renderLit set LC up for this frame)
 function litRow(y) {
   const {
-    W, H, HH, fog, TS, TMASK, LG, FB, SH, CU, XS, PS, LSH, gdip, F0, F1, F2, fogPacked, ca0, sa0, ca1, sa1, sx, sy, ppx, ppy, tR,
+    W, H, HH, HC, fog, TS, TMASK, LG, FB, SH, CU, XS, PS, LSH, gdip, F0, F1, F2, fogPacked, ca0, sa0, ca1, sa1, sx, sy, ppx, ppy, tR,
     tG, tB, fBase, fGlow, levN, levI0, levJ0, HT, LG1, panelInv, lampInv, subMask, subInv, lightBaseX, lightBaseY, ppxT, ppyT,
     fadeA, fadeInv, maxMip, stepLen0, boundFloor, boundCeil, fogMax, fcR, fcG, fcB, gcR, gcG, gcB, glowK, sinH2, cosH2, hasSky,
     usePanels, single, modulated, filt, filtNear, flash, glow, anyDyn, floorVar, ceilVar, floorS, ceilS, aoF, aoC, lm, lev, lt,
@@ -611,7 +619,7 @@ function litRow(y) {
   const C = COL
   const isFloor = y > HH
   if (!isFloor && hasSky) return
-  const rowDist = isFloor ? (H - HH) / Math.max(1, y - HH) : HH / Math.max(1, HH - y)
+  const rowDist = rowDistance(y, H, HH, HC)
   const rowOff = y * W
   if (rowDist > fog) { buf32.fill(fogPacked, rowOff, rowOff + W); return }
 
@@ -635,7 +643,7 @@ function litRow(y) {
   // texel filtering: the mip level whose texels are about as big as this row's pixels (the geometric mean of the footprint across
   // the row and along the view direction, so distant rows average instead of shimmering, without smearing the whole picture)
   let m = 0
-  if (filt) m = mipFor(Math.sqrt(rowDist * stepLen0 * TS * rowDist * rowDist / (isFloor ? H - HH : HH)), maxMip, FLOOR_MIP_BIAS)
+  if (filt) m = mipFor(Math.sqrt(rowDist * stepLen0 * TS * rowDist * rowDist / (isFloor ? H - HC : HC)), maxMip, FLOOR_MIP_BIAS)
   const varCh = isFloor ? floorCh : ceilCh
   const tbl0 = filt ? mipChain(tbl, TS)[m] : tbl
   // a level-m tile holds one value per 2^m x 2^m block of texels, so the plain loop below keys its packed-pixel reuse on the block
