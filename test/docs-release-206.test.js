@@ -1,7 +1,7 @@
-// 2.0.6's release notes (docs/release-notes/v2.0.6.md), a draft written before the version bump: they quote every new line of the field
+// 2.0.6's release notes (docs/release-notes/v2.0.6.md): they quote every new line of the field
 // terminal exactly as the game says it (so a voice pass that changes a line changes the notes with it), say that nothing new goes over
-// the wire and that the closing key moved off the screen, and leave no draft marker half-deleted (the draft comment on line 1 is the
-// owner's to delete; the offline cache's new name is the release step's). The manual and the README say the same.
+// the wire and that the closing key moved off the screen, and leave no draft marker half-deleted (the draft comment that sat on line 1
+// came off at the release, after the owner's voice pass kept every line). The manual and the README say the same.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import { TERM, TERM_CHROME } from '../src/renderer/terminal.js'
@@ -24,7 +24,7 @@ const draftLeftOpen = (s) => {
   return rest.includes('DRAFT') || rest.includes('<!--') || rest.includes('-->') || rest.includes('--!>')
 }
 
-describe('the 2.0.6 release notes (a draft)', () => {
+describe('the 2.0.6 release notes', () => {
   it('leave no draft marker open', () => {
     expect(draftLeftOpen(notes)).toBe(false)
     expect(notes).toContain('## the backrooms 2.0.6')
