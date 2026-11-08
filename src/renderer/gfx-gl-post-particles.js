@@ -81,7 +81,9 @@ export function stepModern(post, fs, sc, sink) {
   const tilt = fs.tilt > 0 || fs.tilt < 0 ? fs.tilt : 0
   const tiltPx = post.camT != null ? (tilt - post.camT) * OH : 0
   post.camT = tilt
-  const cx = OW * 0.5, cy = OH * 0.5
+  // the middle of the view: walking forward, the motes stream out of the vanishing point (the horizon: tilt below the centre) and re-form in
+  // the middle distance there (level: the centre, the field it always was)
+  const cx = OW * 0.5, cy = OH * (0.5 + tilt)
   const glowCol = lights && lights.glow ? lights.glow : null
   sink.kind = spark ? 'spark' : rise ? 'steam' : 'dust'
   particleColor(post, sink.rgb)
@@ -106,7 +108,7 @@ export function stepModern(post, fs, sc, sink) {
       else if (p.x < -12) p.x += OW + 24
       else p.x -= OW + 24
     }
-    const lit = airLight(p.x, p.y, OW, OH, A, lights, null, LIT)
+    const lit = airLight(p.x, p.y, OW, OH, A, lights, null, LIT, tilt)
     let a0, r, kind
     const lb = lit.L
     if (spark) {

@@ -21,7 +21,8 @@ Open the play page with `?gfxbench=1` at the end of the address, for example `ht
 
 1. Plug the device in if you can, close other tabs, set the screen to stay on.
 2. Press **START** and leave it alone for about a minute. It walks slowly through five places (Level 0 corridor and room, Level 2 pipes,
-   Level 3 station, the Level ∅ yard) five times: the CPU renderer at low, medium and high quality, then the GPU renderer at medium and high.
+   Level 3 station, the Level ∅ yard), looking left and right and down at the floor and back, five times: the CPU renderer at low, medium
+   and high quality, then the GPU renderer at medium and high. (Results from before the look down say `BENCH v1`; compare like with like.)
    The screen fades to black between views; nothing flashes; creatures stand still. The camera moves less (a shorter walk, a smaller, slower
    look around) when the device asks for reduced motion or **Reduce flicker** is on in the game's settings. Don't switch tabs (it stops and
    says so).

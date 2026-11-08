@@ -72,6 +72,11 @@ describe('haloRect: where the upscaled, shifted halo can land', () => {
     expect(s[0]).toBeGreaterThan(r[0] + 30); expect(s[0]).toBeLessThanOrEqual(r[0] + 38); expect(s[2]).toBeGreaterThanOrEqual(r[2] - 1)
     expect(haloRect([0, 0, 119, 66], 120, 67, 960, 540, 0)).toEqual([0, 0, 960, 540])
     expect(haloRect([0, 0, 3, 3], 120, 67, 960, 540, -200)[2]).toBe(0)            // turned entirely off the left edge: nothing to draw
+    const u = haloRect([10, 5, 12, 6], 120, 67, 960, 540, 0, 40)                   // a tilt shifts it with the halo, down the frame
+    expect(u[0]).toBe(r[0]); expect(u[2]).toBe(r[2])
+    expect(u[1]).toBeGreaterThan(r[1] + 33); expect(u[1]).toBeLessThanOrEqual(r[1] + 40); expect(u[3]).toBeGreaterThanOrEqual(r[3] - 1)
+    expect(haloRect([10, 5, 12, 6], 120, 67, 960, 540, 37.5, 0)).toEqual(s)        // no tilt: the turn's rectangle exactly
+    expect(haloRect([0, 60, 3, 66], 120, 67, 960, 540, 0, 300)[3]).toBe(0)         // tilted entirely off the bottom: nothing to draw
   })
 })
 

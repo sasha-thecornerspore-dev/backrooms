@@ -5,15 +5,17 @@
 //   - level (pitch 0, or a hand-built fs with no HC) every byte is what it was: the old arithmetic exactly
 //   - pitched, the world frame IS the level frame moved down / up by the pitch's rows, floor, ceiling, walls, light pools and sky alike, on
 //     the classic shading and the lit tiers: the rows meet the walls at any pitch (rowDistance), nothing in the world tilts
-//   - the sprites' floor line follows the horizon by the same rows; the flashlight's beam does NOT (it is in your hand)
-//   - the sky's scratch is sized by the frame (a horizon two rows past the largest so far read past it: black rows)
-//   - the dust field slides with the tilt, the same on the CPU draw and the GPU step
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+//   - the sprites' floor line follows the horizon by the same rows; the flashlight's beam does NOT (it is in your hand): on the sprites it
+//     is measured on the standing body (gfx-light.js flashDv), so looking up climbs a thing instead of leaving it, and the flat boost follows
+//   - the sky's scratch is sized by the frame (a horizon two rows past the largest so far read past it: black rows; on a fresh module)
+//   - the dust field slides with the tilt, streams out of the horizon walking forward and is lit from the ceiling where the ceiling is,
+//     the same on the CPU draw and the GPU step
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { buildFrameState, horizonRow, pitchRows, PITCH_LIMIT, FOV } from '../src/renderer/gfx-frame.js'
 import { renderWorld, rowDistance } from '../src/renderer/gfx-world.js'
 import { renderSky } from '../src/renderer/gfx-sky.js'
-import { planSprites, prewarmSprites } from '../src/renderer/gfx-sprites.js'
-import { createLight } from '../src/renderer/gfx-light.js'
+import { planSprites, prewarmSprites, FIG, PERSON, ITEM_H } from '../src/renderer/gfx-sprites.js'
+import { createLight, flashDv, flashTiltK, FLASH_PITCH } from '../src/renderer/gfx-light.js'
 import { buildTextures } from '../src/renderer/gfx-textures.js'
 import { levelConfig } from '../src/renderer/levels.js'
 import { DEFAULT_CONFIG, createChunkCache } from '../src/renderer/world.js'
@@ -22,7 +24,7 @@ import { hexToRgb, levelKey, mulberry32 } from '../src/renderer/gfx-util.js'
 import { qualityFor, TIERS } from '../src/renderer/gfx-quality.js'
 import { buildSkyRows } from '../src/renderer/gfx-gl-world-data.js'
 import { worldFragmentSource, worldUniformNames } from '../src/renderer/gfx-gl-world-shader.js'
-import { createPostState, seedParticles, drawParticlesModern } from '../src/renderer/gfx-post.js'
+import { createPostState, seedParticles, drawParticlesModern, drawBloom, airLight } from '../src/renderer/gfx-post.js'
 import { createSink, stepModern } from '../src/renderer/gfx-gl-post-particles.js'
 import { PITCH_MAX } from '../src/renderer/look.js'
 import fs from 'node:fs'
@@ -192,24 +194,73 @@ describe('the flashlight is held in the hand: it follows the view, not the horiz
       for (let y = 0; y < H; y++) expect(Math.abs(p.d[y] - lv.d[y]), `pitch ${pitch} row ${y}`).toBeLessThanOrEqual(1)   // (each pixel truncated on its own)
     }
   })
-  it('light.at (what lights the sprites): looking down brings the beam onto the floor near you, looking up takes it further out', () => {
-    // Level 2 with its lamps' pools off (only the dark between them, so nothing but the beam changes), the player's light on; a floor point
-    // at d is drawn 0.5 / d below the horizon, the beam's centre is 0.16 below the view's: level it lands about three units out
-    const base = cfgOf(2), cfg = { ...base, look: { ...(base.look || {}), lighting: { pool: 0 } } }
-    const at = (tilt, wx, flashlight = true) => {
-      const light = createLight(cfg, {})
-      const f = frameState({ cfg }, 'high', { x: 0.5, y: 0.5, angle: 0, bobOffset: 0 }, { light, lights: { flashlight } })
-      f.tilt = tilt
-      light.prepare(f, sc.tex, () => false, null)
-      return light.at(wx, 0.5)
-    }
-    const near = 1.7, far = 6.5                                                   // 1.2 and 6 units ahead
+  // Level 2 with its lamps' pools off (only the dark between them, so nothing but the beam changes), the player's light on. A point at
+  // height y and distance d is drawn (0.5 - y) / d below the horizon, the beam's centre is 0.16 below the view's: level it lands on the
+  // floor about three units out
+  const base = cfgOf(2), cfg2 = { ...base, look: { ...(base.look || {}), lighting: { pool: 0 } } }
+  const at = (tilt, wx, h = 0, flashlight = true) => {
+    const light = createLight(cfg2, {})
+    const f = frameState({ cfg: cfg2 }, 'high', { x: 0.5, y: 0.5, angle: 0, bobOffset: 0 }, { light, lights: { flashlight } })
+    f.tilt = tilt
+    light.prepare(f, sc.tex, () => false, null)
+    return light.at(wx, 0.5, h)
+  }
+  const near = 1.7, mid = 3.5, far = 6.5, farther = 8.5                     // 1.2, 3, 6 and 8 units ahead
+  it('light.at on the floor (h 0): looking down brings the beam onto the floor near you, looking up takes it further out', () => {
     expect(at(0, near)).toBeLessThan(2.1)                                         // (inside the clamp: the comparisons below are real)
     expect(at(-0.2, near)).toBeGreaterThan(at(0, near) + 0.2)
     expect(at(0.25, near)).toBeLessThan(at(0, near) - 0.2)
     expect(at(0.1, far)).toBeGreaterThan(at(0, far))
     expect(at(-0.2, far)).toBeLessThan(at(0, far) - 0.1)
-    expect(at(0.25, near, false)).toBe(at(0, near, false))                        // without the flashlight the tilt changes no light at all
+    expect(at(0.25, near, 0, false)).toBe(at(0, near, 0, false))                  // without the flashlight the tilt changes no light at all
+  })
+  it('light.at on a body (what lights the sprites): the beam climbs it as you look up, and a light at its face never darkens it', () => {
+    const smiler = FIG.smiler.h, tall = 1
+    for (const h of [smiler, tall, PERSON.player.h, ITEM_H]) for (const wx of [near, mid, far, farther]) expect(at(0, wx, h)).toBe(at(0, wx))   // level: what it always was
+    // near: the beam is already on the body; looking up slides it up the body and the light holds, all the way to the stop
+    for (const h of [smiler, tall]) for (const t of [0.05, 0.2, PITCH_MAX]) expect(at(t, near, h), `h ${h} tilt ${t}`).toBe(at(0, near, h))
+    for (const t of [0.05, 0.2, 0.25]) expect(at(t, mid, tall)).toBe(at(0, mid, tall))   // three units out, the beam on its chest: no darker
+    // far: level the beam passes under its feet; looking up a little brings it onto the body (brighter), past its top it goes
+    expect(at(0.1, far, smiler)).toBeGreaterThan(at(0, far, smiler) + 0.02)
+    expect(at(0.15, farther, smiler)).toBeGreaterThan(at(0, farther, smiler) + 0.02)
+    expect(at(PITCH_MAX, farther, smiler)).toBeLessThan(at(0.15, farther, smiler) - 0.03)
+    expect(at(PITCH_MAX, farther, smiler)).toBeLessThan(at(0, farther, smiler))
+    // looking down: the feet are the body's nearest point to a lowered beam, as on the floor
+    for (const wx of [near, far]) for (const t of [-0.2, -PITCH_MAX]) expect(at(t, wx, smiler)).toBe(at(t, wx))
+    expect(at(-PITCH_MAX, farther, smiler)).toBeLessThan(at(0, farther, smiler) - 0.1)
+    // a thing on the floor (an item) leaves the beam as the floor does
+    expect(at(0.25, near, ITEM_H)).toBeLessThan(at(0, near, ITEM_H) - 0.2)
+    expect(at(0.25, near, smiler, false)).toBe(at(0, near, smiler, false))
+  })
+  it("flashDv / flashTiltK: level is the feet's old arithmetic exactly, h 0 the floor's at any tilt, and the factor never above 1", () => {
+    const r = mulberry32(0xbea4)
+    for (let n = 0; n < 3000; n++) {
+      const d = 0.05 + r() * 14, h = r() * 1.2, t = (r() * 2 - 1) * PITCH_MAX
+      expect(flashDv(d, 0, h)).toBe(0.5 / Math.max(0.5, d) - FLASH_PITCH)
+      expect(flashTiltK(d, 0, h)).toBe(1)
+      expect(flashDv(d, t, 0)).toBeCloseTo(0.5 / Math.max(0.5, d) + t - FLASH_PITCH, 14)
+      const k = flashTiltK(d, t, h)
+      expect(k).toBeGreaterThan(0); expect(k).toBeLessThanOrEqual(1)
+      if (t > 0) { expect(Math.abs(flashDv(d, t, h))).toBeLessThanOrEqual(Math.abs(flashDv(d, t, 0)) + 1e-12) }   // a body is never further from the beam than its feet
+    }
+  })
+  it("the sprites' flat flashlight boost follows the tilt: looking down at a thing five units out takes it, looking up at a near one keeps it", () => {
+    const sc0 = scene(0)
+    prewarmSprites(sc0.cfg, 2000)
+    const pose = openPose(sc0.isWall, 6, 6)
+    const ca = Math.cos(pose.angle), sa = Math.sin(pose.angle)
+    const lit = (pitch, dist) => {
+      const ents = [{ kind: 'npc', name: 'someone', x: pose.x + ca * dist, y: pose.y + sa * dist }]
+      const f = frameState(sc0, 'medium', { ...pose, bobOffset: 0, pitch }, { lights: { flashlight: true } })   // (no light model: the boost alone)
+      for (let i = 0; i < 30; i++) planSprites(f, ents)
+      const P = planSprites(f, ents)
+      let m = 0
+      for (let i = 0; i < P.count; i++) if (!P.recs[i].shadow && !P.recs[i].screen) m = Math.max(m, P.recs[i].mr)
+      return m
+    }
+    expect(lit(0, 5)).toBeGreaterThan(0)
+    expect(lit(-PITCH_MAX, 5)).toBeLessThan(lit(0, 5) * 0.95)
+    for (const p of [0.1, 0.2, PITCH_MAX]) expect(lit(p, 1.5), `pitch ${p}`).toBe(lit(0, 1.5))
   })
 })
 
@@ -252,10 +303,14 @@ describe('the sky', () => {
   const sky = hexToRgb('#9aa6ad'), fog = hexToRgb('#b8b2a0')
   const mk = (over) => ({ W: 96, H: 54, HH: 27, HC: 27, hf: Math.PI / 4.8, skyRgb: sky, fogRgb: fog, flicker: 1, t: 3, player: { angle: 0.4 }, levelKey: '∅', look: undefined,
     quality: { lightDetail: 1 }, light: { enabled: true }, ...over })
-  it('a horizon two rows past the largest so far draws every row (the scratch is sized by the frame)', () => {
+  it('a horizon two rows past the largest so far draws every row (the scratch is sized by the frame)', async () => {
+    // on a FRESH gfx-sky.js: its scratch lives at module level, and vitest isolates files, not tests, so the Level ∅ frames drawn above have
+    // already grown it past every frame of this loop (the old scratch would pass here, read past by nothing). A new module starts it empty
+    vi.resetModules()
+    const { renderSky: freshSky } = await import('../src/renderer/gfx-sky.js')
     for (let HH = 4; HH < 54; HH++) {
       const f = mk({ HH, HC: HH }), buf = new Uint32Array(96 * 54)
-      renderSky(f, buf)
+      freshSky(f, buf)
       for (let y = 0; y <= Math.min(HH, 53); y++) for (let x = 0; x < 96; x += 7) expect(buf[y * 96 + x] & 0xffffff, `HH ${HH} row ${y}`).not.toBe(0)
     }
   })
@@ -274,12 +329,12 @@ describe('the sky', () => {
   })
 })
 
-describe('the dust field slides with the tilt, the same on the CPU draw and the GPU step', () => {
+describe('the dust field slides with the tilt and streams out of the horizon, the same on the CPU draw and the GPU step', () => {
   const cfg = { levelIndex: 0, palette: { fog: '#c9c98f' }, particles: { count: 30, color: [235, 228, 190], size: 1.4, sway: 0.35, speed: 0.25 } }
-  const fsAt = (i, tilt) => ({
+  const fsAt = (i, tilt, walk = 0) => ({
     W: 576, H: 324, OW: 960, OH: 540, t: i / 60, dt: 1 / 60, frame: i, flicker: 1, fov: FOV, hf: FOV / 2, tilt,
-    player: { x: 5, y: 5, angle: 0.3 }, opts: { particles: true }, quality: TIERS.medium, levelKey: '0', handled: { flashlight: false, glow: false },
-    light: { enabled: true }, lights: {}, comfort: { reduceFlicker: false, maxGlobalDip: 0.5 },
+    player: { x: 5 + Math.cos(0.3) * walk * i / 60, y: 5 + Math.sin(0.3) * walk * i / 60, angle: 0.3 }, opts: { particles: true }, quality: TIERS.medium,
+    levelKey: '0', handled: { flashlight: false, glow: false }, light: { enabled: true }, lights: {}, comfort: { reduceFlicker: false, maxGlobalDip: 0.5 },
   })
   // a 2D context that draws nothing (the positions are what is compared), and a document whose canvases are the same (gfx-gl-post.test.js)
   const noop2d = () => new Proxy({}, { get: (t, k) => (k === 'createRadialGradient' ? () => ({ addColorStop() {} }) : k === 'createImageData' ? (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }) : () => {}), set: () => true })
@@ -310,10 +365,85 @@ describe('the dust field slides with the tilt, the same on the CPU draw and the 
     }
     expect(moved).toBeGreaterThan(15)
   })
+  it('walking forward they stream out of the horizon, not the centre: a field held tilted is the level one moved by the tilt, mote for mote', () => {
+    const T = -0.25, OH = 540
+    const { a, b, c } = twins()
+    for (const f of [a, b]) for (const p of f.particles) p.y += T * OH
+    for (let i = 1; i <= 14; i++) {
+      drawParticlesModern(recorder(), fsAt(i, T, 3), a, 1)
+      stepModern(b, fsAt(i, T, 3), 1, createSink(30))
+      drawParticlesModern(recorder(), fsAt(i, 0, 3), c, 1)
+    }
+    let kept = 0
+    for (let k = 0; k < a.particles.length; k++) {
+      expect(b.particles[k].x).toBeCloseTo(a.particles[k].x, 9); expect(b.particles[k].y).toBeCloseTo(a.particles[k].y, 9)
+      if (Math.abs(a.particles[k].x - c.particles[k].x) < 1e-9) { expect(a.particles[k].y - c.particles[k].y).toBeCloseTo(T * OH, 6); kept++ }   // (none recycled)
+    }
+    expect(kept).toBeGreaterThan(10)
+  })
+  it('walking forward, a mote that streams off the edge re-forms in the middle distance: about the horizon, on the CPU and the GPU alike', () => {
+    for (const T of [-0.25, 0.2]) {
+      const { a, b } = twins()
+      drawParticlesModern(recorder(), fsAt(1, T, 3), a, 1); stepModern(b, fsAt(1, T, 3), 1, createSink(30))
+      for (const f of [a, b]) for (const p of f.particles) p.y = -100                           // every mote off the top
+      drawParticlesModern(recorder(), fsAt(2, T, 3), a, 1); stepModern(b, fsAt(2, T, 3), 1, createSink(30))
+      const cy = 540 * (0.5 + T)
+      for (let k = 0; k < a.particles.length; k++) {
+        expect(Math.abs(a.particles[k].y - cy)).toBeLessThanOrEqual(540 * 0.3 + 1e-9)
+        expect(b.particles[k].y).toBeCloseTo(a.particles[k].y, 9); expect(b.particles[k].x).toBeCloseTo(a.particles[k].x, 9)
+      }
+    }
+  })
+  it("airLight: the ceiling fixtures' term rides the horizon (held between none and all of it), the hand-held lights stay on the glass; level, it is what it was", () => {
+    const A = createPostState(cfg).atmos.part, OW = 960, OH = 540, o = { L: 0, g: 0 }
+    const L = (x, y, lights, t) => (t === undefined ? airLight(x, y, OW, OH, A, lights, null, o) : airLight(x, y, OW, OH, A, lights, null, o, t)).L
+    for (let y = -12; y <= OH + 12; y += 9) for (const lights of [{}, { flashlight: true }, { glow: [80, 235, 110] }]) expect(L(300, y, lights, 0)).toBe(L(300, y, lights))
+    for (const t of [0.2, -0.25]) for (let y = 30; y <= 400; y += 10) expect(L(480, y + t * OH, {}, t), `tilt ${t} y ${y}`).toBeCloseTo(L(480, y, {}), 12)
+    expect(L(480, 0, {}, 0.3)).toBeCloseTo(A.ambient + A.top, 12); expect(L(480, OH, {}, -0.3)).toBeCloseTo(A.ambient, 12)
+    for (const t of [0.2, -0.25]) for (const [x, y] of [[480, 280], [200, 100], [700, 500]]) {
+      expect(L(x, y, { flashlight: true }, t) - L(x, y, {}, t)).toBeCloseTo(L(x, y, { flashlight: true }) - L(x, y, {}), 12)
+    }
+  })
   it('a level view moves no mote (the field is the one it always was)', () => {
     const { a, c } = twins()
     for (let i = 1; i <= 12; i++) { drawParticlesModern(recorder(), fsAt(i, 0), a, 1); const f = fsAt(i, 0); delete f.tilt; drawParticlesModern(recorder(), f, c, 1) }
     for (let k = 0; k < a.particles.length; k++) { expect(a.particles[k].x).toBe(c.particles[k].x); expect(a.particles[k].y).toBe(c.particles[k].y) }
+  })
+})
+
+describe('the CPU bloom: the frames between its recomputes slide the halo with the horizon', () => {
+  // a canvas whose tiny read-back has one bright patch in a dark frame (so there is a halo), recording what is drawn
+  const rec = () => {
+    const calls = []
+    return new Proxy({ calls }, {
+      get(t, k) {
+        if (k in t) return t[k]
+        if (k === 'getImageData') return (x, y, w, h) => {
+          const d = new Uint8ClampedArray(w * h * 4).fill(18)
+          for (const [px, py] of [[5, 2], [6, 2], [5, 3], [6, 3]]) { const o = (py * w + px) * 4; d[o] = d[o + 1] = d[o + 2] = 250 }
+          return { data: d }
+        }
+        if (k === 'createImageData') return (w, h) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h })
+        return (...a) => { calls.push([k, ...a]) }
+      },
+      set(t, k, v) { t[k] = v; return true },
+    })
+  }
+  let realDoc
+  beforeEach(() => { realDoc = globalThis.document; globalThis.document = { createElement: () => { const c = rec(); return { width: 0, height: 0, getContext: () => c } } } })
+  afterEach(() => { globalThis.document = realDoc })
+  const fsAt = (t, HH, HC) => ({ W: 96, H: 54, HH, HC, OW: 96, OH: 54, t, dt: 1 / 60, fov: FOV, player: { x: 1, y: 1, angle: 0 }, opts: { bloom: true }, quality: { ...TIERS.high } })
+  // -> the composite's drawImage call: [name, image, sx, sy, sw, sh, dx, dy, dw, dh] (no turn here: dx stays 0)
+  const halo = (post, fs) => { const w = rec(); drawBloom(w, {}, fs, post); const d = w.calls.filter((c) => c[0] === 'drawImage'); expect(d.length).toBe(1); expect(Math.abs(d[0][6])).toBe(0); return d[0] }
+  it("a tilt since the recompute moves it by the pitch's rows; a head-bob, a level frame and an unchanged tilt move it not at all", () => {
+    const post = createPostState({ levelIndex: 0, palette: { fog: '#D4C87A' }, particles: { count: 0 } })
+    expect(halo(post, fsAt(0, 27, 27))[7]).toBe(0)            // computed level
+    expect(halo(post, fsAt(0.01, 33, 27))[7]).toBe(6)         // reused, looking up six rows: down six with the room
+    expect(halo(post, fsAt(0.02, 20, 27))[7]).toBe(-7)
+    expect(halo(post, fsAt(0.03, 29, 29))[7]).toBe(0)         // a bob moves the centre and the horizon alike: level
+    expect(halo(post, fsAt(0.05, 33, 27))[7]).toBe(0)         // recomputed tilted
+    expect(halo(post, fsAt(0.06, 35, 29))[7]).toBe(0)         // the same tilt under a bob
+    expect(halo(post, fsAt(0.07, 27, 27))[7]).toBe(-6)        // back to level before the next recompute
   })
 })
 

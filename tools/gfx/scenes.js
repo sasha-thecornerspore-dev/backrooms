@@ -304,9 +304,11 @@ const KIT = {
 }
 for (const register of [regA1, regA2, regB, regC, regD, regE, regInt, regLook]) register(KIT)
 
-// benchmark poses: [name in bench.json, scene id] — run at 1280x720
+// benchmark poses: [name in bench.json, scene id] — run at 1280x720. lnull-down is vertical look's dearest view: the yard looking down,
+// where the level view's cheap sky rows are lit ground (scenes-look.js)
 export const BENCH = [
   ['l0-corridor', 'l0-corridor'],
   ['l2-pipes', 'l2-pipes'],
   ['lnull-yard', 'lnull-yard'],
+  ['lnull-down', 'look-lnull-down'],
 ]

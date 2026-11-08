@@ -9,6 +9,7 @@ import {
   benchVerdict, formatReport, buildView,
 } from '../src/renderer/gfx-bench.js'
 import { DEFAULT_CONFIG, CHUNK_SIZE } from '../src/renderer/world.js'
+import { PITCH_MAX } from '../src/renderer/look.js'
 
 const root = path.resolve(import.meta.dirname, '..')
 const src = (f) => fs.readFileSync(path.join(root, f), 'utf8')
@@ -66,18 +67,33 @@ describe('the camera path', () => {
     for (const reduced of [false, true]) {
       const p = cameraPath(scene, 3, 2.15, reduced)
       const a = p(0)
-      expect(a.x).toBe(5.5); expect(a.y).toBe(5.5); expect(a.angle).toBeCloseTo(0)
-      let prev = a, maxStep = 0, maxTurn = 0, maxX = 0
+      expect(a.x).toBe(5.5); expect(a.y).toBe(5.5); expect(a.angle).toBeCloseTo(0); expect(Math.abs(a.pitch)).toBe(0)
+      let prev = a, maxStep = 0, maxTurn = 0, maxX = 0, maxTilt = 0, low = 0, lowAt = 0
       for (let t = 1 / 60; t <= 2.2; t += 1 / 60) {
         const q = p(t)
         maxStep = Math.max(maxStep, Math.hypot(q.x - prev.x, q.y - prev.y)); maxTurn = Math.max(maxTurn, Math.abs(q.angle - prev.angle)); maxX = Math.max(maxX, q.x)
+        maxTilt = Math.max(maxTilt, Math.abs(q.pitch - prev.pitch))
+        if (q.pitch < low) { low = q.pitch; lowAt = t }
+        expect(q.pitch).toBeLessThanOrEqual(0); expect(q.pitch).toBeGreaterThanOrEqual(-PITCH_MAX)   // it looks down (the dear way), inside the game's range
         prev = q
       }
       expect(maxStep).toBeLessThan(reduced ? 0.01 : 0.03)                      // < 1.8 cells/s: a walk, not the sprint
       expect(maxTurn * 60).toBeLessThan(reduced ? 0.15 : 0.7)                 // rad/s: a slow look around
+      expect(maxTilt * 60).toBeLessThan(reduced ? 0.05 : 0.25)                // of the view's height a second: a slow look down and back
       expect(maxX - 5.5).toBeLessThanOrEqual(3 - PATH.clearance + 1e-9)
+      if (reduced) expect(low).toBeGreaterThan(-0.1)
+      else {
+        const t = benchTiming('full')
+        expect(low).toBeLessThan(-0.2)                                          // well down, and while the view is being measured
+        expect(lowAt).toBeGreaterThan(t.warmMs / 1000); expect(lowAt).toBeLessThan((t.warmMs + t.measureMs) / 1000)
+      }
     }
     expect(cameraPath(scene, 0.2, 2)(2).x).toBe(5.5)                           // no room ahead: it only looks around
+  })
+  it("the run hands the path's tilt to the renderer on the player record, as game.js does (vertical look's dearest frames are timed)", () => {
+    const b = src('src/renderer/gfx-bench.js')
+    expect(b).toContain('player.x = p.x; player.y = p.y; player.angle = p.angle; player.pitch = p.pitch')
+    expect(b).toMatch(/export const BENCH_VERSION = 2 /)
   })
 })
 
@@ -153,7 +169,7 @@ describe('the text report (the Copy button)', () => {
   it('device facts, one row per config (with why when unavailable), the verdict and every check', () => {
     const rep = report({}, { 'gpu-high': { status: 'unavailable', why: 'session-gpu-failed-validate', frames: 0, p95: NaN } })
     const t = formatReport(rep)
-    expect(t).toMatch(/^BACKROOMS GFX BENCH v1 · build m2-3/)
+    expect(t).toMatch(/^BACKROOMS GFX BENCH v2 · build m2-3/)
     expect(t).toMatch(/cores 4 · memory 4 GB · dpr 2 · screen 1366x768/)
     expect(t).toMatch(/gpu: ANGLE \(Intel, Mesa Intel\(R\) UHD Graphics 600\) · webgl2 yes · probe says hardware/)
     expect(t).toMatch(/^CPU medium\s+ok\s+100\s+16\.7\s+17\.0\s+18\.0\s+0%/m)

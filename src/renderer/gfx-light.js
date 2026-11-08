@@ -8,9 +8,12 @@
 //                                    flag: renderWorld() calls light.prepare(fs, …) which sets it from fs.quality.lightDetail
 //                                    (0 = legacy tier ⇒ false, so a legacy-tier frame is untouched) and from whether the level has a
 //                                    lighting recipe at all (a hand-built config with no level identity has none ⇒ always false).
-//   light.at(wx, wy)                 illumination multiplier at a world point on the floor plane; 1 = neutral, ~0.35 in the dark
+//   light.at(wx, wy, h = 0)          illumination multiplier at a world point on the floor plane; 1 = neutral, ~0.35 in the dark
 //                                    between fixtures, ~1.25 under one. Includes the live panel flicker and the player's own lights
-//                                    (flashlight / glowstick) of the current frame. Sprites use this to light themselves.
+//                                    (flashlight / glowstick) of the current frame. Sprites use this to light themselves, passing
+//                                    their height h (wall heights): the hand-held beam is measured on the body standing there, so
+//                                    looking up slides it up the body instead of off the floor under it (flashDv; 0 = the floor point,
+//                                    and with a level view h changes nothing).
 //   light.tint(wx, wy)               [r, g, b] colour multiplier (1,1,1 = none); warm/cold fixture colour, pulled toward the glowstick
 //                                    colour near the player while one burns.
 //   light.nearest(wx, wy)            { x, y, dist, r, g, b } of the nearest emitter (r,g,b = its colour, 0..255), or null — for
@@ -635,10 +638,10 @@ export function createLight(config, worldHooks) {
   }
   const nearestPanelCell = (wx, wy) => ({ i: Math.floor((wx - 0.5) / PERIOD + 0.5), j: Math.floor((wy - 0.5) / PERIOD + 0.5) })
 
-  // the player's flashlight / glowstick light at a floor point, of the last prepared frame (same falloffs as the world pass). The beam is
-  // held in the hand: a floor point at distance d is drawn 0.5 / d of the frame below the horizon, and the horizon F.tilt below the view's
-  // centre, so looking up takes the beam off the floor and looking down puts it nearer (the world pass measures the same from fs.HC)
-  function dynamicAt(wx, wy) {
+  // the player's flashlight / glowstick light on a body h tall standing at a floor point (h 0: the floor point itself), of the last prepared
+  // frame (same falloffs as the world pass). The beam is held in the hand: it follows the view's tilt (F.tilt), and flashDv says how far
+  // the body is from its centre (the world pass measures the same from fs.HC)
+  function dynamicAt(wx, wy, h) {
     if (!F.active || !F.lights) return 0
     let v = 0
     const dx = wx - F.px, dy = wy - F.py
@@ -646,13 +649,13 @@ export function createLight(config, worldHooks) {
     if (F.flash && d > 0.05) {
       const th = Math.atan2(dy, dx) - Math.atan2(F.sa, F.ca)
       const a = Math.atan2(Math.sin(th), Math.cos(th))
-      const dv = 0.5 / Math.max(0.5, d) + F.tilt - FLASH_PITCH
+      const dv = flashDv(d, F.tilt, h)
       v += F.flashK * 0.85 * Math.exp(-(a * a) / (FLASH_SX * FLASH_SX) - (dv * dv) / (FLASH_SY * FLASH_SY)) * flashAtt(d)
     }
     if (F.glow) v += F.glowK * glowAtt(d * d + 0.25)
     return v
   }
-  light.at = (wx, wy) => {
+  light.at = (wx, wy, h = 0) => {
     if (!light.enabled) return 1
     let pool = 0
     if (panels) {
@@ -661,7 +664,7 @@ export function createLight(config, worldHooks) {
       if (F.eS > 0.002 && lastFs) { const n = nearestPanelCell(wx, wy); lev = levelFor(2 * n.i, 2 * n.j, lastFs) }
       pool = F.floorA[idx] + lev * F.floorB[idx]
     } else if (emitters) pool = lightmapAt(wx, wy)
-    return clamp((F.ambient + pool + dynamicAt(wx, wy)) * F.gdip, 0.05, 2.2)
+    return clamp((F.ambient + pool + dynamicAt(wx, wy, h)) * F.gdip, 0.05, 2.2)
   }
   // The colour multiplier at a point: the AMBIENT tint in the dark between fixtures, pulled toward the fixture's tint by the local share
   // of pool light (pool / the emitter's strength). So daylight (no pool but the window spill) and the black between lamps stay
@@ -842,5 +845,31 @@ export function createLight(config, worldHooks) {
 export const FLASH_I = 3.8             // the flashlight's strength at the centre of the beam, close in (light units: 1 = as lit as the legacy shading)
 export const FLASH_PITCH = 0.16       // tangent of the beam's downward pitch
 export const FLASH_SX = 0.33, FLASH_SY = 0.30     // beam width (radians, 1/e) across and up/down
+// How far below the beam's centre (in fractions of the frame, + = below) the hand-held beam meets a body h tall (wall heights) standing at
+// distance d, with the view tilted by `tilt` (+ = up; gfx-frame.js fs.tilt). A point at height y is drawn (0.5 - y) / d below the horizon,
+// and the horizon tilt below the view's centre, so the body spans b - h / d (its top) .. b (its feet), b = 0.5 / d + tilt - FLASH_PITCH.
+//   level      the feet, exactly as the sprites have always been lit (every level frame is byte for byte what it was)
+//   looking down  the feet: they are the body's nearest point to a lowered beam (it slides down onto the floor in front)
+//   looking up    the beam climbs the body. A near one (the beam already on it, level: b > 0) holds its level value until the beam passes
+//                 its top; a far one (the beam level under its feet: b < 0) comes up to the feet, is in the beam's centre while it crosses
+//                 the body, and only past the top does it lose the light. So a light shone at a thing's face never darkens it
+// h 0 is the floor point (the old floor-only arithmetic at any tilt). Pure, allocation-free: the sprites' flat boost uses it too (flashTiltK).
+export function flashDv(d, tilt, h) {
+  const dd = Math.max(0.5, d)
+  if (!(tilt > 0)) return 0.5 / dd + tilt - FLASH_PITCH
+  const g = 0.5 / dd - FLASH_PITCH                             // the feet, level
+  const b = g + tilt, top = b - (h > 0 ? h : 0) / dd           // the feet and the top, now
+  const lo = g > 0 ? g : 0                                     // the closest to the centre the light may hold while the beam is on the body
+  const e = b < lo ? b : lo
+  return top > e ? top : e
+}
+// The share of its level value the beam gives a body (h tall, at d) under a tilt: the beam's vertical profile at flashDv over the level
+// one, capped at 1 (a tilt never adds to a flat boost tuned on the level view). Exactly 1 with a level view.
+export function flashTiltK(d, tilt, h) {
+  if (!(tilt > 0 || tilt < 0)) return 1
+  const v0 = flashDv(d, 0, h), v = flashDv(d, tilt, h)
+  const k = Math.exp((v0 * v0 - v * v) / (FLASH_SY * FLASH_SY))
+  return k < 1 ? k : 1
+}
 export function flashAtt(d) { return 1 / (1 + (d * d) / 9) * (1 - smoothstep(7, 12.5, d)) }
 export function glowAtt(d2) { return 1 / (1 + d2 / 2.2) * (1 - smoothstep(9, 38, d2)) }

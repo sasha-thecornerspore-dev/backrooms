@@ -4,8 +4,9 @@
 //
 // What it does: five fixed views of the real world (Level 0 corridor and room, Level 2 pipes, Level 3 station, the Level ∅ yard; the same
 // seeded chunks, decor and creatures the harness scenes use — nothing moves, nothing attacks), each drawn full-window for ~2 s along a smooth
-// camera path (a slow walk forward while looking left and right; gentler still under prefers-reduced-motion or the game's Reduce flicker
-// setting), once per configuration:
+// camera path (a slow walk forward while looking left and right, and down and back up: vertical look's dearest view, the floor and the lit
+// carpet where the level view has cheap sky or ceiling; gentler still under prefers-reduced-motion or the game's Reduce flicker setting),
+// once per configuration:
 //     CPU low · CPU medium · CPU high · GPU medium · GPU high        (the GPU ones only if the GPU path comes up; otherwise it says why)
 // It records the REAL display frame interval (requestAnimationFrame timestamps: p50 / p95 / p99, % of frames slower than 33 ms) and what the
 // render() call costs on the CPU, then shows a results card — device facts, a table, a plain-language verdict, the GPU_AUTO checks — with a
@@ -37,7 +38,7 @@ import { mulberry32 } from './gfx-util.js'
 
 // ═══════════════════════════════════════════════════════════ pure ═══════════════════════════════════════════════════════════
 
-export const BENCH_VERSION = 1
+export const BENCH_VERSION = 2          // 2: the camera path tilts the view (vertical look) as well as panning it
 export const BENCH_SEED = 0              // the canonical seed-0 world the harness scenes are posed in (tools/gfx/scenes.js WORLD_SEED)
 
 // The views (poses from tools/gfx/scenes.js, angles in degrees: 0 = east, 90 = south). `extra` = a still creature placed like the harness does.
@@ -116,18 +117,28 @@ export function freeRun(isWall, x, y, angle, max = 4, step = 0.05) {
   return max
 }
 // The camera path of one view: a slow walk along the view's facing (eased in and out over the whole segment, stopping well short of any wall)
-// while the view pans left and right on a sine. Reduced motion: a third of the walk, a smaller, slower pan. Smooth everywhere (no cuts, no
-// jumps). scene.angle in degrees; free = freeRun along it (cells); durS = the segment length (s). -> (tSeconds) -> { x, y, angle (radians) }
-export const PATH = Object.freeze({ walkMax: 1.8, walkMaxReduced: 0.6, clearance: 0.6, pan: 28, panReduced: 10, panPeriod: 4.5, panPeriodReduced: 9 })
+// while the view pans left and right on a sine, and tilts down and back up on a slower one (player.pitch, look.js: a fraction of the view's
+// height, + up; it starts and ends a period level, and in a full run its low point falls inside the measured part of a view). Looking down
+// is what a tilted view costs most: on Level ∅ the cheap sky rows become lit floor. Reduced motion: a third of the walk, a smaller, slower
+// pan and tilt. Smooth everywhere (no cuts, no jumps). scene.angle in degrees; free = freeRun along it (cells); durS = the segment length (s).
+// -> (tSeconds) -> { x, y, angle (radians), pitch }
+export const PATH = Object.freeze({
+  walkMax: 1.8, walkMaxReduced: 0.6, clearance: 0.6, pan: 28, panReduced: 10, panPeriod: 4.5, panPeriodReduced: 9,
+  tilt: 0.26, tiltReduced: 0.08, tiltPeriod: 4, tiltPeriodReduced: 8,
+})
 export function cameraPath(scene, free, durS, reduced = false) {
   const a0 = (scene.angle * Math.PI) / 180
   const walk = Math.max(0, Math.min(reduced ? PATH.walkMaxReduced : PATH.walkMax, (free || 0) - PATH.clearance))
   const pan = ((reduced ? PATH.panReduced : PATH.pan) * Math.PI) / 180, per = reduced ? PATH.panPeriodReduced : PATH.panPeriod
+  const tilt = reduced ? PATH.tiltReduced : PATH.tilt, tper = reduced ? PATH.tiltPeriodReduced : PATH.tiltPeriod
   const dx = Math.cos(a0), dy = Math.sin(a0), T = durS > 0 ? durS : 1
   return (t) => {
     const u = Math.min(1, Math.max(0, t / T)), e = u * u * (3 - 2 * u)            // smoothstep: starts and ends at rest
-    const d = walk * e
-    return { x: scene.x + dx * d, y: scene.y + dy * d, angle: a0 + pan * Math.sin((2 * Math.PI * Math.max(0, t)) / per) }
+    const d = walk * e, tt = Math.max(0, t)
+    return {
+      x: scene.x + dx * d, y: scene.y + dy * d, angle: a0 + pan * Math.sin((2 * Math.PI * tt) / per),
+      pitch: -tilt * 0.5 * (1 - Math.cos((2 * Math.PI * tt) / tper)),             // down and back up: level at the start of every period
+    }
   }
 }
 
@@ -411,7 +422,7 @@ export async function startBench(doc, win, opts = {}) {
         if (conf.backend === 'gpu' && r.kind !== 'gpu') { const why = r.why; marker.note(r); r.dispose(); return { unavailable: why } }
         const durS = (timing.warmMs + timing.measureMs) / 1000
         const path = cameraPath(view.scene, view.free, durS, reduced)
-        const player = { x: view.scene.x, y: view.scene.y, angle: 0, bob: 0, bobOffset: 0, moving: false, hp: 100, maxHp: 100 }
+        const player = { x: view.scene.x, y: view.scene.y, angle: 0, bob: 0, bobOffset: 0, moving: false, pitch: 0, pitchIn: 0, hp: 100, maxHp: 100 }
         const cache = view.cache
         let pcx = 0, pcy = 0
         const isWall = (wx, wy) => cache.isWall(wx, wy, pcx, pcy)
@@ -427,7 +438,7 @@ export async function startBench(doc, win, opts = {}) {
             if (t0 < 0) { t0 = ts; last = ts }
             const t = (ts - t0) / 1000, dt = Math.min((ts - last) / 1000, 0.1)
             const p = path(t)
-            player.x = p.x; player.y = p.y; player.angle = p.angle
+            player.x = p.x; player.y = p.y; player.angle = p.angle; player.pitch = p.pitch
             pcx = Math.floor(p.x / CHUNK_SIZE); pcy = Math.floor(p.y / CHUNK_SIZE)
             isWall.pcx = pcx; isWall.pcy = pcy; isWall.evictRadius = view.cfg ? (view.cfg.chunkEvictRadius ?? 3) : 3   // lets the rays' memo on, as in the game
             stepFlicker(fk, dt, view.cfg.flicker, rand, false, true)
