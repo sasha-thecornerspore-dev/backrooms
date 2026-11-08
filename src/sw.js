@@ -23,7 +23,7 @@ const SHELL = [
   '/renderer/compose-perception.js', '/renderer/stillness.js', '/renderer/compose-sanity.js', '/renderer/rollcall.js', '/renderer/downed.js',
   '/renderer/status.js', '/renderer/closings.js', '/renderer/docket.js',
   '/renderer/compose-polaroid.js', '/renderer/compose-radio.js', '/renderer/compose-wish.js', '/renderer/wish-post.js', '/renderer/compose-gates.js', '/renderer/evidence.js',
-  '/renderer/caches.js', '/renderer/lightshare.js', '/renderer/site.js',
+  '/renderer/caches.js', '/renderer/lightshare.js', '/renderer/site.js', '/renderer/recover-seal.js',
   '/renderer/dread.js', '/renderer/firstrun.js', '/renderer/plates.js', '/renderer/pathfield.js', '/renderer/feelings.js', '/renderer/learn.js', '/renderer/radiostatic.js', '/renderer/film.js',
   '/net/client.js', '/net/evbus.js', '/settings.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png',
