@@ -38,6 +38,7 @@ const HELP = 'the file does not recognise that. try /recover, /cases, /file <ans
 const NEW_LINES = [
   ...Object.values(LINE),
   sysText('maddie', CAME_BACK_LINE),
+  'failed: ' + 'too fast',                                     // a first join the room closes 4029 (index.html's 'failed: ' + the client's error)
   CREW.WHO_SOLO, ...WHO,
   refileLine('maddie', 'litigation'), squareLine('maddie'),
   LINES.SUBJECT_PROCESSED.replace('{name}', 'maddie') + photoWord('litigation'),
@@ -62,6 +63,9 @@ describe('the 2.0.7 release notes (a draft until the voice pass)', () => {
     expect(lineNotice('retrying')).toEqual([LINE.DEAD, LINE.TRYING, LINE.PRESS_KEY])
     expect(lineNotice('gave-up', true)).toEqual([LINE.DEAD, LINE.GAVE_UP, LINE.PRESS_TAP])
     expect(lineNotice('flood')).toEqual([LINE.FLOOD])
+    // a first join the room closes 4029: the title shows 'failed: ' and the client's error, which is 'too fast'
+    expect(read('../src/renderer/index.html')).toContain("st.textContent = `failed: ${e.message || 'could not connect'}`")
+    expect(read('../src/net/client.js')).toContain("new Error(code === FLOOD_CLOSE ? 'too fast' : 'connection closed before welcome')")
     // the console's help line, changed only to name /who: its <answer> written so a markdown page shows it
     expect(game).toContain(`showMessage('${HELP}')`)
     expect(notes).toContain(italic(HELP.replace('<answer>', '&lt;answer&gt;')))
