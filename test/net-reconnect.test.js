@@ -525,6 +525,29 @@ describe('a returning player\'s caches: the relay\'s replay after a rejoin is la
     expect(w.bus.receive(replayOf('me1', 'ada', p, 5))).toBe(true)
     expect([w.items.getDropped(), w.items.inventory.map((i) => i.type), w.ledger.get(key)]).toEqual([[], ['bandage'], null])
   })
+  it('a friend\'s cache I carried off: the replay of that very frame is not laid again; the same thing set down there again since is', () => {
+    const w = world('me1')
+    const p = { lvl: 1, cx: 12, cy: 10, x: 12.5, y: 10.5, type: 'glowstick', ex: {}, ph: 3, oct: 2 }
+    expect(w.bus.receive(replayOf('bo1', 'bo', p, 7))).toBe(true)
+    const key = cacheKey(1, 12, 10), d = w.items.getDropped()
+    expect(d.map((x) => [x.byId, x.cacheKey])).toEqual([['bo1', key]])
+    // I pick it up by hand (game.js F): the take may reach the relay only after the next replay
+    expect(w.items.pickUp(w.ledger.localKey(key)).ok).toBe(true)
+    w.ledger.take(key, true)
+    expect(w.items.getDropped()).toEqual([])
+    // the relay's replay of that very frame (its sender's id and nonce, once the bus's own memory of it is gone): an echo
+    expect(w.ledger.isEcho(key, 'bo1', 'bo', { ...p, n: 7 })).toBe(true)
+    // bo set the same glowstick with the same word down there again while my line was dead: a new frame, and it is laid
+    expect(w.ledger.isEcho(key, 'bo1', 'bo', { ...p, n: 12 })).toBe(false)
+    expect(w.ledger.isEcho(key, 'bo2', 'bo', { ...p, n: 7 })).toBe(false)       // under a new id of theirs: a new frame too
+    expect(w.bus.receive(replayOf('bo1', 'bo', p, 12))).toBe(true)
+    expect(w.ledger.get(key)).toMatchObject({ id: 'bo1', name: 'bo' })
+    // a cache whose frame the ledger never saw (my own, set down before it went out): by owner and thing, as before
+    const l = createCacheLedger()
+    l.place({ key: 'c:1:2,2', lvl: 1, cx: 2, cy: 2, id: 'me1', name: 'ada', p: { type: 'radio', ph: 1, oct: 0 } })
+    l.take('c:1:2,2', true)
+    expect(l.isEcho('c:1:2,2', 'me1', 'ada', { type: 'radio', ph: 1, oct: 0, n: 40 })).toBe(true)
+  })
   it('a friend\'s cache on its own floor, waiting, is laid once when the replay comes again; their nonce is the first guard', () => {
     const w = world('me1')
     const p = { lvl: 2, cx: 3, cy: 3, x: 3.5, y: 3.5, type: 'glowstick', ex: {}, ph: 1, oct: 0 }
