@@ -1,8 +1,9 @@
 // 2.0.7's release notes (docs/release-notes/v2.0.7.md): the crew and the relay guard. They quote every new line exactly as the game says
 // it — read from the modules that say it, so a voice pass that changes a line changes the notes with it — say what a room of 2.0.6 and
 // 2.0.7 sees, that the relay guard is its own deploy, that nothing new goes over the wire and that the body line lost its coordinates,
-// and leave no draft marker half-deleted. The draft comment on line 1 stays until the owner's voice pass is in: it is checked closed,
-// never asked to go. The manual and the README say the same; the version and the offline cache moved on for the one new file.
+// and leave no draft marker half-deleted (the draft comment that sat on line 1 came off once the owner's voice pass was in: every line
+// kept, every recommendation on the desk taken). The manual and the README say the same; the version and the offline cache moved on
+// for the one new file.
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import { LINE, CAME_BACK_LINE, sysText, lineNotice } from '../src/net/client.js'
@@ -47,11 +48,11 @@ const NEW_LINES = [
   BODY_LINE, ...PIN_CAPTIONS, ADDRESS_PIN, ANCHORED_LINE, ROOM_PIN_JOIN,
 ]
 
-describe('the 2.0.7 release notes (a draft until the voice pass)', () => {
-  it('carry the draft comment on line 1, closed, and leave no draft marker open', () => {
-    expect(notes.split('\n')[0]).toBe("<!-- DRAFT: waits for the owner's voice pass -->")
+describe('the 2.0.7 release notes', () => {
+  it('leave no draft marker open', () => {
     expect(draftLeftOpen(notes)).toBe(false)
-    expect(draftLeftOpen(notes.slice(notes.indexOf('-->\n') + 4))).toBe(false)
+    expect(notes).not.toContain('DRAFT')
+    expect(notes.split('\n')[0]).toMatch(/^\*\*play it now in your browser, no install:\*\*/)
     expect(notes).toContain('## the backrooms 2.0.7')
   })
 
