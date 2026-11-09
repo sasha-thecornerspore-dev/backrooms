@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import { LINE, CAME_BACK_LINE, sysText, lineNotice } from '../src/net/client.js'
 import { CREW, whoLines, refileLine, squareLine, photoWord } from '../src/renderer/crew.js'
-import { BODY_LINE, pinCaption } from '../src/renderer/origin-anchored.js'
+import { BODY_LINE, LEASH_FREE_M, LEASH_FAR_M, pinCaption } from '../src/renderer/origin-anchored.js'
 import { ADDRESS_PIN } from '../src/renderer/origin-intake.js'
 import { ROOM_PIN_JOIN, ANCHORED_LINE } from '../src/renderer/site.js'
 import { LINES } from '../src/renderer/compose-polaroid.js'
@@ -34,6 +34,8 @@ const italic = (l) => `*${l}*`
 // the new lines as the game says them, with the names and words the notes use
 const SELF = { id: 'me', lvl: 2, status: 'extension' }
 const WHO = whoLines([{ id: 'a', name: 'maddie', lvl: 0, status: 'litigation' }, { id: 'b', name: 'ada', lvl: 4, status: 'compliance' }, { id: 'c', name: 'bo' }], SELF)
+// the film's anchored pin, one line for each of the leash's three bands (close, a long walk, far)
+const PIN_CAPTIONS = [pinCaption(null, LEASH_FREE_M), pinCaption(null, LEASH_FAR_M), pinCaption(null, LEASH_FAR_M + 1)]
 const HELP = 'the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.'
 const NEW_LINES = [
   ...Object.values(LINE),
@@ -42,7 +44,7 @@ const NEW_LINES = [
   CREW.WHO_SOLO, ...WHO,
   refileLine('maddie', 'litigation'), squareLine('maddie'),
   LINES.SUBJECT_PROCESSED.replace('{name}', 'maddie') + photoWord('litigation'),
-  BODY_LINE, pinCaption(null, 40), ADDRESS_PIN, ANCHORED_LINE, ROOM_PIN_JOIN,
+  BODY_LINE, ...PIN_CAPTIONS, ADDRESS_PIN, ANCHORED_LINE, ROOM_PIN_JOIN,
 ]
 
 describe('the 2.0.7 release notes (a draft until the voice pass)', () => {
@@ -111,6 +113,12 @@ describe('the 2.0.7 release notes (a draft until the voice pass)', () => {
     expect(notes).toContain('the body line no longer shows coordinates')
     expect(notes).toContain('the game never asks for your location')
     expect(BODY_LINE).not.toMatch(/\d/)
+    // the film's anchored pin says the distance in words too, so it passes the rules like every other line: no number of metres
+    expect(new Set(PIN_CAPTIONS).size).toBe(3)
+    for (const l of PIN_CAPTIONS) expect(l).not.toMatch(/\d/)
+    expect(notes).toContain("the film's anchored pin says it in words now, the distance too, in three steps that follow the leash")
+    expect(notes).not.toMatch(/\d+ m behind you/)
+    expect(notes).not.toContain('the distance as before')
   })
 
   it('say the version, the cache, the one new file, and the site step; Windows on 2.0.6 updates itself', () => {

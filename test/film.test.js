@@ -236,12 +236,15 @@ describe('compose-polaroid.js is as it was', () => {
           }
     }
     expect(rows.length).toBe(230400)
-    // 2.0.7 (decision 3): the pin caption says where the body lies in words, not its numbers. Put the numbers back where the words are and
-    // every caption is 2.0.4's, byte for byte: nothing else moved (these subjects carry no word, so the photo's word adds nothing either)
+    // 2.0.7 (decision 3): the pin caption says where the body lies in words, not its numbers, and how far in words too (the owner's desk:
+    // at D 42, within the leash's slack, 'close' where 2.0.4 said '42 m'). Put the numbers back where the words are and every caption is
+    // 2.0.4's, byte for byte: nothing else moved (these subjects carry no word, so the photo's word adds nothing either)
     const words = 'the film shows where you fell through.', pin = 'the film shows ' + formatAnchor({ lat: 51.5, lng: -0.12 }) + '.'
+    const far = 'it is close behind you', metres = 'it is 42 m behind you'
     expect(rows.some((r) => r.includes(words))).toBe(true)
-    expect(rows.every((r) => !/\d\.\d{4}/.test(r))).toBe(true)
-    expect(fnv(rows.map((r) => r.split(words).join(pin)).join('\n'))).toBe('cfe8501d')
+    expect(rows.some((r) => r.includes(far))).toBe(true)
+    expect(rows.every((r) => !/\d\.\d{4}/.test(r) && !/\d m behind you/.test(r))).toBe(true)
+    expect(fnv(rows.map((r) => r.split(words).join(pin).split(far).join(metres)).join('\n'))).toBe('cfe8501d')
   })
   it('the film\'s den is a step of its own: film.js reads no caption, and compose-polaroid.js knows nothing of dens', () => {
     const film = src('../src/renderer/film.js'), cp = src('../src/renderer/compose-polaroid.js')
