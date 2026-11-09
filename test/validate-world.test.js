@@ -153,6 +153,8 @@ describe('the CLI: --wish asks for the stricter check', () => {
   const cli = (args, gitDir) => spawnSync(process.execPath, ['tools/validate-world.mjs', ...args], {
     cwd: root, encoding: 'utf8', env: { ...process.env, GIT_DIR: gitDir },
   })
+  // six git calls: on a loaded Windows desk they can run past vitest's default 10 s hook timeout (vitest.config.js raises only the
+  // tests'), so the hook gets the same explicit allowance as build-web.test.js's: it fails on what it builds, not on a slow machine
   beforeAll(() => {
     dir = mkdtempSync(join(tmpdir(), 'validate-world-'))
     writeFileSync(join(dir, 'empty.gitconfig'), '')
@@ -160,7 +162,7 @@ describe('the CLI: --wish asks for the stricter check', () => {
     moved = headOf('moved', { ...world, net: { posHz: world.net?.posHz === 10 ? 20 : 10 } })   // HEAD's rate is not the file's
     same = headOf('same', { ...world, fogDistance: world.fogDistance + 1 })                      // HEAD differs, but not in net
     none = join(dir, 'no-such-repo', '.git')                                                     // no HEAD to read
-  })
+  }, 120000)
   afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }) })
 
   it('a wish that moved net is refused with the plain message, and exits non-zero', () => {
