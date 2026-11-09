@@ -362,8 +362,8 @@ function atlasJson(status, obj) {
 }
 
 // The atlas's open writes: a check-in and a drop-in, the two any visitor may make without the admin key. Each one takes from the
-// shared Gate first (wishgate.js GATE_RULES.atlasAll says why its numbers). Reads, the passage balance (a POST that writes
-// nothing) and the admin's keyed writes never do.
+// shared Gate first (its numbers, and why, are beside GATE_RULES.atlasAll in wishgate.js). Reads, the passage balance (a POST
+// that writes nothing) and the admin's keyed writes never do.
 export function atlasOpenWrite(request, url) {
   if (request.method !== 'POST') return false
   const route = parseAtlasPath(url.pathname)
