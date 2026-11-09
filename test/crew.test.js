@@ -221,7 +221,15 @@ describe('game.js: /who, the people lines, the photo', () => {
     const cmd = slice(game, 'async function handleCommand(t) {', '// desktop: a fetch that never reached the site')
     const who = at(cmd, "} else if (cmd === 'who') {")
     expect(at(cmd, "} else if (cmd === 'invite') {")).toBeLessThan(who)
-    expect(who).toBeLessThan(at(cmd, "} else showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.')"))
+    const help = at(cmd, "const help = 'the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.'")
+    expect(who).toBeLessThan(help)
+    // the help line names /who; on the block it reads exactly as 2.0.6 had it
+    const fallback = slice(cmd, '      } else {\n        // the help names /who', '\n      }\n    } catch (e) {')
+    expect(fallback).toContain("showMessage(level?.cfg.map ? help.replace(', /who', '') : help)")
+    const say = (lvl) => { const out = []; new Function('level', 'showMessage', fallback.slice(fallback.indexOf('{') + 1))(lvl, (m) => out.push(m)); return out }
+    expect(say({ cfg: {} })).toEqual(['the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.'])
+    expect(say({ cfg: { map: {} } })).toEqual(['the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status or /invite.'])
+    expect(say(null)).toEqual(say({ cfg: {} }))
     expect(cmd).toContain("showMessage(level?.cfg.map ? TERM.WHERE_NONE : whoLines(crewRoster(), { id: mpClient?.id ?? null, lvl: level ? level.index : null, status: file.status }).join('\\n'))")
     expect(TERM.WHERE_NONE).toBe('the file holds nothing from here.')       // the terminal's own line on the block, already said there
     expect(game).toMatch(/import \{ whoLines, createCrewWatch \} from '\.\/crew\.js'/)

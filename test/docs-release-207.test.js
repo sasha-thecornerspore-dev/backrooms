@@ -66,8 +66,9 @@ describe('the 2.0.7 release notes (a draft until the voice pass)', () => {
     // a first join the room closes 4029: the title shows 'failed: ' and the client's error, which is 'too fast'
     expect(read('../src/renderer/index.html')).toContain("st.textContent = `failed: ${e.message || 'could not connect'}`")
     expect(read('../src/net/client.js')).toContain("new Error(code === FLOOD_CLOSE ? 'too fast' : 'connection closed before welcome')")
-    // the console's help line, changed only to name /who: its <answer> written so a markdown page shows it
-    expect(game).toContain(`showMessage('${HELP}')`)
+    // the console's help line, changed only to name /who (never on the block): its <answer> written so a markdown page shows it
+    expect(game).toContain(`const help = '${HELP}'`)
+    expect(game).toContain("showMessage(level?.cfg.map ? help.replace(', /who', '') : help)")
     expect(notes).toContain(italic(HELP.replace('<answer>', '&lt;answer&gt;')))
     // the lines it leans on that were already there are quoted as they are
     for (const l of [TERM.WHERE_NONE, LINES.SUBJECT_PIN.replace('{name}', 'maddie'), 'your hands are not ready.', 'no one is here to hear it.']) {

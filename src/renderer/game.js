@@ -1596,7 +1596,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         // the room in words (crew.js whoLines): you, then each friend — the floor by its name (none for a friend on the block), the word
         // the file has them under; solo, that no one else is. On the block nothing new is said: the file holds nothing from there
         showMessage(level?.cfg.map ? TERM.WHERE_NONE : whoLines(crewRoster(), { id: mpClient?.id ?? null, lvl: level ? level.index : null, status: file.status }).join('\n'))
-      } else showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.')
+      } else {
+        // the help names /who — but not on the block, where nothing new is said: there it reads as it always did
+        const help = 'the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.'
+        showMessage(level?.cfg.map ? help.replace(', /who', '') : help)
+      }
     } catch (e) {
       // desktop: a fetch that never reached the site (offline, DNS, blocked) says so plainly
       consoleFailed(e)
