@@ -145,14 +145,26 @@ export function issueRequest(issue, { repo, token } = {}) {
 
 // ── the gate's arithmetic ────────────────────────────────────────────────────────────────────
 // Every rule is { windowMs, max }: at most max takes in any window of windowMs. The Gate durable object (relay.js) keeps one
-// list of take times per bucket per hashed address and wipes it all a day after the last take. wishAll is the one bucket every
-// sender shares (the Gate named GLOBAL_GATE): however many addresses someone has, the relay files at most that many wishes a day.
+// list of take times per bucket per hashed address and wipes it all a day after the last take. wishAll and atlasAll are the
+// buckets every sender shares (the Gate named GLOBAL_GATE, which keeps nothing but their take times): however many addresses
+// someone has, the relay files at most that many wishes a day, and the atlas takes at most that many open writes.
+//
+// atlasAll is the atlas's one flood guard (2.0.7, relay.js atlasOpenWrite): every check-in and drop-in, from anyone, takes from
+// it before it reaches the Atlas; reads never do. Never per address (owner decision 18): a per-visitor guard would keep address
+// fingerprints with times right beside who stood at a landmark, and still not stop a flood spread over many addresses. Why a busy
+// honest day never meets it: a check-in needs a phone within 120 m of an open door, and a visitor's next one at that door counts
+// only after 6 h; a drop-in spends passage, which comes back at 100 an hour. Today no door is open at all, and when the first
+// one opens, a busy day there is tens of visitors pressing a few times each, not the 2000 a day or the 200 in ten minutes (one
+// every three seconds for ten minutes straight) it allows. What it bounds: each take writes two rows of the Gate and lets the
+// Atlas write up to two, so the atlas's open writes cost at most 8000 rows a day, under a tenth of the account's free daily
+// allowance, wherever a flood comes from; and the ten-minute rule keeps one burst from spending the whole day at once.
 const MIN = 60_000
 export const GLOBAL_GATE = 'global'
 export const GATE_RULES = Object.freeze({
   wish: Object.freeze([Object.freeze({ windowMs: 10 * MIN, max: 3 }), Object.freeze({ windowMs: DAY_MS, max: 10 })]),
   wishAll: Object.freeze([Object.freeze({ windowMs: DAY_MS, max: 300 })]),
   maps: Object.freeze([Object.freeze({ windowMs: 10 * MIN, max: 12 }), Object.freeze({ windowMs: DAY_MS, max: 60 })]),
+  atlasAll: Object.freeze([Object.freeze({ windowMs: 10 * MIN, max: 200 }), Object.freeze({ windowMs: DAY_MS, max: 2000 })]),
 })
 
 // stamps: the stored take times (anything else reads as none). → { ok, stamps (pruned to the longest window, plus now when

@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from 'ws'
 import { createServer as createHttpServer } from 'http'
 import { randomBytes } from 'crypto'
 import { startUpdater } from './updater.js'
-import { evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket } from './evguard.js'
+import { evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket, pace, FLOOD_CLOSE, FLOOD_REASON } from './evguard.js'
 import { createEvLog } from './evlog.js'
 
 // the release's version, stamped into the bundle by esbuild (build-release.yml: --define:__BACKROOMS_VERSION__); a checkout
@@ -69,6 +69,18 @@ export function createServer(port = PORT, host, opts = {}) {
     let roomId = null
     let room = null
 
+    // pos, chat and typing pass their pace (evguard.js pace), mirrored textually in relay/relay.js. Over it a frame is dropped and
+    // nothing is said; a socket that keeps at it is seen out of the room at once and closed FLOOD_CLOSE, 'too fast' (and, out of
+    // the room, nothing it still sends reaches anyone). -> true: relay it
+    const paced = (p, type) => {
+      const v = pace(p, type, Date.now())
+      if (v === 'close') {
+        handleLeave(room, roomId, playerId)
+        try { ws.close(FLOOD_CLOSE, FLOOD_REASON) } catch { /* already going */ }
+      }
+      return v === 'pass'
+    }
+
     ws.on('message', (raw) => {
       let msg
       try { msg = JSON.parse(raw.toString()) } catch { return }
@@ -97,20 +109,20 @@ export function createServer(port = PORT, host, opts = {}) {
 
       if (msg.type === 'pos' && playerId && room) {
         const p = room.players.get(playerId)
-        if (p) { p.x = +msg.x || 0; p.y = +msg.y || 0; p.angle = +msg.angle || 0; p.hp = (msg.hp == null ? 100 : +msg.hp) }
+        if (p && paced(p, 'pos')) { p.x = +msg.x || 0; p.y = +msg.y || 0; p.angle = +msg.angle || 0; p.hp = (msg.hp == null ? 100 : +msg.hp) }
         return
       }
 
       if (msg.type === 'chat' && playerId && room) {
         const p = room.players.get(playerId)
         const text = String(msg.text ?? '').slice(0, 200)
-        if (p && text.trim()) broadcast(room, { type: 'chat', id: playerId, name: p.name, text }, playerId)
+        if (p && paced(p, 'chat') && text.trim()) broadcast(room, { type: 'chat', id: playerId, name: p.name, text }, playerId)
         return
       }
 
       if (msg.type === 'typing' && playerId && room) {
         const p = room.players.get(playerId)
-        if (p) broadcast(room, { type: 'typing', id: playerId, name: p.name, on: !!msg.on }, playerId)
+        if (p && paced(p, 'typing')) broadcast(room, { type: 'typing', id: playerId, name: p.name, on: !!msg.on }, playerId)
         return
       }
 

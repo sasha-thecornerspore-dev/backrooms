@@ -128,9 +128,10 @@ describe("relay.js carries the mirrored 'ev' branch (source guard: it cannot run
     expect(relay).toMatch(/const EV_FLUSH_MS = 10_000/)
   })
   it('imports the guards and the log from the pure modules', () => {
-    expect(relay).toMatch(/import \{ evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket \} from '\.\/evguard\.js'/)
+    // 2.0.7: the same line also brings pos, chat and typing their pace and the flood close (test/relay-buckets.test.js)
+    expect(relay).toMatch(/import \{ evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket, pace, FLOOD_CLOSE, FLOOD_REASON \} from '\.\/evguard\.js'/)
     expect(relay).toMatch(/import \{ createStoredLog \} from '\.\/evlog\.js'/)
-    expect(server).toMatch(/import \{ evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket \} from '\.\/evguard\.js'/)
+    expect(server).toMatch(/import \{ evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket, pace, FLOOD_CLOSE, FLOOD_REASON \} from '\.\/evguard\.js'/)
     expect(server).toMatch(/import \{ createEvLog \} from '\.\/evlog\.js'/)
   })
   it('both servers log only the kinds the log holds, a keep within its budget', () => {
