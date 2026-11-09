@@ -77,7 +77,13 @@ export function stepModern(post, fs, sc, sink) {
     post.camA = pl.angle; post.camX = pl.x; post.camY = pl.y
   }
   const turnPx = -dAng * (OW / (fs.fov || 1.3))
-  const cx = OW * 0.5, cy = OH * 0.5
+  // tilting the view (vertical look) slides the field up or down with the horizon: the dust hangs in the room, not on the glass
+  const tilt = fs.tilt > 0 || fs.tilt < 0 ? fs.tilt : 0
+  const tiltPx = post.camT != null ? (tilt - post.camT) * OH : 0
+  post.camT = tilt
+  // the middle of the view: walking forward, the motes stream out of the vanishing point (the horizon: tilt below the centre) and re-form in
+  // the middle distance there (level: the centre, the field it always was)
+  const cx = OW * 0.5, cy = OH * (0.5 + tilt)
   const glowCol = lights && lights.glow ? lights.glow : null
   sink.kind = spark ? 'spark' : rise ? 'steam' : 'dust'
   particleColor(post, sink.rgb)
@@ -94,6 +100,7 @@ export function stepModern(post, fs, sc, sink) {
     const mvx = Math.sin(p.ph * (0.8 + 0.4 * p.w)) * sway * z, mvy = (rise ? -1 : 1) * speed * (0.5 + z) * (0.85 + 0.3 * p.w)
     p.x += mvx * dt + turnPx
     p.y += mvy * dt
+    if (tiltPx !== 0) p.y += tiltPx
     if (fwd !== 0) { p.x += (p.x - cx) * 0.22 * fwd * z2 * dt; p.y += (p.y - cy) * 0.22 * fwd * z2 * dt }
     if (p.y < -12 || p.y > OH + 12 || p.x < -12 || p.x > OW + 12) {
       if (fwd > 0.5) { p.x = cx + (rng() - 0.5) * OW * 0.6; p.y = cy + (rng() - 0.5) * OH * 0.6 }
@@ -101,7 +108,7 @@ export function stepModern(post, fs, sc, sink) {
       else if (p.x < -12) p.x += OW + 24
       else p.x -= OW + 24
     }
-    const lit = airLight(p.x, p.y, OW, OH, A, lights, null, LIT)
+    const lit = airLight(p.x, p.y, OW, OH, A, lights, null, LIT, tilt)
     let a0, r, kind
     const lb = lit.L
     if (spark) {

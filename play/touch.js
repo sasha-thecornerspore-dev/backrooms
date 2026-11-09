@@ -3,7 +3,13 @@
 // A progressive enhancement: it only activates on touch devices, so desktop +
 // keyboard play is completely unaffected. It feeds the SAME input channels the
 // keyboard already uses — it writes movement into the `K` keymap and rotates
-// `player.angle` directly — so NO gameplay logic changes. Action buttons just
+// `player.angle` directly — so NO gameplay logic changes. The look-drag's
+// vertical part tilts the view the same way the mouse does: it is gathered on
+// the player (look.js lookInput, player.pitchIn) and the game loop spends it,
+// so the vertical-look prefs (off, invert) and the downed / fading hold apply
+// to a finger exactly as to a mouse. Only the part of a drag that is mostly up
+// and down tilts (tiltWeight): a thumb turning you sweeps an arc, and its drift
+// off the level must not walk the view up to the ceiling. Action buttons just
 // set the key the game loop already consumes (F take/descend, Q use, E speak,
 // L light, Space ward), so behaviour stays identical to pressing the key.
 // The ward is the one verb with a hold: for the codes named in the optional
@@ -18,8 +24,9 @@
 // plain key button like the six. The discs are placed by placeDiscs from the bottom-right corner up, wrapping into columns to the
 // left, clear of the page's other controls (measured on mount, on a resize and when the set changes — never per frame).
 //
-// The pure input math (stickToKeys, lookYaw), the two conditions (beaconShown, lineShown) and the layout (placeDiscs) are
-// unit-tested; the DOM/event layer is a thin adapter over them.
+// The pure input math (stickToKeys, lookYaw, tiltWeight, and look.js for the tilt), the two conditions (beaconShown, lineShown) and the layout
+// (placeDiscs) are unit-tested; the DOM/event layer is a thin adapter over them.
+import { lookInput, TOUCH_PITCH } from './look.js'
 
 export function isTouchDevice() {
   if (typeof window === 'undefined') return false
@@ -55,6 +62,17 @@ export function stickToKeys(dx, dy, radius, opts = {}) {
 // tuned a touch higher for finger drags. `sens` is the mouseSensitivity pref.
 export function lookYaw(dx, sens) {
   return dx * 0.0055 * ((sens ?? 100) / 100)
+}
+
+// The share of a look-drag's vertical step that tilts the view (look.js), from how vertical the gesture has lately been. gx / gy are its
+// recent sideways and up-down travel: sums of |dx| and |dy| that decay by TILT_DECAY a move and start at 0 with the touch. A turning swipe
+// drifts off the level as the thumb arcs (a 200 px swipe 15 degrees off the level drifts 54 px: at 100%, two thirds of the way to the
+// stop), so while the up-down travel is under TILT_GATE_LO of the sideways it tilts nothing; a drag mostly up and down (TILT_GATE_HI and
+// over: steeper than about 31 degrees) tilts in full, as a mouse would; between, a ramp. Plain numbers in and out: nothing is allocated.
+export const TILT_DECAY = 0.8, TILT_GATE_LO = 0.3, TILT_GATE_HI = 0.6
+export function tiltWeight(gx, gy) {
+  const r = gx > 0 ? gy / gx : gy > 0 ? TILT_GATE_HI : 0      // (no sideways travel at all: straight up or down, or no travel)
+  return r <= TILT_GATE_LO ? 0 : r >= TILT_GATE_HI ? 1 : (r - TILT_GATE_LO) / (TILT_GATE_HI - TILT_GATE_LO)
 }
 
 // ── DOM / event adapter ──
@@ -267,7 +285,8 @@ export function initTouchControls({ canvas, K, player, getPref, edges = null, ta
   const sens = () => (typeof getPref === 'function' ? (getPref('mouseSensitivity') || 100) : 100)
 
   let moveId = null            // touch identifier driving the stick
-  let lookId = null, lookX = 0 // touch identifier driving the look, last x
+  let lookId = null, lookX = 0, lookY = 0 // touch identifier driving the look, last x / y
+  let lookGX = 0, lookGY = 0              // its recent sideways / up-down travel (tiltWeight)
 
   const clearMove = () => { for (const k of MOVE_KEYS) K[k] = false; knob.style.transform = '' }
 
@@ -297,7 +316,7 @@ export function initTouchControls({ canvas, K, player, getPref, edges = null, ta
   look.addEventListener('touchstart', (e) => {
     if (lookId !== null) return
     const t = e.changedTouches[0]
-    lookId = t.identifier; lookX = t.clientX
+    lookId = t.identifier; lookX = t.clientX; lookY = t.clientY; lookGX = 0; lookGY = 0
     e.preventDefault()
   }, { passive: false })
 
@@ -327,7 +346,11 @@ export function initTouchControls({ canvas, K, player, getPref, edges = null, ta
     for (const t of e.changedTouches) {
       if (t.identifier === moveId) { setStick(t.clientX, t.clientY); handled = true }
       else if (t.identifier === lookId) {
-        player.angle += lookYaw(t.clientX - lookX, sens()); lookX = t.clientX; handled = true
+        const s = sens(), dx = t.clientX - lookX, dy = t.clientY - lookY
+        player.angle += lookYaw(dx, s); lookX = t.clientX
+        lookGX = lookGX * TILT_DECAY + Math.abs(dx); lookGY = lookGY * TILT_DECAY + Math.abs(dy)
+        lookInput(player, dy * tiltWeight(lookGX, lookGY), TOUCH_PITCH, s); lookY = t.clientY   // down the glass looks down (the game loop spends it)
+        handled = true
       }
     }
     if (handled) e.preventDefault()

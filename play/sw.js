@@ -4,14 +4,14 @@
 // neither are the recovery-engine case manifests under /recover/ — those
 // must always be live so a case can change without a cache bump. world.json
 // is precached but fetched network-first: it changes with every granted wish.
-const CACHE = 'backrooms-play-v27'
+const CACHE = 'backrooms-play-v28'
 const SHELL = [
   './', 'index.html', 'world.json',
   'game.js', 'touch.js', 'scraps.js', 'events.js', 'anchor.js', 'items.js', 'tactics.js', 'save.js', 'world.js', 'decor.js',
   'fixedmap.js', 'level-null-map.js', 'levels.js', 'raycaster.js', 'renderer.js',
   'gfx-util.js', 'gfx-textures.js', 'gfx-world.js', 'gfx-sprites.js', 'gfx-post.js', 'gfx-cpu.js', 'gfx-sky.js', 'gfx-light.js', 'gfx-quality.js', 'gfx-attract.js',
   'gfx-frame.js', 'gfx-gl-g4-validate.js', 'gfx-gl-post-math.js', 'gfx-gl-post-particles.js', 'gfx-gl-post-shaders.js', 'gfx-gl-sprites-atlas.js', 'gfx-gl-sprites-plan.js', 'gfx-gl.js', 'gfx-gl-util.js', 'gfx-gl-world.js', 'gfx-gl-world-data.js', 'gfx-gl-world-shader.js', 'gfx-gl-sprites.js', 'gfx-gl-post.js', 'gfx-stats.js', 'gfx-bench.js',
-  'entities.js', 'audio.js', 'prefs.js', 'messages.js', 'input.js', 'client.js', 'evbus.js',
+  'entities.js', 'audio.js', 'prefs.js', 'messages.js', 'input.js', 'look.js', 'client.js', 'evbus.js',
   'collide.js', 'placement.js', 'reach.js', 'feedback.js',
   'hunt.js', 'variants.js', 'ward.js', 'tension.js',
   'topology.js', 'levelmem.js', 'death.js', 'channels.js',
@@ -19,7 +19,7 @@ const SHELL = [
   'dress.js', 'containers.js', 'haunts.js', 'papercard.js',
   'origin-intake.js', 'origin-rules.js', 'origin-tenant.js', 'origin-anchored.js', 'origin-processed.js', 'origin-unnamed.js', 'origin-thin.js',
   'compose-perception.js', 'stillness.js', 'compose-sanity.js', 'rollcall.js', 'downed.js', 'status.js', 'closings.js', 'docket.js',
-  'compose-polaroid.js', 'compose-radio.js', 'compose-wish.js', 'wish-post.js', 'compose-gates.js', 'evidence.js', 'caches.js', 'lightshare.js', 'site.js',
+  'compose-polaroid.js', 'compose-radio.js', 'compose-wish.js', 'wish-post.js', 'compose-gates.js', 'evidence.js', 'caches.js', 'lightshare.js', 'site.js', 'recover-seal.js', 'casebook.js', 'terminal.js',
   'dread.js', 'firstrun.js', 'plates.js', 'pathfield.js', 'feelings.js', 'learn.js', 'radiostatic.js', 'film.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
 ]

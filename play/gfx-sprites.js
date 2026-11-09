@@ -24,9 +24,11 @@
 //   drawSprites(buf32, zbuffer, fs, entities) -> nameplates[]     called AFTER the world pass, BEFORE buf32 is put on the canvas
 //     buf32     the low-res world buffer (Uint32, ABGR, stride fs.W); sprites are blended into it
 //     zbuffer   per-column PERPENDICULAR wall distance (what gfx-world.js writes)
-//     fs        the frame state: W H HH fog fogRgb flicker t dt hf player light lights comfort levelKey opts
-//               fs.light   {enabled, at(x,y), tint(x,y), nearest(x,y)}: ambient 1 unless enabled === true. nearest() may report
-//                          its colour as 0..1 or 0..255. fs.opts.spriteLightOverride replaces fs.light (harness / tests only).
+//     fs        the frame state: W H HH fog fogRgb flicker t dt hf player light lights comfort levelKey opts tilt
+//               (HH is the pitched horizon: everything stands on it; tilt, the view's pitch, only aims the hand-held beam)
+//               fs.light   {enabled, at(x,y,h), tint(x,y), nearest(x,y)}: ambient 1 unless enabled === true. at() is handed the body's
+//                          height (its spec's h). nearest() may report its colour as 0..1 or 0..255. fs.opts.spriteLightOverride
+//                          replaces fs.light (harness / tests only).
 //               fs.comfort.reduceFlicker slows the crawling animations (TV static, arcs, sway).
 //     entities  the flat list game.js builds. Fields read: x y kind; prop type rot; exit target; note read frag; machine vended;
 //               sight sightType; item itemType; player/npc name angle chatText hp; enemy variant state dir stagger; apparition
@@ -43,6 +45,7 @@
 // Every exported pure helper is covered by test/gfx-sprites.test.js.
 
 import { hash2, hash2Legacy, mulberry32, levelKey } from './gfx-util.js'
+import { flashTiltK } from './gfx-light.js'
 
 // ════════════════════════════════════════════════════════════════════════════════════════════════
 // 1. TABLES
@@ -116,6 +119,7 @@ export const SIGHT_SPEC = {
 }
 
 export const MACHINE_SPEC = { h: 0.62, w: 0.30 }
+export const ITEM_H = 0.2, NOTE_H = 0.56   // what the hand-held beam measures an item on the floor and a note (lifted to ~0.36) by (sampleLight)
 export const EXIT_SPEC = { h: 0.86, w: 0.46, beam: 2.7 }
 
 // The near cull. Static bodies (props, sights, machines, lost souls) are solid (collide.js), so the camera is never inside one: the
@@ -2241,6 +2245,7 @@ let HARM_R = 1, HARM_G = 1, HARM_B = 1  // palette harmony tint
 let LIGHT = null, LIGHT_ON = false
 let CAMX = 0, CAMY = 0, CAMA = 0, CA = 1, SAN = 0
 let FLASH = false
+let TILT = 0                             // the view's tilt drawn this frame (fs.tilt, 0 level): the hand-held beam follows it (gfx-light.js flashDv)
 
 // per-sprite state
 const S = {
@@ -2291,11 +2296,13 @@ function normRim(n) {
   S.rimR = (n.r || 0) * sc; S.rimG = (n.g || 0) * sc; S.rimB2 = (n.b || 0) * sc
 }
 
-// (the sprite's place is in S — fwd, side — not in arguments; see G)
-function sampleLight(e) {
+// (the sprite's place is in S — fwd, side — not in arguments; see G). h: the body's height in wall heights (its spec's), so the hand-held
+// beam is measured on the body, not the floor under it: looking up slides it up the body (light.at, and the flat boost by flashTiltK; with a
+// level view h changes nothing)
+function sampleLight(e, h) {
   let L = 1, tr = 1, tg = 1, tb = 1
   if (LIGHT_ON) {
-    const l = typeof LIGHT.at === 'function' ? LIGHT.at(e.x, e.y) : 1
+    const l = typeof LIGHT.at === 'function' ? LIGHT.at(e.x, e.y, h) : 1
     if (l > 0) L = l < 0.12 ? 0.12 : l > 1.6 ? 1.6 : l
     const t = typeof LIGHT.tint === 'function' ? LIGHT.tint(e.x, e.y) : null
     if (t) { tr = t[0]; tg = t[1]; tb = t[2] }
@@ -2305,7 +2312,9 @@ function sampleLight(e) {
     const off = Math.abs(S.side) / fwd
     const cone = off < 0.55 ? 1 - off / 0.55 : 0
     const range = fwd < 10 ? 1 - fwd / 10 : 0
-    L += 0.4 * cone * range
+    let k = 0.4 * cone * range
+    if (TILT !== 0 && k > 0) k *= flashTiltK(fwd, TILT, h)    // the beam tilted off the body takes its boost with it (1 level)
+    L += k
   }
   S.L = L; S.tr = tr; S.tg = tg; S.tb = tb
 }
@@ -2331,12 +2340,12 @@ function setRim(e, rimOn = true) {
   S.cmK = side * k * 0.3 / Math.max(6, 0.12 * (CH / S.fwd))
 }
 
-function initSprite(e, alpha) {
+function initSprite(e, alpha, h) {
   S.A = alpha; S.lift = 0
   S.lean = 0; S.swayA = 0; S.swayP = 0; S.rippleA = 0; S.rippleP = 0
   S.dith = 0; S.dx = 0; S.dy = 0
   S.hasRim = false; S.cm0 = 1; S.cmK = 0
-  sampleLight(e)
+  sampleLight(e, h)
 }
 
 // ── planning one layer / one frame ──
@@ -2449,7 +2458,7 @@ function planProp(e) {
   const sp = spec || PROP_SPEC.box
   const rot = e.rot || 0
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, 1)
+  initSprite(e, 1, sp.h)
   const rq = Math.round(rot * 65536)                // variantHash(rot) / unitJitter(rot, salt), inline
   const vh = hash2(rq, 0x51ed, 3)
   const tj = 1 + 0.07 * ((hash2(rq, 11, 7) / 4294967296) * 2 - 1), hj = 1 + 0.04 * ((hash2(rq, 12, 7) / 4294967296) * 2 - 1)
@@ -2512,7 +2521,7 @@ function planCreature(e) {
     else if (facing === FACING_SIDE) mirror = headsRight(e, CAMA)
   }
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, spec.thin ? (0.36 + 0.03 * sinc(TNOW * 0.21 + phase)) : 1)
+  initSprite(e, spec.thin ? (0.36 + 0.03 * sinc(TNOW * 0.21 + phase)) : 1, spec.h)
   const sc = creatureMotion(sIx, spec, phase, unit) * 1
   if (spec.thin) { S.swayA = 0.012 * unit; S.swayP = TNOW * 0.4 + phase; S.rippleA = 0.02 * unit; S.rippleP = TNOW * 1.3 + phase * 3; S.lift = 0.004 * sinc(TNOW * 0.35 + phase) + 0.01 }
   setRim(e)
@@ -2537,7 +2546,7 @@ function planItem(e) {
   const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const type = ITEM_COLORS[e.itemType] ? e.itemType : 'radio'
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, 1)
+  initSprite(e, 1, ITEM_H)
   const ph = posPhase(e)
   const fr = frameFor('item', type, 0, 0, 0, 0)
   if (fr === null) return
@@ -2553,7 +2562,7 @@ function planItem(e) {
 function planNote(e) {
   const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, 1)
+  initSprite(e, 1, NOTE_H)
   const ph = posPhase(e)
   const fr = frameFor('note', e.read ? 'read' : 'unread', 0, 0, 0, 0)
   if (fr === null) return
@@ -2568,7 +2577,7 @@ function planNote(e) {
 function planMachine(e) {
   const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, 1)
+  initSprite(e, 1, MACHINE_SPEC.h)
   setRim(e, false)
   const fr = frameFor('machine', e.vended ? 'spent' : 'lit', 0, 0, 0, 0)
   if (fr === null) return
@@ -2582,7 +2591,7 @@ function planSight(e) {
   const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const t = SIGHT_SPEC[e.sightType] ? e.sightType : 'mannequin'
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, 1)
+  initSprite(e, 1, SIGHT_SPEC[t].h)
   let anim = 0, facing = 0
   if (t === 'tvwall') { const b = ((TNOW * (REDUCE ? 1.5 : 5)) | 0) % 4; anim = b & 1; facing = b >> 1 }   // four static banks
   setRim(e, false)
@@ -2598,7 +2607,7 @@ function planSight(e) {
 function planExit(e) {
   const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
   const unit = CH / fwd, floorY = CHH + unit / 2
-  initSprite(e, 1)
+  initSprite(e, 1, EXIT_SPEC.h)
   const ph = posPhase(e)
   const pulse = 0.55 + 0.45 * sinc(TNOW * 0.35 + ph)
   const fr = frameFor('exit', 'portal', 0, 0, ((TNOW * (REDUCE ? 0.8 : 1.4)) | 0) & 1, 0)
@@ -2656,7 +2665,7 @@ function planPerson(e, isNpc) {
   const spec = isNpc ? PERSON.npc : PERSON.player
   const unit = CH / fwd, floorY = CHH + unit / 2
   const ph = posPhase(e)
-  initSprite(e, isNpc ? 0.94 : (e.thin && !e.seen ? 0.36 + 0.03 * sinc(TNOW * 0.21 + ph) : 0.97) * (e.st === 'down' ? 0.5 : 1))
+  initSprite(e, isNpc ? 0.94 : (e.thin && !e.seen ? 0.36 + 0.03 * sinc(TNOW * 0.21 + ph) : 0.97) * (e.st === 'down' ? 0.5 : 1), spec.h)
   let facing = FACING_FRONT
   if (!isNpc && e.angle !== undefined && Math.abs(wrapAngle(e.angle - Math.atan2(CAMY - e.y, CAMX - e.x))) > (2 * Math.PI) / 3) facing = FACING_BACK
   const moving = !isNpc && playerMoving(e)
@@ -2708,6 +2717,7 @@ export function planSprites(fs, entities) {
   LIGHT = (fs.opts && fs.opts.spriteLightOverride) || fs.light || null
   LIGHT_ON = !!(LIGHT && LIGHT.enabled === true)
   FLASH = !!(fs.lights && fs.lights.flashlight)
+  TILT = fs.tilt > 0 || fs.tilt < 0 ? fs.tilt : 0
   const HF = fs.hf
   const tanLim = Math.tan(Math.min(1.45, HF + 0.1))
 
