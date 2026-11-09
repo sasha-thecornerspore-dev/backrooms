@@ -207,7 +207,7 @@ describe('the workflows recount the docket', () => {
 
   it('both arbiters are told to leave the docket alone and lean the drift', () => {
     for (const y of [grant, auto]) {
-      expect(y).toContain('Never change `docket`')
+      expect(y).toContain('Never change `docket` or `net`')
       expect(y).toContain('lean the drift the way that status wants')
       expect(y).toContain('(EXTENSION: staying; COMPLIANCE: quiet; LITIGATION: naming things).')
     }
