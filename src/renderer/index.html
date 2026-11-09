@@ -126,6 +126,9 @@
       background: rgba(10,8,3,0.7); padding: 4px 14px 5px; border: 1px solid rgba(138,122,58,0.35); text-shadow: 0 1px 6px rgba(0,0,0,0.9);
     }
     #invite-sub:empty { display: none; }
+    /* a joiner who brings a pin is told what the room gets of it before JOIN (site.js ROOM_PIN_JOIN): the anchor field's own ink */
+    #invite-pin { color: var(--text-dim); font: 11px/1.5 var(--mono); letter-spacing: 1px; max-width: min(500px, 90vw); text-align: center; text-shadow: 0 1px 4px rgba(0,0,0,0.9); }
+    #invite-pin:empty { display: none; }
     #start.invited #btn-solo { color: var(--glow); text-shadow: 0 0 8px rgba(239,231,196,0.25); border-color: #8a7a3a; background: rgba(14,12,7,0.74); box-shadow: none; outline: none; }
     #start.invited #btn-solo:hover { background: rgba(58,44,23,0.88); border-color: var(--wall); }
     #start.invited #btn-solo:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; }
@@ -161,6 +164,7 @@
     #settings-modal .modal-foot .modal-btns { margin-top:0; }
     #join-status, #online-status { color:#a09060;font-family:monospace;font-size:13px;margin-top:12px;min-height:20px; }
     #online-status { max-width:360px;line-height:1.5; }
+    #join-status { max-width:360px;line-height:1.5; }   /* (a pin's warning before ENTER: site.js ROOM_PIN_JOIN) */
     /* the PLAY ONLINE modal's invite: a quiet button and the pin's opt-in beside the room field; the link itself shows only when it
        could not be copied (read-only, selected, to copy by hand) */
     #online-invite-row { display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:-2px 0 12px; }
@@ -663,6 +667,7 @@
       <div id="invite-line"></div>
       <button id="btn-invite-join" type="button">JOIN ▶</button>
       <div id="invite-sub" class="set-hint"></div>
+      <div id="invite-pin"></div>
     </div>
     <div id="anchor-wrap">
       <input id="anchor-input" type="text" placeholder="paste a google maps link — that place becomes the maze's seed" spellcheck="false"/>
@@ -788,7 +793,7 @@
     import { parseAnchor, anchorSeed, neighbourhoodSeed, formatAnchor, bodyUrl } from './anchor.js'
     import { getPrefs, setPref } from './prefs.js'
     import { readSave } from './save.js'
-    import { readInvite, buildInvite, normalizeRoom, lanReachable, shortMapsLink, resolveShortLink, ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, PIN_PRESS_AGAIN, NO_FIELD_PIN, ROOM_PIN_AHEAD } from './site.js'
+    import { readInvite, buildInvite, normalizeRoom, lanReachable, shortMapsLink, resolveShortLink, ANCHOR_NOT_FOUND, ANCHOR_LOOKING, PIN_WARNING, PIN_PRESS_AGAIN, NO_FIELD_PIN, ROOM_PIN_AHEAD, ROOM_PIN_JOIN, ANCHORED_LINE } from './site.js'
     const RELAY_URL = 'wss://backrooms-relay.jeff-schatz112.workers.dev'
 
     const startEl = document.getElementById('start')
@@ -844,7 +849,9 @@
       if (!shortAsk.has(link)) shortAsk.set(link, resolveShortLink(link).then((p) => { if (p) shortPin.set(link, p); else shortAsk.delete(link); return p }))
       return shortAsk.get(link)
     }
-    const anchoredLine = (a) => `anchored — you will fall through ${formatAnchor(a)}`
+    // in words (site.js ANCHORED_LINE): the field shows what was pasted, and the line under it never says the pin's numbers — a short
+    // link has none to show, and four decimals on a stream are the door
+    const anchoredLine = () => ANCHORED_LINE
 
     anchorInput.addEventListener('input', () => {
       const v = anchorInput.value
@@ -872,6 +879,8 @@
       const v = anchorInput.value
       return parseAnchor(v) ?? shortPin.get(shortMapsLink(v)) ?? null
     }
+    // a pin in the field, or a short link still out with the relay: what the way in warns about before a room is entered
+    const pinInField = () => !!(fieldAnchorNow() || shortMapsLink(anchorInput.value))
     async function fieldAnchor() {
       const now = fieldAnchorNow()
       if (now) return now
@@ -906,6 +915,12 @@
       document.getElementById('online-room').value = invite.room
       document.getElementById('invite-line').textContent = `a door was left open · room ${invite.room}`
       document.getElementById('invite-sub').textContent = invite.anchor ? 'the first one in decides the world.' : ''
+      // a joiner who brings a pin (the invite's, or their own) is told on the plate, before JOIN, what the room gets of it (site.js
+      // ROOM_PIN_JOIN), and the plate follows the field: their 'here' carries its mark from the first beat, so the chat's line on arrival
+      // comes after the others have it
+      const invitePinEl = document.getElementById('invite-pin')
+      const sayJoinAhead = () => { invitePinEl.textContent = pinInField() ? ROOM_PIN_JOIN : '' }
+      anchorInput.addEventListener('input', sayJoinAhead); sayJoinAhead()
       document.getElementById('invite-plate').hidden = false
       startEl.classList.add('invited')
       document.getElementById('btn-invite-join').onclick = () => { startStatus.textContent = ''; joinOnline(invite.room, startStatus) }
@@ -996,6 +1011,7 @@
 
     document.getElementById('btn-join').onclick = () => {
       startStatus.textContent = ''
+      joinStatus.textContent = pinInField() ? ROOM_PIN_JOIN : ''   // a pin reaches the others as its neighbourhood's mark: said before ENTER
       joinModal.style.display = 'flex'
     }
 
@@ -1089,8 +1105,9 @@
     // warnedFor: the pin that warning was last said for; ticking the box or opening the box again forgets it
     let warnedFor = null
     // the box at rest: with a pin in the field (or a short link still out with the relay) it says before ENTER what a room keeps of it
-    // (site.js ROOM_PIN_AHEAD) — the relay stores a new room's world the moment it is drawn, so the chat's line would come too late
-    const onlineAtRest = () => (fieldAnchorNow() || shortMapsLink(anchorInput.value) ? ROOM_PIN_AHEAD : '')
+    // (site.js ROOM_PIN_AHEAD) — the relay stores a new room's world the moment it is drawn, so the chat's line would come too late — and,
+    // since the code may already have a room behind it, what a room you join gets of it (ROOM_PIN_JOIN: the others have its mark at once)
+    const onlineAtRest = () => (pinInField() ? `${ROOM_PIN_AHEAD} ${ROOM_PIN_JOIN}` : '')
     invitePin.addEventListener('change', () => {
       warnedFor = null
       onlineStatus.textContent = !invitePin.checked ? onlineAtRest() : fieldAnchorNow() ? PIN_WARNING : NO_FIELD_PIN

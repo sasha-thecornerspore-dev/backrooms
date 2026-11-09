@@ -8,12 +8,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import fs from 'node:fs'
 import { WebSocket, WebSocketServer } from 'ws'
 import { anchorSeed, neighbourhood, neighbourhoodSeed, pinTag, ROOM_GRID } from '../src/renderer/anchor.js'
-import { buildInvite, readInvite, inviteFor, roomPinLine, shortMapsLink, ROOM_PIN_LINE, ROOM_PIN_MARK, ROOM_PIN_DOOR, ROOM_PIN_AHEAD } from '../src/renderer/site.js'
+import { buildInvite, readInvite, inviteFor, roomPinLine, shortMapsLink, ROOM_PIN_LINE, ROOM_PIN_MARK, ROOM_PIN_DOOR, ROOM_PIN_AHEAD, ROOM_PIN_JOIN, ANCHORED_LINE } from '../src/renderer/site.js'
+import { formText, ADDRESS_PIN } from '../src/renderer/origin-intake.js'
 import { createMultiplayerClient } from '../src/net/client.js'
 import { createEvBus } from '../src/net/evbus.js'
 import { createServer } from '../server/index.js'
 import { roomSeed } from '../relay/seed.js'
-import { ANCHORED, FRIEND_SAME_PIN } from '../src/renderer/origin-anchored.js'
+import { ANCHORED, FRIEND_SAME_PIN, BODY_LINE, pinCaption } from '../src/renderer/origin-anchored.js'
 
 global.WebSocket = WebSocket   // the client finds it on globalThis (client.test.js does the same)
 
@@ -24,6 +25,9 @@ const readme = read('../README.md'), manual = read('../docs/manual.html')
 const at = (src, s, from = 0) => { const k = src.indexOf(s, from); expect(k, s).toBeGreaterThan(0); return k }
 const slice = (src, from, to) => { const a = at(src, from), b = src.indexOf(to, a); expect(b, to).toBeGreaterThan(a); return src.slice(a, b) }
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+// index.html's one test of 'a pin in the field, or a short link still out with the relay', lifted and run (2.0.7: the way in's warnings)
+const pinLine = html.match(/const pinInField = [^\n]*/)[0]
+const pinIn = (pin, value) => new Function('fieldAnchorNow', 'shortMapsLink', 'anchorInput', `${pinLine}\nreturn pinInField()`)(() => pin, shortMapsLink, { value })
 async function until(fn, ms = 2000) { const t0 = Date.now(); while (!fn()) { if (Date.now() - t0 > ms) throw new Error('timed out'); await sleep(10) } }
 
 const PIN = { lat: 39.2975, lng: -76.643 }          // a door in west baltimore (where relay-routes.test.js's short link lands)
@@ -227,7 +231,7 @@ describe('the line: a pinned player is told once what the room has of it', () =>
     expect(ROOM_PIN_MARK).toBe("this room was drawn before you came. the others get a mark of your pin's neighbourhood — with marks from two rooms, or a guess at your city, enough to find which square kilometre. to someone who already has a few of your addresses, that is the door.")
     expect(ROOM_PIN_DOOR).toBe("this room was drawn from your pin itself, by an older copy. anyone with the code can find the door. leave the code and open a new one.")
     expect(ROOM_PIN_AHEAD).toBe("a room you open with this pin is drawn from its neighbourhood and kept for good. anyone with the code can see which square kilometre — to someone who already has a few of your addresses, that is the door.")
-    for (const s of [ROOM_PIN_LINE, ROOM_PIN_MARK, ROOM_PIN_DOOR, ROOM_PIN_AHEAD]) {
+    for (const s of [ROOM_PIN_LINE, ROOM_PIN_MARK, ROOM_PIN_DOOR, ROOM_PIN_AHEAD, ROOM_PIN_JOIN]) {
       expect(s).toBe(s.toLowerCase()); expect(s).not.toContain('!'); expect(s).not.toMatch(/never the door/)
     }
   })
@@ -271,26 +275,98 @@ describe('the line: a pinned player is told once what the room has of it', () =>
     expect(run(mp, null, HOOD).slice(1)).toEqual([])
     expect(run(null, PIN, SEED)).toEqual([])                                // solo: no room, no line
   })
+  // 2.0.7 (decision 4): the box serves a code that may already have a room behind it, so it says both — what a room you open keeps, and
+  // what a room you join gets (ROOM_PIN_JOIN). pinInField (lifted below) is the one test of 'a pin, or a short link still out'
   it('lifted and run: the PLAY ONLINE box says it before ENTER, with a pin (or a short link still out) in the field; unticking the invite\'s place brings it back', () => {
     const modal = slice(html, "const inviteBtn = document.getElementById('online-invite')", '// ── continue a saved run ──')
     const line = modal.match(/const onlineAtRest = [^\n]*/)[0]
-    expect(line).toBe("const onlineAtRest = () => (fieldAnchorNow() || shortMapsLink(anchorInput.value) ? ROOM_PIN_AHEAD : '')")
+    expect(line).toBe("const onlineAtRest = () => (pinInField() ? `${ROOM_PIN_AHEAD} ${ROOM_PIN_JOIN}` : '')")
+    expect(pinLine).toBe('const pinInField = () => !!(fieldAnchorNow() || shortMapsLink(anchorInput.value))')
     expect(modal).toContain("document.getElementById('btn-online').addEventListener('click', () => { warnedFor = null; onlineStatus.textContent = onlineAtRest() })")
     expect(modal).toContain('onlineStatus.textContent = !invitePin.checked ? onlineAtRest() : fieldAnchorNow() ? PIN_WARNING : NO_FIELD_PIN')
     expect(html).toMatch(/import \{[^}]*\bROOM_PIN_AHEAD\b[^}]*\} from '\.\/site\.js'/)
-    const atRest = (pin, value) => new Function('fieldAnchorNow', 'shortMapsLink', 'anchorInput', 'ROOM_PIN_AHEAD', `${line}\nreturn onlineAtRest()`)(
-      () => pin, shortMapsLink, { value }, ROOM_PIN_AHEAD)
-    expect(atRest(PIN, '39.2975,-76.643')).toBe(ROOM_PIN_AHEAD)
-    expect(atRest(null, 'https://maps.app.goo.gl/abc123')).toBe(ROOM_PIN_AHEAD)   // the relay has not answered yet
+    expect(html).toMatch(/import \{[^}]*\bROOM_PIN_JOIN\b[^}]*\} from '\.\/site\.js'/)
+    const atRest = (pin, value) => new Function('pinInField', 'ROOM_PIN_AHEAD', 'ROOM_PIN_JOIN', `${line}\nreturn onlineAtRest()`)(
+      () => pinIn(pin, value), ROOM_PIN_AHEAD, ROOM_PIN_JOIN)
+    const both = `${ROOM_PIN_AHEAD} ${ROOM_PIN_JOIN}`
+    expect(atRest(PIN, '39.2975,-76.643')).toBe(both)
+    expect(atRest(null, 'https://maps.app.goo.gl/abc123')).toBe(both)   // the relay has not answered yet
     expect(atRest(null, '')).toBe('')
     expect(atRest(null, 'not a place')).toBe('')
   })
 })
 
+describe('a joiner who brings a pin is told before joining (2.0.7, decision 4)', () => {
+  it('the line: what the others get of it, as ROOM_PIN_MARK says it; lowercase, no digits, no "!", no "never the door"', () => {
+    expect(ROOM_PIN_JOIN).toBe("a room you join with this pin hands the others a mark of its neighbourhood — with marks from two rooms, or a guess at your city, enough to find which square kilometre. to someone who already has a few of your addresses, that is the door.")
+    expect(ROOM_PIN_JOIN).toBe(ROOM_PIN_JOIN.toLowerCase()); expect(ROOM_PIN_JOIN).not.toMatch(/[!\d]|never the door/)
+    expect(ROOM_PIN_JOIN).toContain(ROOM_PIN_MARK.slice(ROOM_PIN_MARK.indexOf('a mark of')).replace("your pin's neighbourhood", 'its neighbourhood'))
+  })
+  it('it is true: the mark a joiner hands over picks their square out of a city box once the room\'s seed is known', () => {
+    // a room drawn from somewhere else (as a joiner finds it), and a 0.1 x 0.1 degree box around baltimore: a hundred cells
+    const ws = 1234567, tag = pinTag(PIN, ws), hits = new Set()
+    for (let a = 3925; a < 3935; a++) for (let b = -7669; b < -7659; b++) { const c = { lat: a / 100, lng: b / 100 }; if (pinTag(c, ws) === tag) hits.add(`${a},${b}`) }
+    expect([...hits]).toEqual(['3930,-7664'])                              // the joiner's own cell, and no other
+  })
+  it('lifted and run: the invite\'s plate says it before JOIN while the field holds a pin, and follows the field', () => {
+    const block = slice(html, 'const invite = readInvite(window.__playQuery ?? location.search)', '// player name (persisted)')
+    expect(block).toContain("const invitePinEl = document.getElementById('invite-pin')")
+    expect(block).toContain("const sayJoinAhead = () => { invitePinEl.textContent = pinInField() ? ROOM_PIN_JOIN : '' }")
+    expect(block).toContain("anchorInput.addEventListener('input', sayJoinAhead); sayJoinAhead()")
+    expect(at(block, 'sayJoinAhead()')).toBeLessThan(at(block, "document.getElementById('invite-plate').hidden = false"))
+    expect(html).toMatch(/#invite-pin:empty \{ display: none; \}/)
+    const say = slice(block, 'const sayJoinAhead = ', '\n')
+    const el = { textContent: 'x' }
+    let pin = PIN, value = '39.2975,-76.643'
+    const run = new Function('invitePinEl', 'pinInField', 'ROOM_PIN_JOIN', `${say}\nreturn sayJoinAhead`)(el, () => pinIn(pin, value), ROOM_PIN_JOIN)
+    run(); expect(el.textContent).toBe(ROOM_PIN_JOIN)
+    pin = null; value = 'https://maps.app.goo.gl/abc123'; run(); expect(el.textContent).toBe(ROOM_PIN_JOIN)   // a short link still out
+    value = ''; run(); expect(el.textContent).toBe('')
+  })
+  it('JOIN LAN says it as its box opens; HOST LAN opens its own room and keeps today\'s', () => {
+    const open = slice(html, "document.getElementById('btn-join').onclick = () => {", '\n    }')
+    expect(open).toContain("joinStatus.textContent = pinInField() ? ROOM_PIN_JOIN : ''")
+    expect(at(open, 'joinStatus.textContent')).toBeLessThan(at(open, "joinModal.style.display = 'flex'"))
+    expect(slice(html, "document.getElementById('btn-host').onclick", "document.getElementById('join-cancel')")).not.toContain('ROOM_PIN_JOIN')
+  })
+  it('on arrival the chat still says the right one for a joiner: the mark, or the line from the room\'s own square', () => {
+    expect(roomPinLine({ anchor: PIN, worldSeed: 7 })).toBe(ROOM_PIN_MARK)                          // a room someone else drew
+    expect(roomPinLine({ anchor: { lat: 39.3021, lng: -76.6388 }, worldSeed: HOOD })).toBe(ROOM_PIN_LINE)   // a friend's room, from your square
+  })
+})
+
+describe('the body in words (2.0.7, decision 3): no line on the screen prints the pin', () => {
+  const coords = /-?\d{1,3}\.\d{2,}/
+  it('the murmur, the film\'s pin caption and the form say where you fell through, never the numbers', () => {
+    expect(BODY_LINE).toBe('your body remains where you fell through.')
+    expect(BODY_LINE).not.toMatch(/\d/)
+    expect(game).toContain("...(anchor ? [BODY_LINE, 'you are very far from your body now.'] : []),")
+    expect(game).not.toContain('your body remains at')
+    for (const p of [PIN, { lat: -33.86, lng: 151.21 }, { lat: 0, lng: 0 }]) {
+      expect(pinCaption(p, 340, null)).not.toMatch(coords)
+      expect(formText({ name: 'ada', anchor: p }, 'extension').join('\n')).not.toMatch(coords)
+    }
+    expect(formText({ name: 'ada', anchor: PIN }, null)[2]).toBe(ADDRESS_PIN)
+  })
+  it('formatAnchor reaches no line of the game\'s: the log\'s filter and the title\'s field are its only readers in the renderer', () => {
+    // game.js keeps it for the log's filter (a line that ever carried the pin is never logged: terminal.js loggable)
+    expect(game.match(/formatAnchor\(/g)).toHaveLength(1)
+    expect(game).toContain('const pinText = anchor ? formatAnchor(anchor) : null')
+    for (const f of ['origin-anchored.js', 'origin-intake.js', 'compose-polaroid.js', 'crew.js', 'terminal.js', 'casebook.js', 'death.js', 'mapcard.js', 'fogmap.js'])
+      expect(read(`../src/renderer/${f}`), f).not.toContain('formatAnchor')
+    // the title: the anchor field's own line says the place in words; the field itself shows what was pasted (or an invite's point)
+    expect(ANCHORED_LINE).toBe('anchored — you will fall through that place.')
+    expect(html).toContain('const anchoredLine = () => ANCHORED_LINE')
+    expect(html).not.toContain('you will fall through ${')
+  })
+})
+
 describe('the docs say what the game says', () => {
   it('README and the manual quote the chat\'s lines, and neither promises "never the door"', () => {
+    expect(manual).toContain(`<i>${BODY_LINE}</i>`)                                   // 2.0.7: the body in words
+    for (const d of [readme, manual]) expect(d).not.toMatch(/your body remains at/)
     for (const [k, d] of Object.entries({ readme, manual })) {
-      for (const s of [ROOM_PIN_LINE, ROOM_PIN_DOOR]) expect(d, `${k}: ${s}`).toContain(s)
+      for (const s of [ROOM_PIN_LINE, ROOM_PIN_DOOR, ROOM_PIN_JOIN]) expect(d, `${k}: ${s}`).toContain(s)   // (2.0.7: the joiner's, before joining)
       expect(d, k).not.toMatch(/never the door|never matches that mark|for someone who guesses your city/)
       expect(d, k).toMatch(/locate your body(\*\*|<\/b>) opens google maps at it, when you press it/i)   // the one solo send the player starts
       expect(d, k).toContain('with marks from two rooms, or a guess at your city')
