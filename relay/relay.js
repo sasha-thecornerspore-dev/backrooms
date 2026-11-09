@@ -3,15 +3,23 @@
 // host and no port-forwarding: everyone connects here and shares a world.
 //
 // Speaks the exact same JSON protocol as server/index.js:
-//   → join {roomId, worldSeed?, name}  → pos {x,y,angle}  → chat {text}
+//   → join {roomId, worldSeed?, name}  → pos {x,y,angle}  → chat {text}  → typing {on}
 //   → ev {kind, payload, keep?, drop?}
-//   ← welcome {playerId, worldSeed, first}  ← players [...]  ← joined/left/chat
+//   ← welcome {playerId, worldSeed, first}  ← players [...]  ← joined/left/chat/typing
 //   ← ev {id, name, kind, payload, t, replay?}
+//   ← close 4029 'too fast' (evguard.js FLOOD_CLOSE): the socket flooded; do not reconnect
+//
+// pos, chat and typing each have a pace (evguard.js pace, 2.0.7): a frame over
+// its limit is dropped and nothing is said, and a socket that keeps flooding is
+// seen out of the room and closed 4029 'too fast'. The limits are twice the most
+// an honest client sends, so one never meets them (test/relay-buckets.test.js).
+// 'ev' keeps its own bucket (evBucket), unchanged.
 //
 // Uses the WebSocket Hibernation API + a SQLite-backed class so it runs on the
-// Workers free plan. Per-connection state (id, name, position, the ev token
-// bucket) rides in each socket's attachment, so it survives hibernation
-// between bursts of traffic.
+// Workers free plan. Per-connection state (id, name, position, the token buckets
+// of ev, pos, chat and typing, the flood strikes, and whether it was closed for
+// flooding) rides in each socket's attachment, written back after every change,
+// so it survives hibernation between bursts of traffic.
 //
 // Two plain HTTPS routes ride the same worker:
 //   POST /wish  {text, meta, version?} → files the wish as a GitHub issue with
@@ -39,7 +47,7 @@
 // Gate: that is what deletes their data. test/relay-routes.test.js holds it.
 import { DurableObject } from 'cloudflare:workers'
 import { roomSeed } from './seed.js'
-import { evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket } from './evguard.js'
+import { evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket, pace, FLOOD_CLOSE, FLOOD_REASON } from './evguard.js'
 import { createStoredLog } from './evlog.js'
 import { BODY_MAX, DAY_MS, GATE_RULES, GLOBAL_GATE, ALLOWED_ORIGINS, WISH_ORIGINS, originOk, corsHeaders, validateWish, filterWish, buildIssue, issueRequest, gateTake, gateKey, hashIp } from './wishgate.js'
 import { shortLink, resolveShortLink } from './mapslink.js'
@@ -115,10 +123,27 @@ export class Room extends DurableObject {
     else await this.storedLog().expire()
   }
 
+  // pos, chat and typing pass their pace (evguard.js pace), mirrored textually in server/index.js. Over it a frame is dropped and
+  // nothing is said; a socket that keeps at it is seen out of the room at once and closed FLOOD_CLOSE, 'too fast'. -> true: relay
+  // it, and the caller writes the attachment back with the tokens; false: they are written back here
+  paced(ws, att, type) {
+    const v = pace(att, type, Date.now())
+    if (v === 'pass') return true
+    if (v === 'close') att.flood = true
+    ws.serializeAttachment(att)
+    if (v === 'close') {
+      try { ws.close(FLOOD_CLOSE, FLOOD_REASON) } catch { /* already going */ }
+      this.broadcast({ type: 'left', id: att.id, name: att.name }, att.id)
+    }
+    return false
+  }
+
   async webSocketMessage(ws, raw) {
     let msg
     try { msg = JSON.parse(raw) } catch { return }
     const att = ws.deserializeAttachment() || {}
+    // closed for flooding: whatever it still had in flight while the close goes through is dropped
+    if (att.flood) return
     const env = this.env || {}
     const LOG = env.EV_LOG !== '0'
 
@@ -148,13 +173,18 @@ export class Room extends DurableObject {
       this.broadcast({ type: 'joined', id: att.id, name: att.name }, att.id)
       this.pushPlayers()
     } else if (msg.type === 'pos') {
+      if (!this.paced(ws, att, 'pos')) return
       att.x = +msg.x || 0; att.y = +msg.y || 0; att.angle = +msg.angle || 0; att.hp = (msg.hp == null ? 100 : +msg.hp)
-      ws.serializeAttachment(att)
+      ws.serializeAttachment(att)                  // the position, and posTok/posT with it
       this.pushPlayers()
     } else if (msg.type === 'chat') {
+      if (!this.paced(ws, att, 'chat')) return
+      ws.serializeAttachment(att)                  // chTok/chT ride the attachment
       const text = String(msg.text ?? '').slice(0, 200)
       if (text.trim()) this.broadcast({ type: 'chat', id: att.id, name: att.name, text }, att.id)
     } else if (msg.type === 'typing') {
+      if (!this.paced(ws, att, 'typing')) return
+      ws.serializeAttachment(att)                  // tyTok/tyT ride the attachment
       this.broadcast({ type: 'typing', id: att.id, name: att.name, on: !!msg.on }, att.id)
     } else if (msg.type === 'ev') {
       // one generic relayed event — mirrored textually in server/index.js. The relay
@@ -184,7 +214,7 @@ export class Room extends DurableObject {
 
   async webSocketClose(ws) {
     const att = ws.deserializeAttachment() || {}
-    this.broadcast({ type: 'left', id: att.id, name: att.name }, att.id)
+    if (!att.flood) this.broadcast({ type: 'left', id: att.id, name: att.name }, att.id)   // one closed for flooding was seen out then (paced)
     // the last one out writes what is waiting, rather than leave it to the timer
     if (this._flushTimer && !this.ctx.getWebSockets().some(s => s !== ws)) await this.flushNow()
     // The world is NEVER forgotten. A room is a persistent place.
@@ -195,20 +225,24 @@ export class Room extends DurableObject {
 
   webSocketError() { /* close handler does the cleanup */ }
 
+  // a socket closed for flooding may linger in getWebSockets() until its close goes through: it is out of the room already, so it
+  // is neither sent to nor listed
   broadcast(obj, exceptId) {
     const raw = JSON.stringify(obj)
     for (const s of this.ctx.getWebSockets()) {
       const a = s.deserializeAttachment() || {}
-      if (a.id !== exceptId) { try { s.send(raw) } catch { /* ignore */ } }
+      if (a.id !== exceptId && !a.flood) { try { s.send(raw) } catch { /* ignore */ } }
     }
   }
 
   pushPlayers() {
-    const sockets = this.ctx.getWebSockets()
-    const list = sockets.map(s => {
+    const sockets = [], list = []
+    for (const s of this.ctx.getWebSockets()) {
       const a = s.deserializeAttachment() || {}
-      return { id: a.id, x: a.x, y: a.y, angle: a.angle, name: a.name, hp: a.hp ?? 100 }
-    })
+      if (a.flood) continue
+      sockets.push(s)
+      list.push({ id: a.id, x: a.x, y: a.y, angle: a.angle, name: a.name, hp: a.hp ?? 100 })
+    }
     const raw = JSON.stringify({ type: 'players', list })
     for (const s of sockets) { try { s.send(raw) } catch { /* ignore */ } }
   }
