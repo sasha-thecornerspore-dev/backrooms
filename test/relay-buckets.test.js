@@ -422,7 +422,7 @@ function atlasNamespace() {
   return { seen, idFromName: (n) => ({ name: n }), get: () => stub }
 }
 const HOST = 'https://backrooms-relay.jeff-schatz112.workers.dev'
-const atlasReq = (path, { method = 'POST', ip = '203.0.113.7', body = { visitor: 'v1', lat: 39.28, lng: -76.61 } } = {}) => new Request(HOST + path, {
+const atlasReq = (path, { method = 'POST', ip = '203.0.113.7', body = { visitor: 'v1', lat: 1, lng: 2 } } = {}) => new Request(HOST + path, {
   method, headers: { 'content-type': 'application/json', 'CF-Connecting-IP': ip },
   body: method === 'GET' || method === 'OPTIONS' ? undefined : JSON.stringify(body),
 })
@@ -439,15 +439,15 @@ describe('the atlas: one flood guard every sender shares, in front of check-ins 
   })
 
   it('a check-in and a drop-in each take from the one shared gate, then reach the atlas', async () => {
-    expect((await worker.fetch(atlasReq('/atlas/beacons/f-95/checkin'), env)).status).toBe(201)
-    expect((await worker.fetch(atlasReq('/atlas/beacons/f-95/dropin', { ip: '192.0.2.4' }), env)).status).toBe(201)
+    expect((await worker.fetch(atlasReq('/atlas/beacons/door-1/checkin'), env)).status).toBe(201)
+    expect((await worker.fetch(atlasReq('/atlas/beacons/door-1/dropin', { ip: '192.0.2.4' }), env)).status).toBe(201)
     expect(env.GATE.names).toEqual([GLOBAL_GATE, GLOBAL_GATE])
-    expect(env.ATLAS.seen).toEqual(['POST /atlas/beacons/f-95/checkin', 'POST /atlas/beacons/f-95/dropin'])
+    expect(env.ATLAS.seen).toEqual(['POST /atlas/beacons/door-1/checkin', 'POST /atlas/beacons/door-1/dropin'])
   })
 
   it('it stores no address: one gate, named for no one, holding only take times', async () => {
     const ips = Array.from({ length: 30 }, (_, i) => ip(i))
-    for (const a of ips) await worker.fetch(atlasReq('/atlas/beacons/f-95/checkin', { ip: a }), env)
+    for (const a of ips) await worker.fetch(atlasReq('/atlas/beacons/door-1/checkin', { ip: a }), env)
     expect([...env.GATE.instances.keys()]).toEqual([GLOBAL_GATE])
     const m = env.GATE.instances.get(GLOBAL_GATE).ctx.storage._m
     expect([...m.keys()]).toEqual(['atlasAll'])
@@ -462,10 +462,10 @@ describe('the atlas: one flood guard every sender shares, in front of check-ins 
 
   it('shared: 200 from 200 addresses in ten minutes, then the next, from anyone, is refused like a /wish: 429 rate with a Retry-After', async () => {
     for (let i = 0; i < 200; i++) {
-      const path = i % 2 ? '/atlas/beacons/f-95/dropin' : '/atlas/beacons/f-95/checkin'
+      const path = i % 2 ? '/atlas/beacons/door-1/dropin' : '/atlas/beacons/door-1/checkin'
       expect((await worker.fetch(atlasReq(path, { ip: ip(i) }), env)).status).toBe(201)
     }
-    const res = await worker.fetch(atlasReq('/atlas/beacons/f-95/checkin', { ip: '192.0.2.200' }), env)
+    const res = await worker.fetch(atlasReq('/atlas/beacons/door-1/checkin', { ip: '192.0.2.200' }), env)
     expect([res.status, await res.json()]).toEqual([429, { ok: false, reason: 'rate' }])
     expect(Number(res.headers.get('Retry-After'))).toBeGreaterThan(0)
     expect(Number(res.headers.get('Retry-After'))).toBeLessThanOrEqual(600)
@@ -481,8 +481,8 @@ describe('the atlas: one flood guard every sender shares, in front of check-ins 
     const all = env.GATE.get(env.GATE.idFromName(GLOBAL_GATE))
     const now = Date.now()
     await all.ctx.storage.put('atlasAll', Array.from({ length: 1999 }, (_, i) => now - 11 * MIN - i * 30_000))
-    expect((await worker.fetch(atlasReq('/atlas/beacons/f-95/checkin'), env)).status).toBe(201)
-    const res = await worker.fetch(atlasReq('/atlas/beacons/f-95/dropin', { ip: '192.0.2.9' }), env)
+    expect((await worker.fetch(atlasReq('/atlas/beacons/door-1/checkin'), env)).status).toBe(201)
+    const res = await worker.fetch(atlasReq('/atlas/beacons/door-1/dropin', { ip: '192.0.2.9' }), env)
     expect(res.status).toBe(429)
     expect(Number(res.headers.get('Retry-After'))).toBeGreaterThan(600)
   })
@@ -490,12 +490,12 @@ describe('the atlas: one flood guard every sender shares, in front of check-ins 
   it('reads, the passage balance, a preflight and the admin\'s keyed writes never touch it', async () => {
     const free = [
       atlasReq('/atlas/beacons', { method: 'GET' }),
-      atlasReq('/atlas/beacons/f-95', { method: 'GET' }),
+      atlasReq('/atlas/beacons/door-1', { method: 'GET' }),
       atlasReq('/atlas/passage', { body: { visitor: 'v1' } }),
-      atlasReq('/atlas/beacons/f-95/checkin', { method: 'OPTIONS' }),
-      atlasReq('/atlas/beacons/f-95', { method: 'PUT', body: { id: 'f-95' } }),
-      atlasReq('/atlas/beacons/f-95/strata', { body: { tier: 'deep' } }),
-      atlasReq('/atlas/beacons/f-95/checkin', { method: 'GET' }),
+      atlasReq('/atlas/beacons/door-1/checkin', { method: 'OPTIONS' }),
+      atlasReq('/atlas/beacons/door-1', { method: 'PUT', body: { id: 'door-1' } }),
+      atlasReq('/atlas/beacons/door-1/strata', { body: { tier: 'deep' } }),
+      atlasReq('/atlas/beacons/door-1/checkin', { method: 'GET' }),
       atlasReq('/atlas/nowhere'),
     ]
     for (const req of free) await worker.fetch(req, env)
@@ -505,10 +505,10 @@ describe('the atlas: one flood guard every sender shares, in front of check-ins 
 
   it('atlasOpenWrite names exactly the two', () => {
     const is = (method, path) => atlasOpenWrite(new Request(HOST + path, { method }), new URL(HOST + path))
-    expect(is('POST', '/atlas/beacons/f-95/checkin')).toBe(true)
-    expect(is('POST', '/atlas/beacons/f-95/dropin')).toBe(true)
-    expect(is('POST', '/atlas/beacons/f-95/checkin/')).toBe(true)          // parseAtlasPath reads it the same way
-    for (const [m, p] of [['GET', '/atlas/beacons/f-95/checkin'], ['POST', '/atlas/passage'], ['POST', '/atlas/beacons/f-95/strata'], ['PUT', '/atlas/beacons/f-95'], ['POST', '/atlas/beacons']]) {
+    expect(is('POST', '/atlas/beacons/door-1/checkin')).toBe(true)
+    expect(is('POST', '/atlas/beacons/door-1/dropin')).toBe(true)
+    expect(is('POST', '/atlas/beacons/door-1/checkin/')).toBe(true)          // parseAtlasPath reads it the same way
+    for (const [m, p] of [['GET', '/atlas/beacons/door-1/checkin'], ['POST', '/atlas/passage'], ['POST', '/atlas/beacons/door-1/strata'], ['PUT', '/atlas/beacons/door-1'], ['POST', '/atlas/beacons']]) {
       expect([m, p, is(m, p)]).toEqual([m, p, false])
     }
   })
