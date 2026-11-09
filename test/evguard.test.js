@@ -156,7 +156,9 @@ describe("relay.js carries the mirrored 'ev' branch (source guard: it cannot run
     expect(server).toMatch(/broadcast\(room, out, playerId\)/)
   })
   it('adds welcome.first the documented way on both servers', () => {
-    expect(relay).toMatch(/first: this\.ctx\.getWebSockets\(\)\.length === 1/)
+    // the live sockets only: one closed for flooding whose close has not gone through is out of the room already (2.0.7)
+    expect(relay).toContain('const live = this.ctx.getWebSockets().filter((s) => !(s.deserializeAttachment() || {}).flood).length')
+    expect(relay).toContain('first: live === 1 }')
     expect(relay).not.toMatch(/first: stored == null/)
     expect(server).toMatch(/const first = room\.players\.size === 0/)
     expect(server.indexOf('const first = room.players.size === 0')).toBeLessThan(server.indexOf('room.players.set(playerId'))
