@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { existsSync, readFileSync } from 'fs'
 import {
-  ORIGINS, isValidPin, intake, isBlankName, filingLine, formText, FORM_FOOT, AMEND_LINE,
+  ORIGINS, isValidPin, intake, isBlankName, filingLine, formText, FORM_FOOT, AMEND_LINE, ADDRESS_PIN,
   parseIntakeCommand, identityOut, identityIn, normaliseIntakeCtx,
 } from '../src/renderer/origin-intake.js'
 import { formatAnchor } from '../src/renderer/anchor.js'
@@ -89,14 +89,16 @@ describe('formText — the form on the stoop', () => {
     expect(t).toEqual([
       'intake.',
       'name: ada.',
-      'address: 39.2994,-76.6410. the body is there.',
+      'address: where you fell through. the body is there.',   // 2.0.7: the pin in words — the form is read on screen
       'status: extension.',
     ])
     // F7: the word as every voice says it; the pen runs out only on a blank
     expect(formText({ name: 'ada' }, 'notice-mailed')).toContain('status: notice mailed.')
     expect(formText({ name: 'ada' }, 'notice-mailed').join('\n')).not.toMatch(/notice-mailed|pen ran out/)
     expect(formText({ name: 'ada' }, '')).toContain('status: ______. the pen ran out.')
-    expect(t[2]).toBe(`address: ${formatAnchor(PIN)}. the body is there.`)
+    expect(t[2]).toBe(ADDRESS_PIN)
+    expect(t.join('\n')).not.toContain(formatAnchor(PIN))
+    for (const p of [PIN, { lat: -33.86, lng: 151.21 }, { lat: 0, lng: 0 }]) expect(formText({ name: 'ada', anchor: p }, 'extension')[2]).not.toMatch(/\d/)
     for (const ctx of [{ name: 'ada', anchor: PIN }, { name: '', anchor: null }, { name: 'Ada', anchor: { lat: 91, lng: 0 } }])
       for (const line of formText(ctx, 'notice-mailed')) { expect(line).toBe(line.toLowerCase()); expect(line).not.toContain('!') }
   })

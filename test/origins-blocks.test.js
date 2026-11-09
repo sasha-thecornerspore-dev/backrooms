@@ -147,8 +147,10 @@ describe('anchored', () => {
   })
 
   it('the pin caption', () => {
-    expect(pinCaption(PIN, 340, null)).toBe('the film shows 39.2994,-76.6410. it is 340 m behind you and it has not moved.')
-    expect(pinCaption(PIN, 340, 'i')).toBe('the film shows 39.2994,-76.6410. it is 340 m behind you and it has not moved. one letter developed beside it: "i".')
+    // 2.0.7 (decision 3): the film says where the body lies in words, never the pin's numbers; the distance stays as it was
+    expect(pinCaption(PIN, 340, null)).toBe('the film shows where you fell through. it is 340 m behind you and it has not moved.')
+    expect(pinCaption(PIN, 340, 'i')).toBe('the film shows where you fell through. it is 340 m behind you and it has not moved. one letter developed beside it: "i".')
+    expect(pinCaption(PIN, 340, null)).not.toContain(formatAnchor(PIN))
   })
 
   it('isSamePin is the anchor seed\'s ~11 m rounding', () => {
