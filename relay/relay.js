@@ -34,13 +34,16 @@
 // the invocation log off, so not even the URL of a /maps call is kept. What the
 // relay does keep: each room's seed (forever), its keep/drop log (the name a
 // player chose, a cache's place in the maze and its day, 30 days at most; see
-// Room.storedLog), the Gate's recent take times per salted address (wiped a
-// day after the last), and the atlas.
+// Room.storedLog), the Gate's recent take times per salted address and the
+// shared Gate's (wiped a day after the last), and the atlas.
 //
 // /atlas/* is the atlas's live data layer (the Atlas durable object, logic in
 // atlas.js): open reads, a presence-proved check-in, the passage economy, and
 // admin writes behind env.ATLAS_ADMIN_KEY. It was deployed from the atlas branch
 // before 2.0.0 and lives here unchanged so a deploy never drops its stored data.
+// Since 2.0.7 its two open writes, a check-in and a drop-in, pass one flood
+// guard first: the shared Gate's 'atlasAll' (atlasOpenWrite). It is never per
+// sender: nothing about who sent one is looked at or kept for it.
 // wrangler.jsonc's migration tags are that deployed history — v1 Room, v2 Atlas
 // (from the atlas branch), v3 Gate — never renumber or edit one, and never add
 // a deleted_classes (or renamed / transferred) migration for Room, Atlas or
@@ -248,10 +251,11 @@ export class Room extends DurableObject {
   }
 }
 
-// One per hashed address (the worker names it by hashIp). It keeps only the
-// times of recent takes per bucket ('wish', 'maps'), and an alarm wipes the lot
-// a day after the last take, so an address that stops calling leaves nothing.
-// Input gates make each take's get/put atomic.
+// One per hashed address (the worker names it by hashIp), and one every sender
+// shares (named GLOBAL_GATE: 'wishAll', and the atlas's 'atlasAll'). It keeps
+// only the times of recent takes per bucket ('wish', 'maps'; the shared one's),
+// and an alarm wipes the lot a day after the last take, so an address that
+// stops calling leaves nothing. Input gates make each take's get/put atomic.
 export class Gate extends DurableObject {
   async take(bucket) {
     const rules = GATE_RULES[bucket]
@@ -283,7 +287,8 @@ async function gate(request, env, bucket) {
   return env.GATE.get(env.GATE.idFromName(key)).take(bucket)
 }
 
-const refused = (g, origin, allowed) => reply({ ok: false, reason: 'rate' }, 429, origin, { 'Retry-After': String(Math.max(1, Math.ceil(g.retryMs / 1000))) }, allowed)
+const retryAfter = (g) => ({ 'Retry-After': String(Math.max(1, Math.ceil(g.retryMs / 1000))) })
+const refused = (g, origin, allowed) => reply({ ok: false, reason: 'rate' }, 429, origin, retryAfter(g), allowed)
 
 // The body, never more than max bytes of it: a chunked request has no Content-Length to refuse up front, and request.text() would
 // buffer all of it (up to Cloudflare's 100 MB) before anything could be checked. -> the text, or null once it runs past max
@@ -355,6 +360,21 @@ const ATLAS_CORS = {
 function atlasJson(status, obj) {
   return new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json', ...ATLAS_CORS } })
 }
+
+// The atlas's open writes: a check-in and a drop-in, the two any visitor may make without the admin key. Each one takes from the
+// shared Gate first (wishgate.js GATE_RULES.atlasAll says why its numbers). Reads, the passage balance (a POST that writes
+// nothing) and the admin's keyed writes never do.
+export function atlasOpenWrite(request, url) {
+  if (request.method !== 'POST') return false
+  const route = parseAtlasPath(url.pathname)
+  return route != null && (route.resource === 'checkin' || route.resource === 'dropin')
+}
+
+// refused the way a /wish over its gate is: 429 { ok: false, reason: 'rate' } with a Retry-After, and the atlas's CORS so the
+// page can read it
+const atlasRefused = (g) => new Response(JSON.stringify({ ok: false, reason: 'rate' }), {
+  status: 429, headers: { 'content-type': 'application/json', 'Cache-Control': 'no-store', ...retryAfter(g), ...ATLAS_CORS },
+})
 
 // A single global store of beacons + strata. Reads are open (CORS); writes need
 // the admin bearer secret. All logic is the pure module atlas.js; this shell just
@@ -444,6 +464,12 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url)
     if (url.pathname.startsWith('/atlas')) {
+      // the one flood guard in front of the atlas: one Gate every sender shares, named GLOBAL_GATE and never by an address, and
+      // nothing about who sent it is looked at or kept for it. A refused write never reaches the Atlas.
+      if (atlasOpenWrite(request, url)) {
+        const all = await env.GATE.get(env.GATE.idFromName(GLOBAL_GATE)).take('atlasAll')
+        if (!all.ok) return atlasRefused(all)
+      }
       const stub = env.ATLAS.get(env.ATLAS.idFromName('global'))
       return stub.fetch(request)
     }
