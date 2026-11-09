@@ -516,8 +516,12 @@
       #presence-hint { bottom: 96px; }
       #chat-stack { bottom: 108px; }
     }
-    /* short screens (a landscape phone): the newest chat lines win, older ones clip rather than climb into the centre message */
-    @media (max-height: 460px) { #chat-stack { max-height: 30vh; overflow: hidden; justify-content: flex-end; } }
+    /* short screens (a landscape phone): the newest chat lines win, older ones clip rather than climb into the centre message. The clip
+       takes the top of the stack, so the dropped line's plate (the one way back on a touch screen) goes to its foot, below the log */
+    @media (max-height: 460px) {
+      #chat-stack { max-height: 30vh; overflow: hidden; justify-content: flex-end; }
+      #line-notice { order: 1; flex-shrink: 0; }
+    }
     /* ── phones (portrait): the item dock moves up under the gauges; the controls own the bottom corners ── */
     @media (max-width: 700px) {
       #hud-plate { min-width: 0; }

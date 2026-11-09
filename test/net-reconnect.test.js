@@ -805,6 +805,13 @@ describe('game.js: the dead line said, held, and called back in one press', () =
     expect(stack).toContain('<div id="line-notice" role="button" aria-live="polite" hidden></div>')
     expect(html).toContain('#line-notice[hidden] { display: none; }')
     expect(slice(html, '#line-notice {', '}')).toContain('pointer-events: auto')
+    // a short screen (a landscape phone) clips the stack from the top to keep the newest lines: the plate is put at its foot, below the
+    // clip, and never shrinks, so eight lines of chat cannot push it out of sight (a phone has no R key: the plate is the way back)
+    const short = slice(html, '@media (max-height: 460px) {', '\n    }')
+    expect(short).toContain('#chat-stack { max-height: 30vh; overflow: hidden; justify-content: flex-end; }')
+    expect(short).toContain('#line-notice { order: 1; flex-shrink: 0; }')
+    expect(stack.indexOf('id="chat-log"')).toBeLessThan(stack.indexOf('id="chat-typing"'))
+    for (const kid of ['#chat-log {', '#chat-typing {']) expect(slice(html, kid, '}'), kid).not.toMatch(/(^|[\s;{])order:/)   // nothing else is ordered past it
     expect(game).toContain("else if (t && mpClient && mpClient.isConnected()) mpClient.sendChat(t)")
     expect(game).toContain("else if (t) showMessage('no one is here to hear it.')")
   })
