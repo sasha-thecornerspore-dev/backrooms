@@ -19,6 +19,7 @@ const {
   POS_RATE, POS_BURST, CHAT_RATE, CHAT_BURST, TYPING_RATE, TYPING_BURST, FLOOD_STRIKES, FLOOD_HEAL, FLOOD_CLOSE, FLOOD_REASON,
 } = await import('../relay/evguard.js')
 const serverGuard = await import('../server/evguard.js')
+const { HOLD } = await import('../src/net/client.js')
 const { GATE_RULES, GLOBAL_GATE, DAY_MS, hashIp, gateKey } = await import('../relay/wishgate.js')
 const { createServer } = await import('../server/index.js')
 
@@ -42,9 +43,13 @@ function rng(seed) {
 // each, evenly (Enter opens the line; the letter sends typing on; Enter sends the chat, and closing the line sends typing off).
 // Then the line: each frame arrives 20 to 170 ms after it was made, never before the one made ahead of it, and nothing arrives
 // while the line is stalled (stalls: [from s, for s]): what would have come then comes all at once as it clears.
+// hold: the client's own hold (src/net/client.js HOLD, 2.0.7): nothing comes back while the line is stalled, so from HOLD.QUIET_MS into
+// a stall a position goes at most once every HOLD.PROBE_MS and typing waits (the last one asked for goes as the line speaks again); chat
+// still goes. Without it, a copy before 2.0.7.
 // -> [{ gen, t, type }] in arrival order, times in ms from 0
-function honest({ seconds, fps = 60, lines = 0, stalls = [], seed = 1 }) {
-  const r = rng(seed), out = []
+function honest({ seconds, fps = 60, lines = 0, stalls = [], seed = 1, hold = false }) {
+  const r = rng(seed)
+  let out = []
   let t = 0, netTimer = 0
   while (t < seconds * 1000) {
     const frame = (1000 / fps) * (0.6 + 0.8 * r())
@@ -57,6 +62,18 @@ function honest({ seconds, fps = 60, lines = 0, stalls = [], seed = 1 }) {
     for (let s = 0; s < seconds * 1000; s += 1000 / lines) out.push({ gen: s + key, type: 'typing' }, { gen: s + 2 * key, type: 'chat' }, { gen: s + 2 * key, type: 'typing' })
   }
   out.sort((a, b) => a.gen - b.gen)
+  if (hold) {
+    const kept = [], typed = new Set()
+    let probeAt = -Infinity
+    for (const f of out) {
+      const k = stalls.findIndex(([from, len]) => f.gen - from * 1000 > HOLD.QUIET_MS && f.gen < (from + len) * 1000)
+      if (k < 0 || f.type === 'chat') kept.push(f)
+      else if (f.type === 'typing') typed.add(k)
+      else if (f.gen - probeAt >= HOLD.PROBE_MS) { probeAt = f.gen; kept.push(f) }
+    }
+    for (const k of typed) kept.push({ gen: (stalls[k][0] + stalls[k][1]) * 1000, type: 'typing' })
+    out = kept.sort((a, b) => a.gen - b.gen)
+  }
   let last = 0
   for (const f of out) {
     let at = Math.max(last, f.gen + 20 + 150 * r())
@@ -156,6 +173,27 @@ describe('an honest client never loses a frame and is never closed', () => {
   })
   it('over a minute even with the hand at its fastest throughout the stall', () => {
     expect(play(honest({ seconds: 120, lines: 5, stalls: [[30, 65]], seed: 5 })).close).toBe(0)
+  })
+})
+
+describe('a stall longer than the strikes: a 2.0.7 copy holds its movement while the line is quiet; an older copy can be cut', () => {
+  // a stalled TCP connection lives for minutes on Linux, Android and macOS (Linux gives up at about fifteen): a phone in a dead zone
+  it('with the hold: two and a half minutes, five, fifteen, the hand at two lines a second for the first two: never closed', () => {
+    for (const [len, lines] of [[150, 2], [300, 2], [900, 0], [900, 0.5]]) {
+      const frames = honest({ seconds: 60 + len + 60, lines, stalls: [[60, len]], seed: 3, hold: true })
+      const n = play(frames)
+      expect([len, lines, n.close]).toEqual([len, lines, 0])
+      // what the stall handed over in one clump: its first two seconds, a position a second, the typed lines, one typing frame
+      const clump = frames.filter((f) => f.t === (60 + len) * 1000)
+      expect(clump.filter((f) => f.type === 'pos').length).toBeLessThanOrEqual(40 + len)
+      expect(clump.filter((f) => f.type === 'typing').length).toBeLessThanOrEqual(lines * 2 * 3 + 1)
+    }
+    // stall after stall, five minutes each, a second between: never closed
+    const stalls = Array.from({ length: 6 }, (_, i) => [10 + i * 301, 300])
+    expect(play(honest({ seconds: 6 * 301 + 20, lines: 0.5, stalls, seed: 11, hold: true })).close).toBe(0)
+  })
+  it('without it (2.0.6 and older): two and a half minutes of movement alone spends them, and the room closes it 4029', () => {
+    expect(play(honest({ seconds: 60 + 150 + 60, stalls: [[60, 150]], seed: 3 })).close).toBeGreaterThan(0)
   })
 })
 

@@ -10,7 +10,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   createMultiplayerClient, FLOOD_CLOSE, REJOIN, COMEBACK_MS, rejoinDelay, LINE, lineNotice, foldChat, sysText,
-  JOINED_LINE, LEFT_LINE, CAME_BACK_LINE, POS_HZ, posHz, posGapS, SHARED_NAMES,
+  JOINED_LINE, LEFT_LINE, CAME_BACK_LINE, POS_HZ, posHz, posGapS, SHARED_NAMES, HOLD,
 } from '../src/net/client.js'
 import { createEvBus, STATUSES } from '../src/net/evbus.js'
 import { createCacheLedger, cacheKey, isCachePayload, extraFor, cacheSig, HAND_TAKES_KEPT, NAME_CAP_EXEMPT } from '../src/renderer/caches.js'
@@ -405,6 +405,59 @@ describe('stillFor is read when it is asked', () => {
     list(6)
     expect(r.c.getRemotePlayers()[0].stillFor).toBe(0)
     expect(clientSrc).toContain('stillFor: p.stillSince == null ? 0 : Math.max(0, (t - p.stillSince) / 1000)')
+  })
+})
+
+describe('the hold: a line that has said nothing for two seconds sends a position now and then, and its typing waits', () => {
+  it('steady play holds nothing; quiet, one position a second; the room speaks, and every one goes again with the typing it held', async () => {
+    expect(HOLD).toEqual({ QUIET_MS: 2000, PROBE_MS: 1000, BYTES: 1024 })
+    const r = rig()
+    await r.join()
+    const s = r.last()
+    const sent = (type) => s.sent.filter((f) => f.type === type)
+    // the room answers each position with a list (relay.js pushPlayers; a LAN server every 50 ms): nothing is held
+    for (let i = 0; i < 40; i++) { r.c.sendPos(i, 0, 0, 100); players(s, [{ id: 'me1', x: i, y: 0 }]); r.clock.advance(50) }
+    expect(sent('pos').length).toBe(40)
+    // the line stalls: nothing comes back. For two seconds every position still goes, then one a second
+    const stall = (ms) => { for (let k = 0; k < ms / 50; k++) { r.clock.advance(50); r.c.sendPos(k, 1, 0, 100) } }
+    stall(2000)
+    expect(sent('pos').length).toBe(80)                       // 39 inside the two seconds, and the first of the probes
+    stall(10_000)
+    expect(sent('pos').length).toBe(90)                       // ten seconds quiet: ten positions, not two hundred
+    stall(13 * 60_000)                                        // as long as a stalled TCP connection lives (Linux gives up at about 15 min)
+    expect(sent('pos').length).toBe(90 + 13 * 60)
+    // typing waits while it is quiet: only the last one asked for, and only once the line speaks
+    r.c.sendTyping(true); r.c.sendTyping(false); r.c.sendTyping(true)
+    expect(sent('typing')).toEqual([])
+    players(s, [{ id: 'me1' }])
+    expect(sent('typing')).toEqual([{ type: 'typing', on: true }])
+    players(s, [{ id: 'me1' }])
+    expect(sent('typing').length).toBe(1)                     // said once
+    const n = sent('pos').length
+    r.c.sendPos(9, 9, 0, 100); r.c.sendPos(9, 9, 0, 100); r.c.sendTyping(false)
+    expect([sent('pos').length - n, sent('typing').at(-1)]).toEqual([2, { type: 'typing', on: false }])
+  })
+  it('chat and ev frames are never held; a socket with more than a kilobyte waiting holds positions too; a dropped line forgets held typing', async () => {
+    const r = rig()
+    await r.join()
+    const s = r.last()
+    r.clock.advance(5000)                                     // quiet
+    r.c.sendChat('hello'); r.c.sendEv('whistle', { x: 1 })
+    expect(s.sent.map((f) => f.type)).toEqual(['join', 'chat', 'ev'])
+    players(s, [{ id: 'me1' }])
+    s.bufferedAmount = 4096                                   // the socket itself could not hand it on yet
+    r.c.sendPos(1, 1, 0, 100); r.c.sendPos(1, 1, 0, 100); r.c.sendTyping(true)
+    expect(s.sent.filter((f) => f.type === 'pos').length).toBe(1)
+    s.bufferedAmount = 0
+    r.c.sendPos(2, 2, 0, 100)
+    expect(s.sent.filter((f) => f.type === 'pos').length).toBe(2)
+    r.clock.advance(5000)
+    r.c.sendTyping(false)                                     // held by the quiet line ...
+    s.drop()                                                  // ... which drops: it is not carried to the next socket
+    r.clock.advance(1000); const s2 = r.welcome('me2')
+    players(s2, [{ id: 'me2' }])
+    expect(s2.sent.map((f) => f.type)).toEqual(['join'])
+    expect(clientSrc).not.toMatch(/bufferedAmount\s*=/)        // read, never written
   })
 })
 

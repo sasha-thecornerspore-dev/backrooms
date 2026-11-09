@@ -27,6 +27,13 @@
 // when your own line dropped, coming in after you. Keyed by name, here only; nothing about it goes on the wire. Never for the blank name
 // many share (SHARED_NAMES, as caches.js NAME_CAP_EXEMPT): one 'wanderer' leaving and another arriving are two people. And a name the room
 // lists is not gone: the list after your own rejoin holds those who never left, and the room never says 'joined' of them.
+//
+// The hold: a room answers every position with a players list (a LAN server sends one every 50 ms), so a line that has said nothing for
+// HOLD.QUIET_MS has most likely stalled, and whatever is written into a stalled socket arrives in one clump when it clears — a clump the
+// room's pace refuses and, past its strikes, closes 4029. So while it is quiet (or the socket's own buffer holds more than HOLD.BYTES) a
+// position goes at most once every HOLD.PROBE_MS — the next one replaces it anyway, and the room's answer to it ends the hold — and a typing
+// frame waits: the last one asked for goes as soon as the line speaks again. Chat and ev frames are never held. Fewer of the same frames:
+// nothing new on the wire.
 
 // the room closed this socket for flooding it (relay/relay.js and server/index.js close with the same code, reason 'too fast')
 export const FLOOD_CLOSE = 4029
@@ -41,6 +48,9 @@ export const COMEBACK_MS = 90_000
 // the blank name many strangers share (index.html getName's default, the relay's and the LAN server's): never one friend's line
 export const SHARED_NAMES = Object.freeze(['wanderer'])
 const named = (n) => typeof n === 'string' && n !== '' && !SHARED_NAMES.includes(n)
+
+// the hold (above): quiet this long, a position at most once every PROBE_MS and typing held; or more than BYTES waiting in the socket
+export const HOLD = Object.freeze({ QUIET_MS: 2000, PROBE_MS: 1000, BYTES: 1024 })
 
 // the room's people lines (chat-sys: '— maddie no-clipped away.'); CAME_BACK_LINE joins its name with no space: '— maddie's line came back.'
 export const JOINED_LINE = 'entered the level.'
@@ -147,6 +157,8 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
   // name → when it left (a 'left', or in the room when my own line dropped); never a shared name, never a name the room lists
   const goneAt = new Map()
   const GONE_MAX = 64
+  // the hold: when the socket last said anything, when a held position last went, the typing state a quiet line held back (null: none)
+  let heardAt = -Infinity, probeAt = -Infinity, typingHeld = null
 
   const ARRIVAL_WAIT_MS = 400
   const STILL_EPS = 0.02
@@ -180,6 +192,7 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
     connected = false; remotePlayers.clear()
     evEarly.length = 0
     goneAt.clear()
+    typingHeld = null
     arrivalV = null
     if (arrivalTimer) { clearT(arrivalTimer); arrivalTimer = null }
     joinArgs = { roomId: String(roomId), worldSeed, name: selfName }
@@ -218,6 +231,8 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
 
     sock.onmessage = ({ data }) => {
       if (!mine()) return
+      heardAt = now()                              // the line speaks: the hold is over, and a typing frame it held goes now
+      if (typingHeld !== null && connected) { const on = typingHeld; typingHeld = null; try { sock.send(JSON.stringify({ type: 'typing', on })) } catch {} }
       let msg
       try { msg = JSON.parse(data) } catch { return }
       if (!msg || typeof msg !== 'object') return
@@ -310,6 +325,7 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
     const t = now()
     for (const p of remotePlayers.values()) if (p) noteGone(p.name, t)
     remotePlayers.clear()
+    typingHeld = null
     if (!evCbs.length) evEarly.length = 0
     if (arrivalV == null) settleArrival('walked')
     if (code === FLOOD_CLOSE) { flood(); return }
@@ -359,8 +375,13 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
     return true
   }
 
+  // the hold (above): the line has said nothing for QUIET_MS, or the socket has more than BYTES it could not hand on yet
+  const held = () => now() - heardAt > HOLD.QUIET_MS || (Number(ws?.bufferedAmount) || 0) > HOLD.BYTES
+
   function sendPos(x, y, angle, hp) {
-    if (ws && connected) { try { ws.send(JSON.stringify({ type: 'pos', x, y, angle, hp })) } catch {} }
+    if (!ws || !connected) return
+    if (held()) { const t = now(); if (t - probeAt < HOLD.PROBE_MS) return; probeAt = t }   // one now and then: the room's answer ends it
+    try { ws.send(JSON.stringify({ type: 'pos', x, y, angle, hp })) } catch {}
   }
 
   function sendChat(text) {
@@ -371,7 +392,10 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
   }
 
   function sendTyping(on) {
-    if (ws && connected) { try { ws.send(JSON.stringify({ type: 'typing', on: !!on })) } catch {} }
+    if (!ws || !connected) return
+    if (held()) { typingHeld = !!on; return }   // the last one asked for goes when the line speaks again (onmessage)
+    typingHeld = null
+    try { ws.send(JSON.stringify({ type: 'typing', on: !!on })) } catch {}
   }
 
   // one generic relayed event; opts carries keep/drop for the server's log
@@ -407,6 +431,7 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
     try { s?.close() } catch {}
     remotePlayers.clear()
     evEarly.length = 0
+    typingHeld = null
     if (arrivalTimer) { clearT(arrivalTimer); arrivalTimer = null }
     line = 'off'
   }
