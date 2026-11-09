@@ -45,6 +45,7 @@ import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, 
 import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
 import { createCard, CARD_KEYS, readText, REDACTED_FOOT } from './papercard.js'
 import { createEvBus } from '../net/evbus.js'
+import { LINE, lineNotice, foldChat, sysText, posGapS } from '../net/client.js'
 import { intake, filingLine, formText, FORM_FOOT, parseIntakeCommand, normaliseIntakeCtx, identityOut, identityIn } from './origin-intake.js'
 import { rulesFor, LEGACY } from './origin-rules.js'
 import { DOOR_SANITY, isSealedMaterial, doorLine, facingCell } from './origin-tenant.js'
@@ -317,6 +318,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let hurt       = 0    // red-flash intensity
   let regenDelay = 0    // seconds before hp regen resumes
   let netTimer   = 0    // throttles position updates to the server (~20Hz)
+  // the movement send rate: world.json net.posHz (the owner's switch, 5..20 a second, default 20 — client.js posHz), read once per run.
+  // At 20 the gap is 0.05 s, as it always was; /play/ fetches world.json network-first, the desktop app carries its own copy
+  const POS_GAP_S = posGapS(base.net)
   let flashlight = true // the player's own light (toggle with L)
   let sanity     = 100  // the dark and the things eat at it; light + friends restore it
   let sanWhisperT = 0
@@ -1374,11 +1378,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (note) {
         const cx = Math.floor(r.x), cy = Math.floor(r.y), ck = cacheKey(level.index, cx, cy)
         r.item.cacheKey = ck                                  // the live record: getDropped exports it, levelmem keeps it
-        const old = ledger.place({ key: ck, lvl: level.index, cx, cy, id: myId(), name: myName(), t: playT })
+        // the frame the room hears, and what the ledger knows it by (a rejoin's replay of it is the one already lying here: ledger.isEcho)
+        const p = { lvl: level.index, cx, cy, x: r.x, y: r.y, type: t, ex: exOf(r.item), ph: note.ph, oct: note.oct }
+        const old = ledger.place({ key: ck, lvl: level.index, cx, cy, id: myId(), name: myName(), t: playT, p })
         if (old.replaced) removeCache(old.replaced)
         for (const e of old.evicted) removeCache(e)
         ledger.bind(ck, r.item.key)
-        relayLater('cache', { lvl: level.index, cx, cy, x: r.x, y: r.y, type: t, ex: exOf(r.item), ph: note.ph, oct: note.oct }, { keep: ck })
+        relayLater('cache', p, { keep: ck })
       }
       showMessage(t === 'radio' && r.item.on ? 'you set the radio down, still talking. let it talk.'
                 : t === 'glowstick'          ? 'you leave the green light where it lies.'
@@ -1410,10 +1416,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const escapeHtml = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
   const nameColor = (n) => { let h = 0; for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0; return `hsl(${h % 360} 72% 68%)` }
   const chatLines = []
+  // a friend's 'no-clipped away.' answered by their line coming back reads as that one line (client.js foldChat / sysText: "— maddie's
+  // line came back.")
   function renderChat() {
     if (!chatLogEl) return
-    chatLogEl.innerHTML = chatLines.map(l => {
-      if (l.sys) return `<div class="chat-sys">— ${escapeHtml(l.from)} ${escapeHtml(l.text)}</div>`
+    chatLogEl.innerHTML = foldChat(chatLines).map(l => {
+      if (l.sys) return `<div class="chat-sys">${escapeHtml(sysText(l.from, l.text))}</div>`
       if (l.text.startsWith('/me ')) return `<div class="chat-me" style="color:${nameColor(l.from)}">✦ ${escapeHtml(l.from)} ${escapeHtml(l.text.slice(4))}</div>`
       return `<div class="chat-line"><b style="color:${nameColor(l.from)}">${escapeHtml(l.from)}</b> ${escapeHtml(l.text)}</div>`
     }).join('')
@@ -1482,8 +1490,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       // Kneeling, the terminal waits, and says so, as it does lying down (openTerm), rather than drop the word
       if (termWord(t)) { closeChat(); if (mapOpen) closeMap(); if (!openTerm(t) && kneel.st) showMessage(TERM.NOT_STANDING); return }
       if (t.startsWith('/') && !t.startsWith('/me ')) handleCommand(t)   // the field console
-      else if (t && mpClient) mpClient.sendChat(t)
-      else if (t) showMessage('no one is here to hear it.')
+      else if (t && mpClient && mpClient.isConnected()) mpClient.sendChat(t)
+      else if (t) showMessage('no one is here to hear it.')                  // alone, or the line is dead: nothing leaves
       closeChat()
     }
     else if (e.code === 'Escape') closeChat()
@@ -1817,10 +1825,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // (never this object) is checked exactly as evKinds says
   const kneelOut = { to: '' }, wokeOut = { by: '' }
   const callOut = { x: 0, y: 0, lvl: 0, c: true }   // your whistle on the wire: one reused payload (sendEv serialises it at once)
+  // live: while the line is down nothing is sent and nothing spent — a take waits in the outbox for the line to come back, the heartbeat
+  // keeps its change for that moment, and a cache with a word waits in your hands (cacheReady)
   const bus = mpClient ? createEvBus({
     send: mpClient.sendEv, now: () => performance.now(),
     self: () => { selfPos.x = player.x; selfPos.y = player.y; selfPos.lvl = level ? level.index : 0; return selfPos },
-    peerPos, peerIds: () => peerIdSet, selfId: () => mpClient.id, mergeRemote: mpClient.mergeRemote,
+    peerPos, peerIds: () => peerIdSet, selfId: () => mpClient.id, mergeRemote: mpClient.mergeRemote, live: mpClient.isConnected,
   }) : null
   if (bus) {
     // a friend's floor change is a people line: 'no-clipped deeper.' / 'climbed back.' / 'fell in.' (none when the depth held)
@@ -1861,7 +1871,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     bus.on('cache', ({ id, name, payload: p, replay }) => {
       if (!replay && bus.fresh(id) && bus.peers.get(id).lvl !== p.lvl) return   // live: set down on the floor their 'here' says they stand on
       const key = cacheKey(p.lvl, p.cx, p.cy), here = level != null && p.lvl === level.index   // before the first floor: it waits for its floor
-      const r = ledger.place({ key, lvl: p.lvl, cx: p.cx, cy: p.cy, id, name, t: playT, pending: here ? null : { x: p.x, y: p.y, type: p.type, extra: extraFor(p, id, name, key) } })
+      // the relay's replay of a cache the ledger already holds (your own, handed back under your old id after a rejoin; one waiting for its
+      // floor; one you carried off while the line was dead): it is laid once, and what lies there keeps its clocks
+      if (replay && ledger.isEcho(key, id, name, p)) return
+      const r = ledger.place({ key, lvl: p.lvl, cx: p.cx, cy: p.cy, id, name, t: playT, p, pending: here ? null : { x: p.x, y: p.y, type: p.type, extra: extraFor(p, id, name, key) } })
       if (r.replaced) removeCache(r.replaced)
       for (const e of r.evicted) removeCache(e)
       if (here) {
@@ -1920,6 +1933,35 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     selfFile.status = file.status; selfFile.aseed = myPinTag; selfFile.origin = origin; selfFile.thin = thin
     return hereObj
   }
+  // ── the line (client.js onLine): a room's connection dropping under you is said once (#msg), and held in a plate in the chat stack until
+  //    it is back — the dead line, how the tries go, and the one press that calls it back: R, or a tap on the plate (a touch screen's own
+  //    way, above the discs). The client spaces its own tries meanwhile, the same room under the same name; after four minutes it stops,
+  //    and the press still works. A flood close is its own plate, with no press: the room asked not to be called again so soon. While the
+  //    line is down the bus sends nothing (its live dep): a take waits in the outbox and goes once the line is back, behind the relay's
+  //    replay, which the ledger knows (isEcho). Solo there is no line, and nothing here runs ──
+  const lineEl = document.getElementById('line-notice')
+  const lineDown = () => { const s = mpClient ? mpClient.lineState() : 'off'; return s === 'retrying' || s === 'gave-up' }
+  function renderLine() {
+    if (!lineEl || !mpClient) return
+    const rows = lineNotice(mpClient.lineState(), isTouchDevice())
+    lineEl.textContent = ''
+    if (rows) for (const r of rows) { const d = document.createElement('div'); d.textContent = r; lineEl.appendChild(d) }
+    lineEl.hidden = !rows
+  }
+  // the one press: the client starts its spacing over and tries at once (a try already under way is that try)
+  function callLineBack() { if (lineDown() && mpClient.rejoinNow()) renderLine() }
+  if (mpClient) {
+    lineEl?.addEventListener('click', (e) => { e.preventDefault(); callLineBack() })
+    mpClient.onLine((state) => {
+      if (state === 'dropped') showMessage(LINE.DEAD, PRIO.interaction)
+      else if (state === 'back') { showMessage(LINE.BACK, PRIO.interaction); bus?.here(hereFields()) }
+      else if (state === 'flood') showMessage(LINE.FLOOD, PRIO.interaction)
+      renderLine()
+    })
+    if (lineDown()) showMessage(LINE.DEAD, PRIO.interaction)   // it dropped while the world was still loading
+    renderLine()
+  }
+
   // the friends on this floor who could come for you: fresh, and not lying down themselves (two down together each die as they fell)
   function friendsUp() {
     if (!bus) return 0
@@ -2947,6 +2989,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // the terminal, ` and Esc never reach here (the input keeps its keys): these fold it when the focus has wandered off the input
     if (K['Backquote']) { K['Backquote'] = false; if (termOpen) closeTerm(); else openTerm() }
     if (termOpen && K['Escape']) { K['Escape'] = false; closeTerm() }
+    // R calls a dropped line back (its plate says so): one press, only while a room's line is down. No verb has R, and solo leaves it be
+    if (mpClient && K['KeyR']) { K['KeyR'] = false; callLineBack() }
 
     // Esc gets up from beside the friend you knelt by (before the map can read it)
     if (kneel.st && K['Escape']) { K['Escape'] = false; stopKneel(null) }
@@ -2980,7 +3024,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
           // moment) and the room is told it is gone. The page count never moves: a cache is not a page
           if (res.ok && res.item.cacheKey) {
             if (!isMine(res.item)) sanity = Math.min(100, sanity + 4)
-            ledger.take(res.item.cacheKey)
+            ledger.take(res.item.cacheKey, true)                      // by hand: a replay of it after a rejoin is not laid down again
             relayLater('take', { key: res.item.cacheKey }, { drop: res.item.cacheKey })
             if (res.item.ph >= 0 || res.item.oct >= 0) openCard('read', readText(isMine(res.item) ? 'you left this.' : (res.item.by ?? 'wanderer'), res.item.ph >= 0 ? PHRASES[res.item.ph] : '', arrowFor(res.item.oct, player.angle)))
           }
@@ -3140,7 +3184,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       compassEl.style.opacity = (compassOut.length === 0 || nearExit) ? '0' : '1'
     }
     netTimer += dt
-    if (mpClient?.isConnected() && netTimer >= 0.05) { netTimer = 0; mpClient.sendPos(player.x, player.y, player.angle, player.hp) }
+    if (mpClient?.isConnected() && netTimer >= POS_GAP_S) { netTimer = 0; mpClient.sendPos(player.x, player.y, player.angle, player.hp) }
     // the people: the roster and this floor's remote players, once; then the bus's tick (new / gone / stale peers, the 3 s heartbeat) and
     // 'here' about once a second (the bus sends only a change, or the 3 s beat)
     fillRemotes()
