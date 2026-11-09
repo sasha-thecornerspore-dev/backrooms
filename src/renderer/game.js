@@ -81,6 +81,10 @@ import { STATUSES } from './status.js'
 import { DRAWER_NOTES } from './containers.js'
 import { KINDS } from './film.js'
 import { FIRST_SOUL, FIRST_ROOM, DONE as THREAD_DONE } from './firstrun.js'
+// the crew (crew.js): /who, a friend re-filed, a friend from your square, in words; the body in words; a friend's whistle on the sheet
+import { whoLines, createCrewWatch } from './crew.js'
+import { BODY_LINE } from './origin-anchored.js'
+import { CALL_MARK_MS, CALL_REDRAW_MS } from './fogmap.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -353,6 +357,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── the map (fogmap.js / sightpins.js / mapcard.js / compass.js): the pencil sheet of what you walked and saw, held not modal ──
   const fog = createFogMap()
   let mapOpen = false, mapEverOpened = false, lastLostMsg = -Infinity
+  // a friend's whistle on the sheet (fogmap.js markCall): until when the newest mark still shows, and when the card last redrew for its
+  // fade (the performance.now() ms clock the roll call keeps)
+  let callMarkUntil = 0, callDrawnAt = -Infinity
   const compassOut = []                       // compassLines' reused two-slot output (its line objects live on compassOut.slots)
   let lastCompassAngle = NaN, lastWayCount = -1, lastCompassText = null, lastCellIx = NaN, lastCellIy = NaN
   // the faint pull, per visit (compass.js pullVisible / pullWobble): when the visit began, whether the floor has given you a hint (a page
@@ -714,7 +721,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const messages = [
       ...(cfg.messages || []),
       cfg.exit?.hint,
-      ...(anchor ? [`your body remains at ${formatAnchor(anchor)}.`, 'you are very far from your body now.'] : []),
+      ...(anchor ? [BODY_LINE, 'you are very far from your body now.'] : []),     // the body in words, never the pin (origin-anchored.js)
     ].filter(Boolean)
     murmurBag = createBag(messages.length)   // a bag, not a coin: no line again before the rest, never one twice running (events.js)
 
@@ -1239,7 +1246,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── the map card (mapcard.js): the pencil sheet over the lower view. HELD, NOT MODAL — the pointer lock stays, the loop gates the pace
   //    and the verbs, a hit folds it. A tap on the card (touch) or on the paper corner #map-tab reads as Tab, so every way of folding it
   //    runs through the one K['Tab'] edge in the loop; touchstart's preventDefault keeps the synthesized click from firing a second one. ──
-  const mapCard = createMapCard(document, { fog, getLevel: () => level, getPlayer: () => player, onTap: () => { K['Tab'] = true } })
+  const mapCard = createMapCard(document, { fog, getLevel: () => level, getPlayer: () => player, onTap: () => { K['Tab'] = true }, now: () => performance.now() })
   // body.map-open lifts the centre message over the sheet (index.html): #msg sits at 34%, the card rises from 38vh, so a line said while
   // you read the map ('you start drawing...', 'the hole is not where you drew it.') was cut in half by the paper
   function closeMap() { mapCard.close(); mapOpen = false; document.body.classList.remove('map-open') }
@@ -1585,11 +1592,26 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         pinWarned = inv.warned
         if (!inv.url) { showMessage(inv.say, PRIO.discovery); return }
         document.dispatchEvent(new CustomEvent('backrooms:invite', { detail: { url: inv.url, say: (t) => showMessage([inv.say, t, inv.url].filter(Boolean).join('\n'), PRIO.discovery) } }))
-      } else showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status or /invite.')
+      } else if (cmd === 'who') {
+        // the room in words (crew.js whoLines): you, then each friend — the floor by its name (none for a friend on the block), the word
+        // the file has them under; solo, that no one else is. On the block nothing new is said: the file holds nothing from there
+        showMessage(level?.cfg.map ? TERM.WHERE_NONE : whoLines(crewRoster(), { id: mpClient?.id ?? null, lvl: level ? level.index : null, status: file.status }).join('\n'))
+      } else showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.')
     } catch (e) {
       // desktop: a fetch that never reached the site (offline, DNS, blocked) says so plainly
       consoleFailed(e)
     }
+  }
+  // the people /who lists (crew.js whoLines): the players list as this frame read it (fillRemotes' roster, peerRec), with the floor and the word
+  // only where the bus has a fresh heartbeat for them (an older copy, or a friend gone quiet, is listed and not placed). Built for the one
+  // command typed, never per frame
+  function crewRoster() {
+    const out = []
+    for (const rp of peerRec.values()) {
+      const p = bus && bus.fresh(rp.id) ? bus.peers.get(rp.id) : null
+      out.push({ id: rp.id, name: rp.name, lvl: p ? p.lvl : null, status: p ? p.status : null })
+    }
+    return out
   }
   // the console's two failures, the same from the line and the terminal
   function consoleFailed(e) {
@@ -1851,6 +1873,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       addChatLine(name || 'someone', `whistles · ${bearingLabel(dx, dy, player.angle)}`, true)
       rollcall.hear(id, name, p.x, p.y, now)
       if (dist > FAR_BONUS.cells && rollcall.farBonusOk(id, now)) { sanity = Math.min(100, sanity + FAR_BONUS.sanity); company.add(FAR_BONUS.company) }
+      // and a faint pencil mark on your sheet where they stood (fogmap.js markCall): this floor's, fading out over CALL_MARK_MS, one a
+      // friend (the newest call moves it). Never on the block (it keeps no sheet), never your own (the bus hands you none of yours)
+      if (!level.cfg.map && fog.markCall(level.index, id, p.x, p.y, now)) { callMarkUntil = now + CALL_MARK_MS; if (mapOpen) mapCard.cellsDirty() }
     })
     // a friend kneels by you while you are down: their eighth tick (not before 4 s) counts you back — where you fell, never through die()
     bus.on('kneel', ({ id }) => { if (down.st === 'down' && down.kneelTick(id) === 'woken') wakeUp(id) })
@@ -1965,6 +1990,15 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     renderLine()
   }
 
+  // the crew's people lines (crew.js createCrewWatch, on the bus's reading of each friend's heartbeat — nothing more is sent): a friend
+  // re-filed under a new word ('— ada re-filed under litigation.'; never their first heartbeat), and, once a session, a friend whose pin's
+  // square is yours ('— ada came in from your square.': the film's own rule, the room's own square too). Nothing about yourself, nothing
+  // about a friend on the block, nothing to you while you stand on it
+  const crewWatch = createCrewWatch()
+  bus?.onPeerFile((e) => {
+    const lines = crewWatch.heard(e, { selfId: mpClient.id, selfTag: myPinTag, onBlock: !level || !!level.cfg.map })
+    for (let i = 0; i < lines.length; i++) addChatLine(e.name || 'someone', lines[i], true)
+  })
   // the friends on this floor who could come for you: fresh, and not lying down themselves (two down together each die as they fell)
   function friendsUp() {
     if (!bus) return 0
@@ -3146,6 +3180,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if (mapOpen) mapCard.cellsDirty()
       }
       if (mapOpen) mapCard.angleDirty(player.angle)
+    }
+    // a friend's whistle mark fades while the sheet is up: its strokes are redrawn once a CALL_REDRAW_MS while a mark shows, and once more
+    // as the last one goes (two number compares a frame otherwise)
+    if (mapOpen && callMarkUntil > 0) {
+      const t = performance.now()
+      if (t - callDrawnAt >= CALL_REDRAW_MS) { callDrawnAt = t; mapCard.cellsDirty(); if (t >= callMarkUntil) callMarkUntil = 0 }
     }
     // ── dread (dread.js): on its own 4 Hz clock, so it stays live while you stand still. While something that could count stands within
     //    reach in a straight line, the field is flooded from your cell (only the chunks preload just held; at once when the gate opens,

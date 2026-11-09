@@ -13,6 +13,12 @@ import { WAY_KINDS, waysFor } from './topology.js'
 export const CELL_BYTES = 61                                  // ceil(22 * 22 / 8)
 export const MAX_CHUNKS = 400                                 // per level: ~24 KB of bits, then the farthest chunk goes
 export function revealRadius(level) { return level <= 1 ? 3 : 2 }
+// a friend's whistle, pencilled where they stood: it fades out over CALL_MARK_MS (on the caller's ms clock), one mark a friend, at most
+// CALL_MAX a floor. Never on the block (level 4 keeps no sheet), never saved (export() does not know them), no number on the sheet
+export const CALL_MARK_MS = 60000
+export const CALL_REDRAW_MS = 1000                            // how often the card redraws a fading mark while it is up (game.js)
+export const CALL_MAX = 8
+const BLOCK = 4
 
 const N = CHUNK_SIZE
 const MAX_R = 3                                               // the flood's scratch arrays are sized for this
@@ -82,6 +88,7 @@ export function createFogMap() {
   let lastLevel = null, lastIx = NaN, lastIy = NaN
   let tick = 0                                                // pin order: the t of the next pin
   let mL = null, mcx = NaN, mcy = NaN, mrec = null            // the chunk the flood is marking into
+  const calls = new Map()                                     // level -> Map(key -> { x, y, t }): friends' whistle marks, kept apart from the pins
 
   function levelOf(level) {
     let L = levels.get(level)
@@ -287,6 +294,34 @@ export function createFogMap() {
     return out
   }
 
+  // a friend's whistle at (x, y) on `level`, heard at t (ms): one mark per key (the friend's id; a newer call moves it), the oldest going
+  // past CALL_MAX. -> whether it was marked (never on the block, never a mark without a place or a time)
+  function markCall(level, key, x, y, t) {
+    if (!Number.isInteger(level) || level < 0 || level === BLOCK || typeof key !== 'string' || !key) return false
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(t)) return false
+    let M = calls.get(level)
+    if (!M) { M = new Map(); calls.set(level, M) }
+    M.delete(key)                                             // re-inserted: the Map's order is the calls' age
+    M.set(key, { x, y, t })
+    while (M.size > CALL_MAX) M.delete(M.keys().next().value)
+    return true
+  }
+
+  // the marks still on `level` at t, each handed to fn(x, y, a) — a, how much of its pencil is left (1 fresh, falling to 0 at CALL_MARK_MS)
+  // — oldest first; the ones gone by t are forgotten here. -> how many were handed over
+  function eachCall(level, t, fn) {
+    const M = calls.get(level)
+    if (!M || !Number.isFinite(t)) return 0
+    let n = 0
+    for (const [k, c] of M) {
+      const age = t - c.t
+      if (age >= CALL_MARK_MS) { M.delete(k); continue }
+      n++
+      if (fn) fn(c.x, c.y, age <= 0 ? 1 : 1 - age / CALL_MARK_MS)
+    }
+    return n
+  }
+
   function exportMap() {
     const out = {}
     for (const [level, L] of levels) {
@@ -305,7 +340,7 @@ export function createFogMap() {
 
   // replaces the map; false when anything had to be refused (that entry is skipped, the rest is kept)
   function importMap(obj) {
-    levels.clear()
+    levels.clear(); calls.clear()
     lastLevel = null; lastIx = NaN; lastIy = NaN; trailN = 0; tick = 0; mL = null; mrec = null
     if (!obj || typeof obj !== 'object') return false
     let ok = true
@@ -347,19 +382,22 @@ export function createFogMap() {
     return ok
   }
 
-  return { step, pinWay, pinThing, has, pins, ways, arrivedPin, countWays, isStale, markLost, checkStale, lastTrail, export: exportMap, import: importMap, chunkAt, walked }
+  return { step, pinWay, pinThing, has, pins, ways, arrivedPin, countWays, isStale, markLost, checkStale, lastTrail, export: exportMap, import: importMap, chunkAt, walked,
+    markCall, eachCall }
 }
 
 // The window the card draws: `cells` x `cells` cells centred on the player's cell. cells / fresh are Int16Array pairs of WINDOW-relative
 // (dx, dy); dim[i] = 1 when cells[i] lies in a faded chunk; faded = the faded chunk keys in the window; pins = the pin records in the
-// window; counts = { walked (set bits in the window), total (set bits on the floor), down, up, lift, ring }. Pass opts.out to reuse the
-// view and its arrays (same size).
+// window; counts = { walked (set bits in the window), total (set bits on the floor), down, up, lift, ring }; calls[0..nCalls) = the friends'
+// whistle marks in the window at opts.now (ms, the clock markCall was handed; none without it), as { x, y, a } records reused across views.
+// Pass opts.out to reuse the view and its arrays (same size).
 export function buildMapView(fog, level, player, opts = {}) {
   const size = opts.cells ?? 56
   const cap = size * size
   let v = opts.out
   if (!v || v.size !== size) {
-    v = { ox: 0, oy: 0, size, px: 0, py: 0, angle: 0, cells: new Int16Array(2 * cap), n: 0, dim: new Uint8Array(cap), fresh: new Int16Array(2 * cap), nFresh: 0, faded: new Set(), pins: [], counts: { walked: 0, total: 0, down: 0, up: 0, lift: 0, ring: 0 } }
+    v = { ox: 0, oy: 0, size, px: 0, py: 0, angle: 0, cells: new Int16Array(2 * cap), n: 0, dim: new Uint8Array(cap), fresh: new Int16Array(2 * cap), nFresh: 0, faded: new Set(), pins: [], counts: { walked: 0, total: 0, down: 0, up: 0, lift: 0, ring: 0 },
+      calls: [], nCalls: 0 }
   }
   const half = size >> 1
   const pix = Math.floor(player.x), piy = Math.floor(player.y)
@@ -396,6 +434,17 @@ export function buildMapView(fog, level, player, opts = {}) {
   for (const p of allPins.values()) {
     const dx = Math.floor(p.x) - v.ox, dy = Math.floor(p.y) - v.oy
     if (dx >= 0 && dx < size && dy >= 0 && dy < size) v.pins.push(p)
+  }
+  v.nCalls = 0
+  if (!v.calls) v.calls = []
+  if (Number.isFinite(opts.now) && typeof fog.eachCall === 'function') {
+    fog.eachCall(level, opts.now, (x, y, a) => {
+      const dx = Math.floor(x) - v.ox, dy = Math.floor(y) - v.oy
+      if (dx < 0 || dx >= size || dy < 0 || dy >= size) return
+      const c = v.calls[v.nCalls] ?? (v.calls[v.nCalls] = { x: 0, y: 0, a: 0 })
+      c.x = x; c.y = y; c.a = a
+      v.nCalls++
+    })
   }
 
   const cw = fog.countWays(level)

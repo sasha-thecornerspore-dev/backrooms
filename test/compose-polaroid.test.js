@@ -62,18 +62,18 @@ describe('(1) a friend in frame', () => {
     ]
     for (const [over, tail] of cases) {
       const r = polaroidCaption(mkCtx({ subject: setSubject(over), anchor: ANCHOR, pinTag: PIN, index: 3, depth: 3, sanity: 10 }))   // finalizing: no letter
-      expect(r.cap).toBe('the film develops maddie. ' + tail)
+      expect(r.cap).toBe('the film develops maddie. ' + tail + ' filed under notice mailed.')   // 2.0.7: and the word their file is under
       expect(r.glyphAdvance).toBe(false)
       expect(r.emitPhoto).toEqual({ of: 'p7', x: 3.5, y: 4.5, lvl: 0 })
       expect(r.sanity).toBe(8)
     }
     // without an anchor of your own a pin never matches; nor does a raw seed (a 2.0.0 copy's 'here') held against your tag
-    expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: anchorSeed(ANCHOR.lat, ANCHOR.lng), origin: 'tenant' }), anchor: ANCHOR, pinTag: PIN, sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here.')
-    expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: PIN, origin: 'tenant' }), sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here.')
+    expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: anchorSeed(ANCHOR.lat, ANCHOR.lng), origin: 'tenant' }), anchor: ANCHOR, pinTag: PIN, sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here. filed under notice mailed.')
+    expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: PIN, origin: 'tenant' }), sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here. filed under notice mailed.')
   })
   it('a letter develops beside them only when the claim develops', () => {
     const r = polaroidCaption(mkCtx({ subject: setSubject({ origin: 'tenant' }), photoIdx: 2 }))
-    expect(r.cap).toBe('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here. one letter developed beside them: "a".')
+    expect(r.cap).toBe('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here. filed under notice mailed. one letter developed beside them: "a".')
     expect(r.glyphAdvance).toBe(true)
     const un = polaroidCaption(mkCtx({ rules: rulesFor('unnamed', false), subject: setSubject({ origin: 'tenant' }), photoIdx: 2 }))
     expect(un.glyphAdvance).toBe(false)
@@ -81,9 +81,28 @@ describe('(1) a friend in frame', () => {
   })
   it("a downed friend: 'where they fell. they are counted.', never a letter", () => {
     const r = polaroidCaption(mkCtx({ subject: setSubject({ st: 'down', origin: 'tenant' }), status: 'litigation', mods: statusMods('litigation') }))
-    expect(r.cap).toBe('the film develops maddie, where they fell. they are counted.')
+    expect(r.cap).toBe('the film develops maddie, where they fell. they are counted. filed under notice mailed.')
     expect(r.glyphAdvance).toBe(false)
     expect(r.emitPhoto).toEqual({ of: 'p7', x: 3.5, y: 4.5, lvl: 0 })
+  })
+  it('2.0.7 (decision 6): the film names the word their file is under — after what it shows of them, before a letter; never on the block', () => {
+    for (const st of STATUSES) {
+      const r = polaroidCaption(mkCtx({ subject: setSubject({ origin: 'tenant', status: st }), photoIdx: 2 }))
+      expect(r.cap).toBe(`the film develops maddie. there is an address under them: woodyear st. the street goes on. not here. filed under ${st.replace('-', ' ')}. one letter developed beside them: "a".`)
+      const down = polaroidCaption(mkCtx({ subject: setSubject({ st: 'down', status: st }) }))
+      expect(down.cap).toBe(`the film develops maddie, where they fell. they are counted. filed under ${st.replace('-', ' ')}.`)
+      // every line the film already had is still its prefix, byte for byte
+      expect(r.cap.startsWith('the film develops maddie. ' + 'there is an address under them: woodyear st. the street goes on. not here.')).toBe(true)
+    }
+    // a word the file has no such word for says nothing more (the bus never believes one; the film does not either)
+    expect(polaroidCaption(mkCtx({ subject: setSubject({ origin: 'tenant', status: 'king' }), sanity: 10 })).cap).toBe('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here.')
+    // the block keeps what it said: a friend photographed on ∅ is developed as they were, with no word
+    const block = polaroidCaption(mkCtx({ subject: setSubject({ origin: 'tenant', status: 'litigation' }), index: 4, depth: 0, lvl: 4, sanity: 100 }))
+    expect(block.cap).not.toMatch(/filed under/)
+    expect(block.cap.startsWith('the film develops maddie. there is an address under them: woodyear st. the street goes on. not here.')).toBe(true)
+    // the friend's pin: the same rule the room's square line reads (crew.js squareMatch) — the room's own square (mark 0) included
+    expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: 0, origin: 'tenant' }), pinTag: 0, sanity: 10 })).cap).toBe('the film develops maddie. the film shows your pin. filed under notice mailed.')
+    expect(polaroidCaption(mkCtx({ subject: setSubject({ aseed: 0, origin: 'tenant' }), pinTag: null, sanity: 10 })).cap).not.toMatch(/your pin/)
   })
   it('the record is read inside the call: mutating it afterwards changes nothing returned', () => {
     const r = polaroidCaption(mkCtx({ subject: setSubject({ origin: 'tenant' }), lvl: 2 }))

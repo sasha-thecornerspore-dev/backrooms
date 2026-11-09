@@ -31,6 +31,14 @@ export const ROOM_PIN_DOOR = "this room was drawn from your pin itself, by an ol
 // the PLAY ONLINE box, before ENTER, with a pin in the field (index.html): the relay keeps a new room's world the moment it is drawn, so
 // the chat's line comes too late to change your mind
 export const ROOM_PIN_AHEAD = "a room you open with this pin is drawn from its neighbourhood and kept for good. anyone with the code can see which square kilometre — to someone who already has a few of your addresses, that is the door."
+// and a JOINER who brings a pin, before JOIN (index.html: the invite's plate, JOIN LAN, and the PLAY ONLINE box beside the line above,
+// since a code may already have a room behind it): their 'here' carries the neighbourhood's mark (anchor.js pinTag) from the first beat,
+// so the chat's line on arrival (ROOM_PIN_MARK, or ROOM_PIN_LINE from the room's own square) comes after the others have it. Said as
+// ROOM_PIN_MARK says it: anyone in the room can read the square from the mark and the room's own seed, with a little more to go on
+export const ROOM_PIN_JOIN = "a room you join with this pin hands the others a mark of its neighbourhood — with marks from two rooms, or a guess at your city, enough to find which square kilometre. to someone who already has a few of your addresses, that is the door."
+// the anchor field's own line, once a pin is read (index.html): in words — the field shows what was pasted, and a phone's short link has
+// no numbers in it to begin with, so the line under it never says them (the solo seed's four decimals are the door to about 11 m)
+export const ANCHORED_LINE = 'anchored — you will fall through that place.'
 
 // a room code as the relay will see it: text, no control characters, trimmed, at most 32; nothing -> null. The case is kept: the relay's
 // room name is case-sensitive, so lowering it would split a room in two

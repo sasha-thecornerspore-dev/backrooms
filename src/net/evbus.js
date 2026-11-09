@@ -85,7 +85,7 @@ export function createEvBus(deps) {
   const lastIn = new Map()       // id → Map(kind → t)
   const nonces = new Map()       // id → {set, q}
   const peers = new Map()        // id → {id, name, lvl, lit, st, seen, o, thin, status, aseed, seenAt, legacy}
-  const floorCbs = [], roomCbs = []
+  const floorCbs = [], roomCbs = [], fileCbs = []
   const standing = { 'notice-mailed': 0, extension: 0, compliance: 0, litigation: 0, total: 0 }
   const onFloorList = []         // reused: fresh peers on my floor
   let nOut = 0
@@ -192,6 +192,8 @@ export function createEvBus(deps) {
     const p = ev.payload
     const rec = seat(ev.id)
     const from = rec.legacy ? null : rec.lvl
+    // the word the last heartbeat said: null on the first one this bus has heard from them (seat's seenAt is -Infinity until then)
+    const first = rec.seenAt === -Infinity, was = first ? null : rec.status
     rec.name = ev.name ?? rec.name
     rec.lvl = p.lvl; rec.lit = p.lit; rec.st = p.st; rec.seen = p.seen; rec.o = p.o
     rec.thin = p.thin; rec.status = p.status; rec.aseed = p.aseed
@@ -202,6 +204,12 @@ export function createEvBus(deps) {
     if (from != null && from !== p.lvl) {
       const line = floorChangeLine(from, p.lvl)
       for (const cb of floorCbs) { try { cb(ev.id, rec.name, from, p.lvl, line) } catch {} }
+    }
+    // what the file holds of them, heartbeat by heartbeat (crew.js reads a re-filing and a shared square off it): read on the receiving
+    // side only, from the fields 'here' already carries
+    if (fileCbs.length) {
+      const fe = { id: ev.id, name: rec.name, lvl: p.lvl, status: p.status, aseed: p.aseed, first, from: was }
+      for (const cb of fileCbs) { try { cb(fe) } catch {} }
     }
     recompute()
   }
@@ -242,6 +250,9 @@ export function createEvBus(deps) {
   function roomStanding() { return standing }
   function onRoomChange(cb) { if (typeof cb === 'function') roomCbs.push(cb) }
   function onFloorChange(cb) { if (typeof cb === 'function') floorCbs.push(cb) }
+  // cb({ id, name, lvl, status, aseed, first, from }) after every believed 'here': first on the first one heard from that id, from the
+  // status the one before said (null when first). Nothing is sent: it is the receiving side's reading of the heartbeat it already had
+  function onPeerFile(cb) { if (typeof cb === 'function') fileCbs.push(cb) }
 
   // ---- here: the heartbeat out ---------------------------------------------
   function flushHere(t) {
@@ -282,5 +293,5 @@ export function createEvBus(deps) {
   // must not be lost behind its own heartbeat
   register('here', { check: hereOk })
 
-  return { register, emit, ready, receive, on, here, peers, onFloor, fresh, freshPeersOnFloor, roomStanding, onRoomChange, onFloorChange, tick }
+  return { register, emit, ready, receive, on, here, peers, onFloor, fresh, freshPeersOnFloor, roomStanding, onRoomChange, onFloorChange, onPeerFile, tick }
 }

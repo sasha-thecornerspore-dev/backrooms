@@ -18,8 +18,9 @@ import { DREAD_W } from '../src/renderer/dread.js'
 import { DEFAULT_CONFIG, CHUNK_SIZE, createChunkCache, createGridReader } from '../src/renderer/world.js'
 import { levelConfig } from '../src/renderer/levels.js'
 import { createEntitySystem } from '../src/renderer/entities.js'
+import { formatAnchor } from '../src/renderer/anchor.js'
 
-const src = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
+const src =(p) => readFileSync(new URL(p, import.meta.url), 'utf8')
 const open = () => true
 const losOn = (floor) => (ax, ay, bx, by) => lineOfSight(ax, ay, bx, by, floor)
 const OPEN_LOS = losOn(open)
@@ -235,7 +236,12 @@ describe('compose-polaroid.js is as it was', () => {
           }
     }
     expect(rows.length).toBe(230400)
-    expect(fnv(rows.join('\n'))).toBe('cfe8501d')
+    // 2.0.7 (decision 3): the pin caption says where the body lies in words, not its numbers. Put the numbers back where the words are and
+    // every caption is 2.0.4's, byte for byte: nothing else moved (these subjects carry no word, so the photo's word adds nothing either)
+    const words = 'the film shows where you fell through.', pin = 'the film shows ' + formatAnchor({ lat: 51.5, lng: -0.12 }) + '.'
+    expect(rows.some((r) => r.includes(words))).toBe(true)
+    expect(rows.every((r) => !/\d\.\d{4}/.test(r))).toBe(true)
+    expect(fnv(rows.map((r) => r.split(words).join(pin)).join('\n'))).toBe('cfe8501d')
   })
   it('the film\'s den is a step of its own: film.js reads no caption, and compose-polaroid.js knows nothing of dens', () => {
     const film = src('../src/renderer/film.js'), cp = src('../src/renderer/compose-polaroid.js')
