@@ -134,6 +134,7 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
   // the line: 'off' (never joined, or disconnect()) | 'joining' | 'live' | 'retrying' | 'gave-up' | 'flood'
   let line = 'off'
   let joinArgs = null              // { roomId, worldSeed, name }: what every rejoin asks with
+  let worldV = null                // the world the first welcome gave
   const retry = { attempt: 0, since: 0, timer: null }
   let backAt = -Infinity
   // my own ids this session: a socket the room has not noticed is dead yet still lists me (a ghost of me) and says I left
@@ -222,14 +223,15 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
         playerId = msg.playerId
         const first = typeof msg.first === 'boolean' ? msg.first : undefined
         if (att.rejoin) {
-          // back: the arrival stays the first join's (first: true here is the relay's own restart, or a room you came back to alone)
+          // back: the arrival stays the first join's (first: true here is the relay's own restart, or a room you came back to alone).
+          // sameWorld: the room still keeps the world you walk (the relay never forgets one; a LAN server started again may not)
           if (att.timer) { clearT(att.timer); att.timer = null }
           stopRetry()
           line = 'live'; backAt = now()
-          emitLine('back', { attempt: retry.attempt })
+          emitLine('back', { attempt: retry.attempt, sameWorld: msg.worldSeed === worldV })
           return
         }
-        line = 'live'
+        line = 'live'; worldV = msg.worldSeed
         if (first !== undefined) settleArrival(first ? 'walked' : 'dropped')
         else arrivalTimer = setT(() => settleArrival('walked'), ARRIVAL_WAIT_MS)
         att.resolve({ worldSeed: msg.worldSeed, playerId: msg.playerId, roomId: msg.roomId, first })
