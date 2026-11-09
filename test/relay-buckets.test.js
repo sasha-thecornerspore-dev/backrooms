@@ -359,6 +359,18 @@ describe("the relay's Room paces them, and closes a flooder 4029 'too fast'", ()
     expect(ada.closed.length).toBe(1)
   })
 
+  it('a socket closed for flooding that has not finished closing is no one to drop in on: the next joiner walked in', async () => {
+    const a = room()
+    const ada = await a.join('ada1', 'ada')
+    for (let i = 0; i < 3000 && !ada.closed.length; i++) await a.send(ada, { type: 'pos', x: i, y: 0, angle: 0 })
+    expect([ada.att.flood, a.sockets.includes(ada)]).toEqual([true, true])   // its close has not gone through: it lingers
+    const cy = await a.join('cy1', 'cy')
+    expect(of(cy, 'welcome')[0].first).toBe(true)
+    expect(of(cy, 'players').at(-1).list.map((p) => p.id)).toEqual(['cy1'])
+    const dee = await a.join('dee1', 'dee')
+    expect(of(dee, 'welcome')[0].first).toBe(false)                         // cy is someone
+  })
+
   it('a chat or a typing flood is closed the same way', async () => {
     for (const frame of [{ type: 'chat', text: 'x' }, { type: 'typing', on: true }]) {
       const a = room()
@@ -523,6 +535,18 @@ describe('the atlas: one flood guard every sender shares, in front of check-ins 
     const res = await worker.fetch(atlasReq('/atlas/beacons/door-1/dropin', { ip: '192.0.2.9' }), env)
     expect(res.status).toBe(429)
     expect(Number(res.headers.get('Retry-After'))).toBeGreaterThan(600)
+  })
+
+  it('a take that cannot be written (the write allowance spent, the one Gate overloaded) answers 503 with the atlas\'s CORS; the atlas is not reached', async () => {
+    const broken = { idFromName: (n) => ({ name: n }), get: () => ({ take: async () => { throw new Error('storage put failed') } }) }
+    const env2 = { GATE: broken, ATLAS: atlasNamespace() }
+    for (const path of ['/atlas/beacons/door-1/checkin', '/atlas/beacons/door-1/dropin']) {
+      const res = await worker.fetch(atlasReq(path), env2)
+      expect([path, res.status, await res.json()]).toEqual([path, 503, { error: 'atlas write failed' }])
+      expect(res.headers.get('access-control-allow-origin')).toBe('*')
+    }
+    expect(env2.ATLAS.seen).toEqual([])
+    expect((await worker.fetch(atlasReq('/atlas/beacons', { method: 'GET' }), env2)).status).toBe(201)   // reads never ask it
   })
 
   it('reads, the passage balance, a preflight and the admin\'s keyed writes never touch it', async () => {

@@ -163,8 +163,10 @@ export class Room extends DurableObject {
       if (stored == null) await this.ctx.storage.put('seed', seed)
       // first = no OTHER live socket in the room at join (the accepting socket is
       // already in the list). NOT `stored == null`: the seed is kept forever, which
-      // would mint every returning visitor to an empty room thin.
-      ws.send(JSON.stringify({ type: 'welcome', playerId: att.id, worldSeed: seed, roomId, first: this.ctx.getWebSockets().length === 1 }))
+      // would mint every returning visitor to an empty room thin. A socket closed for flooding that has not finished closing is out of
+      // the room already (broadcast, pushPlayers): it is no one to drop in on.
+      const live = this.ctx.getWebSockets().filter((s) => !(s.deserializeAttachment() || {}).flood).length
+      ws.send(JSON.stringify({ type: 'welcome', playerId: att.id, worldSeed: seed, roomId, first: live === 1 }))
       if (LOG) {
         const log = await this.storedLog().load()       // null when the read failed: no replay this time, and nothing overwritten
         if (log) for (const f of log.replay()) { try { ws.send(JSON.stringify({ ...f, replay: true })) } catch { /* ignore */ } }
@@ -467,7 +469,11 @@ export default {
       // the one flood guard in front of the atlas: one Gate every sender shares, named GLOBAL_GATE and never by an address, and
       // nothing about who sent it is looked at or kept for it. A refused write never reaches the Atlas.
       if (atlasOpenWrite(request, url)) {
-        const all = await env.GATE.get(env.GATE.idFromName(GLOBAL_GATE)).take('atlasAll')
+        // a take that cannot be written (the account's write allowance spent, or the one Gate overloaded by the flood it is there for)
+        // answers as the Atlas itself does when its write fails: 503 with the atlas's CORS, so the page can read it
+        let all
+        try { all = await env.GATE.get(env.GATE.idFromName(GLOBAL_GATE)).take('atlasAll') }
+        catch { return atlasJson(503, { error: 'atlas write failed' }) }
         if (!all.ok) return atlasRefused(all)
       }
       const stub = env.ATLAS.get(env.ATLAS.idFromName('global'))
