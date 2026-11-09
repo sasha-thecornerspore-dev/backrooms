@@ -17,7 +17,10 @@
         "type": "sha256",
         "hash": "92d9be063285bfa54504ebd4b79fccb9fc0856985931c5b7690fd6f9245fbd79"
       },
-      "onSolve": "the Office of the Comptroller of the Currency, a federal bank regulator, found reason to believe the bank had engaged in a pattern or practice of discrimination by race or color in those two metro areas. the settlement resolved what the Department alleged; no court ruled on it. in a separate matter in 2020 the same bank agreed to pay three billion dollars and admitted that employees had opened accounts in customers' names without their consent; the Justice Department says staff called it gaming. next: the paper that took the houses."
+      "onSolveSealed": {
+        "iv": "JGCwfVitZKXNZlzo",
+        "ct": "dR67cELABx6vf6tQWAo0xkuprvNceucb6_H95vkV-FjzkPc_PapB121kjAtwjw5PjPu7xwA5iOosfH7A3dkV7umPgKIqbWGukyIiL9SBPZ30G3vxLQarAB9eLrN_rZCdo6gvn0MnhK5snmuLGKKH7nSOglxRR7VgKZ84mdD6CBDqP5ghsGUqATM-qwUdYDffa2enKRnkT3gV2nDb0sXaPhNuIp6GMpZ3OLpTWOPKHIPg0C1qXbhGJprjfReHPu6pymUJKaf_tibjf8qK0zQqBLpr38JRNLyxpP3LpzMn9iQbSokRmIxAK-Nt-BUcAJhFDil5Lum-iYWcb51hPTuxZfqxXJNTxPTiTDwY_q30jppYXYy3XeSvsV1Yt0QLEcethiUaMAA3MevOiqiMlAA-mULhvs-G7C7Duvj3jpbnTzq8uyz-7MciHP-yUpOB2VJMiymbNjbk7ibVYWcpOrHbaOh-FEP43_RoqLOSsMNGr_ye8EKT0QNvyCJ12Ur5razLLoG68tZNh0S-ZSqUvu_66qOR1WDeFjqiPHm87kDTulo1Vq7IRJ8IpXGI0kJpK3_ulX1kDJbqZlUiiqDctA2pWrRQA8ssdFBvC8yNU_rdP_8kHMtnX0pvsw82Yp5JRKTI-luzboD4uEeTbvKUvf03XHApoS8cpYOK6vaVUHXDSfLXqCBkY7dB4jEtemLUoDLbucEDau2OjCqmOyBZV6XFFwkwcv9goS2MKHg"
+      }
     },
     {
       "id": "stamps",
@@ -33,7 +36,10 @@
         "type": "sha256",
         "hash": "ab2f577d4a4fd692bc2a31049c6364f8ffea5b6cbe0f6db771da97909a43faba"
       },
-      "onSolve": "three in August, two in September, one in October: six commissions revoked when none of the notaries asked for a hearing. the practice had a name by then: robo-signing. in 2012 the five largest mortgage servicers, Wells Fargo among them, settled with the federal government and forty-nine state attorneys general over robo-signed affidavits and other foreclosure abuses. next: the one sheet of paper the homeowners asked to see."
+      "onSolveSealed": {
+        "iv": "0lBtwYpyEGaULV_e",
+        "ct": "nAipsbtT6tN-DY-nRUXcEumOYnpFkp87zbejiXXRqXTq_ylzqGKTrFjDsJ3QHQKHhTRt40pzwSodGFBztBvzfZJq2zmnX3quVJ9svUqKsZAgx9bIGKunEAOAmePbD5GduYJDRB08CHdLB6oiDUfFebjXwZMGezX6Wy0A-17URlEdQKD4VZURG6JWLX--6uNfwQbXdoe8GYJ_HeeH6KhAYtxUR_-RdkzfYW28o90EJrENvTiZkXpEMzuNzlfDzkBX_b5ij4cMe73gCmcWVjQEkhXohIJwPeNrt0MLSm6EKrsY_j3J_BYLc-w05EKJjMGLr-RXoP7EE0mJ2q0vECENcAL9dpruJM8t7R0xwewtZzh0LcJJjvlxFjWexhN08HwQk9SFRNDG-PJVpkUSNVro5ZawS2wRRA22kiJ67CRInHTuJdYcX52s5308Ss7zLpZFQ8BIR25NAVM3EnpUF5FFCTI0lv58XRqQYKnNWIL6zT0e39ofkdvjysj1WbIJ_KGwU09XTgRcJNK-iO_7fIGCCq3TNisdx0wBPa-TJolnCF0moQ_T6OFruA4aofaitHZke1Smg-aL5sdvgK4d"
+      }
     },
     {
       "id": "note",
@@ -49,7 +55,10 @@
         "type": "sha256",
         "hash": "9bd94aecc142e07809fbb144036c55709be94df0fa12dd80d680ccf8842b4f2c"
       },
-      "onSolve": "standing: the right to ask at all. in Maryland a foreclosure can be filed with a sworn copy of the note instead of the original, and when no copy can be found, a sworn lost-note affidavit that says why can take its place. a homeowner's motion to stop the sale must be sworn, must state every defense with particularity, and is due fifteen days after the last of several later steps in the case. next: the sale the city runs itself."
+      "onSolveSealed": {
+        "iv": "3QSDWZzAb45qz1o5",
+        "ct": "deH4_YjnUmDM8dnmFvAusPcdnrKNM-KXfnUEDlYfCfBePFGPdiUw9LqP1aRJp7O_h3tx2gtbE7wQ-qyc0bx-ZaB8FvySa58CW8z2lgjww9EkvGsPy78YX5Wqbr2OSZSs1RcPxnP-ad4-9ZhirntbMc371W53a1P_u8QN9kmgszxbjFeOR1x83Xr-Cq0XQpqabtmxg4WbgacQH5TJ1L7IbA6tB0AMx3kcJPJXhNy0Quk0Wc85Dx3PqnUT_4PftRAbXE7znwMVBog35Fd2NJC4BQ2LN08ioJJr0J8SicbR9flS2VfCnEVP9wAY3RXklsG8fQye6gJAYzOhc7fYXdPvDwqws4yZQ6qXfUdQKNwTjnzK3EHEAXw4CPW3HGJSZL-C8cxttcpaUTI3zqRt_byIj1BMJSD1Xuv-cXXDN_AI5jx0uSynpUfNRxqo63VNZ95dMxmXvhAOaAVQuqWqtXgs3wtmdnK1KuqV_9M331J3n16MQPTEAww4pvOSNa3VHX7ol_ge0mo3TE1Th9DhVDYi9ALEMH8IgfxGRTpU2bgrppB42Faw3opx8609euUgYIZ0enY2j_GedURo4q80EfxkH9jXacks9lgM54slg-x4hkRfUInmrH4Pe180hLMeyftA3Xodvwf6qDHrvUKZHpnkKD5n_nTeWdu8rA58QpO3nzqSBSdFwePof2e6l-5LxmHhiWGSmS9DKIpTrSej8pgnorFtpfHunbok51dspMkh3mXGhQcJrdgu8oLS2hm_zz2IoMSWfb6H5c3dzWl4i1O2kHIdvOuklZE-PbWsnks"
+      }
     },
     {
       "id": "sale",
@@ -66,7 +75,10 @@
         "type": "sha256",
         "hash": "a8c6e2cafbabdf2c76c765cdf8ca54b2a5f3c9dd91d06a61993c34fa36623f86"
       },
-      "onSolve": "a thousand dollars in city bills, by the housing department's count (another city page still gives a lower figure), and the debt on a home its owner lives in can be sold to a bidder who charges interest on it. since 2020 the water bill no longer counts toward that line, and in recent years the mayor has pulled many owner-occupied homes off the list. the same page lists the credits and the deferral that can keep a home off the sale. next: the people sworn to protect the block."
+      "onSolveSealed": {
+        "iv": "6QB-SF2qP_jmNxst",
+        "ct": "Rlik_58Aj2ymifmDZKShDbqX2dSeh-5-xBVwTk2_KtJiqMx0L1_xfqvbEZa3MNmYi3HU-ujmxboVcNJ-medobrYcOlpglE4C6clPU8bACvugl3t2rrB1FL3e07AQywExvupZBBFskEZPVWRuZbAI3P6u_ciHnOHpNwfR9_qr_XoxWGck8LFMWTFJIEyr1MEC-D0Npa5gQYa3Jxx0IXW3NfzZR6J3JWRSIXHBPQ3ZBUJUK1mRicJoqu0_skKqLJudjhvp4LNE1FseaiJrnZb6kMjSrQ_nmH4CbQ6X8yo6diGJt2zYnvvuN2FzuiVYIJQYDuqovnuXhVTbv223ZlP4r_gagRG56T4KLiBvIOLunAV0r2NsOvbYLm-n2o9ZCytv54y8TdWtuwiU9Do8ix0uzN5c51I3-cUL633nLXBAQwnavAhHDaSyyTGrkilBUoK7adIWoZfvAeYlJBaUhr-H-GZtrjFjI3YHs_ly9i7FAvUB2MUHWag2NWN0uvdidmjigWBptLlcDr0DhOfcCj0GuKraqDGN50ZOlxVmSXEx-iyNCQzfu6jNgur3RC_I1NJqQgHUbjyu4Zuqe_yRWF8wNvMpRre43N-stim9iOV5G4m4jNBl2qTEanjiI2qwmnklpRDyqMmjcZjogsX3PYLmBg"
+      }
     },
     {
       "id": "badge",
@@ -82,7 +94,10 @@
         "type": "sha256",
         "hash": "21765dbbb36e4cefcb31ec15c0f792b0b49c8c3caf53994fb70438cf9f66da00"
       },
-      "onSolve": "overtime: paid for hours that never happened. eight members of the unit were convicted, by plea or at trial, and their sergeant was sentenced to twenty-five years. he also pleaded guilty to planting evidence and writing a false police report that led to two Baltimore men being convicted and imprisoned in 2010. next: the ledger at the top."
+      "onSolveSealed": {
+        "iv": "KuNqlphjl_uYuJu6",
+        "ct": "xmq4haZaLibUXd6ToZMXOiRqCWINTc1ZENf--SrNyq2kI8aGgQUJiKN--2fhrZCl0ZSalaS_BGb99NeXbPOkNHYNtsFYgQj5tjWMaK9W0H6LnmctoztuNn6dimQoKsRy4i92h8jR9xAxzZUbkG449aXFXXcS1mQxAjX5_6EbOIeBxoqHSydIngUuCOfOII_JK1jNHE8nJNC5Nhb_LOY3v-15HFfz5L2FSF9OCtKajsgnG7ekAtROWIazNYsZTG9tzpj9SaDf9B36VVQtyQKfXjrCGTU1LfjTAKxHmpfRd9ORQ7TgAWYzBo65jw8IU5dtKPpkAj9qHDqOV9Ao5AqYZZlSkRxzU-L8miedgCu4jpqE60HqqBUgLzHvZlzvG52ZpNCNwQDPo2LX5XgI41F7jKAHGPZdS9PLPgz7S0UX_WEh3Q6K5d2Bi80ZlWBmcdCDT2SYtDRBXphc-8BSKtEnZPOPq9w"
+      }
     },
     {
       "id": "books",
@@ -98,14 +113,15 @@
         "type": "sha256",
         "hash": "20dc67791c7f6d01d8a327cd6a7b878679c8de5031d944059109e396bf7c2cda"
       },
-      "onSolve": "backdated: paper that lies about when it was made. kin to the robo-signed affidavit and the unwitnessed stamp: paper that says something happened the way it did not. the file is read."
+      "onSolveSealed": {
+        "iv": "OJpNC1VO45xEI56S",
+        "ct": "8l3rB91_LocAiQ6rq25xBzI7UvMSNhfl8tLpWETXID5oWRs2G_0vkl1nGfQ_dth7dnTFRG6ppuv5cRbV5Jhg6zY6Jn6qMEr09fZ-Ok2Qt9-noGM2_ZfrIA_SREBCoE3U23w5EPbx3OF63UJf5W56bBs9cAah4gzLU9-Lbf82ueqeaIAA1uilCA_apsEPwfMkvdPoUKhAxjeoaGGHRFhNvi420QXBG30tZwnsWSLEcefoUI8UXpUdIjrp_0eMW4d5nrOYv7dlsQ"
+      }
     }
   ],
-  "reward": {
-    "title": "the paper house is read.",
-    "text": "Six instruments, one machine. Loans the government alleged were priced and steered by race, referred by the federal Comptroller of the Currency and settled without a ruling. Commissions pulled from notaries alleged to have stamped what they never watched. A defense that asks one question, standing, and rules that will take a sworn copy of the note, or a sworn page saying why there is none. A city that sells the unpaid bills on a home once they reach a line its own pages do not agree on, and that lists, on the same page, the help that can keep a home off the sale. A police unit billing overtime while some of its members robbed the block. Invoices backdated at a mayor's urging. Field Recovery does not say how this ends for you. It shows you how the machine works, from the loan to the ledger at the top. Keep the file open.",
-    "key": "R-14 · THE NOTE · FILED",
-    "href": "../codex/#loans",
-    "linkLabel": "▸ the map came back — the fourth instrument"
+  "seal": 1,
+  "rewardSealed": {
+    "iv": "tAOuZDjLBxwXdTAV",
+    "ct": "GgqeKMG8MvyioUn4LVIiwyTh7YhiqNQttcM6UMLGUatNZuqMkJrqr734xjih6iAJBFdUGCkp3l9ZiTsQwIqjarNGCfhtv5dKgXU3XXlbZSVTXjyUXahECBRmlrIjd_uJBbbzLYlJqZRGV2LfAMGRhJWSFBFvNYexTgOc1AvmLqEi-X3r9BM6BlNom_FmczJ8oqBXt84ZV2x5C1_jtuyIgyO427bEd0Nr1_X1RFB9kHPkhCBTCgmrEqmWKgOlwG_mU1J4AxPj7auN7AZtBmg5-lzbrw57vj7Ac9C5SkMMZvEvUB-fauUV3C7P5eqZsW4XkHy5nmJr5BoGI3VhMXR_1KqhNVbMtiAnzOV3OpBf4xW-_Wa5L1n1lHeiBJ-QANFjCalI-3QwRXAsgPA__FXsiUXGa1JqchTKPBJfz2PNrF_Z-75UpIg_w_JhNjjAkcN5BEu1ZDrukvvkO1AqqXgv5rYJM2qtmsx6Oz2aRjSG46RxvjcVAro_dw2a3u5VRcitn-RW0BWYSrdA42YHLRqzfRHAQkhXqn26uDn1bpQXJ2IflAKVYDOUq_K12TKovWdfF9sq9iTHVZo96blu01Pjk6AZY_trAaRCBySA5c8VH2zOJ2ax9jNa3z3iiL7JsENp2tyzw6yNnFQEqCTZQTXutW3ctEYiwjkH_wVnniNwNwED9RpG6qRgfU1Uhj4qSpVobKOYwH6CO6-dRBMp9utk1iyjKyXlBhMbY-0-53y0lJTmGKJ_1DJvV8xdV6jPGNaZO1zZgxsGbhcLUJmYk0dRCM5Us0xwy9VyJtI0zLRpWX3zHi-eb7JPOiTjTPoz7t5mQOMsOFA3e4BybxA80tRORh1cVAvsILdq1nFdyvjJora2pGee_3OQhGodpqasGA5VtrnENuATwflx2PSWUIVRsRPpmvS0ysFKEzCpYcfTPlmakztHKpqEFOiBCpkY2XeLlYbZddbXey8WZsrzSvRJFUxAe6xovoTJbZyP_tQcsXJh-e-ew6fiRYyMZYRE8VZLuNjONwDgvmNzgGyHTUjaXMNvW0YhbmKVR1ipUHdUKyUDXtM9UD5gLPL4hHHLEPThKimPse8whLSnINwC7OA5LHGogTMhzWBe534T1UH1WoYJReeRjs1LJ6_vzoZQOI0ApEqxlK0vaGIUp2PSKv6eL-a1ayXi9zLcQ0SK1F1ZtiR6hqmRCaGwxpqfnoWvC7uvBxQtYpOJXtyR1O8pbURrmY_hkobJJIMOi4VTk87e8ZHBiJXswsygx2TQ6d3wI15rICilPei87vZ7FmPAchNqi0vNdKVrVcVshhGXMWYVJYIx_3wZzcNagsNsEbs_p_Sj7ztZ_1ER"
   }
 }
