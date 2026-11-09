@@ -1938,27 +1938,30 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   //    way, above the discs). The client spaces its own tries meanwhile, the same room under the same name; after four minutes it stops,
   //    and the press still works. A flood close is its own plate, with no press: the room asked not to be called again so soon. While the
   //    line is down the bus sends nothing (its live dep): a take waits in the outbox and goes once the line is back, behind the relay's
-  //    replay, which the ledger knows (isEcho). Solo there is no line, and nothing here runs ──
+  //    replay, which the ledger knows (isEcho). Solo there is no line, and nothing here runs. Nothing of it is said on the block (Level ∅,
+  //    which a room never reaches: the front door is solo only), where nothing new is ──
   const lineEl = document.getElementById('line-notice')
   const lineDown = () => { const s = mpClient ? mpClient.lineState() : 'off'; return s === 'retrying' || s === 'gave-up' }
+  const lineQuiet = () => !!(level && level.cfg && level.cfg.map)
   function renderLine() {
     if (!lineEl || !mpClient) return
-    const rows = lineNotice(mpClient.lineState(), isTouchDevice())
+    const rows = lineQuiet() ? null : lineNotice(mpClient.lineState(), isTouchDevice())
     lineEl.textContent = ''
     if (rows) for (const r of rows) { const d = document.createElement('div'); d.textContent = r; lineEl.appendChild(d) }
     lineEl.hidden = !rows
   }
+  const sayLine = (text) => { if (!lineQuiet()) showMessage(text, PRIO.interaction) }
   // the one press: the client starts its spacing over and tries at once (a try already under way is that try)
   function callLineBack() { if (lineDown() && mpClient.rejoinNow()) renderLine() }
   if (mpClient) {
     lineEl?.addEventListener('click', (e) => { e.preventDefault(); callLineBack() })
     mpClient.onLine((state) => {
-      if (state === 'dropped') showMessage(LINE.DEAD, PRIO.interaction)
-      else if (state === 'back') { showMessage(LINE.BACK, PRIO.interaction); bus?.here(hereFields()) }
-      else if (state === 'flood') showMessage(LINE.FLOOD, PRIO.interaction)
+      if (state === 'dropped') sayLine(LINE.DEAD)
+      else if (state === 'back') { sayLine(LINE.BACK); bus?.here(hereFields()) }
+      else if (state === 'flood') sayLine(LINE.FLOOD)
       renderLine()
     })
-    if (lineDown()) showMessage(LINE.DEAD, PRIO.interaction)   // it dropped while the world was still loading
+    if (lineDown()) sayLine(LINE.DEAD)   // it dropped while the world was still loading
     renderLine()
   }
 

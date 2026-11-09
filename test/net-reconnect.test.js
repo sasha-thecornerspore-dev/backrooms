@@ -619,7 +619,7 @@ describe('while the line is down the bus sends nothing; the take waits in the ou
 // ── the game's side: the plate, the press, the key ──
 describe('game.js: the dead line said, held, and called back in one press', () => {
   const block = slice(game, "  const lineEl = document.getElementById('line-notice')", '    renderLine()\n  }')
-  function play({ touch = false, state = 'live' } = {}) {
+  function play({ touch = false, state = 'live', level = { index: 1, cfg: {} } } = {}) {
     const el = { hidden: true, textContent: '', kids: [], listeners: {}, appendChild(d) { this.kids.push(d.textContent) }, addEventListener(k, f) { this.listeners[k] = f } }
     Object.defineProperty(el, 'textContent', { get() { return this._t ?? '' }, set(v) { this._t = v; this.kids = [] } })
     const doc = { getElementById: (id) => (id === 'line-notice' ? el : null), createElement: () => ({ textContent: '' }) }
@@ -627,8 +627,8 @@ describe('game.js: the dead line said, held, and called back in one press', () =
     let s = state, cb = null
     const mp = { lineState: () => s, onLine: (f) => { cb = f }, rejoinNow: () => { presses.push(s); if (s !== 'retrying' && s !== 'gave-up') return false; s = 'retrying'; return true } }
     const bus = { here: (f) => heres.push(f) }
-    const api = new Function('document', 'mpClient', 'lineNotice', 'isTouchDevice', 'showMessage', 'PRIO', 'LINE', 'bus', 'hereFields',
-      `${block}\nreturn { renderLine, callLineBack, lineDown }`)(doc, mp, lineNotice, () => touch, (m, p) => said.push([m, p]), { interaction: 2 }, LINE, bus, () => 'here!')
+    const api = new Function('document', 'mpClient', 'lineNotice', 'isTouchDevice', 'showMessage', 'PRIO', 'LINE', 'bus', 'hereFields', 'level',
+      `${block}\nreturn { renderLine, callLineBack, lineDown }`)(doc, mp, lineNotice, () => touch, (m, p) => said.push([m, p]), { interaction: 2 }, LINE, bus, () => 'here!', level)
     const go = (next, info = {}) => { s = next === 'dropped' ? 'retrying' : next === 'back' ? 'live' : next; cb(next, info) }
     return { el, said, heres, presses, api, go, rows: () => (el.hidden ? null : el.kids) }
   }
@@ -661,6 +661,12 @@ describe('game.js: the dead line said, held, and called back in one press', () =
   it('a line that dropped while the world was still loading is said when the game comes up', () => {
     const g = play({ state: 'retrying' })
     expect([g.said, g.rows()]).toEqual([[[LINE.DEAD, 2]], [LINE.DEAD, LINE.TRYING, LINE.PRESS_KEY]])
+  })
+  it('nothing of it on the block (Level ∅): no plate, no line — a room never reaches it, and nothing new is said there', () => {
+    const g = play({ level: { index: 4, cfg: { map: {} } } })
+    g.go('dropped'); g.go('gave-up'); g.go('flood')
+    expect([g.said, g.rows()]).toEqual([[], null])
+    expect(read('src/renderer/topology.js')).toContain('return frontDoor && !online ? BLOCK : LOBBY')
   })
   it('R in the loop calls it back, in a room only; no other key, verb, disc or card has R', () => {
     const rLine = lineOf(game, "if (mpClient && K['KeyR'])")
