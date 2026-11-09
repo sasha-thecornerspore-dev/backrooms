@@ -156,6 +156,10 @@ describe('createCrewWatch: what a friend\'s heartbeat earns, once', () => {
     expect(w.heard(ev({ id: 'd', name: 'di', first: true, from: null, aseed: null }), { selfId: 'me', selfTag: 41 })).toEqual([])  // no pin
     expect(w.heard(ev({ id: 'e', name: 'ed', first: true, from: null, aseed: 41 }), { selfId: 'me', selfTag: null })).toEqual([])  // you brought none
     expect(w.heard(ev({ id: 'b', name: 'bo', first: false, from: 'extension', aseed: 41 }), { selfId: 'me', selfTag: 41 })).toEqual([])   // only on coming in
+    // the blank name many share is nobody in particular: each 'wanderer' from your square is said, by their own id
+    expect(w.heard(ev({ id: 'w1', name: 'wanderer', first: true, from: null, aseed: 41 }), { selfId: 'me', selfTag: 41 })).toEqual(['came in from your square.'])
+    expect(w.heard(ev({ id: 'w2', name: 'wanderer', first: true, from: null, aseed: 41 }), { selfId: 'me', selfTag: 41 })).toEqual(['came in from your square.'])
+    expect(w.heard(ev({ id: 'w1', name: 'wanderer', first: true, from: null, aseed: 41 }), { selfId: 'me', selfTag: 41 })).toEqual([])
   })
   it('nothing about yourself, nothing about a friend on the block, nothing to you while you stand on it', () => {
     const w = createCrewWatch()

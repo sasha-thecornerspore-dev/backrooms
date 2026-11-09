@@ -15,6 +15,7 @@
 import { LEVELS } from './levels.js'
 import { STATUSES } from './status.js'
 import { floorWord } from './terminal.js'
+import { NAME_CAP_EXEMPT } from './caches.js'
 
 // VOICE REVIEW: every line below is new in v2.0.7 and waits for the owner's voice pass. Lowercase, no '!', no digits, no coordinates,
 // tags or seeds; a name is spliced in as it was typed. REFILE and SQUARE are people lines: the chat draws them as '— name ' + the line
@@ -83,7 +84,7 @@ export function squareMatch(a, b) {
 // last heartbeat said, null on the first) -> the people lines it earns, each said once:
 //   • a re-filing: the word changed since their last heartbeat (never on the first: that is not a change, it is news to you)
 //   • the square: the first heartbeat of a friend whose pin's square is yours — once per friend a session (by name: a friend who comes
-//     back under a new id is not news again)
+//     back under a new id is not news again; by id for the blank name many share, caches.js NAME_CAP_EXEMPT: two of them are two people)
 // Nothing about a friend on the block, nothing to you while you stand on it, nothing about yourself.
 // ctx: { selfId, selfTag (your pin's mark in this room, or null), onBlock (you are on ∅) }
 const NONE = Object.freeze([])
@@ -95,7 +96,7 @@ export function createCrewWatch() {
       if (onBlock || ev.lvl === BLOCK) return NONE
       if (ev.first) {
         if (!squareMatch(ev.aseed, selfTag)) return NONE
-        const key = typeof ev.name === 'string' && ev.name ? 'n:' + ev.name : 'i:' + ev.id
+        const key = typeof ev.name === 'string' && ev.name && !NAME_CAP_EXEMPT.includes(ev.name) ? 'n:' + ev.name : 'i:' + ev.id
         if (squared.has(key)) return NONE
         squared.add(key)
         return [CREW.SQUARE]

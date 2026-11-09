@@ -24,7 +24,9 @@
 //
 // A friend's line: a 'left' and then a 'joined' under the same name within COMEBACK_MS is one line — CAME_BACK_LINE ("— maddie's line came
 // back.") in place of 'entered the level.' (the game folds the 'no-clipped away.' it said before: foldChat). So is a name that was in the room
-// when your own line dropped, coming in after you. Keyed by name, here only; nothing about it goes on the wire.
+// when your own line dropped, coming in after you. Keyed by name, here only; nothing about it goes on the wire. Never for the blank name
+// many share (SHARED_NAMES, as caches.js NAME_CAP_EXEMPT): one 'wanderer' leaving and another arriving are two people. And a name the room
+// lists is not gone: the list after your own rejoin holds those who never left, and the room never says 'joined' of them.
 
 // the room closed this socket for flooding it (relay/relay.js and server/index.js close with the same code, reason 'too fast')
 export const FLOOD_CLOSE = 4029
@@ -36,6 +38,9 @@ export const REJOIN = Object.freeze({ FIRST_MS: 1000, CAP_MS: 30_000, JITTER: 0.
 
 // a friend who left and came back under the same name within this long reads as their line coming back
 export const COMEBACK_MS = 90_000
+// the blank name many strangers share (index.html getName's default, the relay's and the LAN server's): never one friend's line
+export const SHARED_NAMES = Object.freeze(['wanderer'])
+const named = (n) => typeof n === 'string' && n !== '' && !SHARED_NAMES.includes(n)
 
 // the room's people lines (chat-sys: '— maddie no-clipped away.'); CAME_BACK_LINE joins its name with no space: '— maddie's line came back.'
 export const JOINED_LINE = 'entered the level.'
@@ -139,7 +144,7 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
   let backAt = -Infinity
   // my own ids this session: a socket the room has not noticed is dead yet still lists me (a ghost of me) and says I left
   const pastIds = new Set()
-  // name → when it left (a 'left', or in the room when my own line dropped)
+  // name → when it left (a 'left', or in the room when my own line dropped); never a shared name, never a name the room lists
   const goneAt = new Map()
   const GONE_MAX = 64
 
@@ -162,6 +167,7 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
   }
 
   function noteGone(name, t) {
+    if (!named(name)) return
     goneAt.delete(name)
     goneAt.set(name, t)
     for (const [n, at] of goneAt) { if (goneAt.size <= GONE_MAX && t - at <= COMEBACK_MS) break; goneAt.delete(n) }
@@ -244,6 +250,8 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
         for (const p of msg.list) {
           if (p.id === playerId || pastIds.has(p.id)) continue
           others = true
+          // listed, so not gone: someone the room still had when your own line came back never left it (its 'joined', if any, came first)
+          if (goneAt.size) goneAt.delete(p.name)
           const ex = remotePlayers.get(p.id)
           if (ex) {
             // stillness from successive list positions: parked when the list barely moves (stillFor is read from stillSince: getRemotePlayers)
@@ -257,15 +265,14 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
         }
         if (arrivalV == null) settleArrival(others ? 'dropped' : 'walked')
       } else if (msg.type === 'joined') {
-        const n = msg.name || 'someone', at = goneAt.get(n)
+        const n = msg.name || 'someone', at = named(msg.name) ? goneAt.get(n) : undefined
         if (at != null && now() - at <= COMEBACK_MS) { goneAt.delete(n); emitChat(n, CAME_BACK_LINE, true, msg.id) }
         else emitChat(n, JOINED_LINE, true, msg.id)
       } else if (msg.type === 'left') {
         remotePlayers.delete(msg.id)
         if (pastIds.has(msg.id)) return            // my own old socket, noticed late: I am still here
-        const n = msg.name || 'someone'
-        noteGone(n, now())
-        emitChat(n, LEFT_LINE, true, msg.id)
+        noteGone(msg.name, now())                  // a name only: the blank one, or none ('someone'), is nobody in particular
+        emitChat(msg.name || 'someone', LEFT_LINE, true, msg.id)
       } else if (msg.type === 'chat') {
         if (msg.id === playerId) return
         const rp = remotePlayers.get(msg.id)
@@ -301,7 +308,7 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
   // the line went dead under the game: who was here is gone with it, and the tries begin (never after a flood close)
   function dropped(code) {
     const t = now()
-    for (const p of remotePlayers.values()) if (p && p.name) noteGone(String(p.name), t)
+    for (const p of remotePlayers.values()) if (p) noteGone(p.name, t)
     remotePlayers.clear()
     if (!evCbs.length) evEarly.length = 0
     if (arrivalV == null) settleArrival('walked')

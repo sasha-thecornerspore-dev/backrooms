@@ -10,10 +10,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   createMultiplayerClient, FLOOD_CLOSE, REJOIN, COMEBACK_MS, rejoinDelay, LINE, lineNotice, foldChat, sysText,
-  JOINED_LINE, LEFT_LINE, CAME_BACK_LINE, POS_HZ, posHz, posGapS,
+  JOINED_LINE, LEFT_LINE, CAME_BACK_LINE, POS_HZ, posHz, posGapS, SHARED_NAMES,
 } from '../src/net/client.js'
 import { createEvBus, STATUSES } from '../src/net/evbus.js'
-import { createCacheLedger, cacheKey, isCachePayload, extraFor, cacheSig, HAND_TAKES_KEPT } from '../src/renderer/caches.js'
+import { createCacheLedger, cacheKey, isCachePayload, extraFor, cacheSig, HAND_TAKES_KEPT, NAME_CAP_EXEMPT } from '../src/renderer/caches.js'
 import { createItemSystem } from '../src/renderer/items.js'
 import { createLevelMemory } from '../src/renderer/levelmem.js'
 import { findOpenNear } from '../src/renderer/topology.js'
@@ -441,6 +441,45 @@ describe('a friend\'s line coming back is one quiet line', () => {
     s.msg({ type: 'left', id: 'me1', name: 'ada' })
     s.msg({ type: 'joined', id: 'b2', name: 'bo' })
     expect(r.chats).toEqual([['bo', CAME_BACK_LINE, true, 'b2']])
+  })
+  it('the blank name many share is never one line: a "wanderer" leaving and another arriving are two people, folded into nothing', async () => {
+    expect(SHARED_NAMES).toEqual(NAME_CAP_EXEMPT)                // the same blank one the caches and the relay's log count per id
+    const r = rig()
+    await r.join()
+    const s = r.last()
+    s.msg({ type: 'joined', id: 'p1', name: 'wanderer' })
+    r.clock.advance(5000)
+    s.msg({ type: 'left', id: 'p1', name: 'wanderer' })
+    r.clock.advance(30_000)
+    s.msg({ type: 'joined', id: 'p2', name: 'wanderer' })        // a stranger, also unnamed
+    s.msg({ type: 'left', id: 'q', name: '' })                   // and a frame with no name at all ('someone')
+    s.msg({ type: 'joined', id: 'q2', name: '' })
+    expect(r.chats.map(([n, t]) => [n, t])).toEqual([
+      ['wanderer', JOINED_LINE], ['wanderer', LEFT_LINE], ['wanderer', JOINED_LINE], ['someone', LEFT_LINE], ['someone', JOINED_LINE],
+    ])
+    const log = r.chats.map(([from, text, sys]) => ({ from, text, sys }))
+    expect(foldChat(log)).toBe(log)                              // the first one's leaving stays said
+    // nor does my own drop count a wanderer who was in the room
+    players(s, [{ id: 'me1' }, { id: 'p2', x: 1, y: 1, name: 'wanderer' }])
+    s.drop()
+    r.clock.advance(1000); r.welcome('me2')
+    r.last().msg({ type: 'joined', id: 'p3', name: 'wanderer' })
+    expect(r.chats.at(-1)).toEqual(['wanderer', JOINED_LINE, true, 'p3'])
+  })
+  it('a name the room still lists after my own line came back never left: a newcomer under it later enters the level', async () => {
+    const r = rig()
+    await r.join('me1')
+    players(r.last(), [{ id: 'me1' }, { id: 'b', x: 1, y: 1, name: 'bo' }, { id: 'c', x: 2, y: 2, name: 'cy' }])
+    r.last().drop()
+    r.clock.advance(1000); r.welcome('me2')
+    const s = r.last()
+    players(s, [{ id: 'me2' }, { id: 'b', x: 1, y: 1, name: 'bo' }])   // bo never left; cy dropped with me
+    r.clock.advance(30_000)
+    s.msg({ type: 'joined', id: 'b9', name: 'bo' })              // someone new under bo's name (bo is still here)
+    s.msg({ type: 'joined', id: 'c2', name: 'cy' })              // cy coming in after me: her line came back
+    expect(r.chats).toEqual([['bo', JOINED_LINE, true, 'b9'], ['cy', CAME_BACK_LINE, true, 'c2']])
+    const log = r.chats.map(([from, text, sys]) => ({ from, text, sys }))
+    expect(foldChat([{ from: 'bo', text: LEFT_LINE, sys: true }, ...log]).length).toBe(3)   // nothing of bo's folds: no came-back of his
   })
   it('the chat log folds the leave into it: "— bo\'s line came back."; an unanswered leave and every other line read as they did', () => {
     const L = [
