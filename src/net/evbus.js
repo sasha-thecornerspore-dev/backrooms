@@ -20,7 +20,10 @@
 // Pure. deps: { send(kind, payload, opts), now() ms, self() → {x,y,lvl},
 // peerPos(id) → {x,y}|null, peerIds() → Set, selfId (value or fn),
 // mergeRemote?(id, fields) — lets the client's remote records carry the
-// here fields for the renderer }.
+// here fields for the renderer, live?() → false while the line is down
+// (client.js isConnected): then nothing is sent and nothing is spent —
+// emit() and ready() say no (the game's outbox keeps a take for the line
+// coming back), and the heartbeat keeps its change for that moment }.
 
 export const HERE_INTERVAL_MS = 3000
 export const STALE_MS = 8000
@@ -88,6 +91,7 @@ export function createEvBus(deps) {
   let nOut = 0
   let hereFields = null, hereDirty = false, lastHereAt = -Infinity
   let lastSelfLvl = null
+  const live = () => typeof deps.live !== 'function' || deps.live() !== false
 
   function register(kind, spec = {}) {
     kinds.set(kind, {
@@ -109,6 +113,7 @@ export function createEvBus(deps) {
     const spec = kinds.get(kind)
     if (!spec || !payload || typeof payload !== 'object') return false
     if (!spec.check(payload)) return false
+    if (!live()) return false
     const t = now()
     if (spec.minGapMs && lastOut.has(kind) && t - lastOut.get(kind) < spec.minGapMs) return false
     lastOut.set(kind, t)
@@ -120,7 +125,7 @@ export function createEvBus(deps) {
   // would emit() let this kind out now (marginMs: and that long besides)? The caller asks before it acts on what it would send
   function ready(kind, marginMs = 0) {
     const spec = kinds.get(kind)
-    if (!spec) return false
+    if (!spec || !live()) return false
     return !spec.minGapMs || !lastOut.has(kind) || now() - lastOut.get(kind) >= spec.minGapMs + marginMs
   }
 
@@ -240,7 +245,7 @@ export function createEvBus(deps) {
 
   // ---- here: the heartbeat out ---------------------------------------------
   function flushHere(t) {
-    if (!hereFields) return
+    if (!hereFields || !live()) return
     if (!hereDirty && t - lastHereAt < HERE_INTERVAL_MS) return
     if (emitHere({ ...hereFields }, t)) { hereDirty = false; lastHereAt = t }
   }

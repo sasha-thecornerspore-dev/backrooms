@@ -44,6 +44,10 @@ export function validateWorld(raw, { headRaw = null } = {}) {
   if (raw.items !== undefined && !(cfg.items && Array.isArray(cfg.items.types) && cfg.items.types.length)) return no('items.types must be a non-empty array')
   // the floor feelings' kill switch (feelings.js, read by levelConfig): a boolean, or absent (on)
   if (raw.feelings !== undefined && typeof raw.feelings !== 'boolean') return no('feelings must be true or false')
+  // the movement send rate (game.js, client.js posHz): { posHz } and nothing else, an integer 5..20 a second, or absent (20)
+  if (raw.net !== undefined && !(isObj(raw.net) && sameKeys(raw.net, ['posHz']) && Number.isInteger(raw.net.posHz) && raw.net.posHz >= 5 && raw.net.posHz <= 20)) {
+    return no('net.posHz must be an integer from 5 to 20')
+  }
 
   // the docket is recounted by tools/docket.mjs, never drifted: a bad shape or a dropped key fails
   if (raw.docket !== undefined && !docketOk(raw.docket)) return no('docket must be four level rows of three non-negative integers')

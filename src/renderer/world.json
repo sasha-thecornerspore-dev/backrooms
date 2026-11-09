@@ -32,6 +32,9 @@
   ],
   "messageInterval": [25, 90],
   "feelings": true,
+  "net": {
+    "posHz": 20
+  },
   "items": {
     "density": 5,
     "types": ["almond-water", "glowstick", "polaroid", "radio"]
