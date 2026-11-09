@@ -4,7 +4,7 @@
 // never intercepted, so online play is unaffected. This file is only ever
 // registered over http(s); under Electron's file:// it is never loaded.
 // world.json is precached but fetched network-first: it changes with every granted wish.
-const CACHE = 'backrooms-pwa-v14'
+const CACHE = 'backrooms-pwa-v15'
 const SHELL = [
   '/renderer/index.html', '/renderer/world.json',
   '/renderer/game.js', '/renderer/touch.js', '/renderer/scraps.js', '/renderer/events.js', '/renderer/anchor.js', '/renderer/items.js', '/renderer/tactics.js', '/renderer/save.js',
