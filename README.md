@@ -382,6 +382,7 @@ the lost souls know which word you are under, and so does the room — *entered 
 | enter | chat (in online play) — and the field console, solo too: `/status` (your file), `/intake` (the form), `/recover` · `/cases` · `/file <answer>` (field recovery), `/me` (an emote, online), `/invite` (a link to your room) |
 | `` ` `` | the field terminal (the key left of 1; or `/term` on the line): reads back what you found — `pages`, `radio`, `words`, `voices`, `sights`, `floors`, `grep`, `notes`, `log`, a margin you write |
 | b | fire your beacon — your own webhook, set in settings ⚙; it fires only from the desktop app |
+| r | online, once the line has dropped: call it back now — the same room, under the same name (on a phone, tap the plate that says so) |
 | m | mute / unmute the music |
 | n | next track — cycle the ambient beds, or back to the floor's own song |
 | esc | close settings, a page, the map or the chat line, and let the mouse go. not the wish box while you are typing in it — use **cancel** |
@@ -435,6 +436,7 @@ type your **name**, hit **PLAY ONLINE**, pick a **room code** — the box comes 
 - the first person into a room fixes its world; everyone else inherits it.
 - online, everyone starts in the lobby together, as a solo run does — the front door is for solo runs only — and the file writes each of you in on your first way down. how you arrive is written down: opening a room is not the same as dropping into one someone already walks (*not all of you arrived* — see **thin**, above).
 - online runs are not saved. the room keeps its world, and you fall back into it.
+- **when the line drops** — a network that blinks, a relay update — the game says *the line went dead. the others are gone.* and keeps a plate in the chat until it is back. meanwhile it asks for the same room under the same name, a little longer between each try, for four minutes; **r** (on a phone, a tap on the plate) tries again at once, and still does after it has stopped. coming back is not walking in: what the file wrote of how you arrived stays. a friend whose line comes back within a minute and a half reads as one line, *— maddie's line came back.* a relay that cut you off for sending too fast says so, and the game does not call it again.
 - the things in a room do not learn your habits; only a solo run's floors remember how you got away.
 
 ### invite links
@@ -507,6 +509,8 @@ bash tools/build-itch.sh src dist/backrooms-web-<version>.zip               # th
 ```
 
 **the floor feelings' switch.** `world.json` ships `"feelings": true`. set it to `false` and no floor feels different on any visit: the browser follows on the next site deploy (world.json is fetched network-first), the desktop app with its next release. `node tools/validate-world.mjs` refuses anything but `true` or `false`.
+
+**the movement rate.** `world.json` ships `"net": { "posHz": 20 }`: how many times a second a player in a room sends where they stand. every one of those frames is a request the relay's free plan counts, so this is the one lever on that meter; 10 halves them. the browser follows on the next site deploy, the desktop app with its next release, so a room of mixed copies sends at both rates (the movement just looks a little less smooth). `node tools/validate-world.mjs` refuses anything but a whole number from 5 to 20.
 
 bump `<n>` on every site rebuild so installed copies fetch the new one (the site now ships 22; the next rebuild is 23). there is no default: the site target refuses to build without it, so a rebuild can never repeat a cache name by accident. the site target adds the GoatCounter tag (`GOATCOUNTER_CODE`, default `backrooms`, counting at `https://backrooms.goatcounter.com/count` with the path pinned to `/play/`) behind a line that takes `room` and `anchor` out of the address first, and a service worker. `build-itch.sh` runs the same script with `PLAY_TARGET=itch` — no counter, no service worker — and checks the zip before it writes it: `index.html` at the root, at most 1000 files, no path over 240 characters, no absolute paths, no `goatcounter`, no token, no `build-config.json`. both bundles carry `LICENSE` and `LICENSE-LORE.md`.
 
