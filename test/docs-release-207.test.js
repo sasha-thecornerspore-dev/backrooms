@@ -86,11 +86,24 @@ describe('the 2.0.7 release notes (a draft until the voice pass)', () => {
     expect(notes).toContain('a solo run saved on 2.0.6 continues where you left it')
   })
 
-  it('say the relay guard is its own deploy, and what a 2.0.6 copy does after it', () => {
-    expect(notes).toContain('the relay guard goes out on its own deploy, at an hour the owner chooses. until then nothing changes on the relay.')
+  it('say the relay guard deploys with the push that brings 2.0.7 to main unless it is held, and what a 2.0.6 copy does after it', () => {
+    expect(notes).toContain('the relay guard rides the push that brings 2.0.7 to main: that push deploys the relay too, unless the owner holds the deploy for a later hour.')
+    expect(notes).not.toContain('until then nothing changes on the relay')
     expect(notes).toContain('a 2.0.6 copy that drops does not rejoin by itself')
     expect(notes).toContain('closed with code 4029, reason `too fast`')
     expect(notes).toContain('the push that brings 2.0.7 to main is the relay deploy')
+    // every file the relay workflow deploys on is named, as the workflow lists them
+    const wf = read('../.github/workflows/relay-deploy.yml')
+    const paths = wf.slice(wf.indexOf('  push:'), wf.indexOf('  workflow_dispatch:'))
+    for (const f of ['relay/**', 'src/renderer/anchor.js', 'src/renderer/origin-intake.js', 'src/renderer/status.js', 'src/renderer/prefs.js', 'src/renderer/scraps.js', 'src/wish-labels.js']) {
+      expect(paths, f).toContain(`'${f}'`)
+      const name = f.startsWith('relay/') ? '`relay/`' : f.split('/').pop()
+      for (const [doc, label] of [[notes, 'notes'], [readme, 'README'], [read('../docs/operations.md'), 'operations']]) expect(doc, `${label}: ${name}`).toContain(name)
+    }
+    // the guard: a 2.0.7 copy holds back through a stall, and nobody is told an honest copy cannot be cut
+    expect(notes).toContain('a 2.0.7 copy holds back where it stands while its line is silent')
+    expect(notes).not.toContain('an honest copy never sees it')
+    expect(notes).not.toContain('one player cannot flood a room')
   })
 
   it('say the privacy: nothing new over the wire, the body line without coordinates, no location asked', () => {

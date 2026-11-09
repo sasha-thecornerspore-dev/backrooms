@@ -99,11 +99,23 @@ export const TYPING_BURST = 40       // four seconds of that hand
 // over what it queued can be refused, and then no more than the client made during the stall, less
 // the three bursts. Over any stretch longer than a moment an honest client makes fewer than
 // FLOOD_HEAL frames a second (pos 20, and 6 from a hand that keeps up two lines a second: it cannot
-// keep up five), so stall after stall never wears the strikes down; and FLOOD_STRIKES is more than it
-// makes in a minute and a half, so no stall shorter than that spends them (over a minute even with
-// the hand at its fastest throughout). test/relay-buckets.test.js plays both. A socket that keeps
-// sending past a limit by more than FLOOD_HEAL a second is closed in seconds: at a thousand a second,
-// in under three.
+// keep up five), so stall after stall never wears the strikes down. How long one stall may be:
+//   • a 2.0.7 client holds its positions and its typing while its line says nothing (src/net/client.js
+//     HOLD), so a stall hands over its first two seconds, one position a second and what was typed
+//     into it. No stall a connection lives through spends the strikes (a stalled TCP connection gives
+//     up after about fifteen minutes on Linux) unless a hand keeps up two lines a second into the
+//     silence for more than about thirteen minutes of it.
+//   • a copy before 2.0.7 holds nothing: FLOOD_STRIKES is more than it makes in a minute and a half,
+//     so no shorter stall spends them (over a minute even with the hand at its fastest throughout),
+//     but a stall of about two minutes or more that its connection survives can, and it is closed.
+// test/relay-buckets.test.js plays all of it.
+// A socket sending past a limit by e frames a second is closed after about FLOOD_STRIKES /
+// (e − FLOOD_HEAL) seconds: in under three at a thousand a second, about eighty at sixty over, twenty
+// minutes at two over the heal. One that stays within FLOOD_HEAL of its limits is clipped and never
+// closed, so the most one socket can send without end is the three limits and the heal: a hundred
+// frames a second, every one of them metered whether it is refused or not, seventy of them relayed
+// (forty positions, each a players list to the whole room, ten chat lines, twenty typing frames).
+// docs/operations.md §6 (gap 11) says what that leaves open.
 export const FLOOD_STRIKES = 2400
 export const FLOOD_HEAL = 30
 export const FLOOD_CLOSE = 4029      // a private-use WebSocket close code (4000–4999)
