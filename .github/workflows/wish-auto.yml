@@ -136,8 +136,9 @@ jobs:
 
           # write the drift, then TEST it before it can ship
           echo "$OUT" | jq '.world' > src/renderer/world.json
-          # the docket is recounted from the trailers, never drifted (a recount failure is a failed grant)
-          if ! ( jq . src/renderer/world.json >/dev/null 2>&1 && node tools/docket.mjs && node tools/validate-world.mjs && npm test ); then
+          # the docket is recounted from the trailers, never drifted (a recount failure is a failed grant);
+          # --wish: a granted wish may not change `net` (the movement rate is the owner's to set)
+          if ! ( jq . src/renderer/world.json >/dev/null 2>&1 && node tools/docket.mjs && node tools/validate-world.mjs --wish && npm test ); then
             git checkout -- src/renderer/world.json
             gh issue edit "$NUM" --add-label auto-failed
             gh issue comment "$NUM" --body "the spirits reached for it and the world rejected the shape of it. a keeper must look. ($NOTE)"

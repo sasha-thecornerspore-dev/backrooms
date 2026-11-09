@@ -51,11 +51,12 @@ jobs:
           printf '%s\n' "$NEW_WORLD" > src/renderer/world.json
 
       # the arbiter may drop or bend the docket: recount it from the wish trailers (never
-      # drifted), then gate the file the PR will carry
+      # drifted), then gate the file the PR will carry. --wish is the wish path's stricter
+      # check: a granted wish may not change `net` (the movement rate is the owner's to set)
       - name: recount the docket
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node tools/docket.mjs && node tools/validate-world.mjs
+        run: node tools/docket.mjs && node tools/validate-world.mjs --wish
 
       - name: Create branch and PR
         env:
