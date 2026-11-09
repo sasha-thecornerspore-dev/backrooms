@@ -41,6 +41,7 @@ invocation logs are off for the whole worker: no request URL, address or body is
 - **each room's seed** — forever, by design (a room is a place).
 - **each room's keep/drop log** (`evlog`, 2.0.3): for every cache still lying there, the name the player chose, the cache's place in the maze (floor, cell, item, phrase, arrow) and the UTC day it was set down — never the time of day, never a pin. The last 64 per room, 6 per name, and nothing older than 30 days: the room's alarm deletes it. Replayed to anyone who enters the room code. `EV_LOG` `'0'` turns it off (§2).
 - **the Gate** — per salted address hash, the times of recent `/wish` and `/maps` requests, wiped a day after the last. And one Gate every sender shares (`global`), named for no one: the times of the day's filed wishes (`wishAll`) and, since 2.0.7, of the atlas's check-ins and drop-ins (`atlasAll`). It holds no address and no hash of one, only the times.
+- **the atlas** — beacons and their strata; presence marks at the resolution of a UTC day, today's kept out of view until the day ends, the newest 50 past-day marks per beacon; per beacon a map of salted device hashes for the 6-hour check-in cooldown; per hashed device token a passage balance.
 - **nothing per player for the limits** — a socket's pace (below) is a few token counts on the socket itself (its attachment), gone with the socket.
 
 ### the relay's limits (2.0.7)
@@ -60,7 +61,6 @@ Every limit is at least twice what an honest client sends at the most, read off 
 **the atlas's flood guard.** a check-in or a drop-in (the two writes anyone may make without the admin key) takes from the one Gate every sender shares, `atlasAll`: at most 200 in any ten minutes and 2000 a day, from everyone at once. It is never per address (owner decision 18): it reads no address and keeps none. Over it the answer is the one a `/wish` over its gate gets, 429 `{ ok: false, reason: 'rate' }` with a `Retry-After`, and the write never reaches the Atlas. Reads, the passage balance and the admin's keyed writes are never guarded. A busy honest day never meets it: a check-in needs a phone within 120 m of an open door and counts once per visitor per door per 6 h, and a drop-in spends passage, so even a crowd at the first open door is tens of people pressing a few times each. What it bounds: at most four rows written per open write, so 8000 a day at the worst, under a tenth of the free daily allowance, however many addresses a flood comes from. The cost of sharing it: a flood shuts the open writes for everyone until its `Retry-After`. The site's check-in panel reads any 429 as "the door already knows you were here" until it reads `reason: 'rate'`.
 
 The wish and maps gates are unchanged: `/wish` 3 in ten minutes and 10 a day per address, 300 a day for everyone (`wishAll`); `/maps` 12 in ten minutes and 60 a day per address.
-- **the atlas** — beacons and their strata; presence marks at the resolution of a UTC day, today's kept out of view until the day ends, the newest 50 past-day marks per beacon; per beacon a map of salted device hashes for the 6-hour check-in cooldown; per hashed device token a passage balance.
 
 ## 3. deploying
 
