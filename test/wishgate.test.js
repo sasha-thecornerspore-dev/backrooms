@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import {
   WISH_MAX, ALLOWED_ORIGINS, DEFAULT_REPO, DAY_MS, GATE_RULES,
-  WISH_ORIGINS, GLOBAL_GATE, originOk, corsHeaders, validateWish, filterWish, buildIssue, quietMentions, issueRequest, gateTake, gateKey, hashIp,
+  WISH_ORIGINS, GLOBAL_GATE, ATLAS_GATE, originOk, corsHeaders, validateWish, filterWish, buildIssue, quietMentions, issueRequest, gateTake, gateKey, hashIp,
 } from '../relay/wishgate.js'
 import { wishTitle, wishLabels } from '../src/wish-labels.js'
 import { wishTrailer, parseTrailer } from '../src/renderer/status.js'
@@ -161,6 +161,7 @@ describe('gateTake: the per-address limiter (3 wishes in 10 minutes, 10 a day)',
     expect(GATE_RULES.maps.length).toBe(2)
     expect(GATE_RULES.wishAll).toEqual([{ windowMs: DAY_MS, max: 300 }])   // the one bucket every sender shares (review SEC-3)
     expect(GLOBAL_GATE).toBe('global')
+    expect(ATLAS_GATE).toBe('atlas')                                       // the atlas's own shared Gate, apart from /wish's
     expect(Object.isFrozen(GATE_RULES)).toBe(true)
   })
   it('three, then a refusal that says when the oldest leaves the window, then three more after it does', () => {

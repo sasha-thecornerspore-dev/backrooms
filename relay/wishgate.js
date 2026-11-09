@@ -146,8 +146,10 @@ export function issueRequest(issue, { repo, token } = {}) {
 // ── the gate's arithmetic ────────────────────────────────────────────────────────────────────
 // Every rule is { windowMs, max }: at most max takes in any window of windowMs. The Gate durable object (relay.js) keeps one
 // list of take times per bucket per hashed address and wipes it all a day after the last take. wishAll and atlasAll are the
-// buckets every sender shares (the Gate named GLOBAL_GATE, which keeps nothing but their take times): however many addresses
-// someone has, the relay files at most that many wishes a day, and the atlas takes at most that many open writes.
+// buckets every sender shares, each on a Gate of its own that keeps nothing but its take times: wishAll on the one named
+// GLOBAL_GATE, atlasAll on the one named ATLAS_GATE, so a flood at the atlas never loads the Gate /wish takes from. However many
+// addresses someone has, the relay files at most that many wishes a day, and the atlas takes at most that many open writes.
+// Neither name can be an address's: hashIp names those with hex alone.
 //
 // atlasAll is the atlas's one flood guard (2.0.7, relay.js atlasOpenWrite): every check-in and drop-in, from anyone, takes from
 // it before it reaches the Atlas; reads never do. Never per address (owner decision 18): a per-visitor guard would keep address
@@ -160,6 +162,7 @@ export function issueRequest(issue, { repo, token } = {}) {
 // allowance, wherever a flood comes from; and the ten-minute rule keeps one burst from spending the whole day at once.
 const MIN = 60_000
 export const GLOBAL_GATE = 'global'
+export const ATLAS_GATE = 'atlas'
 export const GATE_RULES = Object.freeze({
   wish: Object.freeze([Object.freeze({ windowMs: 10 * MIN, max: 3 }), Object.freeze({ windowMs: DAY_MS, max: 10 })]),
   wishAll: Object.freeze([Object.freeze({ windowMs: DAY_MS, max: 300 })]),

@@ -1,6 +1,7 @@
 // test/relay-buckets.test.js — the relay guard (2.0.7). pos, chat and typing each have a pace (relay/evguard.js pace), on both
 // servers: a frame over its limit is dropped and nothing is said, and a socket that keeps flooding is closed 4029 'too fast'. The
-// atlas's two open writes, a check-in and a drop-in, pass one flood guard that every sender shares, kept by no address.
+// atlas's two open writes, a check-in and a drop-in, pass one flood guard that every sender shares, kept by no address, on a Gate of
+// its own (never the one /wish takes from).
 //
 // The promise this file holds: an honest client never loses a frame in steady play and is never closed, whatever its line does;
 // a flooder is closed. The honest client is made frame by frame the way game.js makes it (the frame loop, netTimer, the three
@@ -20,7 +21,7 @@ const {
 } = await import('../relay/evguard.js')
 const serverGuard = await import('../server/evguard.js')
 const { HOLD } = await import('../src/net/client.js')
-const { GATE_RULES, GLOBAL_GATE, DAY_MS, hashIp, gateKey } = await import('../relay/wishgate.js')
+const { GATE_RULES, GLOBAL_GATE, ATLAS_GATE, DAY_MS, hashIp, gateKey } = await import('../relay/wishgate.js')
 const { createServer } = await import('../server/index.js')
 
 const raw = (p) => readFileSync(new URL(p, import.meta.url), 'utf8')
@@ -491,15 +492,15 @@ describe('the atlas: one flood guard every sender shares, in front of check-ins 
   it('a check-in and a drop-in each take from the one shared gate, then reach the atlas', async () => {
     expect((await worker.fetch(atlasReq('/atlas/beacons/door-1/checkin'), env)).status).toBe(201)
     expect((await worker.fetch(atlasReq('/atlas/beacons/door-1/dropin', { ip: '192.0.2.4' }), env)).status).toBe(201)
-    expect(env.GATE.names).toEqual([GLOBAL_GATE, GLOBAL_GATE])
+    expect(env.GATE.names).toEqual([ATLAS_GATE, ATLAS_GATE])
     expect(env.ATLAS.seen).toEqual(['POST /atlas/beacons/door-1/checkin', 'POST /atlas/beacons/door-1/dropin'])
   })
 
   it('it stores no address: one gate, named for no one, holding only take times', async () => {
     const ips = Array.from({ length: 30 }, (_, i) => ip(i))
     for (const a of ips) await worker.fetch(atlasReq('/atlas/beacons/door-1/checkin', { ip: a }), env)
-    expect([...env.GATE.instances.keys()]).toEqual([GLOBAL_GATE])
-    const m = env.GATE.instances.get(GLOBAL_GATE).ctx.storage._m
+    expect([...env.GATE.instances.keys()]).toEqual([ATLAS_GATE])
+    const m = env.GATE.instances.get(ATLAS_GATE).ctx.storage._m
     expect([...m.keys()]).toEqual(['atlasAll'])
     expect(m.get('atlasAll').length).toBe(30)
     expect(m.get('atlasAll').every((t) => typeof t === 'number')).toBe(true)
@@ -528,13 +529,43 @@ describe('the atlas: one flood guard every sender shares, in front of check-ins 
   })
 
   it('the day: 2000, however they are spread', async () => {
-    const all = env.GATE.get(env.GATE.idFromName(GLOBAL_GATE))
+    const all = env.GATE.get(env.GATE.idFromName(ATLAS_GATE))
     const now = Date.now()
     await all.ctx.storage.put('atlasAll', Array.from({ length: 1999 }, (_, i) => now - 11 * MIN - i * 30_000))
     expect((await worker.fetch(atlasReq('/atlas/beacons/door-1/checkin'), env)).status).toBe(201)
     const res = await worker.fetch(atlasReq('/atlas/beacons/door-1/dropin', { ip: '192.0.2.9' }), env)
     expect(res.status).toBe(429)
     expect(Number(res.headers.get('Retry-After'))).toBeGreaterThan(600)
+  })
+
+  it('the atlas and /wish take from different shared Gates: a flood at the atlas never loads /wish, nor a full day of wishes the atlas', async () => {
+    expect(ATLAS_GATE).toBe('atlas')
+    expect(ATLAS_GATE).not.toBe(GLOBAL_GATE)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ number: 7 }), { status: 201 })))   // GitHub files the wish
+    try {
+      const both = { GATE: gateNamespace(), ATLAS: atlasNamespace(), GITHUB_TOKEN: 'tok', GITHUB_REPO: 'o/r' }
+      const wishReq = (text, from) => new Request(HOST + '/wish', {
+        method: 'POST', body: JSON.stringify({ text }),
+        headers: { 'content-type': 'application/json', Origin: 'https://backrooms.thecornerspore.dev', 'CF-Connecting-IP': from },
+      })
+      const now = Date.now()
+      // the atlas's whole day spent by a flood: its doors refuse, and a wish still files
+      await both.GATE.get(both.GATE.idFromName(ATLAS_GATE)).ctx.storage.put('atlasAll', Array.from({ length: 2000 }, (_, i) => now - 1000 - i))
+      both.GATE.names.length = 0
+      expect((await worker.fetch(atlasReq('/atlas/beacons/door-1/checkin'), both)).status).toBe(429)
+      expect(both.GATE.names).toEqual([ATLAS_GATE])
+      expect((await worker.fetch(wishReq('let me out', '192.0.2.50'), both)).status).toBe(201)
+      expect(both.GATE.names.slice(1)).toEqual([await hashIp(gateKey('192.0.2.50'), 'backrooms-gate'), GLOBAL_GATE])
+      // each shared Gate holds its own bucket and nothing of the other's
+      expect([...both.GATE.instances.get(ATLAS_GATE).ctx.storage._m.keys()]).toEqual(['atlasAll'])
+      expect([...both.GATE.instances.get(GLOBAL_GATE).ctx.storage._m.keys()]).toEqual(['wishAll'])
+      // and the other way: the day's wishes spent, the doors still open
+      await both.GATE.get(both.GATE.idFromName(ATLAS_GATE)).ctx.storage.put('atlasAll', [])
+      await both.GATE.get(both.GATE.idFromName(GLOBAL_GATE)).ctx.storage.put('wishAll', Array.from({ length: GATE_RULES.wishAll[0].max }, (_, i) => now - 1000 - i))
+      expect((await worker.fetch(wishReq('one more', '192.0.2.51'), both)).status).toBe(429)
+      expect((await worker.fetch(atlasReq('/atlas/beacons/door-1/dropin', { ip: '192.0.2.52' }), both)).status).toBe(201)
+      expect(both.ATLAS.seen).toEqual(['POST /atlas/beacons/door-1/dropin'])
+    } finally { vi.unstubAllGlobals() }
   })
 
   it('a take that cannot be written (the write allowance spent, the one Gate overloaded) answers 503 with the atlas\'s CORS; the atlas is not reached', async () => {
@@ -621,10 +652,15 @@ describe('the two copies and the two servers stay one guard (source guards: rela
     }
   })
 
-  it('the atlas guard sits in the /atlas forwarding, before the Atlas is reached, on the shared gate', () => {
+  it('the atlas guard sits in the /atlas forwarding, before the Atlas is reached, on its own shared gate', () => {
     const at = relaySrc.slice(relaySrc.indexOf("if (url.pathname.startsWith('/atlas')) {"))
     expect(at.indexOf('atlasOpenWrite(request, url)')).toBeGreaterThan(0)
-    expect(at.indexOf("env.GATE.get(env.GATE.idFromName(GLOBAL_GATE)).take('atlasAll')")).toBeGreaterThan(at.indexOf('atlasOpenWrite(request, url)'))
+    expect(at.indexOf("env.GATE.get(env.GATE.idFromName(ATLAS_GATE)).take('atlasAll')")).toBeGreaterThan(at.indexOf('atlasOpenWrite(request, url)'))
+    // /wish's shared take stays on GLOBAL_GATE, and nothing else takes 'atlasAll' or names the atlas's Gate
+    expect(relaySrc).toContain("env.GATE.get(env.GATE.idFromName(GLOBAL_GATE)).take('wishAll')")
+    expect(relaySrc.match(/take\('atlasAll'\)/g).length).toBe(1)
+    expect(relaySrc.match(/idFromName\(ATLAS_GATE\)/g).length).toBe(1)
+    expect(relaySrc).not.toContain("idFromName(GLOBAL_GATE)).take('atlasAll')")
     expect(at.indexOf('stub.fetch(request)')).toBeGreaterThan(at.indexOf("take('atlasAll')"))
     expect(at.slice(0, at.indexOf('stub.fetch(request)'))).not.toContain('CF-Connecting-IP')
   })
