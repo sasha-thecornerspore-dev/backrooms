@@ -122,9 +122,28 @@ export function extraFor(p, id, name, key) {
 
 const strOrNull = (v) => v === undefined || v === null || typeof v === 'string'
 
+// what a cache is, to tell one frame of it from another: the thing and its word — never where it lies (a floor that moved lays it on the
+// nearest open cell), never its clocks, never the bus's nonce
+export function cacheSig(type, ph, oct, sour = false, tool = false) {
+  return `${type}|${ph ?? -1}|${oct ?? -1}|${sour ? 1 : 0}${tool ? 1 : 0}`
+}
+const payloadSig = (p) => (p && typeof p === 'object' ? cacheSig(p.type, p.ph, p.oct, !!p.ex?.sour, !!p.ex?.tool) : null)
+const recordSig = (r) => cacheSig(r.type, r.ph, r.oct, !!r.sour, !!r.tool)
+// the same owner: the same id, or — past a rejoin's new id, as the caps count — the same name, never the blank one many share
+const sameOwner = (e, id, name) =>
+  (id != null && e.id === id) || (name != null && !NAME_CAP_EXEMPT.includes(name) && e.name === name)
+// how many caches carried off by hand the ledger remembers (a rejoin's replay of one is not laid down again)
+export const HAND_TAKES_KEPT = 64
+
 // cacheKey -> { key, lvl, cx, cy, id, name, t, localKey, pending }
 export function createCacheLedger({ maxPerOwner = MAX_PER_OWNER } = {}) {
   const entries = new Map()
+  const sigs = new Map()        // cacheKey -> cacheSig of the entry there, when known: per residency, never saved (isEcho)
+  const handTakes = new Map()   // cacheKey -> { id, name, sig, n }: the last caches taken by hand here, newest last
+  // cacheKey -> { id, n }: the frame that laid what is there, when a frame did — its sender's id and the bus's nonce (evbus.js emit), which
+  // the relay's replay of that very frame carries again. Per residency, never saved
+  const frames = new Map()
+  const forget = (key) => { entries.delete(key); sigs.delete(key); frames.delete(key) }
 
   // oldest by t; ties go to insertion order (Map order)
   function oldestWhere(pred) {
@@ -141,27 +160,59 @@ export function createCacheLedger({ maxPerOwner = MAX_PER_OWNER } = {}) {
     while (countWhere(pred) >= maxPerOwner) {
       const o = oldestWhere(pred)
       if (!o) break
-      entries.delete(o.key)
+      forget(o.key)
       evicted.push(o)
     }
   }
 
-  function place({ key, lvl, cx, cy, id = null, name = null, t = 0, pending = null }) {
+  // p: the cache's payload (the wire's { type, ph, oct, ex }), when there is one — what isEcho compares a replay with
+  function place({ key, lvl, cx, cy, id = null, name = null, t = 0, pending = null, p = null }) {
     const replaced = entries.get(key) ?? null
-    if (replaced) entries.delete(key)
+    if (replaced) forget(key)
+    handTakes.delete(key)                    // a cache set down on the cell again: whatever was carried off from it is not this one
     const evicted = []
     if (id !== null && id !== undefined) capBy((e) => e.id === id, evicted)
     // a named player reconnecting with a fresh id does not reset the cap
     if (name !== null && name !== undefined && !NAME_CAP_EXEMPT.includes(name)) capBy((e) => e.name === name, evicted)
+    const sig = payloadSig(p) ?? (pending && pending.extra ? recordSig({ type: pending.type, ...pending.extra }) : null)
     entries.set(key, { key, lvl, cx, cy, id: id ?? null, name: name ?? null, t, localKey: null, pending: pending ?? null })
+    if (sig !== null) sigs.set(key, sig)
+    if (p && typeof p.n === 'number' && id != null) frames.set(key, { id, n: p.n })
     return { replaced, evicted }
   }
 
-  function take(key) {
+  // hand: you picked it up (game.js's F on a cache) — remembered, so the relay's replay of it after a rejoin does not lay it down again
+  // while it is in your hands (a take made while the line was dead waits in the outbox, and reaches the relay after the replay). What is
+  // remembered is the frame that laid it, when one did: the same owner setting the same thing down there again later is a new frame
+  function take(key, hand = false) {
     const e = entries.get(key)
     if (!e) return null
-    entries.delete(key)
+    const sig = sigs.get(key) ?? null
+    const f = frames.get(key)
+    forget(key)
+    if (hand) {
+      handTakes.delete(key)
+      handTakes.set(key, { id: e.id, name: e.name, sig, n: f && f.id === e.id ? f.n : null })
+      while (handTakes.size > HAND_TAKES_KEPT) handTakes.delete(handTakes.keys().next().value)
+    }
     return e
+  }
+
+  // a replayed cache (the relay's keep, stamped replay) is an echo when the ledger already holds that key — lying here, or waiting for its
+  // floor — from the same owner (sameOwner: by name past a rejoin's new id) and the same thing (sig), or when you carried that very cache
+  // off by hand. A rejoin's replay hands a returning player their own caches again under their old id: laid once, never twice, and
+  // what lies there keeps its clocks (a radio still talking). Anything else for the key — another owner, another thing — is news. A cache
+  // you carried off whose frame is known is that frame only (its sender's id and nonce): the same owner may have set the same thing down
+  // on that cell again while your line was dead, and that one lies there for everyone
+  function isEcho(key, id, name, p) {
+    const sig = payloadSig(p)
+    if (sig === null) return false
+    const e = entries.get(key)
+    if (e) return sigs.get(key) === sig && sameOwner(e, id, name)
+    const h = handTakes.get(key)
+    if (!h || h.sig !== sig) return false
+    if (h.n !== null && typeof p.n === 'number') return id === h.id && p.n === h.n
+    return sameOwner(h, id, name)
   }
 
   function get(key) { return entries.get(key) ?? null }
@@ -199,6 +250,7 @@ export function createCacheLedger({ maxPerOwner = MAX_PER_OWNER } = {}) {
         entries.set(r.cacheKey, e)
       }
       e.localKey = r.key
+      if (!sigs.has(r.cacheKey)) sigs.set(r.cacheKey, recordSig(r))   // what the floor holds is what it is (a save keeps no sig)
     }
   }
 
@@ -224,7 +276,7 @@ export function createCacheLedger({ maxPerOwner = MAX_PER_OWNER } = {}) {
 
   // Tolerates undefined / garbage: every row is checked; a save without caches -> empty.
   function restore(s) {
-    entries.clear()
+    entries.clear(); sigs.clear(); frames.clear()
     if (!s || typeof s !== 'object') return
     if (Array.isArray(s.entries)) {
       for (const r of s.entries) { const e = rowOk(r); if (e) entries.set(e.key, e) }
@@ -236,12 +288,13 @@ export function createCacheLedger({ maxPerOwner = MAX_PER_OWNER } = {}) {
         if (!r.extra || typeof r.extra !== 'object' || Array.isArray(r.extra)) continue
         e.pending = { x: r.x, y: r.y, type: r.type, extra: { ...r.extra } }
         entries.set(e.key, e)
+        sigs.set(e.key, recordSig({ type: r.type, ...r.extra }))
       }
     }
   }
 
   return {
-    place, take, get, localKey, bind, rebind, forLevel, pendingFor, clearPending, snapshot, restore,
+    place, take, isEcho, get, localKey, bind, rebind, forLevel, pendingFor, clearPending, snapshot, restore,
     get size() { return entries.size },
   }
 }

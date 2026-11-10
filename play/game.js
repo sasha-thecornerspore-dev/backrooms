@@ -45,6 +45,7 @@ import { CONTAINER_TYPES, SEARCH_HOLD_S, DRAWER_COST, rollContainer, applyRoll, 
 import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
 import { createCard, CARD_KEYS, readText, REDACTED_FOOT } from './papercard.js'
 import { createEvBus } from './evbus.js'
+import { LINE, lineNotice, foldChat, sysText, posGapS } from './client.js'
 import { intake, filingLine, formText, FORM_FOOT, parseIntakeCommand, normaliseIntakeCtx, identityOut, identityIn } from './origin-intake.js'
 import { rulesFor, LEGACY } from './origin-rules.js'
 import { DOOR_SANITY, isSealedMaterial, doorLine, facingCell } from './origin-tenant.js'
@@ -80,6 +81,10 @@ import { STATUSES } from './status.js'
 import { DRAWER_NOTES } from './containers.js'
 import { KINDS } from './film.js'
 import { FIRST_SOUL, FIRST_ROOM, DONE as THREAD_DONE } from './firstrun.js'
+// the crew (crew.js): /who, a friend re-filed, a friend from your square, in words; the body in words; a friend's whistle on the sheet
+import { whoLines, createCrewWatch } from './crew.js'
+import { BODY_LINE } from './origin-anchored.js'
+import { CALL_MARK_MS, CALL_REDRAW_MS } from './fogmap.js'
 // the descent compass's arrow table lives in compass.js now (byte-identical), the resume order in levelmem.js: both re-exported from here
 export { exitArrow } from './compass.js'
 export { applyResume } from './levelmem.js'
@@ -317,6 +322,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   let hurt       = 0    // red-flash intensity
   let regenDelay = 0    // seconds before hp regen resumes
   let netTimer   = 0    // throttles position updates to the server (~20Hz)
+  // the movement send rate: world.json net.posHz (the owner's switch, 5..20 a second, default 20 — client.js posHz), read once per run.
+  // At 20 the gap is 0.05 s, as it always was; /play/ fetches world.json network-first, the desktop app carries its own copy
+  const POS_GAP_S = posGapS(base.net)
   let flashlight = true // the player's own light (toggle with L)
   let sanity     = 100  // the dark and the things eat at it; light + friends restore it
   let sanWhisperT = 0
@@ -349,6 +357,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── the map (fogmap.js / sightpins.js / mapcard.js / compass.js): the pencil sheet of what you walked and saw, held not modal ──
   const fog = createFogMap()
   let mapOpen = false, mapEverOpened = false, lastLostMsg = -Infinity
+  // a friend's whistle on the sheet (fogmap.js markCall): until when the newest mark still shows, and when the card last redrew for its
+  // fade (the performance.now() ms clock the roll call keeps)
+  let callMarkUntil = 0, callDrawnAt = -Infinity
   const compassOut = []                       // compassLines' reused two-slot output (its line objects live on compassOut.slots)
   let lastCompassAngle = NaN, lastWayCount = -1, lastCompassText = null, lastCellIx = NaN, lastCellIy = NaN
   // the faint pull, per visit (compass.js pullVisible / pullWobble): when the visit began, whether the floor has given you a hint (a page
@@ -710,7 +721,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const messages = [
       ...(cfg.messages || []),
       cfg.exit?.hint,
-      ...(anchor ? [`your body remains at ${formatAnchor(anchor)}.`, 'you are very far from your body now.'] : []),
+      ...(anchor ? [BODY_LINE, 'you are very far from your body now.'] : []),     // the body in words, never the pin (origin-anchored.js)
     ].filter(Boolean)
     murmurBag = createBag(messages.length)   // a bag, not a coin: no line again before the rest, never one twice running (events.js)
 
@@ -1235,7 +1246,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // ── the map card (mapcard.js): the pencil sheet over the lower view. HELD, NOT MODAL — the pointer lock stays, the loop gates the pace
   //    and the verbs, a hit folds it. A tap on the card (touch) or on the paper corner #map-tab reads as Tab, so every way of folding it
   //    runs through the one K['Tab'] edge in the loop; touchstart's preventDefault keeps the synthesized click from firing a second one. ──
-  const mapCard = createMapCard(document, { fog, getLevel: () => level, getPlayer: () => player, onTap: () => { K['Tab'] = true } })
+  const mapCard = createMapCard(document, { fog, getLevel: () => level, getPlayer: () => player, onTap: () => { K['Tab'] = true }, now: () => performance.now() })
   // body.map-open lifts the centre message over the sheet (index.html): #msg sits at 34%, the card rises from 38vh, so a line said while
   // you read the map ('you start drawing...', 'the hole is not where you drew it.') was cut in half by the paper
   function closeMap() { mapCard.close(); mapOpen = false; document.body.classList.remove('map-open') }
@@ -1374,11 +1385,13 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       if (note) {
         const cx = Math.floor(r.x), cy = Math.floor(r.y), ck = cacheKey(level.index, cx, cy)
         r.item.cacheKey = ck                                  // the live record: getDropped exports it, levelmem keeps it
-        const old = ledger.place({ key: ck, lvl: level.index, cx, cy, id: myId(), name: myName(), t: playT })
+        // the frame the room hears, and what the ledger knows it by (a rejoin's replay of it is the one already lying here: ledger.isEcho)
+        const p = { lvl: level.index, cx, cy, x: r.x, y: r.y, type: t, ex: exOf(r.item), ph: note.ph, oct: note.oct }
+        const old = ledger.place({ key: ck, lvl: level.index, cx, cy, id: myId(), name: myName(), t: playT, p })
         if (old.replaced) removeCache(old.replaced)
         for (const e of old.evicted) removeCache(e)
         ledger.bind(ck, r.item.key)
-        relayLater('cache', { lvl: level.index, cx, cy, x: r.x, y: r.y, type: t, ex: exOf(r.item), ph: note.ph, oct: note.oct }, { keep: ck })
+        relayLater('cache', p, { keep: ck })
       }
       showMessage(t === 'radio' && r.item.on ? 'you set the radio down, still talking. let it talk.'
                 : t === 'glowstick'          ? 'you leave the green light where it lies.'
@@ -1410,10 +1423,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   const escapeHtml = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
   const nameColor = (n) => { let h = 0; for (let i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) >>> 0; return `hsl(${h % 360} 72% 68%)` }
   const chatLines = []
+  // a friend's 'no-clipped away.' answered by their line coming back reads as that one line (client.js foldChat / sysText: "— maddie's
+  // line came back.")
   function renderChat() {
     if (!chatLogEl) return
-    chatLogEl.innerHTML = chatLines.map(l => {
-      if (l.sys) return `<div class="chat-sys">— ${escapeHtml(l.from)} ${escapeHtml(l.text)}</div>`
+    chatLogEl.innerHTML = foldChat(chatLines).map(l => {
+      if (l.sys) return `<div class="chat-sys">${escapeHtml(sysText(l.from, l.text))}</div>`
       if (l.text.startsWith('/me ')) return `<div class="chat-me" style="color:${nameColor(l.from)}">✦ ${escapeHtml(l.from)} ${escapeHtml(l.text.slice(4))}</div>`
       return `<div class="chat-line"><b style="color:${nameColor(l.from)}">${escapeHtml(l.from)}</b> ${escapeHtml(l.text)}</div>`
     }).join('')
@@ -1482,8 +1497,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       // Kneeling, the terminal waits, and says so, as it does lying down (openTerm), rather than drop the word
       if (termWord(t)) { closeChat(); if (mapOpen) closeMap(); if (!openTerm(t) && kneel.st) showMessage(TERM.NOT_STANDING); return }
       if (t.startsWith('/') && !t.startsWith('/me ')) handleCommand(t)   // the field console
-      else if (t && mpClient) mpClient.sendChat(t)
-      else if (t) showMessage('no one is here to hear it.')
+      else if (t && mpClient && mpClient.isConnected()) mpClient.sendChat(t)
+      else if (t) showMessage('no one is here to hear it.')                  // alone, or the line is dead: nothing leaves
       closeChat()
     }
     else if (e.code === 'Escape') closeChat()
@@ -1577,11 +1592,30 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         pinWarned = inv.warned
         if (!inv.url) { showMessage(inv.say, PRIO.discovery); return }
         document.dispatchEvent(new CustomEvent('backrooms:invite', { detail: { url: inv.url, say: (t) => showMessage([inv.say, t, inv.url].filter(Boolean).join('\n'), PRIO.discovery) } }))
-      } else showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status or /invite.')
+      } else if (cmd === 'who') {
+        // the room in words (crew.js whoLines): you, then each friend — the floor by its name (none for a friend on the block), the word
+        // the file has them under; solo, that no one else is. On the block nothing new is said: the file holds nothing from there
+        showMessage(level?.cfg.map ? TERM.WHERE_NONE : whoLines(crewRoster(), { id: mpClient?.id ?? null, lvl: level ? level.index : null, status: file.status }).join('\n'))
+      } else {
+        // the help names /who — but not on the block, where nothing new is said: there it reads as it always did
+        const help = 'the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.'
+        showMessage(level?.cfg.map ? help.replace(', /who', '') : help)
+      }
     } catch (e) {
       // desktop: a fetch that never reached the site (offline, DNS, blocked) says so plainly
       consoleFailed(e)
     }
+  }
+  // the people /who lists (crew.js whoLines): the players list as this frame read it (fillRemotes' roster, peerRec), with the floor and the word
+  // only where the bus has a fresh heartbeat for them (an older copy, or a friend gone quiet, is listed and not placed). Built for the one
+  // command typed, never per frame
+  function crewRoster() {
+    const out = []
+    for (const rp of peerRec.values()) {
+      const p = bus && bus.fresh(rp.id) ? bus.peers.get(rp.id) : null
+      out.push({ id: rp.id, name: rp.name, lvl: p ? p.lvl : null, status: p ? p.status : null })
+    }
+    return out
   }
   // the console's two failures, the same from the line and the terminal
   function consoleFailed(e) {
@@ -1817,10 +1851,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // (never this object) is checked exactly as evKinds says
   const kneelOut = { to: '' }, wokeOut = { by: '' }
   const callOut = { x: 0, y: 0, lvl: 0, c: true }   // your whistle on the wire: one reused payload (sendEv serialises it at once)
+  // live: while the line is down nothing is sent and nothing spent — a take waits in the outbox for the line to come back, the heartbeat
+  // keeps its change for that moment, and a cache with a word waits in your hands (cacheReady)
   const bus = mpClient ? createEvBus({
     send: mpClient.sendEv, now: () => performance.now(),
     self: () => { selfPos.x = player.x; selfPos.y = player.y; selfPos.lvl = level ? level.index : 0; return selfPos },
-    peerPos, peerIds: () => peerIdSet, selfId: () => mpClient.id, mergeRemote: mpClient.mergeRemote,
+    peerPos, peerIds: () => peerIdSet, selfId: () => mpClient.id, mergeRemote: mpClient.mergeRemote, live: mpClient.isConnected,
   }) : null
   if (bus) {
     // a friend's floor change is a people line: 'no-clipped deeper.' / 'climbed back.' / 'fell in.' (none when the depth held)
@@ -1841,6 +1877,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       addChatLine(name || 'someone', `whistles · ${bearingLabel(dx, dy, player.angle)}`, true)
       rollcall.hear(id, name, p.x, p.y, now)
       if (dist > FAR_BONUS.cells && rollcall.farBonusOk(id, now)) { sanity = Math.min(100, sanity + FAR_BONUS.sanity); company.add(FAR_BONUS.company) }
+      // and a faint pencil mark on your sheet where they stood (fogmap.js markCall): this floor's, fading out over CALL_MARK_MS, one a
+      // friend (the newest call moves it). Never on the block (it keeps no sheet), never your own (the bus hands you none of yours)
+      if (!level.cfg.map && fog.markCall(level.index, id, p.x, p.y, now)) { callMarkUntil = now + CALL_MARK_MS; if (mapOpen) mapCard.cellsDirty() }
     })
     // a friend kneels by you while you are down: their eighth tick (not before 4 s) counts you back — where you fell, never through die()
     bus.on('kneel', ({ id }) => { if (down.st === 'down' && down.kneelTick(id) === 'woken') wakeUp(id) })
@@ -1861,7 +1900,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     bus.on('cache', ({ id, name, payload: p, replay }) => {
       if (!replay && bus.fresh(id) && bus.peers.get(id).lvl !== p.lvl) return   // live: set down on the floor their 'here' says they stand on
       const key = cacheKey(p.lvl, p.cx, p.cy), here = level != null && p.lvl === level.index   // before the first floor: it waits for its floor
-      const r = ledger.place({ key, lvl: p.lvl, cx: p.cx, cy: p.cy, id, name, t: playT, pending: here ? null : { x: p.x, y: p.y, type: p.type, extra: extraFor(p, id, name, key) } })
+      // the relay's replay of a cache the ledger already holds (your own, handed back under your old id after a rejoin; one waiting for its
+      // floor; one you carried off while the line was dead): it is laid once, and what lies there keeps its clocks
+      if (replay && ledger.isEcho(key, id, name, p)) return
+      const r = ledger.place({ key, lvl: p.lvl, cx: p.cx, cy: p.cy, id, name, t: playT, p, pending: here ? null : { x: p.x, y: p.y, type: p.type, extra: extraFor(p, id, name, key) } })
       if (r.replaced) removeCache(r.replaced)
       for (const e of r.evicted) removeCache(e)
       if (here) {
@@ -1920,6 +1962,47 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     selfFile.status = file.status; selfFile.aseed = myPinTag; selfFile.origin = origin; selfFile.thin = thin
     return hereObj
   }
+  // ── the line (client.js onLine): a room's connection dropping under you is said once (#msg), and held in a plate in the chat stack until
+  //    it is back — the dead line, how the tries go, and the one press that calls it back: R, or a tap on the plate (a touch screen's own
+  //    way, above the discs). The client spaces its own tries meanwhile, the same room under the same name; after four minutes it stops,
+  //    and the press still works. A flood close is its own plate, with no press: the room asked not to be called again so soon. While the
+  //    line is down the bus sends nothing (its live dep): a take waits in the outbox and goes once the line is back, behind the relay's
+  //    replay, which the ledger knows (isEcho). Solo there is no line, and nothing here runs. Nothing of it is said on the block (Level ∅,
+  //    which a room never reaches: the front door is solo only), where nothing new is ──
+  const lineEl = document.getElementById('line-notice')
+  const lineDown = () => { const s = mpClient ? mpClient.lineState() : 'off'; return s === 'retrying' || s === 'gave-up' }
+  const lineQuiet = () => !!(level && level.cfg && level.cfg.map)
+  function renderLine() {
+    if (!lineEl || !mpClient) return
+    const rows = lineQuiet() ? null : lineNotice(mpClient.lineState(), isTouchDevice())
+    lineEl.textContent = ''
+    if (rows) for (const r of rows) { const d = document.createElement('div'); d.textContent = r; lineEl.appendChild(d) }
+    lineEl.hidden = !rows
+  }
+  const sayLine = (text) => { if (!lineQuiet()) showMessage(text, PRIO.interaction) }
+  // the one press: the client starts its spacing over and tries at once (a try already under way is that try)
+  function callLineBack() { if (lineDown() && mpClient.rejoinNow()) renderLine() }
+  if (mpClient) {
+    lineEl?.addEventListener('click', (e) => { e.preventDefault(); callLineBack() })
+    mpClient.onLine((state) => {
+      if (state === 'dropped') sayLine(LINE.DEAD)
+      else if (state === 'back') { sayLine(LINE.BACK); bus?.here(hereFields()) }
+      else if (state === 'flood') sayLine(LINE.FLOOD)
+      renderLine()
+    })
+    if (lineDown()) sayLine(LINE.DEAD)   // it dropped while the world was still loading
+    renderLine()
+  }
+
+  // the crew's people lines (crew.js createCrewWatch, on the bus's reading of each friend's heartbeat — nothing more is sent): a friend
+  // re-filed under a new word ('— ada re-filed under litigation.'; never their first heartbeat), and, once a session, a friend whose pin's
+  // square is yours ('— ada came in from your square.': the film's own rule, the room's own square too). Nothing about yourself, nothing
+  // about a friend on the block, nothing to you while you stand on it
+  const crewWatch = createCrewWatch()
+  bus?.onPeerFile((e) => {
+    const lines = crewWatch.heard(e, { selfId: mpClient.id, selfTag: myPinTag, onBlock: !level || !!level.cfg.map })
+    for (let i = 0; i < lines.length; i++) addChatLine(e.name || 'someone', lines[i], true)
+  })
   // the friends on this floor who could come for you: fresh, and not lying down themselves (two down together each die as they fell)
   function friendsUp() {
     if (!bus) return 0
@@ -2947,6 +3030,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // the terminal, ` and Esc never reach here (the input keeps its keys): these fold it when the focus has wandered off the input
     if (K['Backquote']) { K['Backquote'] = false; if (termOpen) closeTerm(); else openTerm() }
     if (termOpen && K['Escape']) { K['Escape'] = false; closeTerm() }
+    // R calls a dropped line back (its plate says so): one press, only while a room's line is down. No verb has R, and solo leaves it be
+    if (mpClient && K['KeyR']) { K['KeyR'] = false; callLineBack() }
 
     // Esc gets up from beside the friend you knelt by (before the map can read it)
     if (kneel.st && K['Escape']) { K['Escape'] = false; stopKneel(null) }
@@ -2980,7 +3065,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
           // moment) and the room is told it is gone. The page count never moves: a cache is not a page
           if (res.ok && res.item.cacheKey) {
             if (!isMine(res.item)) sanity = Math.min(100, sanity + 4)
-            ledger.take(res.item.cacheKey)
+            ledger.take(res.item.cacheKey, true)                      // by hand: a replay of it after a rejoin is not laid down again
             relayLater('take', { key: res.item.cacheKey }, { drop: res.item.cacheKey })
             if (res.item.ph >= 0 || res.item.oct >= 0) openCard('read', readText(isMine(res.item) ? 'you left this.' : (res.item.by ?? 'wanderer'), res.item.ph >= 0 ? PHRASES[res.item.ph] : '', arrowFor(res.item.oct, player.angle)))
           }
@@ -3100,6 +3185,12 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       }
       if (mapOpen) mapCard.angleDirty(player.angle)
     }
+    // a friend's whistle mark fades while the sheet is up: its strokes are redrawn once a CALL_REDRAW_MS while a mark shows, and once more
+    // as the last one goes (two number compares a frame otherwise)
+    if (mapOpen && callMarkUntil > 0) {
+      const t = performance.now()
+      if (t - callDrawnAt >= CALL_REDRAW_MS) { callDrawnAt = t; mapCard.cellsDirty(); if (t >= callMarkUntil) callMarkUntil = 0 }
+    }
     // ── dread (dread.js): on its own 4 Hz clock, so it stays live while you stand still. While something that could count stands within
     //    reach in a straight line, the field is flooded from your cell (only the chunks preload just held; at once when the gate opens,
     //    then at most every DREAD_CLOCK.build) and dreadFrom reads it: walls between you and a thing make it weigh nothing. Otherwise
@@ -3140,7 +3231,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       compassEl.style.opacity = (compassOut.length === 0 || nearExit) ? '0' : '1'
     }
     netTimer += dt
-    if (mpClient?.isConnected() && netTimer >= 0.05) { netTimer = 0; mpClient.sendPos(player.x, player.y, player.angle, player.hp) }
+    if (mpClient?.isConnected() && netTimer >= POS_GAP_S) { netTimer = 0; mpClient.sendPos(player.x, player.y, player.angle, player.hp) }
     // the people: the roster and this floor's remote players, once; then the bus's tick (new / gone / stale peers, the 3 s heartbeat) and
     // 'here' about once a second (the bus sends only a change, or the 3 s beat)
     fillRemotes()

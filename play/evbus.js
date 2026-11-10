@@ -20,7 +20,10 @@
 // Pure. deps: { send(kind, payload, opts), now() ms, self() → {x,y,lvl},
 // peerPos(id) → {x,y}|null, peerIds() → Set, selfId (value or fn),
 // mergeRemote?(id, fields) — lets the client's remote records carry the
-// here fields for the renderer }.
+// here fields for the renderer, live?() → false while the line is down
+// (client.js isConnected): then nothing is sent and nothing is spent —
+// emit() and ready() say no (the game's outbox keeps a take for the line
+// coming back), and the heartbeat keeps its change for that moment }.
 
 export const HERE_INTERVAL_MS = 3000
 export const STALE_MS = 8000
@@ -82,12 +85,13 @@ export function createEvBus(deps) {
   const lastIn = new Map()       // id → Map(kind → t)
   const nonces = new Map()       // id → {set, q}
   const peers = new Map()        // id → {id, name, lvl, lit, st, seen, o, thin, status, aseed, seenAt, legacy}
-  const floorCbs = [], roomCbs = []
+  const floorCbs = [], roomCbs = [], fileCbs = []
   const standing = { 'notice-mailed': 0, extension: 0, compliance: 0, litigation: 0, total: 0 }
   const onFloorList = []         // reused: fresh peers on my floor
   let nOut = 0
   let hereFields = null, hereDirty = false, lastHereAt = -Infinity
   let lastSelfLvl = null
+  const live = () => typeof deps.live !== 'function' || deps.live() !== false
 
   function register(kind, spec = {}) {
     kinds.set(kind, {
@@ -109,6 +113,7 @@ export function createEvBus(deps) {
     const spec = kinds.get(kind)
     if (!spec || !payload || typeof payload !== 'object') return false
     if (!spec.check(payload)) return false
+    if (!live()) return false
     const t = now()
     if (spec.minGapMs && lastOut.has(kind) && t - lastOut.get(kind) < spec.minGapMs) return false
     lastOut.set(kind, t)
@@ -120,7 +125,7 @@ export function createEvBus(deps) {
   // would emit() let this kind out now (marginMs: and that long besides)? The caller asks before it acts on what it would send
   function ready(kind, marginMs = 0) {
     const spec = kinds.get(kind)
-    if (!spec) return false
+    if (!spec || !live()) return false
     return !spec.minGapMs || !lastOut.has(kind) || now() - lastOut.get(kind) >= spec.minGapMs + marginMs
   }
 
@@ -187,6 +192,8 @@ export function createEvBus(deps) {
     const p = ev.payload
     const rec = seat(ev.id)
     const from = rec.legacy ? null : rec.lvl
+    // the word the last heartbeat said: null on the first one this bus has heard from them (seat's seenAt is -Infinity until then)
+    const first = rec.seenAt === -Infinity, was = first ? null : rec.status
     rec.name = ev.name ?? rec.name
     rec.lvl = p.lvl; rec.lit = p.lit; rec.st = p.st; rec.seen = p.seen; rec.o = p.o
     rec.thin = p.thin; rec.status = p.status; rec.aseed = p.aseed
@@ -197,6 +204,12 @@ export function createEvBus(deps) {
     if (from != null && from !== p.lvl) {
       const line = floorChangeLine(from, p.lvl)
       for (const cb of floorCbs) { try { cb(ev.id, rec.name, from, p.lvl, line) } catch {} }
+    }
+    // what the file holds of them, heartbeat by heartbeat (crew.js reads a re-filing and a shared square off it): read on the receiving
+    // side only, from the fields 'here' already carries
+    if (fileCbs.length) {
+      const fe = { id: ev.id, name: rec.name, lvl: p.lvl, status: p.status, aseed: p.aseed, first, from: was }
+      for (const cb of fileCbs) { try { cb(fe) } catch {} }
     }
     recompute()
   }
@@ -237,10 +250,13 @@ export function createEvBus(deps) {
   function roomStanding() { return standing }
   function onRoomChange(cb) { if (typeof cb === 'function') roomCbs.push(cb) }
   function onFloorChange(cb) { if (typeof cb === 'function') floorCbs.push(cb) }
+  // cb({ id, name, lvl, status, aseed, first, from }) after every believed 'here': first on the first one heard from that id, from the
+  // status the one before said (null when first). Nothing is sent: it is the receiving side's reading of the heartbeat it already had
+  function onPeerFile(cb) { if (typeof cb === 'function') fileCbs.push(cb) }
 
   // ---- here: the heartbeat out ---------------------------------------------
   function flushHere(t) {
-    if (!hereFields) return
+    if (!hereFields || !live()) return
     if (!hereDirty && t - lastHereAt < HERE_INTERVAL_MS) return
     if (emitHere({ ...hereFields }, t)) { hereDirty = false; lastHereAt = t }
   }
@@ -277,5 +293,5 @@ export function createEvBus(deps) {
   // must not be lost behind its own heartbeat
   register('here', { check: hereOk })
 
-  return { register, emit, ready, receive, on, here, peers, onFloor, fresh, freshPeersOnFloor, roomStanding, onRoomChange, onFloorChange, tick }
+  return { register, emit, ready, receive, on, here, peers, onFloor, fresh, freshPeersOnFloor, roomStanding, onRoomChange, onFloorChange, onPeerFile, tick }
 }

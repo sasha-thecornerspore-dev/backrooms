@@ -7,12 +7,13 @@
 // The pin itself leaves the machine only through the player's OWN custom beacon webhook (and a phone's short link, read once
 // at the relay: site.js resolveShortLink); a room is told its neighbourhood (anchor.js neighbourhoodSeed), and so is an
 // invite link that carries it (site.js buildInvite).
-import { formatAnchor, anchorSeed } from './anchor.js'
+import { anchorSeed } from './anchor.js'
 import { isValidPin } from './origin-intake.js'
 import { LEGACY, LEGACY_EFFECT, fileBase } from './origin-rules.js'
 import { FIRST_LINE, AGAIN_LINE } from './origin-thin.js'
 
 export const LEASH_FREE_M = 200
+export const LEASH_FAR_M = 600   // where the pull reaches a point a second: past it the film says the body is far behind you
 export const LEASH_PER_M = 400
 export const CALM_S = 60
 export const DEBT_DECAY_M_PER_S = 1
@@ -22,6 +23,10 @@ export const MERCY_LINE = 'the floor moved under the pin. for a moment you are c
 export const DEATH_LINE = 'the body is pulling you back. it is not there yet.'
 export const BEACON_LINE = 'you push the beacon into the dark. it carries the pin.'
 const WISH_LINE = 'your request is noted against an address. the address is real. that is the problem.'
+// the body, in words (2.0.7): a murmur on every floor (game.js buildLevel), and what the film and the form say of where it lies. None of
+// them prints the pin: on a stream or a screenshot its four decimals were the door to about 11 m
+export const BODY_LINE = 'your body remains where you fell through.'
+export const BODY_PLACE = 'where you fell through'
 
 // sanity per second the pin takes back
 export function leashDrain(D, calm) {
@@ -32,8 +37,17 @@ export function leashDebtStep(debt, dt) {
   return Math.max(0, debt - dt * DEBT_DECAY_M_PER_S)
 }
 
+// how far behind you the film puts the body, in words, in the leash's three bands: within its slack (to LEASH_FREE_M), while it
+// pulls (to LEASH_FAR_M), and past that. D itself is never printed, so no digit reaches the line. A D that is not a finite number
+// (NaN, a missing drift, Infinity) reads as far: a drift that cannot be read cannot vouch that the body is close
+function pinFar(D) {
+  if (!Number.isFinite(D) || D > LEASH_FAR_M) return 'far'
+  return D <= LEASH_FREE_M ? 'close' : 'a long walk'
+}
+
+// (anchor: the pin, which the caption needs to exist and never prints; glyph: a letter of compose-polaroid.js's CLAIM, or none)
 export function pinCaption(anchor, D, glyph) {
-  return `the film shows ${formatAnchor(anchor)}. it is ${D} m behind you and it has not moved.` +
+  return `the film shows ${BODY_PLACE}. it is ${pinFar(D)} behind you and it has not moved.` +
     (glyph ? ` one letter developed beside it: "${glyph}".` : '')
 }
 

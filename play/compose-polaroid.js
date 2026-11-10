@@ -7,6 +7,8 @@
 //   anchored pin, the unnamed's letter that is not theirs)   (3) a lost soul in frame   (4) the thin figure beside you
 //   (5) no claim develops: compliance's honest film, else the finalizing hall   (6) the letter.
 // Under LEGACY with nobody in frame this is the core's three captions, by its precedence (thinNear > finalizing > letter).
+import { squareMatch, photoWord } from './crew.js'
+
 export const LINES = Object.freeze({
   SUBJECT_DOWN: 'the film develops {name}, where they fell. they are counted.',
   SUBJECT_THIN: 'the film develops {name}. you can see the wall through them.',
@@ -28,6 +30,7 @@ export const LINES = Object.freeze({
 
 const PHOTO_SANITY = 8          // a capture is a small counter-claim: it steadies you (game.js's +8)
 const CLAIM = 'iwashere'
+const BLOCK = 4                 // level.index of ∅
 
 // a function replacer: a name is spliced verbatim, whatever `$` patterns it holds
 const fill = (s, key, v) => s.replace(key, () => String(v))
@@ -39,10 +42,11 @@ export function developsClaim(rules, mods, index, depth, sanity) {
   return !!(rules.canDevelopClaim && mods.polaroidGlyph(index, depth, sanity))
 }
 
-// the friend's 'here' carries their pin's TAG (anchor.js pinTag: its neighbourhood's, room-salted), so it is your own tag it is held against
+// the friend's 'here' carries their pin's TAG (anchor.js pinTag: its neighbourhood's, room-salted), so it is your own tag it is held against —
+// by crew.js squareMatch, the one rule the room's 'came in from your square.' reads too (so that line never says more than the film)
 function subjectLine(s, tag) {
   if (s.thin === true) return LINES.SUBJECT_THIN
-  if (tag != null && s.aseed != null && s.aseed === tag) return LINES.SUBJECT_PIN   // the same neighbourhood's pin, never same maze
+  if (squareMatch(s.aseed, tag)) return LINES.SUBJECT_PIN                         // the same neighbourhood's pin, never same maze
   if (s.origin === 'processed') return LINES.SUBJECT_PROCESSED
   if (s.origin === 'anchored') return LINES.SUBJECT_ANCHORED
   if (s.origin === 'tenant') return LINES.SUBJECT_TENANT
@@ -59,12 +63,14 @@ export function polaroidCaption(ctx) {
   const dev = developsClaim(rules, mods, index, depth, sanity)
   const r = { cap: '', glyphAdvance: false, emitPhoto: null, sanity: PHOTO_SANITY, leashCalm: 0 }
 
-  // (1) a friend in frame: the photo goes to them; a downed one is counted, never lettered
+  // (1) a friend in frame: the photo goes to them; a downed one is counted, never lettered. The film names the word their file is under
+  // (crew.js photoWord), after what it shows of them and before a letter — never on the block, which keeps what it said
   const s = ctx.subject
   if (s) {
     r.emitPhoto = { of: s.id, x: ctx.player.x, y: ctx.player.y, lvl: ctx.lvl }
-    if (s.st === 'down') { r.cap = fill(LINES.SUBJECT_DOWN, '{name}', s.name); return r }
-    r.cap = fill(subjectLine(s, ctx.pinTag ?? null), '{name}', s.name)
+    const word = index === BLOCK ? '' : photoWord(s.status)
+    if (s.st === 'down') { r.cap = fill(LINES.SUBJECT_DOWN, '{name}', s.name) + word; return r }
+    r.cap = fill(subjectLine(s, ctx.pinTag ?? null), '{name}', s.name) + word
     if (dev) { r.cap += fill(LINES.SUBJECT_GLYPH, '{g}', g); r.glyphAdvance = true }
     return r
   }
