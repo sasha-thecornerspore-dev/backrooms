@@ -17,7 +17,7 @@ const {
   TENANT, DOOR_LINES, DOOR_SANITY, SEALED_CELLS, facingCell, sealedCellIndex, isSealedMaterial, doorLine, TENANT_EVENTS, EXIT_GRAB,
 } = tenantMod
 const {
-  ANCHORED, LEASH_FREE_M, LEASH_PER_M, CALM_S, leashDrain, leashDebtStep, pinCaption, isSamePin, MERCY_LINE, DEATH_LINE, FRIEND_SAME_PIN,
+  ANCHORED, LEASH_FREE_M, LEASH_FAR_M, LEASH_PER_M, CALM_S, leashDrain, leashDebtStep, pinCaption, isSamePin, MERCY_LINE, DEATH_LINE, FRIEND_SAME_PIN,
 } = anchoredMod
 const {
   PROCESSED, floorKey, SLIP_LINE, RADIO_KEY_LINE, OPENED_LINE, RELEASE_LINE, SOUR, NPC_REFUSAL, WISH_REPLY, claimRefile,
@@ -147,8 +147,29 @@ describe('anchored', () => {
   })
 
   it('the pin caption', () => {
-    expect(pinCaption(PIN, 340, null)).toBe('the film shows 39.2994,-76.6410. it is 340 m behind you and it has not moved.')
-    expect(pinCaption(PIN, 340, 'i')).toBe('the film shows 39.2994,-76.6410. it is 340 m behind you and it has not moved. one letter developed beside it: "i".')
+    // 2.0.7 (decision 3): the film says where the body lies in words, never the pin's numbers; and how far, in words too
+    expect(pinCaption(PIN, 340, null)).toBe('the film shows where you fell through. it is a long walk behind you and it has not moved.')
+    expect(pinCaption(PIN, 340, 'i')).toBe('the film shows where you fell through. it is a long walk behind you and it has not moved. one letter developed beside it: "i".')
+    expect(pinCaption(PIN, 340, null)).not.toContain(formatAnchor(PIN))
+  })
+
+  it('the pin caption says the distance in three bands that follow the leash, at their edges', () => {
+    const CLOSE = 'the film shows where you fell through. it is close behind you and it has not moved.'
+    const WALK = 'the film shows where you fell through. it is a long walk behind you and it has not moved.'
+    const FAR = 'the film shows where you fell through. it is far behind you and it has not moved.'
+    expect(LEASH_FAR_M).toBe(600)
+    expect(LEASH_FAR_M).toBe(LEASH_FREE_M + LEASH_PER_M)   // the drift where the pull reaches a point a second
+    expect(leashDrain(LEASH_FAR_M, 0)).toBe(1)
+    for (const [D, cap] of [[0, CLOSE], [12, CLOSE], [200, CLOSE], [201, WALK], [200.5, WALK], [340, WALK], [600, WALK], [601, FAR], [600.5, FAR], [5000, FAR]]) {
+      expect(pinCaption(PIN, D, null), String(D)).toBe(cap)
+    }
+    // a D that is not a finite number still says a line, the far band: a drift that cannot be read cannot vouch the body is close
+    for (const D of [NaN, Infinity, -Infinity, undefined, null, '340']) expect(pinCaption(PIN, D, null), String(D)).toBe(FAR)
+    expect(pinCaption(PIN, NaN, 'w')).toBe(FAR + ' one letter developed beside it: "w".')
+    // no digit reaches the line, whatever D is and whichever letter the film develops (compose-polaroid.js CLAIM, 'iwashere')
+    for (const D of [0, 200, 201, 600, 601, 123456.789, 1e21, -5, NaN, Infinity, undefined]) {
+      for (const g of [null, ...'iwashere']) expect(pinCaption(PIN, D, g), `${D} ${g}`).not.toMatch(/\d/)
+    }
   })
 
   it('isSamePin is the anchor seed\'s ~11 m rounding', () => {

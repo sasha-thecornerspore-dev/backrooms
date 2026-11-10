@@ -181,7 +181,8 @@ describe('game.js: the save and the resume', () => {
 
 describe('game.js: the map, held not modal', () => {
   it('the card is built once with the fog and a Tab-shaped onTap; closeMap folds it; the paper corner feeds the same key', () => {
-    expect(game).toMatch(/const mapCard = createMapCard\(document, \{ fog, getLevel: \(\) => level, getPlayer: \(\) => player, onTap: \(\) => \{ K\['Tab'\] = true \} \}\)/)
+    // (2.0.7: and the ms clock a friend's whistle mark was made on, so the card can fade it: fogmap.js markCall)
+    expect(game).toMatch(/const mapCard = createMapCard\(document, \{ fog, getLevel: \(\) => level, getPlayer: \(\) => player, onTap: \(\) => \{ K\['Tab'\] = true \}, now: \(\) => performance\.now\(\) \}\)/)
     expect(game).toMatch(/function closeMap\(\) \{ mapCard\.close\(\); mapOpen = false; document\.body\.classList\.remove\('map-open'\) \}/)
     expect(game).toMatch(/mapTabEl\?\.addEventListener\('touchstart', \(e\) => \{ e\.preventDefault\(\); K\['Tab'\] = true \}, \{ passive: false \}\)/)
     expect(game).toMatch(/mapTabEl\?\.addEventListener\('click', \(\) => \{ K\['Tab'\] = true \}\)/)

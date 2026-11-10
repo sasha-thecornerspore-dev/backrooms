@@ -303,13 +303,14 @@ describe('remote records', () => {
     const c = createMultiplayerClient(fs.url)
     await c.connect('r')
     const list = (x) => send(sock, { type: 'players', list: [{ id: 'me' }, { id: 'b', x, y: 1, angle: 0, name: 'bo' }] })
+    // stillFor is read from stillSince when asked (the stillness fix): just seated or just moved, it reads about the 20 ms since
     list(1); await sleep(20)
-    expect(c.getRemotePlayers()[0].stillFor).toBe(0)
+    expect(c.getRemotePlayers()[0].stillFor).toBeLessThan(0.2)
     list(1.01); await sleep(650)
     list(1.0); await sleep(20)
     expect(c.getRemotePlayers()[0].stillFor).toBeGreaterThanOrEqual(0.6)
     list(1.5); await sleep(20)
-    expect(c.getRemotePlayers()[0].stillFor).toBe(0)
+    expect(c.getRemotePlayers()[0].stillFor).toBeLessThan(0.2)
     c.disconnect(); await fs.close()
   })
 

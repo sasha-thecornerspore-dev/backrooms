@@ -1,4 +1,5 @@
-// relay/evguard.js — the guards every relayed 'ev' frame passes.
+// relay/evguard.js — the guards every relayed 'ev' frame passes, and the pace
+// of pos, chat and typing (2.0.7, below).
 //
 // Extracted from relay.js (like seed.js) so plain vitest can import it:
 // relay.js imports 'cloudflare:workers', which cannot resolve under
@@ -61,3 +62,75 @@ export function evBucket(att, now) { return bucket(att, now, 'evTok', 'evT', EV_
 
 // a keep the log will store: kpTok / kpT, one every 2 s, a burst of 4
 export function evKeepBucket(att, now) { return bucket(att, now, 'kpTok', 'kpT', EV_KEEP_RATE, EV_KEEP_BURST) }
+
+// ── pos, chat and typing: a pace each ───────────────────────────────────────────────────────
+// Nothing limited these three before 2.0.7. Each limit is at least twice the most an honest client
+// sends, read off the client (src/net/client.js and its callers in src/renderer/game.js), and each
+// burst covers what a line that stalled hands the socket all at once: frames queue in the sender
+// while nothing moves, then arrive together.
+//
+// pos: game.js sends one when netTimer passes 0.05 s of play, then sets it back to 0, so at most one
+// a frame and never two within 0.05 s; a frame's dt is the time that passed, capped at 0.05 s, so play
+// never runs ahead of the clock. 20 a second is the most, whatever the frame rate (world.json
+// net.posHz may only lower it).
+export const POS_RATE = 40           // twice 20
+export const POS_BURST = 60          // three seconds of honest frames
+// chat: typed by hand. Enter opens the line, and the Enter that sends it closes it, so a line is three
+// keys at the least (Enter, a letter, Enter); holding Enter sends nothing (the line opens empty and
+// closes empty). A hand at its fastest, about fifteen keys a second and only for a moment, sends five
+// lines a second.
+export const CHAT_RATE = 10          // twice 5
+export const CHAT_BURST = 20         // four seconds of that hand
+// typing: noteTyping sends on with the first key of a line and off when its 1800 ms stop timer runs
+// out or the line closes, so two frames a line at the most (Enter, a letter, Escape is enough): the
+// same hand sends ten a second.
+export const TYPING_RATE = 20        // twice 10
+export const TYPING_BURST = 40       // four seconds of that hand
+
+// The close. A frame one of the three refuses is dropped and nothing is said; it is also a strike. A
+// socket holds FLOOD_STRIKES of them and they come back at FLOOD_HEAL a second; the strike it does not
+// have closes it, FLOOD_CLOSE 'too fast', the one close a 2.0.7 client takes as do not reconnect.
+// Why an honest client never comes near it: at its own pace each kind takes at most half of what its
+// bucket refills, so in steady play nothing is refused at all. Only a line that stalls and then hands
+// over what it queued can be refused, and then no more than the client made during the stall, less
+// the three bursts. Over any stretch longer than a moment an honest client makes fewer than
+// FLOOD_HEAL frames a second (pos 20, and 6 from a hand that keeps up two lines a second: it cannot
+// keep up five), so stall after stall never wears the strikes down. How long one stall may be:
+//   • a 2.0.7 client holds its positions and its typing while its line says nothing (src/net/client.js
+//     HOLD), so a stall hands over its first two seconds, one position a second and what was typed
+//     into it. No stall a connection lives through spends the strikes (a stalled TCP connection gives
+//     up after about fifteen minutes on Linux) unless a hand keeps up two lines a second into the
+//     silence for more than about thirteen minutes of it.
+//   • a copy before 2.0.7 holds nothing: FLOOD_STRIKES is more than it makes in a minute and a half,
+//     so no shorter stall spends them (over a minute even with the hand at its fastest throughout),
+//     but a stall of about two minutes or more that its connection survives can, and it is closed.
+// test/relay-buckets.test.js plays all of it.
+// A socket sending past a limit by e frames a second is closed after about FLOOD_STRIKES /
+// (e − FLOOD_HEAL) seconds: in under three at a thousand a second, about eighty at sixty over, twenty
+// minutes at two over the heal. One that stays within FLOOD_HEAL of its limits is clipped and never
+// closed, so the most one socket can send without end is the three limits and the heal: a hundred
+// frames a second, every one of them metered whether it is refused or not, seventy of them relayed
+// (forty positions, each a players list to the whole room, ten chat lines, twenty typing frames).
+// docs/operations.md §6 (gap 11) says what that leaves open.
+export const FLOOD_STRIKES = 2400
+export const FLOOD_HEAL = 30
+export const FLOOD_CLOSE = 4029      // a private-use WebSocket close code (4000–4999)
+export const FLOOD_REASON = 'too fast'
+
+// posTok / posT, chTok / chT, tyTok / tyT: on the attachment, like evTok / evT
+export function posBucket(att, now) { return bucket(att, now, 'posTok', 'posT', POS_RATE, POS_BURST) }
+export function chatBucket(att, now) { return bucket(att, now, 'chTok', 'chT', CHAT_RATE, CHAT_BURST) }
+export function typingBucket(att, now) { return bucket(att, now, 'tyTok', 'tyT', TYPING_RATE, TYPING_BURST) }
+// a refused frame's strike, flTok / flT: false when there was none left to spend
+export function floodStrike(att, now) { return bucket(att, now, 'flTok', 'flT', FLOOD_HEAL, FLOOD_STRIKES) }
+
+const PACED = Object.freeze({ __proto__: null, pos: posBucket, chat: chatBucket, typing: typingBucket })
+
+// The one call both servers make for a pos, chat or typing frame: 'pass' (relay it), 'drop' (over its
+// limit: drop it, say nothing) or 'close' (out of strikes: close the socket FLOOD_CLOSE, FLOOD_REASON).
+// A type it does not pace passes.
+export function pace(att, type, now) {
+  const b = PACED[type]
+  if (!b || b(att, now)) return 'pass'
+  return floodStrike(att, now) ? 'drop' : 'close'
+}

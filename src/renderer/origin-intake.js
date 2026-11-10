@@ -7,8 +7,6 @@
 //
 // Pure: no DOM, no clock, no Math.random. The save helpers (identityOut / identityIn) let game.js add the identity to
 // snapshot() and read it back before applyResume() in one validated call each.
-import { formatAnchor } from './anchor.js'
-
 export const ORIGINS = Object.freeze(['tenant', 'anchored', 'processed', 'unnamed'])   // the four evbus.js accepts beside null
 const ROUTES = ['solo', 'online', 'lan', 'host']
 const ARRIVALS = ['walked', 'dropped']
@@ -53,13 +51,17 @@ export function formText(ctx, fileStatus) {
   const lines = [
     'intake.',
     `name: ${blank ? '______' : c.name.trim().toLowerCase()}.`,
-    isValidPin(c.anchor) ? `address: ${formatAnchor(c.anchor)}. the body is there.` : 'address: woodyear st. (the street goes on. the block does not.)',
+    // a pin is written in words (2.0.7): the form is read on screen, and its four decimals were the door
+    isValidPin(c.anchor) ? ADDRESS_PIN : 'address: woodyear st. (the street goes on. the block does not.)',
     fileStatus ? `status: ${fileStatus.replace('-', ' ')}.` : 'status: ______. the pen ran out.',   // the word as every voice says it; the pen runs out only on a blank
   ]
   if (blank) lines.push('the file cannot spell you. write your name where the dark can read it.')
   return lines
 }
 
+// the form's address for a pin, in the same words as origin-anchored.js BODY_PLACE (written out here: the relay bundles this file, and it
+// stays clear of the film's modules)
+export const ADDRESS_PIN = 'address: where you fell through. the body is there.'
 export const FORM_FOOT = 'the form on the counter.'
 export const AMEND_LINE = 'the file does not take amendments. it takes forms.'
 

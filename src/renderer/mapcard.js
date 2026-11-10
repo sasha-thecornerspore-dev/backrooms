@@ -2,7 +2,8 @@
 //
 // drawMap(ctx, view, opts) takes any object with fillRect / fillText / save / restore / translate / rotate / beginPath / moveTo / lineTo /
 // fill: each walked cell one 7x7 ink rect at alpha 0.55, jittered ±0.6 px by a hash of the cell (a pencil hand, the same every time),
-// faded chunks at 0.22 with their fresh cells drawn dark over them, pins as 11 px monospace glyphs (hollow when lost, faint when stale or
+// faded chunks at 0.22 with their fresh cells drawn dark over them, a friend's whistle a faint squiggle fading with its mark, pins as 11 px
+// monospace glyphs (hollow when lost, faint when stale or
 // lost, a machine struck through once vended, a note faint until read), the player a 3-point arrow rotated by the view's angle. opts.layer 'cells' draws the
 // strokes and pins only (the offscreen layer), 'player' the arrow only (redrawn when the angle turns), unset draws all.
 // createMapCard(doc, deps) is the thin DOM: a no-op card when #map-card is absent (openNoteCard's rule, game.js:468), otherwise redraws
@@ -14,6 +15,9 @@ import { buildMapView } from './fogmap.js'
 export const GLYPHS = Object.freeze({ down: '▽', up: '△', lift: '◇', ring: '▽', machine: '⊟', sight: '✶', note: '¶', arrived: '○', hurt: '×', den: '⌂' })
 const LOST = '◌'                                              // the hole is not where you drew it
 const VENDED = '⊠'                                            // the machine, struck through
+// a friend's whistle, where they stood (fogmap.js markCall): a faint squiggle that fades with the mark, never a pin and never a number
+export const CALL_GLYPH = '∿'
+export const CALL_ALPHA = 0.45                                // a fresh mark; it fades to nothing with the pencil left (view.calls[i].a)
 const INK = '#2b2418'
 const CELLS = 56, PITCH = 8, INK_PX = 7
 const KIND_ORDER = ['down', 'up', 'lift', 'ring']
@@ -62,6 +66,22 @@ function drawPins(ctx, view, pitch, color, tx, ty) {
   }
 }
 
+// the friends' whistle marks (view.calls[0..nCalls)), under the pins, each as faint as the pencil it has left
+function drawCalls(ctx, view, pitch, color, tx, ty) {
+  const n = view.nCalls | 0
+  if (!n) return
+  ctx.fillStyle = color
+  ctx.font = `${Math.round(11 * pitch / PITCH)}px monospace`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const half = pitch / 2
+  for (let i = 0; i < n; i++) {
+    const c = view.calls[i]
+    ctx.globalAlpha = CALL_ALPHA * Math.max(0, Math.min(1, c.a))
+    ctx.fillText(CALL_GLYPH, tx + (Math.floor(c.x) - view.ox) * pitch + half, ty + (Math.floor(c.y) - view.oy) * pitch + half)
+  }
+}
+
 function drawPlayer(ctx, view, pitch, color, tx, ty) {
   const s = pitch / PITCH
   ctx.save()
@@ -82,7 +102,7 @@ export function drawMap(ctx, view, opts = {}) {
   const pitch = opts.pitch ?? PITCH, ink = opts.ink ?? INK_PX, color = opts.color ?? INK
   const tx = opts.tx ?? 0, ty = opts.ty ?? 0
   const layer = opts.layer ?? 'all'
-  if (layer !== 'player') { drawCells(ctx, view, pitch, ink, color, tx, ty); drawPins(ctx, view, pitch, color, tx, ty) }
+  if (layer !== 'player') { drawCells(ctx, view, pitch, ink, color, tx, ty); drawCalls(ctx, view, pitch, color, tx, ty); drawPins(ctx, view, pitch, color, tx, ty) }
   if (layer !== 'cells') drawPlayer(ctx, view, pitch, color, tx, ty)
   ctx.globalAlpha = 1
 }
@@ -99,6 +119,7 @@ export function fitView(view, size, out = { pitch: PITCH, ink: INK_PX, tx: 0, ty
   for (let i = 0; i < view.n; i++) grow(view.cells[2 * i], view.cells[2 * i + 1])
   for (let i = 0; i < view.nFresh; i++) grow(view.fresh[2 * i], view.fresh[2 * i + 1])
   for (let i = 0; i < view.pins.length; i++) grow(Math.floor(view.pins[i].x) - view.ox, Math.floor(view.pins[i].y) - view.oy)
+  for (let i = 0; i < (view.nCalls | 0); i++) grow(Math.floor(view.calls[i].x) - view.ox, Math.floor(view.calls[i].y) - view.oy)   // a friend's whistle stays on the sheet
   const span = Math.max(x1 - x0 + 1, y1 - y0 + 1) + 2 * FIT_MARGIN
   let pitch = PITCH
   for (const p of FIT_PITCHES) if (p * span <= size) { pitch = p; break }
@@ -121,9 +142,9 @@ function footerText(name, counts) {
 const noop = () => {}
 const NOOP_CARD = Object.freeze({ open: noop, close: noop, toggle: noop, isOpen: () => false, cellsDirty: noop, angleDirty: noop, setFooter: noop })
 
-// createMapCard(doc, { fog, getLevel, getPlayer, onTap? }): onTap is called when the card itself is tapped (the game treats it like Tab);
-// without one a tap folds the card directly.
-export function createMapCard(doc, { fog, getLevel, getPlayer, onTap = null } = {}) {
+// createMapCard(doc, { fog, getLevel, getPlayer, onTap?, now? }): onTap is called when the card itself is tapped (the game treats it like Tab);
+// without one a tap folds the card directly. now() is the ms clock the whistle marks were made on (without one none is drawn).
+export function createMapCard(doc, { fog, getLevel, getPlayer, onTap = null, now = null } = {}) {
   const card = doc && typeof doc.getElementById === 'function' ? doc.getElementById('map-card') : null
   if (!card) return NOOP_CARD
   const canvas = doc.getElementById('map-canvas')
@@ -154,7 +175,7 @@ export function createMapCard(doc, { fog, getLevel, getPlayer, onTap = null } = 
   function redrawCells() {
     const lvl = getLevel(), player = getPlayer()
     if (!lvl || !player) return
-    view = buildMapView(fog, lvl.index, player, { cells: CELLS, out: view })
+    view = buildMapView(fog, lvl.index, player, { cells: CELLS, out: view, now: typeof now === 'function' ? now() : NaN })
     fitView(view, W, fit)
     if (octx) {
       if (octx.clearRect) octx.clearRect(0, 0, W, W)

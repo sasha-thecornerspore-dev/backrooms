@@ -3,15 +3,23 @@
 // host and no port-forwarding: everyone connects here and shares a world.
 //
 // Speaks the exact same JSON protocol as server/index.js:
-//   → join {roomId, worldSeed?, name}  → pos {x,y,angle}  → chat {text}
+//   → join {roomId, worldSeed?, name}  → pos {x,y,angle}  → chat {text}  → typing {on}
 //   → ev {kind, payload, keep?, drop?}
-//   ← welcome {playerId, worldSeed, first}  ← players [...]  ← joined/left/chat
+//   ← welcome {playerId, worldSeed, first}  ← players [...]  ← joined/left/chat/typing
 //   ← ev {id, name, kind, payload, t, replay?}
+//   ← close 4029 'too fast' (evguard.js FLOOD_CLOSE): the socket flooded; do not reconnect
+//
+// pos, chat and typing each have a pace (evguard.js pace, 2.0.7): a frame over
+// its limit is dropped and nothing is said, and a socket that keeps flooding is
+// seen out of the room and closed 4029 'too fast'. The limits are twice the most
+// an honest client sends, so one never meets them (test/relay-buckets.test.js).
+// 'ev' keeps its own bucket (evBucket), unchanged.
 //
 // Uses the WebSocket Hibernation API + a SQLite-backed class so it runs on the
-// Workers free plan. Per-connection state (id, name, position, the ev token
-// bucket) rides in each socket's attachment, so it survives hibernation
-// between bursts of traffic.
+// Workers free plan. Per-connection state (id, name, position, the token buckets
+// of ev, pos, chat and typing, the flood strikes, and whether it was closed for
+// flooding) rides in each socket's attachment, written back after every change,
+// so it survives hibernation between bursts of traffic.
 //
 // Two plain HTTPS routes ride the same worker:
 //   POST /wish  {text, meta, version?} → files the wish as a GitHub issue with
@@ -26,22 +34,26 @@
 // the invocation log off, so not even the URL of a /maps call is kept. What the
 // relay does keep: each room's seed (forever), its keep/drop log (the name a
 // player chose, a cache's place in the maze and its day, 30 days at most; see
-// Room.storedLog), the Gate's recent take times per salted address (wiped a
-// day after the last), and the atlas.
+// Room.storedLog), the Gate's recent take times per salted address and the
+// two shared Gates' (wiped a day after the last), and the atlas.
 //
 // /atlas/* is the atlas's live data layer (the Atlas durable object, logic in
 // atlas.js): open reads, a presence-proved check-in, the passage economy, and
 // admin writes behind env.ATLAS_ADMIN_KEY. It was deployed from the atlas branch
 // before 2.0.0 and lives here unchanged so a deploy never drops its stored data.
+// Since 2.0.7 its two open writes, a check-in and a drop-in, pass one flood
+// guard first: 'atlasAll', on a shared Gate of its own (ATLAS_GATE, never the
+// one /wish takes from; atlasOpenWrite). It is never per sender: nothing about
+// who sent one is looked at or kept for it.
 // wrangler.jsonc's migration tags are that deployed history — v1 Room, v2 Atlas
 // (from the atlas branch), v3 Gate — never renumber or edit one, and never add
 // a deleted_classes (or renamed / transferred) migration for Room, Atlas or
 // Gate: that is what deletes their data. test/relay-routes.test.js holds it.
 import { DurableObject } from 'cloudflare:workers'
 import { roomSeed } from './seed.js'
-import { evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket } from './evguard.js'
+import { evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket, pace, FLOOD_CLOSE, FLOOD_REASON } from './evguard.js'
 import { createStoredLog } from './evlog.js'
-import { BODY_MAX, DAY_MS, GATE_RULES, GLOBAL_GATE, ALLOWED_ORIGINS, WISH_ORIGINS, originOk, corsHeaders, validateWish, filterWish, buildIssue, issueRequest, gateTake, gateKey, hashIp } from './wishgate.js'
+import { BODY_MAX, DAY_MS, GATE_RULES, GLOBAL_GATE, ATLAS_GATE, ALLOWED_ORIGINS, WISH_ORIGINS, originOk, corsHeaders, validateWish, filterWish, buildIssue, issueRequest, gateTake, gateKey, hashIp } from './wishgate.js'
 import { shortLink, resolveShortLink } from './mapslink.js'
 import SEED from './atlas-seed.js'
 import { parseAtlasPath, authorize, readAtlas, upsertBeacon, appendStratum, checkin, dropin, regenBalance } from './atlas.js'
@@ -115,10 +127,27 @@ export class Room extends DurableObject {
     else await this.storedLog().expire()
   }
 
+  // pos, chat and typing pass their pace (evguard.js pace), mirrored textually in server/index.js. Over it a frame is dropped and
+  // nothing is said; a socket that keeps at it is seen out of the room at once and closed FLOOD_CLOSE, 'too fast'. -> true: relay
+  // it, and the caller writes the attachment back with the tokens; false: they are written back here
+  paced(ws, att, type) {
+    const v = pace(att, type, Date.now())
+    if (v === 'pass') return true
+    if (v === 'close') att.flood = true
+    ws.serializeAttachment(att)
+    if (v === 'close') {
+      try { ws.close(FLOOD_CLOSE, FLOOD_REASON) } catch { /* already going */ }
+      this.broadcast({ type: 'left', id: att.id, name: att.name }, att.id)
+    }
+    return false
+  }
+
   async webSocketMessage(ws, raw) {
     let msg
     try { msg = JSON.parse(raw) } catch { return }
     const att = ws.deserializeAttachment() || {}
+    // closed for flooding: whatever it still had in flight while the close goes through is dropped
+    if (att.flood) return
     const env = this.env || {}
     const LOG = env.EV_LOG !== '0'
 
@@ -135,8 +164,10 @@ export class Room extends DurableObject {
       if (stored == null) await this.ctx.storage.put('seed', seed)
       // first = no OTHER live socket in the room at join (the accepting socket is
       // already in the list). NOT `stored == null`: the seed is kept forever, which
-      // would mint every returning visitor to an empty room thin.
-      ws.send(JSON.stringify({ type: 'welcome', playerId: att.id, worldSeed: seed, roomId, first: this.ctx.getWebSockets().length === 1 }))
+      // would mint every returning visitor to an empty room thin. A socket closed for flooding that has not finished closing is out of
+      // the room already (broadcast, pushPlayers): it is no one to drop in on.
+      const live = this.ctx.getWebSockets().filter((s) => !(s.deserializeAttachment() || {}).flood).length
+      ws.send(JSON.stringify({ type: 'welcome', playerId: att.id, worldSeed: seed, roomId, first: live === 1 }))
       if (LOG) {
         const log = await this.storedLog().load()       // null when the read failed: no replay this time, and nothing overwritten
         if (log) for (const f of log.replay()) { try { ws.send(JSON.stringify({ ...f, replay: true })) } catch { /* ignore */ } }
@@ -148,13 +179,18 @@ export class Room extends DurableObject {
       this.broadcast({ type: 'joined', id: att.id, name: att.name }, att.id)
       this.pushPlayers()
     } else if (msg.type === 'pos') {
+      if (!this.paced(ws, att, 'pos')) return
       att.x = +msg.x || 0; att.y = +msg.y || 0; att.angle = +msg.angle || 0; att.hp = (msg.hp == null ? 100 : +msg.hp)
-      ws.serializeAttachment(att)
+      ws.serializeAttachment(att)                  // the position, and posTok/posT with it
       this.pushPlayers()
     } else if (msg.type === 'chat') {
+      if (!this.paced(ws, att, 'chat')) return
+      ws.serializeAttachment(att)                  // chTok/chT ride the attachment
       const text = String(msg.text ?? '').slice(0, 200)
       if (text.trim()) this.broadcast({ type: 'chat', id: att.id, name: att.name, text }, att.id)
     } else if (msg.type === 'typing') {
+      if (!this.paced(ws, att, 'typing')) return
+      ws.serializeAttachment(att)                  // tyTok/tyT ride the attachment
       this.broadcast({ type: 'typing', id: att.id, name: att.name, on: !!msg.on }, att.id)
     } else if (msg.type === 'ev') {
       // one generic relayed event — mirrored textually in server/index.js. The relay
@@ -184,7 +220,7 @@ export class Room extends DurableObject {
 
   async webSocketClose(ws) {
     const att = ws.deserializeAttachment() || {}
-    this.broadcast({ type: 'left', id: att.id, name: att.name }, att.id)
+    if (!att.flood) this.broadcast({ type: 'left', id: att.id, name: att.name }, att.id)   // one closed for flooding was seen out then (paced)
     // the last one out writes what is waiting, rather than leave it to the timer
     if (this._flushTimer && !this.ctx.getWebSockets().some(s => s !== ws)) await this.flushNow()
     // The world is NEVER forgotten. A room is a persistent place.
@@ -195,29 +231,35 @@ export class Room extends DurableObject {
 
   webSocketError() { /* close handler does the cleanup */ }
 
+  // a socket closed for flooding may linger in getWebSockets() until its close goes through: it is out of the room already, so it
+  // is neither sent to nor listed
   broadcast(obj, exceptId) {
     const raw = JSON.stringify(obj)
     for (const s of this.ctx.getWebSockets()) {
       const a = s.deserializeAttachment() || {}
-      if (a.id !== exceptId) { try { s.send(raw) } catch { /* ignore */ } }
+      if (a.id !== exceptId && !a.flood) { try { s.send(raw) } catch { /* ignore */ } }
     }
   }
 
   pushPlayers() {
-    const sockets = this.ctx.getWebSockets()
-    const list = sockets.map(s => {
+    const sockets = [], list = []
+    for (const s of this.ctx.getWebSockets()) {
       const a = s.deserializeAttachment() || {}
-      return { id: a.id, x: a.x, y: a.y, angle: a.angle, name: a.name, hp: a.hp ?? 100 }
-    })
+      if (a.flood) continue
+      sockets.push(s)
+      list.push({ id: a.id, x: a.x, y: a.y, angle: a.angle, name: a.name, hp: a.hp ?? 100 })
+    }
     const raw = JSON.stringify({ type: 'players', list })
     for (const s of sockets) { try { s.send(raw) } catch { /* ignore */ } }
   }
 }
 
-// One per hashed address (the worker names it by hashIp). It keeps only the
-// times of recent takes per bucket ('wish', 'maps'), and an alarm wipes the lot
-// a day after the last take, so an address that stops calling leaves nothing.
-// Input gates make each take's get/put atomic.
+// One per hashed address (the worker names it by hashIp), and two every sender
+// shares: GLOBAL_GATE holds 'wishAll', ATLAS_GATE the atlas's 'atlasAll', apart
+// so a flood at the atlas never loads /wish. It keeps only the times of recent
+// takes per bucket ('wish', 'maps'; each shared one's),
+// and an alarm wipes the lot a day after the last take, so an address that
+// stops calling leaves nothing. Input gates make each take's get/put atomic.
 export class Gate extends DurableObject {
   async take(bucket) {
     const rules = GATE_RULES[bucket]
@@ -249,7 +291,8 @@ async function gate(request, env, bucket) {
   return env.GATE.get(env.GATE.idFromName(key)).take(bucket)
 }
 
-const refused = (g, origin, allowed) => reply({ ok: false, reason: 'rate' }, 429, origin, { 'Retry-After': String(Math.max(1, Math.ceil(g.retryMs / 1000))) }, allowed)
+const retryAfter = (g) => ({ 'Retry-After': String(Math.max(1, Math.ceil(g.retryMs / 1000))) })
+const refused = (g, origin, allowed) => reply({ ok: false, reason: 'rate' }, 429, origin, retryAfter(g), allowed)
 
 // The body, never more than max bytes of it: a chunked request has no Content-Length to refuse up front, and request.text() would
 // buffer all of it (up to Cloudflare's 100 MB) before anything could be checked. -> the text, or null once it runs past max
@@ -321,6 +364,21 @@ const ATLAS_CORS = {
 function atlasJson(status, obj) {
   return new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json', ...ATLAS_CORS } })
 }
+
+// The atlas's open writes: a check-in and a drop-in, the two any visitor may make without the admin key. Each one takes from the
+// atlas's shared Gate first (ATLAS_GATE; its numbers, and why, are beside GATE_RULES.atlasAll in wishgate.js). Reads, the passage
+// balance (a POST that writes nothing) and the admin's keyed writes never do.
+export function atlasOpenWrite(request, url) {
+  if (request.method !== 'POST') return false
+  const route = parseAtlasPath(url.pathname)
+  return route != null && (route.resource === 'checkin' || route.resource === 'dropin')
+}
+
+// refused the way a /wish over its gate is: 429 { ok: false, reason: 'rate' } with a Retry-After, and the atlas's CORS so the
+// page can read it
+const atlasRefused = (g) => new Response(JSON.stringify({ ok: false, reason: 'rate' }), {
+  status: 429, headers: { 'content-type': 'application/json', 'Cache-Control': 'no-store', ...retryAfter(g), ...ATLAS_CORS },
+})
 
 // A single global store of beacons + strata. Reads are open (CORS); writes need
 // the admin bearer secret. All logic is the pure module atlas.js; this shell just
@@ -410,6 +468,16 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url)
     if (url.pathname.startsWith('/atlas')) {
+      // the one flood guard in front of the atlas: one Gate every sender shares, named ATLAS_GATE, never by an address and never
+      // the GLOBAL_GATE /wish takes from; nothing about who sent it is looked at or kept for it. A refused write never reaches the Atlas.
+      if (atlasOpenWrite(request, url)) {
+        // a take that cannot be written (the account's write allowance spent, or the one Gate overloaded by the flood it is there for)
+        // answers as the Atlas itself does when its write fails: 503 with the atlas's CORS, so the page can read it
+        let all
+        try { all = await env.GATE.get(env.GATE.idFromName(ATLAS_GATE)).take('atlasAll') }
+        catch { return atlasJson(503, { error: 'atlas write failed' }) }
+        if (!all.ok) return atlasRefused(all)
+      }
       const stub = env.ATLAS.get(env.ATLAS.idFromName('global'))
       return stub.fetch(request)
     }

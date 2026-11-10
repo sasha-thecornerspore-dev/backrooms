@@ -128,9 +128,10 @@ describe("relay.js carries the mirrored 'ev' branch (source guard: it cannot run
     expect(relay).toMatch(/const EV_FLUSH_MS = 10_000/)
   })
   it('imports the guards and the log from the pure modules', () => {
-    expect(relay).toMatch(/import \{ evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket \} from '\.\/evguard\.js'/)
+    // 2.0.7: the same line also brings pos, chat and typing their pace and the flood close (test/relay-buckets.test.js)
+    expect(relay).toMatch(/import \{ evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket, pace, FLOOD_CLOSE, FLOOD_REASON \} from '\.\/evguard\.js'/)
     expect(relay).toMatch(/import \{ createStoredLog \} from '\.\/evlog\.js'/)
-    expect(server).toMatch(/import \{ evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket \} from '\.\/evguard\.js'/)
+    expect(server).toMatch(/import \{ evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket, pace, FLOOD_CLOSE, FLOOD_REASON \} from '\.\/evguard\.js'/)
     expect(server).toMatch(/import \{ createEvLog \} from '\.\/evlog\.js'/)
   })
   it('both servers log only the kinds the log holds, a keep within its budget', () => {
@@ -155,7 +156,9 @@ describe("relay.js carries the mirrored 'ev' branch (source guard: it cannot run
     expect(server).toMatch(/broadcast\(room, out, playerId\)/)
   })
   it('adds welcome.first the documented way on both servers', () => {
-    expect(relay).toMatch(/first: this\.ctx\.getWebSockets\(\)\.length === 1/)
+    // the live sockets only: one closed for flooding whose close has not gone through is out of the room already (2.0.7)
+    expect(relay).toContain('const live = this.ctx.getWebSockets().filter((s) => !(s.deserializeAttachment() || {}).flood).length')
+    expect(relay).toContain('first: live === 1 }')
     expect(relay).not.toMatch(/first: stored == null/)
     expect(server).toMatch(/const first = room\.players\.size === 0/)
     expect(server.indexOf('const first = room.players.size === 0')).toBeLessThan(server.indexOf('room.players.set(playerId'))

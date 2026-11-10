@@ -51,10 +51,8 @@ describe('the 2.0.6 release notes', () => {
     expect(notes).toContain('**a case\'s notes are sealed.**')
     expect(notes).toContain('**on windows with 2.0.3, 2.0.4 or 2.0.5:**')
     expect(notes).toContain('`The-Backrooms-Setup-2.0.6.exe`')
-    expect(notes).toContain('backrooms-pwa-v14')
-    expect(fs.readFileSync(new URL('../src/sw.js', import.meta.url), 'utf8')).toContain("const CACHE = 'backrooms-pwa-v14'")
+    expect(notes).toContain('backrooms-pwa-v14')   // (the cache and the version moved on in 2.0.7: docs-release-207.test.js pins them now)
     expect(notes).toContain('put `docs/manual.html` at `manual/index.html` on gh-pages')
-    expect(JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version).toBe('2.0.6')
   })
 })
 

@@ -28,7 +28,8 @@ describe('index.html: the title screen', () => {
     const name = at(html, '<input id="player-name"'), plate = at(html, '<div id="invite-plate" hidden>'), anchor = at(html, '<div id="anchor-wrap">')
     const btns = at(html, '<div class="btns">'), door = at(html, '<div id="front-door">'), status = at(html, '<div id="start-status"')
     expect(name).toBeLessThan(plate); expect(plate).toBeLessThan(anchor); expect(anchor).toBeLessThan(btns); expect(btns).toBeLessThan(door); expect(door).toBeLessThan(status)
-    expect(html).toMatch(/<div id="invite-plate" hidden>\r?\n\s*<div id="invite-line"><\/div>\r?\n\s*<button id="btn-invite-join" type="button">JOIN ▶<\/button>\r?\n\s*<div id="invite-sub" class="set-hint"><\/div>\r?\n\s*<\/div>/)
+    // (2.0.7: the joiner's pin warning sits last on the plate, empty until a pin is in the field — pin-privacy.test.js)
+    expect(html).toMatch(/<div id="invite-plate" hidden>\r?\n\s*<div id="invite-line"><\/div>\r?\n\s*<button id="btn-invite-join" type="button">JOIN ▶<\/button>\r?\n\s*<div id="invite-sub" class="set-hint"><\/div>\r?\n\s*<div id="invite-pin"><\/div>\r?\n\s*<\/div>/)
     expect(html).toMatch(/#invite-plate\[hidden\] \{ display: none; \}/)            // its display:flex must not undo [hidden]
   })
   it('the anchor field: the new placeholder, no "(optional)", more contrast', () => {
@@ -126,11 +127,11 @@ describe('index.html: copying an invite', () => {
     const el = () => ({ textContent: '', addEventListener(t, f) { this[t] = f } })
     const invitePin = { checked: false, ...el() }, onlineStatus = el(), inviteBtn = {}, online = el()
     const run = new Function('invitePin', 'onlineStatus', 'inviteBtn', 'fieldAnchorNow', 'formatAnchor', 'shareInvite', 'buildInvite', 'document', 'PIN_WARNING', 'PIN_PRESS_AGAIN', 'NO_FIELD_PIN', 'inviteUrlEl',
-      'shortMapsLink', 'anchorInput', 'ROOM_PIN_AHEAD',
+      'shortMapsLink', 'anchorInput', 'ROOM_PIN_AHEAD', 'ROOM_PIN_JOIN', 'pinInField',
       src + '\nreturn { change: invitePin.change }')
     const { change } = run(invitePin, onlineStatus, inviteBtn, () => fieldPin, (a) => `${a.lat},${a.lng}`, (url) => { shared.push(url) },
       ({ anchor }) => (anchor ? `link&anchor=${anchor.lat},${anchor.lng}` : 'link'), { getElementById: (id) => (id === 'btn-online' ? online : { value: 'room-1' }) },
-      'WARN', 'AGAIN', 'NOPIN', null, () => null, { value: '' }, 'AHEAD')
+      'WARN', 'AGAIN', 'NOPIN', null, () => null, { value: '' }, 'AHEAD', 'JOIN', () => !!fieldPin)
     online.click()
     expect(onlineStatus.textContent).toBe('')                        // the box opened with no pin in the field says nothing
     invitePin.checked = true; change()
@@ -146,9 +147,10 @@ describe('index.html: copying an invite', () => {
     invitePin.checked = false; change(); inviteBtn.onclick()           // unticked: the room only, at once
     expect(shared).toEqual(['link&anchor=39.2854,-76.6083', 'link'])
     invitePin.checked = false; change()
-    expect(onlineStatus.textContent).toBe('AHEAD')                   // unticked with a pin: back to what a room keeps of it (pin-privacy.test.js)
+    // unticked with a pin: back to what a room keeps of it, and what a room you join gets of it (pin-privacy.test.js)
+    expect(onlineStatus.textContent).toBe('AHEAD JOIN')
     online.click()
-    expect(onlineStatus.textContent).toBe('AHEAD')                   // and so on opening the box
+    expect(onlineStatus.textContent).toBe('AHEAD JOIN')              // and so on opening the box
   })
   it('one copy helper: the share sheet on a phone, the desktop bridge, the clipboard, else the link shown selected', () => {
     const fn = slice(html, 'async function shareInvite(url, say, fallbackEl) {', "document.addEventListener('backrooms:invite'")

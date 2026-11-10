@@ -325,7 +325,8 @@ describe('I5: the form, the doors, the soul, the console, the naming', () => {
   it('/intake re-opens the form or refuses an amendment; the fallback names it', () => {
     const cmd = slice('async function handleCommand(t) {', '// desktop: a fetch that never reached the site')
     expect(cmd).toMatch(/\} else if \(cmd === 'intake'\) \{\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*const r = parseIntakeCommand\(arg\)\r?\n\s*if \(r\.refuse\) showMessage\(r\.refuse\)\r?\n\s*else openForm\(\)/)
-    expect(cmd).toContain("showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status or /invite.')")   // (the ONE string, I13; /invite since the way in)
+    expect(cmd).toContain("const help = 'the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.'")   // (the ONE string, I13; /invite since the way in, /who since the crew)
+    expect(cmd).toContain("showMessage(level?.cfg.map ? help.replace(', /who', '') : help)")                                                        // (on the block, as it was before /who)
   })
   it('the naming re-file: an unnamed player\'s naming wish closes the dialog and asks how it is spelled; only a confirm files the name', () => {
     const fn = slice('function refileName(name) {', "document.getElementById('wish-cancel')")
@@ -2008,7 +2009,9 @@ describe('I13 (W3): the file\'s own — the stand, the sealed pages, the souls\'
     const cmd = slice('async function handleCommand(t) {', '// desktop: a fetch that never reached the site')
     // (since the way in, /invite sits between /status and the fallback, which names it)
     expect(cmd).toMatch(/\} else if \(cmd === 'status'\) \{\r?\n(?:[ \t]*\/\/[^\r\n]*\r?\n)*[ \t]*showMessage\(fileLines\(\)\.slice\(0, -1\)\.join\(' · '\)\)\r?\n\s*\} else if \(cmd === 'invite'\) \{/)
-    expect(cmd).toMatch(/\} else showMessage\('the file does not recognise that\. try \/recover, \/cases, \/file <answer>, \/intake, \/status or \/invite\.'\)/)
+    const fallback = cmd.indexOf('// the help names /who')
+    expect(fallback).toBeGreaterThan(cmd.indexOf("} else if (cmd === 'invite') {"))
+    expect(cmd.indexOf("const help = 'the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.'")).toBeGreaterThan(fallback)
     expect(count(/const fileLines = /g)).toBe(1)
     const line = game.match(/const fileLines = \(\) => [^\n]*/)[0]
     const status = (file, origin, claimFiled = false, beaconFired = false) => new Function('yourFileLines', 'closingProgress', 'file', 'origin', 'claimFiled', 'beaconFired',
@@ -2170,7 +2173,7 @@ describe('I15: the factions wave, closed', () => {
 
   it('the console and the card: the ONE fallback string, the placeholder\'s tail, the sealed page read from cardScrap', () => {
     expect(count(/the file does not recognise that\./g)).toBe(1)
-    expect(game).toContain("showMessage('the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status or /invite.')")
+    expect(game).toContain("const help = 'the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.'")
     expect(html).toContain(' · /intake · /status · /invite)"')
     expect(slice('function revealScrap() {', 'function redactScrap() {')).toMatch(/const scrap = cardScrap\r?\n[\s\S]*if \(!level\.cfg\.map\) fog\.pinThing\(level\.index, 'n:' \+ scrap\.key, 'note', scrap\.x, scrap\.y, true\)/)
   })
