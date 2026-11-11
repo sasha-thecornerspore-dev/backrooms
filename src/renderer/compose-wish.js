@@ -17,17 +17,23 @@ export const LEGACY_WISH_REPLY = 'your request has been received. whether it is 
 // all); only the presence's reply is the owner's. The wish carries no name and keeps no number, so this is how the answer reaches
 // whoever says hi: the next time they do.
 export const GREETING_REPLY = 'hello. make a real wish next time.'
-const GREETING_WORDS = new Set(['hi', 'hello', 'hey', 'hiya', 'howdy', 'greetings', 'hola'])
+// wish #21 ('yoooooooo') is the same wish, said longer: a held letter counts once ('yoooooooo' is 'yo', 'heyyy' is 'hey'), and the
+// slang ones count ('yo', 'sup', "what's up"). Every word is compared with its held letters folded, on both sides.
+const fold = (w) => w.replace(/(.)\1+/g, '$1')
+const GREETING_WORDS = new Set(['hi', 'hello', 'hey', 'hiya', 'heya', 'howdy', 'greetings', 'hola', 'yo', 'sup', 'wassup', 'wazzup', 'whatsup', 'watsup'].map(fold))
 // words that may ride along with one ('hi there', 'hello everyone'); never a greeting alone
-const GREETING_FILLER = new Set(['there', 'everyone', 'everybody', 'all', 'yall', 'guys', 'friend', 'friends', 'world', 'again'])
-// a few words, every one a greeting or its filler, at least one a greeting; punctuation and case do not count
+const GREETING_FILLER = new Set(['there', 'everyone', 'everybody', 'all', 'yall', 'guys', 'friend', 'friends', 'world', 'again'].map(fold))
+// a few words, every one a greeting or its filler, at least one a greeting; punctuation, case and held letters do not count
 export function isGreeting(text) {
-  const words = String(text).toLowerCase().replace(/['’]/g, '').replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean)
+  const said = String(text).toLowerCase().replace(/['’]/g, '').replace(/[^a-z\s]/g, ' ')
+    .replace(/\bw+h*[au]+t+s+\s+u+p+\b/g, 'sup')                                  // "what's up", "whats up", "watsup" -> sup
+  const words = said.split(/\s+/).filter(Boolean)
   if (words.length === 0 || words.length > 6) return false
   let greeted = false
   for (const w of words) {
-    if (GREETING_WORDS.has(w)) greeted = true
-    else if (!GREETING_FILLER.has(w)) return false
+    const f = fold(w)
+    if (GREETING_WORDS.has(f)) greeted = true
+    else if (!GREETING_FILLER.has(f)) return false
   }
   return greeted
 }
