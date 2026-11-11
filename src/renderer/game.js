@@ -46,6 +46,7 @@ import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
 import { createCard, CARD_KEYS, readText, REDACTED_FOOT } from './papercard.js'
 import { createEvBus } from '../net/evbus.js'
 import { LINE, lineNotice, foldChat, sysText, posGapS } from '../net/client.js'
+import { ownerCommand } from './owner.js'
 import { intake, filingLine, formText, FORM_FOOT, parseIntakeCommand, normaliseIntakeCtx, identityOut, identityIn } from './origin-intake.js'
 import { rulesFor, LEGACY } from './origin-rules.js'
 import { DOOR_SANITY, isSealedMaterial, doorLine, facingCell } from './origin-tenant.js'
@@ -197,7 +198,7 @@ export function createEntityAssembler() {
 // trailing fields are the friend's heartbeat as the event bus merged it onto the record (evbus.js mergeRemote; blanked for a stale one,
 // absent for a legacy peer) — gfx-sprites planPerson draws them: faint when thin and unseen, halved and 'name · down' when down, warm when lit
 export const ENTITY_FILLS = Object.freeze({
-  player:  (r, p) => { r.x = p.x; r.y = p.y; r.kind = 'player'; r.name = p.name || 'wanderer'; r.angle = p.angle; r.chatText = p.chatText; r.hp = p.hp; r.st = p.st; r.lit = p.lit; r.thin = !!p.thin; r.origin = p.origin; r.status = p.status; r.seen = !!p.seen },
+  player:  (r, p) => { r.x = p.x; r.y = p.y; r.kind = 'player'; r.name = p.name || 'wanderer'; r.angle = p.angle; r.chatText = p.chatText; r.hp = p.hp; r.st = p.st; r.lit = p.lit; r.thin = !!p.thin; r.origin = p.origin; r.status = p.status; r.seen = !!p.seen; r.mark = p.mark === 'mumon' ? 'mumon' : undefined },
   npc:     (r, n) => { r.x = n.x; r.y = n.y; r.kind = 'npc'; r.name = 'a lost soul'; r.key = n.key },
   prop:    (r, p) => { r.x = p.x; r.y = p.y; r.kind = 'prop'; r.type = p.type; r.rot = p.rot; r.key = p.key },
   exit:    (r, e) => { r.x = e.x; r.y = e.y; r.kind = 'exit'; r.target = e.target; r.key = e.key },
@@ -1599,6 +1600,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         // the room in words (crew.js whoLines): you, then each friend — the floor by its name (none for a friend on the block), the word
         // the file has them under; solo, that no one else is. On the block nothing new is said: the file holds nothing from there
         showMessage(level?.cfg.map ? TERM.WHERE_NONE : whoLines(crewRoster(), { id: mpClient?.id ?? null, lvl: level ? level.index : null, status: file.status }).join('\n'))
+      } else if (cmd === 'owner') {
+        // the owner's key for the name Mumon (wish #27, owner.js): kept on this device, read by the next room you enter; never said back,
+        // never sent as chat, never in the help
+        showMessage(ownerCommand(arg).line)
       } else {
         // the help names /who — but not on the block, where nothing new is said: there it reads as it always did
         const help = 'the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.'
@@ -1995,6 +2000,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     })
     if (lineDown()) sayLine(LINE.DEAD)   // it dropped while the world was still loading
     renderLine()
+  }
+  // the room's name for you (wish #27): the name Mumon is its owner's (relay/names.js), and a name the room would not give is said once
+  if (mpClient) {
+    const asked = (String(getPref('playerName') ?? '').trim() || 'wanderer').slice(0, 24)
+    if (mpClient.getName() !== asked) setTimeout(() => showMessage(`the room will not call you ${asked}. here you are ${mpClient.getName()}.`, PRIO.interaction), 2200)
   }
 
   // the crew's people lines (crew.js createCrewWatch, on the bus's reading of each friend's heartbeat — nothing more is sent): a friend

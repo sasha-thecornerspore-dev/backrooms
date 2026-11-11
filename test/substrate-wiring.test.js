@@ -146,8 +146,8 @@ describe('game.js: the paper card (I4)', () => {
 })
 
 describe('game.js: the remote player fill (I2)', () => {
-  it('ENTITY_FILLS.player forwards the six heartbeat fields after hp, in order, and never the id', () => {
-    expect(game).toContain("r.hp = p.hp; r.st = p.st; r.lit = p.lit; r.thin = !!p.thin; r.origin = p.origin; r.status = p.status; r.seen = !!p.seen }")
+  it("ENTITY_FILLS.player forwards the six heartbeat fields after hp, in order, then the relay's mark (wish #27), and never the id", () => {
+    expect(game).toContain("r.hp = p.hp; r.st = p.st; r.lit = p.lit; r.thin = !!p.thin; r.origin = p.origin; r.status = p.status; r.seen = !!p.seen; r.mark = p.mark === 'mumon' ? 'mumon' : undefined }")
     expect(game).not.toMatch(/r\.id = p\.id/)
   })
 })

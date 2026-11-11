@@ -9,6 +9,12 @@
 //   ← ev {id, name, kind, payload, t, replay?}
 //   ← close 4029 'too fast' (evguard.js FLOOD_CLOSE): the socket flooded; do not reconnect
 //
+// The name Mumon is the owner's (wish #27, names.js admitName): a join may carry
+// key, checked against env.OWNER_KEY (a wrangler secret: `wrangler secret put
+// OWNER_KEY`, 16..128 characters) and never kept. A name that spells Mumon
+// without it is 'wanderer'; with it the player's 'joined' and 'players' frames
+// carry mark: 'mumon'. welcome also carries the name the room gave.
+//
 // pos, chat and typing each have a pace (evguard.js pace, 2.0.7): a frame over
 // its limit is dropped and nothing is said, and a socket that keeps flooding is
 // seen out of the room and closed 4029 'too fast'. The limits are twice the most
@@ -53,6 +59,7 @@ import { DurableObject } from 'cloudflare:workers'
 import { roomSeed } from './seed.js'
 import { evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket, pace, FLOOD_CLOSE, FLOOD_REASON } from './evguard.js'
 import { createStoredLog } from './evlog.js'
+import { admitName } from './names.js'
 import { BODY_MAX, DAY_MS, GATE_RULES, GLOBAL_GATE, ATLAS_GATE, ALLOWED_ORIGINS, WISH_ORIGINS, originOk, corsHeaders, validateWish, filterWish, buildIssue, issueRequest, gateTake, gateKey, hashIp } from './wishgate.js'
 import { shortLink, resolveShortLink } from './mapslink.js'
 import SEED from './atlas-seed.js'
@@ -152,7 +159,11 @@ export class Room extends DurableObject {
     const LOG = env.EV_LOG !== '0'
 
     if (msg.type === 'join') {
-      att.name = String(msg.name || 'wanderer').slice(0, 24)
+      // the name the room will use (names.js): Mumon only with the owner's key, which is read here and kept nowhere
+      const admitted = admitName(msg.name, msg.key, env.OWNER_KEY)
+      att.name = admitted.name
+      if (admitted.mark) att.mark = admitted.mark
+      else delete att.mark
       ws.serializeAttachment(att)
       const roomId = String(msg.roomId || 'default').slice(0, 32)
       // The first joiner into a virgin room fixes its world — from their anchor
@@ -167,7 +178,7 @@ export class Room extends DurableObject {
       // would mint every returning visitor to an empty room thin. A socket closed for flooding that has not finished closing is out of
       // the room already (broadcast, pushPlayers): it is no one to drop in on.
       const live = this.ctx.getWebSockets().filter((s) => !(s.deserializeAttachment() || {}).flood).length
-      ws.send(JSON.stringify({ type: 'welcome', playerId: att.id, worldSeed: seed, roomId, first: live === 1 }))
+      ws.send(JSON.stringify({ type: 'welcome', playerId: att.id, worldSeed: seed, roomId, name: att.name, first: live === 1 }))
       if (LOG) {
         const log = await this.storedLog().load()       // null when the read failed: no replay this time, and nothing overwritten
         if (log) for (const f of log.replay()) { try { ws.send(JSON.stringify({ ...f, replay: true })) } catch { /* ignore */ } }
@@ -176,7 +187,7 @@ export class Room extends DurableObject {
         this._evErased = true
         await this.storedLog().erase()
       }
-      this.broadcast({ type: 'joined', id: att.id, name: att.name }, att.id)
+      this.broadcast({ type: 'joined', id: att.id, name: att.name, ...(att.mark ? { mark: att.mark } : {}) }, att.id)
       this.pushPlayers()
     } else if (msg.type === 'pos') {
       if (!this.paced(ws, att, 'pos')) return
@@ -247,7 +258,7 @@ export class Room extends DurableObject {
       const a = s.deserializeAttachment() || {}
       if (a.flood) continue
       sockets.push(s)
-      list.push({ id: a.id, x: a.x, y: a.y, angle: a.angle, name: a.name, hp: a.hp ?? 100 })
+      list.push({ id: a.id, x: a.x, y: a.y, angle: a.angle, name: a.name, hp: a.hp ?? 100, ...(a.mark ? { mark: a.mark } : {}) })
     }
     const raw = JSON.stringify({ type: 'players', list })
     for (const s of sockets) { try { s.send(raw) } catch { /* ignore */ } }

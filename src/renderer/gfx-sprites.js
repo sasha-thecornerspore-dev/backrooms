@@ -109,6 +109,9 @@ export const FIG = {
 export const PERSON = {
   player: { w: 0.24, h: 0.58 },
   npc:    { w: 0.26, h: 0.52 },
+  // Mumon (wish #27): the owner, as the relay marks them (relay/names.js, e.mark === 'mumon') — half as tall again as anyone else,
+  // robed to the floor, with a ring of light behind the head and the robe written over in small lit marks
+  mumon:  { w: 0.44, h: 0.88 },
 }
 
 export const SIGHT_SPEC = {
@@ -949,6 +952,12 @@ const RIG = {
              arm: { l1: 0.22, l2: 0.21, r0: 0.04, r1: 0.032, r2: 0.023 }, reachX: 0.12, reachY: 0.4,
              hand: { size: 0.032, fingers: 0, flen: 0 },
              leg: { l1: 0.25, l2: 0.23, r0: 0.05, r1: 0.038, r2: 0.028, stance: 0.065 }, foot: 0.04 },
+  // Mumon (PERSON.mumon): broad in the shoulder, a small head deep in a cowl, long arms in bell sleeves; the robe hides the legs
+  // (lower than the others' in its own frame: the ring behind the head and the cowl's peak stand above it, inside the canvas)
+  mumon:   { hipY: 0.44, hipHW: 0.07, shY: 0.74, shHW: 0.155, waistHW: 0.1, headY: 0.845, hrx: 0.056, hry: 0.066, neckR: 0.03, chestRy: 0.12,
+             arm: { l1: 0.2, l2: 0.19, r0: 0.045, r1: 0.04, r2: 0.03 }, reachX: 0.14, reachY: 0.5,
+             hand: { size: 0.03, fingers: 0, flen: 0 },
+             leg: { l1: 0.25, l2: 0.23, r0: 0.05, r1: 0.038, r2: 0.028, stance: 0.07 }, foot: 0.042 },
 }
 
 // Build one creature frame. Returns a Frame: layer 0 = the lit body (rim-capable), layer 1 = emissive tells (eyes, grin),
@@ -1204,8 +1213,57 @@ const PERSON_ART = {
     void head
     return { bulge: 0.06, glow: false }
   },
+  // Mumon (wish #27): a tall robed figure — the robe flared to the floor, bell sleeves, a peaked cowl, a layered mantle — and in the
+  // glow paint the intricate part: a ring of light behind the head with an open circle inside it, two embers under the cowl, a
+  // ringed gate on the chest, three columns of small lit marks down the robe and a band of them along the hem
+  mumon: (G, GP, rnd, s, anim) => {
+    const { F, X, Y, L } = G
+    const R = RIG.mumon
+    const k = L(0.026)
+    const head = humanoid(G, R, s === 1 ? 2 : 0, anim, { k: 0.026, noLegs: true })
+    const hx = head.hx, hy = head.hy
+    const sway = anim ? 0.012 : -0.012
+    cloak(G, rnd, R.shY - 0.01, 0.13, 0.0, 0.27, 0.012, s === 1 ? sway : 0, L(0.03))                         // the robe, flared to the floor
+    for (const sd of [-1, 1]) fieldSeg(F, X(sd * 0.14), Y(0.69), X(sd * 0.175), Y(0.4), L(0.035), L(0.062), k)   // bell sleeves
+    fieldPoly(F, [X(-0.17), Y(0.745), X(0.17), Y(0.745), X(0.11), Y(0.65), X(0), Y(0.6), X(-0.11), Y(0.65)], L(0.02))   // the mantle
+    fieldPoly(F, [X(hx - 0.07), Y(hy + 0.02), X(hx + 0.07), Y(hy + 0.02), X(0.14), Y(R.shY - 0.02), X(-0.14), Y(R.shY - 0.02)], L(0.02))   // the cowl's drape
+    fieldEll(F, X(hx), Y(hy + 0.008), L(0.075), L(0.084), L(0.02))                                           // the cowl
+    fieldPoly(F, [X(hx - 0.05), Y(hy + 0.045), X(hx + 0.05), Y(hy + 0.045), X(hx), Y(hy + 0.11)], L(0.015))   // its peak
+    // the ring behind the head (24 points, the ones the shoulders would cover left out) and the open circle inside it (18 of 21: a gap
+    // left at the lower right)
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2, y = hy + 0.01 + Math.sin(a) * 0.12
+      if (y < R.shY + 0.02) continue
+      glowEll(GP, X(hx + Math.cos(a) * 0.12), Y(y), L(0.011), L(0.011), 240, 204, 128, 0.85, 1.2)
+    }
+    for (let i = 0; i < 21; i++) {
+      if (i >= 17 && i <= 19) continue
+      const a = (i / 21) * Math.PI * 2, y = hy + 0.01 + Math.sin(a) * 0.093
+      if (y < R.shY + 0.02) continue
+      glowEll(GP, X(hx + Math.cos(a) * 0.093), Y(y), L(0.008), L(0.008), 255, 226, 170, 0.7, 1.1)
+    }
+    glowEll(GP, X(hx), Y(hy + 0.01), L(0.15), L(0.15), 220, 170, 100, 0.18, 1.8)                             // the ring's soft light
+    for (const sd of [-1, 1]) {                                                                                // embers under the cowl
+      glowEll(GP, X(hx + sd * 0.022), Y(hy - 0.004), L(0.016), L(0.011), 255, 110, 50, 0.55, 1.6)
+      glowEll(GP, X(hx + sd * 0.022), Y(hy - 0.004), L(0.006), L(0.005), 255, 236, 200, 0.95, 0.8)
+    }
+    for (let i = 0; i < 12; i++) {                                                                             // the gate on the chest
+      const a = (i / 12) * Math.PI * 2
+      glowEll(GP, X(Math.cos(a) * 0.05), Y(0.58 + Math.sin(a) * 0.05), L(0.007), L(0.007), 255, 160, 80, 0.8, 1.1)
+    }
+    glowEll(GP, X(0), Y(0.58), L(0.012), L(0.012), 255, 220, 160, 0.9, 1)
+    for (let i = 0; i < 8; i++) {                                                                              // the marks down the robe
+      const y = 0.5 - i * 0.06
+      const half = 0.03 + (0.5 - y) * 0.36
+      glowEll(GP, X(0), Y(y), L(0.008), L(0.011), 255, 150, 72, 0.75, 1.1)
+      if (i % 2 === 0) for (const sd of [-1, 1]) glowEll(GP, X(sd * half), Y(y - 0.03), L(0.007), L(0.007), 240, 132, 64, 0.6, 1.1)
+    }
+    for (let i = 0; i <= 14; i++) glowEll(GP, X(-0.25 + i * (0.5 / 14)), Y(0.035), L(0.007), L(0.006), 230, 150, 80, 0.6, 1.1)   // the hem band
+    glowEll(GP, X(0), Y(0.48), L(0.3), L(0.48), 170, 90, 70, 0.08, 2)                                       // a faint warmth around it all
+    return { bulge: 0.07, face: { x: hx, y: hy - 0.006, rx: 0.042, ry: 0.052 } }                            // the cowl's dark opening (tex)
+  },
 }
-const PERSON_COL = { player: [118, 132, 160], npc: [126, 116, 102] }
+const PERSON_COL = { player: [118, 132, 160], npc: [126, 116, 102], mumon: [96, 30, 34] }
 function personFrame(name, stateIx, anim, facing) {
   const spec = PERSON[name] || PERSON.player
   const seed = seedOf('person-' + name, 0, stateIx, anim * 3 + facing)
@@ -1214,12 +1272,21 @@ function personFrame(name, stateIx, anim, facing) {
   const GP = createPaint(G.fw, G.fh)
   const info = PERSON_ART[name](G, GP, rnd, stateIx, anim) || {}
   const c = PERSON_COL[name]
+  const robed = name === 'mumon'
   paintField(G.P, G.F, {
-    c, R: G.L(info.bulge || 0.06), amb: 0.6, dif: 0.7, sky: 0.12, cold: name === 'player' ? 1.4 : 0.2, rim: true,
+    c, R: G.L(info.bulge || 0.06), amb: 0.6, dif: 0.7, sky: 0.12, cold: name === 'player' ? 1.4 : robed ? 0.5 : 0.2, rim: true,
     tex: (x, y) => {
       const base = 0.92 + 0.16 * (nz(x * 0.4 + seed % 31, y * 0.08) - 0.5) * 2
       const R0 = RIG[name]
       const headY = G.Y(R0.headY - 0.045), legY = G.Y(R0.hipY + 0.02)
+      // Mumon: the cowl's opening is dark (the embers in the glow paint sit in it), and the robe is brocade — thin diagonal seams in a
+      // diamond lattice over the cloth — a little darker below the waist; the cowl is cloth, so it is not the paler head
+      if (robed) {
+        const fc = info.face
+        if (fc) { const dx = (x - G.X(fc.x)) / G.L(fc.rx), dy = (y - G.Y(fc.y)) / G.L(fc.ry); if (dx * dx + dy * dy < 1) return base * 0.26 }
+        const seam = Math.max(Math.cos((x + y) * 0.42), Math.cos((x - y) * 0.42))
+        return base * (y > legY ? 0.86 : 1) * (seam > 0.92 ? 0.78 : 1.04)
+      }
       if (y < headY + G.L(0.03)) return base * 1.32                       // the head reads paler than the clothes
       if (y > legY) return base * (name === 'player' ? 0.62 : 0.82)         // trousers darker than the coat
       return base
@@ -1227,7 +1294,8 @@ function personFrame(name, stateIx, anim, facing) {
   })
   // the co-op player carries a little light of their own (cold blue = other people): a fraction of emit keeps the body's cold
   // cast from being wiped by a warm room tint, a gentler fog keeps it through a yellow lobby. The lost soul is lit like a wall.
-  const layers = [packLayer(G.P, G.rect[0], G.rect[1], G.rect[2], G.rect[3], name === 'player' ? { rimK: 1, emit: 0.45, fogK: 0.8 } : { rimK: 1 })]
+  // Mumon is a co-op player too, lit a little less from within (its ring and marks carry the light)
+  const layers = [packLayer(G.P, G.rect[0], G.rect[1], G.rect[2], G.rect[3], name === 'player' ? { rimK: 1, emit: 0.45, fogK: 0.8 } : robed ? { rimK: 1, emit: 0.35, fogK: 0.75 } : { rimK: 1 })]
   if (info.glow !== false) layers.push(packLayer(GP, G.rect[0], G.rect[1], G.rect[2], G.rect[3], { mode: 1, emit: 1, fogK: 0.7 }))
   return makeFrame(layers)
 }
@@ -2660,9 +2728,11 @@ export function motionProbe(players, t) { TNOW = t; FRAME_N++; return players.ma
 // thin and not seen by a friend's polaroid -> a faint drifting 0.36 (the drop-in's alpha), down -> half of that, lit (their own light on)
 // -> a warm cast, and a down friend's plate reads 'name · down' — built into the plate, never written back to e.name (the motion records
 // key on the name).
+// A player the relay marks 'mumon' (wish #27: the owner, relay/names.js) is drawn as PERSON.mumon, larger and robed, with all of the above.
 function planPerson(e, isNpc) {
   const sx = S.sx, fwd = S.fwd, fogT = S.fogT, side = S.side
-  const spec = isNpc ? PERSON.npc : PERSON.player
+  const mumon = !isNpc && e.mark === 'mumon'
+  const spec = isNpc ? PERSON.npc : mumon ? PERSON.mumon : PERSON.player
   const unit = CH / fwd, floorY = CHH + unit / 2
   const ph = posPhase(e)
   initSprite(e, isNpc ? 0.94 : (e.thin && !e.seen ? 0.36 + 0.03 * sinc(TNOW * 0.21 + ph) : 0.97) * (e.st === 'down' ? 0.5 : 1), spec.h)
@@ -2673,7 +2743,7 @@ function planPerson(e, isNpc) {
   if (moving) { S.swayA = 0.014 * unit; S.swayP = TNOW * 1.2 + ph } else { S.swayA = (isNpc ? 0.006 : 0.008) * unit; S.swayP = TNOW * 0.3 + ph }
   setRim(e)
   if (!isNpc && e.lit) { S.tg *= 0.92; S.tb *= 0.7 }     // their light is on: the reflected colour warms (red kept, green 0.92, blue 0.7)
-  const fr = frameFor('person', isNpc ? 'npc' : 'player', 0, moving ? 1 : 0, anim, FACING_FRONT)
+  const fr = frameFor('person', isNpc ? 'npc' : mumon ? 'mumon' : 'player', 0, moving ? 1 : 0, anim, FACING_FRONT)
   if (fr === null) return
   resetLayA()
   if (facing === FACING_BACK) for (let i = 1; i < fr.layers.length; i++) LAYA[i] = 0.35     // seen from behind the lamp is mostly hidden
