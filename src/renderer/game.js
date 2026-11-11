@@ -68,6 +68,7 @@ import { radioLine, RADIO_GROUPS } from './compose-radio.js'
 import { wishRoute } from './compose-wish.js'
 import { postWish } from './wish-post.js'
 import { TOKEN, TOKEN_LINE, trayToken } from './token.js'
+import { PLAQUE_HINT, plaqueText, nearPlaque } from './plaque.js'
 import { finaleGate, beaconDecision, deathDecision } from './compose-gates.js'
 import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame, createEvidence, photoOutcome, EVIDENCE_FLOOR, EVIDENCE_LINE, COUNTED_LINE } from './evidence.js'
 import { PHRASES, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from './caches.js'
@@ -1234,6 +1235,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // E at ∅'s form on the counter (decor's authored note, frag -1), and /intake: the file's view of you, read-only — no page count, no
   // sanity, no pin; it closes on any close key like a page
   function openForm() { openCard('form', { text: formText(intakeCtx, file.status).join('\n'), foot: FORM_FOOT }) }
+  // E at the block's lightpost (wish #5, plaque.js): the plaque on the card, read-only, closed like the form
+  function openPlaque() { openCard('form', { text: plaqueText(), foot: '' }) }
   // ∅'s sealed doors (origin-tenant.js): the cell an arm's length ahead, when it is block or plywood on the FIXED map (materialAt exists only
   // there: callers check cfg.map). -> { ix, iy } or null
   function doorAhead() {
@@ -2983,6 +2986,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const nearNpc  = level.decor.nearestNpc(player.x, player.y, 1.8)
     const nearScrap = level.decor.nearestScrap(player.x, player.y, 1.8)
     const nearMachine = level.decor.nearestMachine(player.x, player.y, 1.6)
+    const atPlaque = nearPlaque(player, cfg.plaque)          // the block's lightpost (wish #5): only a level with a plaque has one
     // the drawers (containers.js): the nearest container you have not opened; it takes the prompt and F over a way farther than
     // 1.0 u (the block has no containers). Ladder: item > machine > container-or-way > scrap > soul
     const nearBox = cfg.map ? null : level.decor.nearestProp(player.x, player.y, 1.5, unsearchedBox)
@@ -3020,6 +3024,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.style.opacity = '1'
       } else if (nearScrap) {
         itemHintEl.textContent = nearScrap.form ? 'e · read the form' : 'e · read the scrap'
+        itemHintEl.style.opacity = '1'
+      } else if (atPlaque) {
+        itemHintEl.textContent = PLAQUE_HINT
         itemHintEl.style.opacity = '1'
       } else if (nearNpc) {
         itemHintEl.textContent = 'e · speak to the lost soul'
@@ -3150,6 +3157,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if (nearPresence && !scrapFirst) openDialog()
         else if (nearScrap?.firstrun) openFirstNote(nearScrap)
         else if (nearScrap) nearScrap.form ? openForm() : mods.sealedCards && !readSet.has(nearScrap.frag) ? openSealed(nearScrap) : openNoteCard(nearScrap)
+        else if (atPlaque) openPlaque()
         else if (door) knockDoor(door)
         else if (nearNpc) {
           const r = rules.npcLine()                       // processed: the soul sees the stamp and will not talk

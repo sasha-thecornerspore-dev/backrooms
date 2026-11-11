@@ -10,7 +10,7 @@
 // (DEFAULT_CONFIG, possibly drifted by world.json). game.js rebuilds the
 // world, renderer, entities and decor from the merged config on every
 // transition. Inventory and hit points carry with you; the world does not.
-import { NULL_MAP, NULL_SPAWN, NULL_EXIT } from './level-null-map.js'
+import { NULL_MAP, NULL_SPAWN, NULL_EXIT, NULL_LIGHTPOST } from './level-null-map.js'
 
 // the setting's line, out of the murmur draw: said only while no way on is known and the faint pull is hidden, once a visit
 // (compass.js lostDue), so it never plays while the compass names the exit
@@ -231,6 +231,9 @@ export const LEVELS = [
       props: { density: 0.4, types: ['trash', 'tire', 'weeds', 'box'] },  // the dumping-ground yard
       scraps: { denom: 0 },   // no office-wanderer notes here — this is a real place
       notes: [{ x: 6.5, y: 6.5 }],   // one authored note: the intake form, on open ground two cells west of the stoops
+      // one authored sight: the lightpost in the park, and the plaque on it read with E (wish #5, plaque.js; decor.js sightsAt)
+      sightsAt: [{ ...NULL_LIGHTPOST, type: 'lightpost' }],
+      plaque: NULL_LIGHTPOST,
       machines: { denom: 0 },
       sights: { denom: 0 },
       dress: { denom: 0 },    // the yard is dressed by hand, not by the lobby's furniture

@@ -119,7 +119,12 @@ export const SIGHT_SPEC = {
   chairpile: { h: 0.86, w: 0.96 },
   payphone:  { h: 0.58, w: 0.22 },
   mannequin: { h: 0.60, w: 0.22 },
+  // the block's lightpost (wish #5): never scattered (decor.js SIGHT_TYPES does not hold it), only authored (levels.js sightsAt). Taller
+  // than a wall: the block is outdoors. Its width is the plaque's, bolted to the post at eye height
+  lightpost: { h: 1.3, w: 0.34 },
 }
+// the sights the floors scatter (and warm): every one but the authored lightpost
+const SCATTER_SIGHTS = Object.keys(SIGHT_SPEC).filter((t) => t !== 'lightpost')
 
 export const MACHINE_SPEC = { h: 0.62, w: 0.30 }
 export const ITEM_H = 0.2, NOTE_H = 0.56   // what the hand-held beam measures an item on the floor and a note (lifted to ~0.36) by (sampleLight)
@@ -702,7 +707,7 @@ const LEVEL_SPRITES = {
   '1': { props: ['pallet', 'barrel', 'crate', 'couch', 'cart', 'box'], items: ['almond-water', 'glowstick', 'bandage', 'polaroid', 'radio'], creatures: ['smiler', 'hound', 'watcher'], notes: true, sights: true },
   '2': { props: ['pipe', 'valve', 'drum', 'toolbox', 'vent', 'crate'], items: ['almond-water', 'glowstick', 'bandage', 'radio'], creatures: ['lurker', 'hound', 'crawler'], notes: true, sights: true },
   '3': { props: ['transformer', 'cabinet-e', 'spool', 'sign', 'drum'], items: ['almond-water', 'glowstick', 'bandage', 'radio'], creatures: ['tesla', 'smiler', 'watcher'], notes: true, sights: true },
-  '∅': { props: ['trash', 'tire', 'weeds', 'box'], items: ['polaroid'], creatures: [], notes: true },   // the intake form on the counter (levels.js notes)
+  '∅': { props: ['trash', 'tire', 'weeds', 'box'], items: ['polaroid'], creatures: [], notes: true, fixed: ['lightpost'] },   // the intake form on the counter (levels.js notes), the lightpost (sightsAt)
 }
 let LAST_LEVEL = null
 const LEVEL_QUEUED = new Set()     // level keys whose own config list was queued (prewarmSprites / queueLevelSprites): LEVEL_SPRITES is not needed
@@ -716,7 +721,8 @@ function queueLevel(key) {
   for (const t of L.items) warmPush(['item', t, 0, 0, 0, 0])
   if (L.notes) warmPush(['note', 'unread', 0, 0, 0, 0]); warmPush(['note', 'read', 0, 0, 0, 0])
   if (L.machines) warmPush(['machine', 'lit', 0, 0, 0, 0]); warmPush(['machine', 'spent', 0, 0, 0, 0])
-  if (L.sights) for (const t of Object.keys(SIGHT_SPEC)) warmPush(['sight', t, 0, 0, 0, 0])
+  if (L.sights) for (const t of SCATTER_SIGHTS) warmPush(['sight', t, 0, 0, 0, 0])
+  if (L.fixed) for (const t of L.fixed) warmPush(['sight', t, 0, 0, 0, 0])
 }
 
 // The frames a level can show, from its CONFIG, most important first (a cut drops the tail): the exit, notes and machines, the first
@@ -736,7 +742,8 @@ function levelJobs(c) {
   for (const t of (c.items && c.items.types) || []) jobs.push(['item', ITEM_COLORS[t] ? t : 'radio', 0, 0, 0, 0])
   for (const t of (c.props && c.props.types) || []) for (let v = 1; v < 3; v++) jobs.push(['prop', PROP_SPEC[t] ? t : 'box', v, 0, 0, 0])
   for (const v of cast) for (const s of [2, 3]) jobs.push(['creature', v, 0, s, 0, FACING_FRONT])
-  if (SIGHT_LEVELS[levelKey(c)]) for (const t of Object.keys(SIGHT_SPEC)) jobs.push(['sight', t, 0, 0, 0, 0])
+  if (SIGHT_LEVELS[levelKey(c)]) for (const t of SCATTER_SIGHTS) jobs.push(['sight', t, 0, 0, 0, 0])
+  for (const s of c.sightsAt || []) if (SIGHT_SPEC[s.type]) jobs.push(['sight', s.type, 0, 0, 0, 0])   // a level's authored sights (the block's lightpost)
   return jobs
 }
 
@@ -2244,6 +2251,52 @@ function payphoneFrame() {
   return makeFrame([body, packLayer(G, c.rect[0], c.rect[1], c.rect[2], c.rect[3], { mode: 1, emit: 1, fogK: 0.8 })])
 }
 
+// ─ the block's lightpost (wish #5): a cast-iron post with an acorn globe, as the city's are, and bolted to it at eye height a big bronze
+//   plaque, its words raised on it. The words are read on the card (plaque.js), not off the sprite: here each letter is a raised stroke,
+//   laid out word by word as the plaque's own ('Mads n Dads' over 'were here') ─
+function lightpostFrame() {
+  const spec = SIGHT_SPEC.lightpost
+  const c = sightCanvas(spec, 168, 8)
+  const { X, Y, P } = c
+  const iron = [34, 40, 36], bronze = [128, 94, 52], raised = [206, 172, 112]
+  slab(c, 0.33, 0, 0.67, 0.08, cmul(iron, 0.9), { r: 2, cyl: 0.7, grain: 0.1 })                 // the fluted base
+  for (let i = 0; i < 5; i++) slab(c, 0.36 + i * 0.065, 0.012, 0.375 + i * 0.065, 0.07, cmul(iron, 0.6), { r: 0.5 })
+  slab(c, 0.37, 0.08, 0.63, 0.11, iron, { r: 1, cyl: 0.6 })                                       // its collar
+  slab(c, 0.455, 0.11, 0.545, 0.87, iron, { cyl: 0.85, streak: 0.25, grain: 0.06 })               // the post
+  slab(c, 0.41, 0.87, 0.59, 0.9, cmul(iron, 1.1), { r: 1, cyl: 0.6 })                              // the fitter
+  disc(c, X(0.5), Y(0.945), c.W(0.17), c.H(0.05), [214, 210, 192], { cyl: 0.5, grain: 0.02 })      // the acorn globe
+  slab(c, 0.42, 0.985, 0.58, 0.997, cmul(iron, 1.1), { r: 1 })                                      // its cap and finial
+  slab(c, 0.485, 0.997, 0.515, 1.0, iron, { r: 0.5 })
+  // the plaque: a raised border round a recessed field, four bolts, two straps round the post, and its words raised in two rows
+  slab(c, 0.44, 0.565, 0.56, 0.58, cmul(iron, 1.2), { r: 0.5 })
+  slab(c, 0.44, 0.3, 0.56, 0.315, cmul(iron, 1.2), { r: 0.5 })
+  slab(c, 0.02, 0.315, 0.98, 0.565, bronze, { r: 2.5, grain: 0.12, streak: 0.1, seed: 5 })
+  slab(c, 0.07, 0.34, 0.93, 0.54, cmul(bronze, 0.72), { r: 1.2, grain: 0.1, seed: 6 })
+  for (const [u, v] of [[0.045, 0.34], [0.955, 0.34], [0.045, 0.54], [0.955, 0.54]]) disc(c, X(u), Y(v), 1.6, 1.6, raised, { cyl: 0.4 })
+  // a row of words, centred: each letter a raised upright stem (a capital a little taller), a wider gap between the words
+  const PITCH = 0.052, SPACE = 0.07
+  const row = (v, words) => {
+    const width = words.reduce((s, w) => s + (w.length - 1) * PITCH, 0) + SPACE * (words.length - 1)
+    let u = 0.5 - width / 2
+    for (const w of words) {
+      for (let i = 0; i < w.length; i++) {
+        const tall = w[i] !== w[i].toLowerCase() ? 0.026 : 0.016
+        stroke(c, X(u), Y(v - 0.016), X(u), Y(v + tall), 1.6, raised, 0.95)
+        if (i < w.length - 1) u += PITCH
+      }
+      u += SPACE
+    }
+  }
+  row(0.47, ['Mads', 'n', 'Dads'])
+  row(0.385, ['were', 'here'])
+  finishProp(c, { dust: 0.2, stain: 0.3, outline: 0.6, ao: 0.25 })
+  const body = packLayer(P, c.rect[0], c.rect[1], c.rect[2], c.rect[3], { emit: 0.06 })
+  const G = createPaint(c.fw, c.fh)                                                                 // the globe, lit in daylight: faint
+  glowEll(G, X(0.5), Y(0.945), c.W(0.28), c.H(0.07), 255, 226, 170, 0.32, 1.6)
+  glowEll(G, X(0.5), Y(0.945), c.W(0.1), c.H(0.03), 255, 244, 220, 0.6, 1)
+  return makeFrame([body, packLayer(G, c.rect[0], c.rect[1], c.rect[2], c.rect[3], { mode: 1, emit: 1, fogK: 0.8 })])
+}
+
 // ─ a mannequin: pale, faceless, still ─
 RIG.mannequin = { hipY: 0.47, hipHW: 0.05, shY: 0.78, shHW: 0.12, waistHW: 0.07, headY: 0.895, hrx: 0.058, hry: 0.076, neckR: 0.026, chestRy: 0.12,
   arm: { l1: 0.22, l2: 0.21, r0: 0.032, r1: 0.027, r2: 0.022 }, reachX: 0.16, reachY: 0.5,
@@ -2265,6 +2318,7 @@ function mannequinFrame() {
 }
 
 registerGenerator('sight', (name, v, s, anim, facing) => {
+  if (name === 'lightpost') return lightpostFrame()
   if (name === 'tvwall') return tvwallFrame(anim * 2 + facing)
   if (name === 'chairpile') return chairpileFrame()
   if (name === 'payphone') return payphoneFrame()

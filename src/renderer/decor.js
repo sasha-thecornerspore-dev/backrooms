@@ -46,6 +46,9 @@ const TRUE = () => true
 // an authored note's scrap key ('∅:n0', ...), built once: update() runs every frame
 const NOTE_KEYS = []
 const noteKey = (i) => NOTE_KEYS[i] ?? (NOTE_KEYS[i] = '∅:n' + i)
+// an authored sight's key ('∅:s0', ...: the block's lightpost), the same way
+const SIGHT_KEYS = []
+const sightKey = (i) => SIGHT_KEYS[i] ?? (SIGHT_KEYS[i] = '∅:s' + i)
 
 export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null) {
   let cfg = config
@@ -63,6 +66,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
   // scattering them by chunk hash. When set, procedural exit placement is skipped.
   let fixedExit = config.exitAt || null
   let fixedNotes = config.notes || null   // ...and its authored notes (the ∅ intake form): scraps keyed outside the chunks
+  let fixedSights = config.sightsAt || null   // ...and its authored sights (the ∅ lightpost, wish #5): bodies keyed outside the chunks
   let exitKind  = wayDown(config).kind
   let exitLabel = wayDown(config).label
   const passes  = (hooks?.passes ?? EMPTY).filter((p) => typeof p === 'function')
@@ -247,6 +251,15 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
       const k = noteKey(i)
       if (!scraps.has(k)) scraps.set(k, { key: k, x: fixedNotes[i].x, y: fixedNotes[i].y, frag: -1, form: true })
     }
+    // the authored sights, the same way (never in `scanned`, never evicted) — but solid: each is handed to onChunk under its own key, once,
+    // so the collider index holds its body as it holds a chunk's (the travel that clears the index clears `sights` too, and it comes back)
+    if (fixedSights) for (let i = 0; i < fixedSights.length; i++) {
+      const k = sightKey(i)
+      if (sights.has(k)) continue
+      const rec = { key: k, x: fixedSights[i].x, y: fixedSights[i].y, type: fixedSights[i].type }
+      sights.set(k, rec)
+      if (onChunk) onChunk(k, { colliders: [colliderFor('sight', rec)], props: EMPTY, machine: null, sight: rec, npc: null, stairs: EMPTY })
+    }
   }
 
   function getProps() {
@@ -406,6 +419,7 @@ export function createDecorSystem(config, isWallFn, worldSeed = 0, hooks = null)
     salt      = cfg.maze?.salt | 0
     fixedExit = cfg.exitAt || null
     fixedNotes = cfg.notes || null
+    fixedSights = cfg.sightsAt || null
     exitKind  = wayDown(cfg).kind
     exitLabel = wayDown(cfg).label
     props.clear()
