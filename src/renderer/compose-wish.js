@@ -13,6 +13,25 @@ import { isCloseWish, closeFile, closingReply } from './closings.js'
 export const LEGACY_CLAIM_REPLY = 'you did not ask. you asserted. the file has no column to deny a claim made. received.'
 export const LEGACY_WISH_REPLY = 'your request has been received. whether it is heard is another matter.'
 
+// wish #20 ('hi'): the owner's answer to a wish that is nothing but a greeting. It is still filed as any wish is (the owner reads them
+// all); only the presence's reply is the owner's. The wish carries no name and keeps no number, so this is how the answer reaches
+// whoever says hi: the next time they do.
+export const GREETING_REPLY = 'hello. make a real wish next time.'
+const GREETING_WORDS = new Set(['hi', 'hello', 'hey', 'hiya', 'howdy', 'greetings', 'hola'])
+// words that may ride along with one ('hi there', 'hello everyone'); never a greeting alone
+const GREETING_FILLER = new Set(['there', 'everyone', 'everybody', 'all', 'yall', 'guys', 'friend', 'friends', 'world', 'again'])
+// a few words, every one a greeting or its filler, at least one a greeting; punctuation and case do not count
+export function isGreeting(text) {
+  const words = String(text).toLowerCase().replace(/['’]/g, '').replace(/[^a-z\s]/g, ' ').split(/\s+/).filter(Boolean)
+  if (words.length === 0 || words.length > 6) return false
+  let greeted = false
+  for (const w of words) {
+    if (GREETING_WORDS.has(w)) greeted = true
+    else if (!GREETING_FILLER.has(w)) return false
+  }
+  return greeted
+}
+
 // game.js's claim test, byte for byte: 'iwashere' anywhere in the letters ('i was not here' is not a claim)
 export const isClaim = (t) => /iwashere/.test(String(t).toLowerCase().replace(/[^a-z]/g, ''))
 
@@ -33,5 +52,6 @@ export function wishRoute(ctx) {
   if (isClaim(text)) {
     return { kind: 'claim', submit, reply: rules.presenceReply('claim') ?? LEGACY_CLAIM_REPLY, refile: origin === 'processed' ? null : claimRefile(origin) }
   }
+  if (isGreeting(text)) return { kind: 'wish', submit, reply: GREETING_REPLY }
   return { kind: 'wish', submit, reply: closingReply(file.closing) ?? rules.presenceReply('wish') ?? LEGACY_WISH_REPLY }
 }

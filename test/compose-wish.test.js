@@ -139,3 +139,39 @@ describe('isClaim', () => {
     expect(fileStatus).not.toHaveBeenCalled()
   })
 })
+
+// wish #20 ('hi'): the owner's answer to a greeting — "send a message to that user saying hello, make a real wish next time"
+describe('a wish that is only a greeting (wish #20)', () => {
+  it('is answered by the owner, and still filed as an ordinary wish (its text, its trailer, its meta)', async () => {
+    const { GREETING_REPLY } = await import('../src/renderer/compose-wish.js')
+    expect(GREETING_REPLY).toBe('hello. make a real wish next time.')
+    const r = wishRoute(ctx('hi'))
+    expect(r.kind).toBe('wish')
+    expect(r.reply).toBe(GREETING_REPLY)
+    expect(r.submit).toEqual({ text: 'hi', meta: { origin: null } })           // the notice nobody answered: the text byte for byte
+    const ext = file({ status: 'extension', at: 1 })
+    const filed = wishRoute(ctx('hi', { file: ext, depth: 2 }))
+    expect(filed.submit.text).toBe(wishRoute(ctx('let me out', { file: ext, depth: 2 })).submit.text.replace('let me out', 'hi'))
+    expect(parseTrailer(filed.submit.text)).toEqual(parseTrailer(wishRoute(ctx('let me out', { file: ext, depth: 2 })).submit.text))
+  })
+  it('wins over the closing reply and the origin\'s presence reply', async () => {
+    const { GREETING_REPLY } = await import('../src/renderer/compose-wish.js')
+    const ext = file({ status: 'extension', at: 1, closing: 'extension' })
+    expect(wishRoute(ctx('hello', { file: ext, origin: 'tenant', rules: rulesFor('tenant', false) })).reply).toBe(GREETING_REPLY)
+    expect(wishRoute(ctx('hey', { origin: 'processed', rules: rulesFor('processed', false) })).reply).toBe(GREETING_REPLY)
+  })
+  it('isGreeting: greetings, with punctuation, case and a little filler; anything with a wish in it is not one', async () => {
+    const { isGreeting } = await import('../src/renderer/compose-wish.js')
+    for (const t of ['hi', 'Hi!', 'hello', 'HELLO?', 'hey', 'hey there', 'hi everyone', 'hello, world', 'hiya', 'howdy', 'hola', 'greetings', "hi y'all", 'hi hi', '  hi  '])
+      expect(isGreeting(t), t).toBe(true)
+    for (const t of ['', '   ', '?!', 'there', 'everyone', 'hi i want a door', 'hello let me out', 'fast', 'Jejum', 'what is the way out?!',
+      'hi hi hi hi hi hi hi', 'his', 'shell', 'thigh', 'i was here', 'chi'])
+      expect(isGreeting(t), t).toBe(false)
+  })
+  it('the routes before it still win: a claim, a status word, a name', async () => {
+    const { GREETING_REPLY } = await import('../src/renderer/compose-wish.js')
+    expect(wishRoute(ctx('hi, i was here')).kind).toBe('claim')
+    expect(wishRoute(ctx('extension')).kind).toBe('status')
+    expect(wishRoute(ctx('let me out')).reply).not.toBe(GREETING_REPLY)
+  })
+})
