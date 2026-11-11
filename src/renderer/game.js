@@ -66,6 +66,7 @@ import { createFilm } from './film.js'
 import { radioLine, RADIO_GROUPS } from './compose-radio.js'
 import { wishRoute } from './compose-wish.js'
 import { postWish } from './wish-post.js'
+import { TOKEN, TOKEN_LINE, trayToken } from './token.js'
 import { finaleGate, beaconDecision, deathDecision } from './compose-gates.js'
 import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame, createEvidence, photoOutcome, EVIDENCE_FLOOR, EVIDENCE_LINE, COUNTED_LINE } from './evidence.js'
 import { PHRASES, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from './caches.js'
@@ -105,6 +106,7 @@ const ITEM_NAMES = {
   'plumb':          'survey plumb',
   'ballast':        'ballast',
   'extension-slip': 'extension slip',
+  'way-out-token':  'way out token',
 }
 // what the machine's tray says drops into it: every ITEM_NAMES key with its article (the deep stacks' tools and a floor's lean included)
 const TRAY_NAMES = {
@@ -116,6 +118,7 @@ const TRAY_NAMES = {
   'plumb':          'a survey plumb',
   'ballast':        'some ballast',
   'extension-slip': 'an extension slip',
+  'way-out-token':  'a way out token',
 }
 
 // The numbers station in the deep stacks reads the ledger aloud — the count that decodes (subtract the drift 3, then A=1..Z=26) to the
@@ -2271,6 +2274,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       // (closings.js slipText: today's line for everyone else; the processed read their own, and under extension it is yours now)
       sanity = Math.min(100, sanity + 20); wardPulse()
       showMessage(slipText(origin, file.status, file.closing))
+    } else if (eff.type === TOKEN) {
+      // the way out token (wish #29): what it opens is not known yet. It says what it is, and nothing is spent
+      showMessage(TOKEN_LINE)
     }
     renderHotbar()
   }
@@ -2462,9 +2468,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // a floor whose files lean one way stocks for it, and the tray says which (docket.js trayLean: nothing on a floor that does not lean)
     const lean = trayLean(level.st)
     if (lean.item) pool.push(lean.item, lean.item)
-    const type = pool[Math.floor(Math.random() * pool.length)]
+    // the way out token (token.js): one draw in TOKEN_ODDS on any floor, to a hand that holds none; it reads as a tool and is kept
+    const type = trayToken(itemSys.inventory, Math.random()) ? TOKEN : pool[Math.floor(Math.random() * pool.length)]
     const sour = type === 'almond-water' && dfloor >= 2 && Math.random() < 0.4
-    const extra = type === 'plumb' ? { tool: true } : (sour ? { sour: true } : {})
+    const extra = type === 'plumb' || type === TOKEN ? { tool: true } : (sour ? { sour: true } : {})
     const res = itemSys.grant(type, extra)
     if (!res.ok) { showMessage('the machine whirs, but your hands are already full.'); return }
     mem.noteVended(level.index, m.key, playT); vendedSet.add(m.key)
