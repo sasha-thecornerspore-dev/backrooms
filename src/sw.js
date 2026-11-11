@@ -25,6 +25,7 @@ const SHELL = [
   '/renderer/compose-polaroid.js', '/renderer/compose-radio.js', '/renderer/compose-wish.js', '/renderer/wish-post.js', '/renderer/compose-gates.js', '/renderer/evidence.js',
   '/renderer/caches.js', '/renderer/lightshare.js', '/renderer/site.js', '/renderer/recover-seal.js', '/renderer/casebook.js', '/renderer/terminal.js', '/renderer/crew.js',
   '/renderer/dread.js', '/renderer/firstrun.js', '/renderer/plates.js', '/renderer/pathfield.js', '/renderer/feelings.js', '/renderer/learn.js', '/renderer/radiostatic.js', '/renderer/film.js',
+  '/renderer/token.js',
   '/net/client.js', '/net/evbus.js', '/settings.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png',
 ]
