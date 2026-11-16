@@ -43,3 +43,7 @@ export const NULL_MAP = [
 // sits deeper in — always reachable on foot (asserted in the test).
 export const NULL_SPAWN = { x: 2.5, y: 2.5 }
 export const NULL_EXIT  = { x: 18.5, y: 13.5 }
+
+// The lightpost (wish #5): in the open park between the two rows that jut in, in sight of the spawn, a big plaque bolted to it
+// (plaque.js). A body, like any sight: the way to the exit goes round it
+export const NULL_LIGHTPOST = { x: 12.5, y: 7.5 }

@@ -4,12 +4,13 @@
 // the ballast and the extension slip stay), your ceiling is five points lower (never below 60), the trays are empty for that visit.
 // Arriving on a floor for the first time gives five back (never above 100). Pure: game.js applies the result.
 import { offsetBeside } from './topology.js'
+import { TOKEN } from './token.js'
 
 export const MAX_HP_FLOOR = 60
 export const SCAR = 5
 // never lost in the fall: the deep-stack finds that are kept (items.js KEPT). The plumb is kept by its type too, so a plumb whose tool
-// flag was lost (an old save) still stays in the hand
-const KEPT = new Set(['plumb', 'ballast', 'extension-slip'])
+// flag was lost (an old save) still stays in the hand. The way out token is kept the same way (token.js)
+const KEPT = new Set(['plumb', 'ballast', 'extension-slip', TOKEN])
 const WAKE_LINE = 'you wake beside the hole you fell through. something of you stayed down there.'
 
 // the floor you wake on: a floor above for 1..3, the lobby and the block where they are

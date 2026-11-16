@@ -9,7 +9,7 @@ import { mulberry32 } from '../src/renderer/gfx-util.js'
 // the assembly exactly as game.js wrote it before the pooling (verbatim maps, same spread order)
 function legacyAssemble(w) {
   // (the six trailing fields are a friend's heartbeat as the event bus merges it onto the record: undefined / false for a legacy peer)
-  const remoteEntities = w.mp ? w.remote.map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle, chatText: p.chatText, hp: p.hp, st: p.st, lit: p.lit, thin: !!p.thin, origin: p.origin, status: p.status, seen: !!p.seen })) : []
+  const remoteEntities = w.mp ? w.remote.map(p => ({ x: p.x, y: p.y, kind: 'player', name: p.name || 'wanderer', angle: p.angle, chatText: p.chatText, hp: p.hp, st: p.st, lit: p.lit, thin: !!p.thin, origin: p.origin, status: p.status, seen: !!p.seen, mark: p.mark === 'mumon' ? 'mumon' : undefined })) : []   // (+ the relay's mark, wish #27)
   const propEntities = w.props.map(p => ({ x: p.x, y: p.y, kind: 'prop', type: p.type, rot: p.rot, key: p.key }))
   const exitEntities = w.exits.map(e => ({ x: e.x, y: e.y, kind: 'exit', target: e.target, key: e.key }))
   const npcEntities  = w.npcs.map(n => ({ x: n.x, y: n.y, kind: 'npc', name: 'a lost soul', key: n.key }))

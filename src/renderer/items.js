@@ -7,12 +7,13 @@
 import { CHUNK_SIZE } from './world.js'
 import { computeLures, RADIO_BATTERY, GLOW_TTL } from './tactics.js'
 import { findOpenNear } from './topology.js'
+import { TOKEN } from './token.js'
 
 export const ITEM_TYPES = ['almond-water', 'glowstick', 'bandage', 'polaroid', 'radio']
 export const MAX_SLOTS = 6
 export const MAX_DROPPED = 24
-// the deep-stack finds are not put down: a reading, a weight, the one line that stayed open
-export const KEPT = new Set(['plumb', 'ballast', 'extension-slip'])
+// the deep-stack finds are not put down: a reading, a weight, the one line that stayed open — and the way out token (token.js)
+export const KEPT = new Set(['plumb', 'ballast', 'extension-slip', TOKEN])
 const THROW_AHEAD = 1.2
 // the throw is marched in steps of 0.3 u: no step can skip a one-cell (1 u) wall
 const THROW_STEPS = 4
@@ -146,8 +147,8 @@ export function createItemSystem(config, isWallFn, worldSeed = 0) {
       item.on = !item.on
       return { type: 'radio', on: item.on }
     }
-    // tools (e.g. the plumb) take a reading on every press and are never consumed
-    if (item.tool) return { type: item.type, tool: true }
+    // tools (e.g. the plumb) take a reading on every press and are never consumed; nor is the way out token, flag or no flag
+    if (item.tool || item.type === TOKEN) return { type: item.type, tool: true }
     inventory.splice(selected, 1)
     if (selected >= inventory.length && selected > 0) selected = inventory.length - 1
     return { type: item.type, ...(item.sour ? { sour: true } : {}) }

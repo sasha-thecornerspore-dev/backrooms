@@ -5,6 +5,7 @@ import { randomBytes } from 'crypto'
 import { startUpdater } from './updater.js'
 import { evKindOk, evFrameOk, evBucket, evKeepOk, evDropOk, evKeepBucket, pace, FLOOD_CLOSE, FLOOD_REASON } from './evguard.js'
 import { createEvLog } from './evlog.js'
+import { admitName } from './names.js'
 
 // the release's version, stamped into the bundle by esbuild (build-release.yml: --define:__BACKROOMS_VERSION__); a checkout
 // has none, and server/package.json's is not the release's — so only the bundle ever compares itself with a release
@@ -13,6 +14,8 @@ const SERVER_VERSION = typeof __BACKROOMS_VERSION__ === 'string' ? __BACKROOMS_V
 const PORT = parseInt(process.env.PORT ?? '8765', 10)
 // the keep/drop log is the owner's explicit opt-in: `node index.js --evlog` or EV_LOG=1
 const EV_LOG = process.argv.includes('--evlog') || process.env.EV_LOG === '1'
+// the name Mumon is the owner's (wish #27, names.js): held only with the OWNER_KEY environment variable (read at each join), which a
+// LAN server has only if its owner set it. The game sends a key only over TLS, so on a plain ws:// LAN the name is refused to everyone
 
 const rooms = new Map()  // roomId → { worldSeed, players: Map<id,{ws,x,y,angle}>, expireTimer }
 
@@ -30,7 +33,7 @@ function startBroadcastLoop(room) {
   if (room._ticker) return
   room._ticker = setInterval(() => {
     if (room.players.size === 0) return
-    const list = [...room.players.entries()].map(([id, p]) => ({ id, x: p.x, y: p.y, angle: p.angle, name: p.name, hp: p.hp ?? 100 }))
+    const list = [...room.players.entries()].map(([id, p]) => ({ id, x: p.x, y: p.y, angle: p.angle, name: p.name, hp: p.hp ?? 100, ...(p.mark ? { mark: p.mark } : {}) }))
     broadcast(room, { type: 'players', list })
   }, 50)  // 20Hz
 }
@@ -94,15 +97,15 @@ export function createServer(port = PORT, host, opts = {}) {
           : null
         room = getOrCreateRoom(roomId, seedOverride, evlog)
         playerId = uuid()
-        const name = String(msg.name || 'wanderer').slice(0, 24)
+        const { name, mark } = admitName(msg.name, msg.key, process.env.OWNER_KEY)
         // first = no OTHER live socket in the room at join. Not "room is new": the
         // room (and its world) outlives its last player for 30 s; whoever walks
         // into the empty room walked in, they did not drop in on anyone.
         const first = room.players.size === 0
-        room.players.set(playerId, { ws, x: 0, y: 0, angle: 0, name })
-        ws.send(JSON.stringify({ type: 'welcome', playerId, worldSeed: room.worldSeed, roomId, first }))
+        room.players.set(playerId, { ws, x: 0, y: 0, angle: 0, name, ...(mark ? { mark } : {}) })
+        ws.send(JSON.stringify({ type: 'welcome', playerId, worldSeed: room.worldSeed, roomId, name, first }))
         if (room.log) for (const f of room.log.replay()) ws.send(JSON.stringify({ ...f, replay: true }))
-        broadcast(room, { type: 'joined', id: playerId, name }, playerId)
+        broadcast(room, { type: 'joined', id: playerId, name, ...(mark ? { mark } : {}) }, playerId)
         startBroadcastLoop(room)
         return
       }

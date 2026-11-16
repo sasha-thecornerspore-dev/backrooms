@@ -804,6 +804,7 @@
   <script type="module">
     import { initGame } from './game.js'
     import { createMultiplayerClient } from '../net/client.js'
+    import { readOwnerKey } from './owner.js'
     import { parseAnchor, anchorSeed, neighbourhoodSeed, formatAnchor, bodyUrl } from './anchor.js'
     import { getPrefs, setPref } from './prefs.js'
     import { readSave } from './save.js'
@@ -993,7 +994,8 @@
         // a room is asked for the pin's NEIGHBOURHOOD (anchor.js neighbourhoodSeed), never the pin: host or joiner, relay or LAN. The
         // pin itself stays here, for the leash and the film; game.js says once what the room has of it
         const requestedSeed = neighbourhoodSeed(anchor)
-        const mpClient = createMultiplayerClient(serverUrl)
+        // the owner's key for the name Mumon (wish #27, owner.js), when this device keeps one: the client sends it over TLS only
+        const mpClient = createMultiplayerClient(serverUrl, { ownerKey: readOwnerKey() })
         // first joiner's seed wins; later joiners inherit the room's world
         const { worldSeed } = await mpClient.connect(roomId, requestedSeed, getName())
         joinModal.style.display = 'none'

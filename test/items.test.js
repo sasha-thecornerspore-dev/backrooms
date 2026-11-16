@@ -599,9 +599,9 @@ describe('caches: the note rides the dropped record', () => {
     expect(rows[23].cacheKey).toBe('c:1:24,0')
   })
 
-  it('KEPT is exported: plumb, ballast, the extension slip — and they are still kept', () => {
-    expect([...KEPT].sort()).toEqual(['ballast', 'extension-slip', 'plumb'])
-    for (const type of ['plumb', 'ballast', 'extension-slip']) {
+  it('KEPT is exported: plumb, ballast, the extension slip, the way out token — and they are still kept', () => {
+    expect([...KEPT].sort()).toEqual(['ballast', 'extension-slip', 'plumb', 'way-out-token'])
+    for (const type of ['plumb', 'ballast', 'extension-slip', 'way-out-token']) {
       const sys = holding([{ type }])
       expect(sys.throwSelected(0, 0, 0, 0, { ph: 1, oct: 0 })).toEqual({ ok: false, reason: 'kept' })
       expect(sys.inventory).toHaveLength(1)

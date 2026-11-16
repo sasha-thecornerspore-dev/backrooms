@@ -45,7 +45,7 @@ describe('resolveDeath', () => {
     const tool = resolveDeath(base({ inventory: [{ type: 'plumb', tool: true }, { type: 'bandage' }], selected: 0 }))
     expect(tool.inventory).toEqual([{ type: 'plumb', tool: true }, { type: 'bandage' }])
     expect(tool.dropped).toBeNull(); expect(tool.droppedLine).toBeNull()
-    for (const type of ['ballast', 'extension-slip']) {
+    for (const type of ['ballast', 'extension-slip', 'way-out-token']) {
       const r = resolveDeath(base({ inventory: [{ type: 'bandage' }, { type }], selected: 1 }))
       expect(r.inventory).toEqual([{ type: 'bandage' }, { type }])
       expect(r.dropped).toBeNull()

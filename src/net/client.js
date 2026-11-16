@@ -1,16 +1,19 @@
 // src/net/client.js — multiplayer client.
 // Speaks one small JSON protocol that both the bundled Node server (server/index.js) and the Cloudflare Durable-Object relay
 // (relay/relay.js) understand:
-//   → join {roomId, worldSeed?, name}   → pos {x, y, angle, hp}   → chat {text}   → typing {on}
+//   → join {roomId, worldSeed?, name, key?}   → pos {x, y, angle, hp}   → chat {text}   → typing {on}
 //   → ev {kind, payload, keep?, drop?}
-//   ← welcome {playerId, worldSeed, roomId, first?}   ← players {list: [{id, x, y, angle, name, hp}]}
-//   ← joined / left {id, name}   ← chat {id, name, text}   ← typing {id, name, on}
+//   ← welcome {playerId, worldSeed, roomId, first?, name?}   ← players {list: [{id, x, y, angle, name, hp, mark?}]}
+//   ← joined {id, name, mark?} / left {id, name}   ← chat {id, name, text}   ← typing {id, name, on}
 //   ← ev {id, name, kind, payload, t, replay?}
 //   ← a close with code FLOOD_CLOSE (4029, reason 'too fast'): the room shut this socket for sending faster than it allows. Never retried
 // Unknown message types are ignored, so an old client rides a new server and a new client rides an old one (no 'ev', no welcome.first,
 // no flood close) with no error.
 // join.worldSeed is whatever the caller hands connect(): index.html hands it a pin's neighbourhood seed (anchor.js neighbourhoodSeed),
 // never the pin's own. A rejoin asks with the very same one.
+// join.key (wish #27): the owner's key for the name Mumon (relay/names.js), handed in as opts.ownerKey (index.html: renderer/owner.js readOwnerKey()) and sent only over TLS (a
+// wss:// room), never to a LAN server spoken to in the clear. welcome.name is the name the room gave: when it is not the one asked
+// for (Mumon without the key is 'wanderer'), getName() and the local echo of your own chat say the room's (connect() resolves as before).
 //
 // The dropped line: a close after welcome that the game did not ask for (disconnect()) empties the players list and is told to onLine
 // ('dropped'). Then the SAME room is asked for again, under the SAME name, with the SAME requested seed — the tries spaced about 1 s, 2 s,
@@ -120,12 +123,14 @@ export function sysText(from, text) {
   return `— ${from ?? ''}${t.startsWith("'") ? '' : ' '}${t}`
 }
 
-// opts (tests): { WebSocket, setTimeout, clearTimeout, now, random } — the page's own when left out
+// opts: { ownerKey } (the owner's key, see above), and for tests { WebSocket, setTimeout, clearTimeout, now, random } — the page's own when left out
 export function createMultiplayerClient(serverUrl, opts = {}) {
   const setT = typeof opts.setTimeout === 'function' ? opts.setTimeout : (fn, ms) => setTimeout(fn, ms)
   const clearT = typeof opts.clearTimeout === 'function' ? opts.clearTimeout : (id) => clearTimeout(id)
   const now = typeof opts.now === 'function' ? opts.now : () => (typeof performance !== 'undefined' ? performance.now() : Date.now())
   const random = typeof opts.random === 'function' ? opts.random : Math.random
+  // the owner's key goes only where the line is encrypted
+  const ownerKey = typeof opts.ownerKey === 'string' && opts.ownerKey && String(serverUrl).toLowerCase().startsWith('wss://') ? opts.ownerKey : null
 
   let ws = null
   let connected = false
@@ -226,6 +231,7 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
       if (!mine()) return
       const join = { type: 'join', roomId: joinArgs.roomId, name: joinArgs.name }
       if (joinArgs.worldSeed != null) join.worldSeed = joinArgs.worldSeed
+      if (ownerKey) join.key = ownerKey
       try { sock.send(JSON.stringify(join)) } catch {}
     }
 
@@ -242,6 +248,7 @@ export function createMultiplayerClient(serverUrl, opts = {}) {
         welcomed = true; settled = true; connected = true
         if (playerId != null && playerId !== msg.playerId) pastIds.add(playerId)
         playerId = msg.playerId
+        if (typeof msg.name === 'string' && msg.name) selfName = msg.name.slice(0, 24)     // the room's name for you (an old room sends none)
         const first = typeof msg.first === 'boolean' ? msg.first : undefined
         if (att.rejoin) {
           // back: the arrival stays the first join's (first: true here is the relay's own restart, or a room you came back to alone).

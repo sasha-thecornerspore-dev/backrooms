@@ -46,6 +46,7 @@ import { hauntsPass, createHauntTracker, hauntEffects } from './haunts.js'
 import { createCard, CARD_KEYS, readText, REDACTED_FOOT } from './papercard.js'
 import { createEvBus } from '../net/evbus.js'
 import { LINE, lineNotice, foldChat, sysText, posGapS } from '../net/client.js'
+import { ownerCommand } from './owner.js'
 import { intake, filingLine, formText, FORM_FOOT, parseIntakeCommand, normaliseIntakeCtx, identityOut, identityIn } from './origin-intake.js'
 import { rulesFor, LEGACY } from './origin-rules.js'
 import { DOOR_SANITY, isSealedMaterial, doorLine, facingCell } from './origin-tenant.js'
@@ -66,6 +67,8 @@ import { createFilm } from './film.js'
 import { radioLine, RADIO_GROUPS } from './compose-radio.js'
 import { wishRoute } from './compose-wish.js'
 import { postWish } from './wish-post.js'
+import { TOKEN, TOKEN_LINE, trayToken } from './token.js'
+import { PLAQUE_HINT, plaqueText, nearPlaque } from './plaque.js'
 import { finaleGate, beaconDecision, deathDecision } from './compose-gates.js'
 import { SUBJECT_RANGE, SOUL_RANGE, inFrame, subjectInFrame, createEvidence, photoOutcome, EVIDENCE_FLOOR, EVIDENCE_LINE, COUNTED_LINE } from './evidence.js'
 import { PHRASES, NOTE_NONE, menuFor, cacheKey, parseCacheKey, octOf, arrowFor, isCachePayload, isTakePayload, extraFor, createCacheLedger, NAME_CAP_EXEMPT } from './caches.js'
@@ -105,6 +108,7 @@ const ITEM_NAMES = {
   'plumb':          'survey plumb',
   'ballast':        'ballast',
   'extension-slip': 'extension slip',
+  'way-out-token':  'way out token',
 }
 // what the machine's tray says drops into it: every ITEM_NAMES key with its article (the deep stacks' tools and a floor's lean included)
 const TRAY_NAMES = {
@@ -116,6 +120,7 @@ const TRAY_NAMES = {
   'plumb':          'a survey plumb',
   'ballast':        'some ballast',
   'extension-slip': 'an extension slip',
+  'way-out-token':  'a way out token',
 }
 
 // The numbers station in the deep stacks reads the ledger aloud — the count that decodes (subtract the drift 3, then A=1..Z=26) to the
@@ -194,7 +199,7 @@ export function createEntityAssembler() {
 // trailing fields are the friend's heartbeat as the event bus merged it onto the record (evbus.js mergeRemote; blanked for a stale one,
 // absent for a legacy peer) — gfx-sprites planPerson draws them: faint when thin and unseen, halved and 'name · down' when down, warm when lit
 export const ENTITY_FILLS = Object.freeze({
-  player:  (r, p) => { r.x = p.x; r.y = p.y; r.kind = 'player'; r.name = p.name || 'wanderer'; r.angle = p.angle; r.chatText = p.chatText; r.hp = p.hp; r.st = p.st; r.lit = p.lit; r.thin = !!p.thin; r.origin = p.origin; r.status = p.status; r.seen = !!p.seen },
+  player:  (r, p) => { r.x = p.x; r.y = p.y; r.kind = 'player'; r.name = p.name || 'wanderer'; r.angle = p.angle; r.chatText = p.chatText; r.hp = p.hp; r.st = p.st; r.lit = p.lit; r.thin = !!p.thin; r.origin = p.origin; r.status = p.status; r.seen = !!p.seen; r.mark = p.mark === 'mumon' ? 'mumon' : undefined },
   npc:     (r, n) => { r.x = n.x; r.y = n.y; r.kind = 'npc'; r.name = 'a lost soul'; r.key = n.key },
   prop:    (r, p) => { r.x = p.x; r.y = p.y; r.kind = 'prop'; r.type = p.type; r.rot = p.rot; r.key = p.key },
   exit:    (r, e) => { r.x = e.x; r.y = e.y; r.kind = 'exit'; r.target = e.target; r.key = e.key },
@@ -1230,6 +1235,8 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // E at ∅'s form on the counter (decor's authored note, frag -1), and /intake: the file's view of you, read-only — no page count, no
   // sanity, no pin; it closes on any close key like a page
   function openForm() { openCard('form', { text: formText(intakeCtx, file.status).join('\n'), foot: FORM_FOOT }) }
+  // E at the block's lightpost (wish #5, plaque.js): the plaque on the card, read-only, closed like the form
+  function openPlaque() { openCard('form', { text: plaqueText(), foot: '' }) }
   // ∅'s sealed doors (origin-tenant.js): the cell an arm's length ahead, when it is block or plywood on the FIXED map (materialAt exists only
   // there: callers check cfg.map). -> { ix, iy } or null
   function doorAhead() {
@@ -1596,6 +1603,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         // the room in words (crew.js whoLines): you, then each friend — the floor by its name (none for a friend on the block), the word
         // the file has them under; solo, that no one else is. On the block nothing new is said: the file holds nothing from there
         showMessage(level?.cfg.map ? TERM.WHERE_NONE : whoLines(crewRoster(), { id: mpClient?.id ?? null, lvl: level ? level.index : null, status: file.status }).join('\n'))
+      } else if (cmd === 'owner') {
+        // the owner's key for the name Mumon (wish #27, owner.js): kept on this device, read by the next room you enter; never said back,
+        // never sent as chat, never in the help
+        showMessage(ownerCommand(arg).line)
       } else {
         // the help names /who — but not on the block, where nothing new is said: there it reads as it always did
         const help = 'the file does not recognise that. try /recover, /cases, /file <answer>, /intake, /status, /who or /invite.'
@@ -1993,6 +2004,11 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     if (lineDown()) sayLine(LINE.DEAD)   // it dropped while the world was still loading
     renderLine()
   }
+  // the room's name for you (wish #27): the name Mumon is its owner's (relay/names.js), and a name the room would not give is said once
+  if (mpClient) {
+    const asked = (String(getPref('playerName') ?? '').trim() || 'wanderer').slice(0, 24)
+    if (mpClient.getName() !== asked) setTimeout(() => showMessage(`the room will not call you ${asked}. here you are ${mpClient.getName()}.`, PRIO.interaction), 2200)
+  }
 
   // the crew's people lines (crew.js createCrewWatch, on the bus's reading of each friend's heartbeat — nothing more is sent): a friend
   // re-filed under a new word ('— ada re-filed under litigation.'; never their first heartbeat), and, once a session, a friend whose pin's
@@ -2271,6 +2287,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
       // (closings.js slipText: today's line for everyone else; the processed read their own, and under extension it is yours now)
       sanity = Math.min(100, sanity + 20); wardPulse()
       showMessage(slipText(origin, file.status, file.closing))
+    } else if (eff.type === TOKEN) {
+      // the way out token (wish #29): what it opens is not known yet. It says what it is, and nothing is spent
+      showMessage(TOKEN_LINE)
     }
     renderHotbar()
   }
@@ -2462,9 +2481,10 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     // a floor whose files lean one way stocks for it, and the tray says which (docket.js trayLean: nothing on a floor that does not lean)
     const lean = trayLean(level.st)
     if (lean.item) pool.push(lean.item, lean.item)
-    const type = pool[Math.floor(Math.random() * pool.length)]
+    // the way out token (token.js): one draw in TOKEN_ODDS on any floor, to a hand that holds none; it reads as a tool and is kept
+    const type = trayToken(itemSys.inventory, Math.random()) ? TOKEN : pool[Math.floor(Math.random() * pool.length)]
     const sour = type === 'almond-water' && dfloor >= 2 && Math.random() < 0.4
-    const extra = type === 'plumb' ? { tool: true } : (sour ? { sour: true } : {})
+    const extra = type === 'plumb' || type === TOKEN ? { tool: true } : (sour ? { sour: true } : {})
     const res = itemSys.grant(type, extra)
     if (!res.ok) { showMessage('the machine whirs, but your hands are already full.'); return }
     mem.noteVended(level.index, m.key, playT); vendedSet.add(m.key)
@@ -2966,6 +2986,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
     const nearNpc  = level.decor.nearestNpc(player.x, player.y, 1.8)
     const nearScrap = level.decor.nearestScrap(player.x, player.y, 1.8)
     const nearMachine = level.decor.nearestMachine(player.x, player.y, 1.6)
+    const atPlaque = nearPlaque(player, cfg.plaque)          // the block's lightpost (wish #5): only a level with a plaque has one
     // the drawers (containers.js): the nearest container you have not opened; it takes the prompt and F over a way farther than
     // 1.0 u (the block has no containers). Ladder: item > machine > container-or-way > scrap > soul
     const nearBox = cfg.map ? null : level.decor.nearestProp(player.x, player.y, 1.5, unsearchedBox)
@@ -3003,6 +3024,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         itemHintEl.style.opacity = '1'
       } else if (nearScrap) {
         itemHintEl.textContent = nearScrap.form ? 'e · read the form' : 'e · read the scrap'
+        itemHintEl.style.opacity = '1'
+      } else if (atPlaque) {
+        itemHintEl.textContent = PLAQUE_HINT
         itemHintEl.style.opacity = '1'
       } else if (nearNpc) {
         itemHintEl.textContent = 'e · speak to the lost soul'
@@ -3133,6 +3157,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
         if (nearPresence && !scrapFirst) openDialog()
         else if (nearScrap?.firstrun) openFirstNote(nearScrap)
         else if (nearScrap) nearScrap.form ? openForm() : mods.sealedCards && !readSet.has(nearScrap.frag) ? openSealed(nearScrap) : openNoteCard(nearScrap)
+        else if (atPlaque) openPlaque()
         else if (door) knockDoor(door)
         else if (nearNpc) {
           const r = rules.npcLine()                       // processed: the soul sees the stamp and will not talk
