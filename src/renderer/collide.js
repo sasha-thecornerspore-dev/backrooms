@@ -55,31 +55,72 @@ export function colliderFor(kind, obj) {
 // Records live in per-chunk lists keyed by a packed (cx, cy) so a query builds no key strings. query(x, y, r, out) writes
 // every record of any class whose circle overlaps (x, y, r) from the 3x3 chunk neighbourhood into the caller's `out`
 // (left oversized: read out[0..n)) and returns n.
+// A key that does not read as "cx,cy" is level-wide (decor.js files the block's authored sights under '∅:s0', ...: the lightpost, wish
+// #5): its records go in the list of the chunk each stands in, after that chunk's own, and stay there whatever that chunk's own key
+// does, in either order, until their own key is set again or dropped. A level that never hands one builds the lists it always did.
 const pack = (cx, cy) => cx * 65536 + cy                       // injective while |cy| < 32768
 function parseKey(key) {
   const i = key.indexOf(',')
   return [Number(key.slice(0, i)), Number(key.slice(i + 1))]
 }
 export function createColliderIndex() {
-  const chunks = new Map()                                      // pack(cx, cy) -> records[]
+  const chunks = new Map()                                      // pack(cx, cy) -> records[] (what query reads)
+  const own = new Map()                                         // pack(cx, cy) -> the chunk's own records (the list above, bar the wide)
+  const wide = new Map()                                        // a level-wide key -> { list: its records, at: the chunk each is filed in }
+  const wideAt = new Map()                                      // pack(cx, cy) -> the level-wide records standing in that chunk
   let total = 0
+  // the chunk's list: its own records, then the level-wide ones standing in it (none: its own list as it is)
+  function file(k) {
+    const o = own.get(k), w = wideAt.get(k)
+    if (!w) { if (o) chunks.set(k, o); else chunks.delete(k) }
+    else chunks.set(k, o ? o.concat(w) : w.slice())
+  }
+  function dropWide(key) {
+    const prev = wide.get(key)
+    if (!prev) return
+    wide.delete(key)
+    total -= prev.list.length
+    for (let i = 0; i < prev.list.length; i++) {
+      const k = prev.at[i], w = wideAt.get(k)
+      const j = w.indexOf(prev.list[i])
+      if (j >= 0) w.splice(j, 1)
+      if (!w.length) wideAt.delete(k)
+      file(k)
+    }
+  }
+  function setWide(key, records) {
+    dropWide(key)
+    const list = records ? records.slice() : []                 // our own copy, as a chunk's
+    if (!list.length) return
+    const at = list.map((c) => pack(Math.floor(c.x / CHUNK_SIZE), Math.floor(c.y / CHUNK_SIZE)))   // where it stands
+    wide.set(key, { list, at })
+    total += list.length
+    for (let i = 0; i < list.length; i++) {
+      const w = wideAt.get(at[i])
+      if (w) w.push(list[i]); else wideAt.set(at[i], [list[i]])
+      file(at[i])
+    }
+  }
   function setChunk(key, records) {
     const [cx, cy] = parseKey(key)
-    if (!Number.isFinite(cx) || !Number.isFinite(cy)) return
+    if (!Number.isFinite(cx) || !Number.isFinite(cy)) { setWide(key, records); return }
     const k = pack(cx, cy)
-    const prev = chunks.get(k)
+    const prev = own.get(k)
     if (prev) total -= prev.length
     const list = records ? records.slice() : []                 // our own copy: the caller may reuse its bundle
-    chunks.set(k, list)
+    own.set(k, list)
     total += list.length
+    file(k)
   }
   function dropChunk(key) {
     const [cx, cy] = parseKey(key)
+    if (!Number.isFinite(cx) || !Number.isFinite(cy)) { dropWide(key); return }
     const k = pack(cx, cy)
-    const prev = chunks.get(k)
+    const prev = own.get(k)
     if (!prev) return
     total -= prev.length
-    chunks.delete(k)
+    own.delete(k)
+    file(k)
   }
   function query(x, y, r, out) {
     const cx = Math.floor(x / CHUNK_SIZE), cy = Math.floor(y / CHUNK_SIZE)
