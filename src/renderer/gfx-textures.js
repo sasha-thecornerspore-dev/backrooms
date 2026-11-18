@@ -2793,6 +2793,21 @@ export function buildTextures(palette, materials = null, look = null, levelKey =
 }
 // a style's result, or (the Harlem Park styles: generators) the result of its stepped job
 const isJob = (v) => !!v && typeof v.next === 'function'
+// TexSet.wallBands, the storeys' band tiles, of every TexSet built from the styles: ONE accessor, the same getter on every such TexSet,
+// whether it has bands or not (it reads undefined on every level but the block with its look). The bands of a TexSet that has them live
+// beside it, in BANDS (TexSet -> { bands: built or undefined, make: the job that builds them }). So the TexSets of all the levels share one
+// shape: an accessor on the block's TexSet alone (a getter of its own) gave that TexSet a shape no other level's has, and once the block had
+// been drawn the world pass every level shares (gfx-world.js) was compiled for both shapes, which left the floor and ceiling of every other
+// level a few percent slower to draw on the CPU renderer. Not enumerable, so a TexSet still compares and serialises as before.
+const BANDS = new WeakMap()
+function wallBandsGet() {
+  const e = BANDS.get(this)
+  if (e === undefined) return undefined
+  if (e.bands === undefined) BF.drain(e.make())
+  return e.bands
+}
+const WALL_BANDS = { enumerable: false, configurable: true, get: wallBandsGet }
+
 // buildTextures as a stepped job (gfx-block-facade.js §3b). eagerBands: build the storeys' band tiles (wallBands) in the job too, instead of
 // the first time a renderer reads them (prebuildTextures); the TexSet is the same either way.
 function* buildTexturesSteps(palette, materials, look, levelKey, eagerBands) {
@@ -2802,6 +2817,7 @@ function* buildTexturesSteps(palette, materials, look, levelKey, eagerBands) {
   // the original tiles, only for a surface that has no style (a partial `look` on a hand-built config)
   const legacy = surf.wall && surf.floor && surf.ceil && surf.light ? null : buildLegacyTextures(palette, null, look)
   const tex = { ts: TS, tmask: TMASK, walls: {}, ceil: null, floor: null, light: null, look, wallVar: null, ceilVar: null, floorVar: null }
+  Object.defineProperty(tex, 'wallBands', WALL_BANDS)                 // (on every level's TexSet alike: one shape, see BANDS above)
   if (surf.wall) { const s = WALL_STYLES[surf.wall](palette); tex.walls['0'] = s.base; tex.wallVar = { '0': s.slots } } else tex.walls['0'] = legacy.walls['0']
   if (BF.due()) yield
   if (surf.floor) { let s = FLOOR_STYLES[surf.floor](palette); if (isJob(s)) s = yield* s; tex.floor = s.base; tex.floorVar = s.slots } else tex.floor = legacy.floor
@@ -2830,17 +2846,14 @@ function* buildTexturesSteps(palette, materials, look, levelKey, eagerBands) {
     }
     // the storey bands (TexSet.wallBands, see above), for the level's own map: built the first time a renderer that draws storeys asks
     // (gfx-world.js / gfx-gl-world.js with fs.wallH > 1), from this build's own renders; a TexSet nobody draws storeys with never pays for
-    // them. Not enumerable, so the TexSet still compares and serialises as before. (With eagerBands, the prebuild, they are built here.)
+    // them. They are kept in BANDS, read through the accessor every TexSet has. (With eagerBands, the prebuild, they are built here.)
     const lvl = all.hp ? LEVELS.find((l) => String(l.id) === levelKey) : null
     const map = lvl && lvl.config ? lvl.config.map : null
     if (map) {
-      let bands
-      const make = function* () { bands = yield* hpBands(all.hp, planBlockFacade(map, HOUSE_SEED)); all.hp.cache.clear(); all.hp.painted.clear() }
-      Object.defineProperty(tex, 'wallBands', {
-        enumerable: false, configurable: true,
-        get() { if (bands === undefined) BF.drain(make()); return bands },
-      })
-      if (eagerBands) yield* make()
+      const e = { bands: undefined, make: null }
+      e.make = function* () { e.bands = yield* hpBands(all.hp, planBlockFacade(map, HOUSE_SEED)); all.hp.cache.clear(); all.hp.painted.clear() }
+      BANDS.set(tex, e)
+      if (eagerBands) yield* e.make()
     }
   }
   return tex

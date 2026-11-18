@@ -1,7 +1,7 @@
 // gfx-block-bands.test.js — Level ∅'s storeys: the band tiles gfx-textures.js
 // builds for the block (TexSet.wallBands, buildBlockBands) from the house plan's stacks (block-stacks.js).
 //   * shape: a pair a material-tile slot for every code, the stacks in block-stacks.js's order; lazy (only a renderer that draws storeys builds them)
-//     and not enumerable (the TexSet compares as before)
+//     and not enumerable (the TexSet compares as before); one shape for every level's TexSet (the one same accessor on each, bands or not)
 //   * determinism: two builds byte-identical, and the lazy build (sharing the material tiles' renders) the same bytes as a build of its own
 //   * seams: the belt at the band 1/2 seam is one strip everywhere; within a code (and within a house's look) the outer columns agree; the
 //     band 0/1 seam of a pair and the band 2/3 seam of a look are as smooth as the wall itself
@@ -22,6 +22,7 @@ import { pickBandPairs } from '../src/renderer/gfx-world.js'
 import { NULL_MAP } from '../src/renderer/level-null-map.js'
 import { LEVELS, levelConfig } from '../src/renderer/levels.js'
 import { DEFAULT_CONFIG } from '../src/renderer/world.js'
+import { levelKey } from '../src/renderer/gfx-util.js'
 
 vi.setConfig({ testTimeout: 60000 })
 
@@ -75,6 +76,25 @@ describe('shape, laziness, determinism', () => {
     expect(t.wallBands).toBe(t.wallBands)
     expect(buildTextures(PAL, MATS, null, '∅').wallBands).toBeUndefined()
     expect(buildTextures(PAL, null, LOOK, '0').wallBands).toBeUndefined()
+  })
+  it('one shape for every TexSet: the same own properties in the same order and the one same wallBands getter, bands or not', () => {
+    // A TexSet of a shape of its own (the block's, with an accessor only it had) made the world pass every level shares slower on the
+    // other levels once the block had been drawn: every level's TexSet, the block's with its look included, must look the same to it.
+    const sets = LEVELS.map((l, i) => { const c = levelConfig(DEFAULT_CONFIG, i); return [String(l.id), buildTextures(c.palette, c.materials, c.look ?? null, levelKey(c))] })
+    sets.push(['∅ no look', buildTextures(PAL, MATS, null, '∅')], ['0 with the look', buildTextures(PAL, null, LOOK, '0')], ['∅ look (shared)', hp()])
+    expect(sets.map(([k]) => k)).toContain('∅')
+    const names = (t) => JSON.stringify(Object.getOwnPropertyNames(t))
+    const get = Object.getOwnPropertyDescriptor(sets[0][1], 'wallBands').get
+    expect(get).toBeTypeOf('function')
+    for (const [k, t] of sets) {
+      expect(names(t), k).toBe(names(sets[0][1]))
+      const d = Object.getOwnPropertyDescriptor(t, 'wallBands')
+      expect(d.get, k).toBe(get)
+      expect([d.set, d.enumerable, d.configurable], k).toEqual([undefined, false, true])
+    }
+    // the block with its look reads its own bands through that getter; every other TexSet reads none
+    expect(hp().wallBands.upper.length).toBe(STACKS.length)
+    for (const [k, t] of sets) if (!k.startsWith('∅')) expect(t.wallBands, k).toBeUndefined()
   })
   it('a pair for every material-tile slot of every code (the same pick: hash2(mx, my, side) % slots), a stack entry per block-stacks.js stack', () => {
     const B = bands(), T = hp()
