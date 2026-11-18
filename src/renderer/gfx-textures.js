@@ -17,7 +17,12 @@
 //   levelKey  '0'..'3' | '∅' for the real levels, 'legacy' for hand-built configs (gfx-util.js levelKey()).
 //   levelKey === 'legacy' with no `look` reproduces the original single-tile art BYTE FOR BYTE (pinned by test/gfx-textures.test.js).
 //   A real level gets its own surfaces from LEVEL_SURFACES below (walls, floor, ceiling, light panel, and for ∅ the material
-//   tiles + ground), each with per-cell variants. `look.wall|floor|ceil` (names in the *_STYLES tables) override the choice.
+//   tiles + ground), each with per-cell variants. `look.wall|floor|ceil` (names in the *_STYLES tables) override the choice, and
+//   `look.facade: 'harlem'` gives Level ∅'s material tiles the Harlem Park set (MATERIAL_STYLES_HP, from gfx-block-facade.js), and the
+//   TexSet then also carries the storeys' band tiles (wallBands: built the first time a renderer that draws a taller wall reads it).
+//   That TexSet is about 1.5 s of work: the title screen builds it ahead in its idle time (prebuildTextures, prebuildLevelTextures below),
+//   a start before it is done waits for the rest under a dark screen (finishPrebuild), and the block's renderer takes it from
+//   buildTexturesMemo.
 //
 // How the art is built (so it is edited safely):
 //   * Every tile is 64x64 texels: nearest-neighbour texels at distance alias badly, so a bigger tile would look worse.
@@ -30,8 +35,11 @@
 //     Only small semantic accents (rust, warning yellow, indicator lights, weed green) are absolute, and each is tempered
 //     with the palette colour.
 //   * Seeded per tile (mulberry32 + hash-free fixed seeds): identical for every player, no Math.random anywhere.
-import { hexToRgb, clamp255, mulberry32 } from './gfx-util.js'
+import { hexToRgb, clamp255, mulberry32, levelKey } from './gfx-util.js'
 import { LEVELS } from './levels.js'
+import * as BF from './gfx-block-facade.js'
+import { planBlockFacade, HOUSE_SEED } from './block-facade-plan.js'
+import { planBlockStacks, lookKey, houseLook } from './block-stacks.js'
 
 
 const TS = 64            // texture tile size (px per world cell)
@@ -1998,6 +2006,722 @@ const MATERIAL_STYLES = {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════
+//  Level ∅, the Harlem Park look: config.look { facade: 'harlem', floor: 'yard' } (the material tiles and the ground)
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+// The block's material tiles and its ground repainted from the procedural recipes of gfx-block-facade.js at 32 texels a metre, so one
+// 64-texel tile is one 2 m bay of a rowhouse back. Only selected by the look: without it every builder above returns today's bytes.
+// The tiles keep today's composition, so a knock door still reads where it did (the doorway x 12–51 / y 6–63, the window x 10–53 /
+// y 9–52, in texels). Every code is one bay elevation (paintBayElevation): a cladding field standing on the yard with its pieces laid in.
+//   F  formstone, the grey palette, with its failures (a re-coated patch, soot, a spall to the brick beneath, a cement parge patch)
+//   C  the rear door of a vacant house: the original painted frame kept at the face, CMU laid in 8 cm behind it, a concrete step; on
+//      some, the invented vacancy placard beside it (off-white, one black band, no symbol)
+//   P  the same door boarded over its frame: plywood with bolts and perimeter screws, on most boards the sprayed crew mark (invented)
+//   B  common brick, lime pointing, with soot, a spall, the ghost of a bricked-up opening, a rust run
+//   W  the black open window of a vacant house: a jack arch, a stone sill, a peeling casing, the dark room (a hanging sash rail on one)
+//   O  a lit window: the same opening, a white 1/1 sash, a roller shade lit warm from behind, curtains; the brick takes the O hex too
+//   M  marble: three treads, weathered, with cracks and a rail's rust run
+//   ground  the park's packed dirt with sparse worn grass (yardFloor), with gravel, tanbark, litter, glass and a damp patch as variants
+// The CMU (C) and the formstone (F, the uppers, the J-west front) are laid on whole texels (the recipes' opts.snap): at 32 texels a metre
+// their sub-texel joints washed out into a mottled slab and flat light courses.
+// Seeds: subSeed(0x4C4E4601, seedKey) for every piece (hpSeed), so a piece of the same size and key shows the same bricks, stones and
+// blocks wherever it is laid. ss 1: every coverage stays exact and only the in-unit shading is point-sampled (the recipes' cheap
+// render, for the build's time; a frame's peel flakes, finer than a texel, alias a little, which a 3-texel casing hides), except the
+// arch and the placard (2: tiny, and their joints and band are finer than a texel).
+// Colour, by the recipes' colour rule (target × hex / stock hex): the cladding and the trim follow the B hex (O's brick also its own O
+// hex, as today's O tile does), the formstone F, the marble M, the CMU C, the board P, the dark room W, the lit room O, the ground
+// palette.floor; at the stock hexes every colour target comes out exactly, and a drifted hex drifts its tile.
+const HP_SEED = 0x4C4E4601
+const HP_TPM = TS / 2
+const hpSeed = (key) => BF.subSeed(HP_SEED, key)
+const tx = (t) => t / HP_TPM
+const trect = (x0, y0, x1, y1) => [tx(x0), tx(y0), tx(x1), tx(y1)]       // texels (end exclusive) -> metres
+// the colour rule's drift of a code: its hex over its stock hex, per channel (exactly 1 at the stock)
+function hpRatio(mats, code) {
+  const m = BF.hexToRgb((mats && mats[code]) || ''), s = BF.hexToRgb(BF.STOCK_HEX[code])
+  return m && s ? [0, 1, 2].map((c) => (s[c] > 0 ? m[c] / s[c] : 1)) : [1, 1, 1]
+}
+const unit = (r) => r[0] === 1 && r[1] === 1 && r[2] === 1
+function hpHex(stock, ...ratios) {
+  if (ratios.every(unit)) return stock
+  const c = BF.hexToRgb(stock)
+  for (const r of ratios) for (let k = 0; k < 3; k++) c[k] *= r[k]
+  return '#' + c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('')
+}
+// one build's context: the material hexes per piece, and the recipe renders shared between its tiles
+function hpContext(palette, materials) {
+  const rB = hpRatio(materials, 'B')
+  return {
+    cache: new Map(),
+    painted: new Map(),                                                         // the storeys: a painted house's wall, by paint and wear (hpPainted4)
+    brick: (code) => hpHex(BF.STOCK_HEX.B, rB, ...(code === 'O' ? [hpRatio(materials, 'O')] : [])),
+    trim: (stock) => hpHex(stock, rB),
+    own: (code, stock = BF.STOCK_HEX[code]) => hpHex(stock, hpRatio(materials, code)),
+    floor: hexOk(palette && palette.floor) ? palette.floor : BF.STOCK_HEX.floor,
+    sky: hexOk(palette && palette.ceiling) ? palette.ceiling : BF.SKY_HEX,     // the open sky (seen through a roofless house's voids)
+    fog: hexOk(palette && palette.fog) ? palette.fog : '#9A968C',               // ... fogged by the level's fog colour
+  }
+}
+// a code's tiles: list = [[key, weight], ...] (the first is the base); every variant keeps the base's EDGE columns (and rows) exactly.
+// (The Harlem Park builders below are generators, gfx-block-facade.js §3b: buildTextures drains them in one go, prebuildTextures steps
+// them a few ms at a time; the same calls in the same order either way.)
+function* hpSet(C, list, specOf, rows = 0) {
+  const tiles = new Map()
+  let base = null
+  for (const [k] of list) {
+    if (tiles.has(k)) continue
+    const R = yield* BF.paintBayElevationSteps(specOf(C, k), HP_TPM, C.cache)
+    if (base) BF.restoreEdges(R, base, { rows }); else base = R
+    tiles.set(k, finish(R.rgb))
+  }
+  return { base: tiles.get(list[0][0]), slots: weighted(list.map(([k, w]) => [tiles.get(k), w])) }
+}
+const HP_DOOR = [12, 6, 52, 64], HP_WIN = [10, 9, 54, 53]                 // texels, end exclusive (today's composition)
+const hpBrick = (C, variant = 'base', code = 'B') => ({ recipe: 'paintCommonBrick', seed: hpSeed('CommonBrick'), hex: C.brick(code), opts: { variant, foot: true, ss: 1 } })
+// a painted wood casing round [x0, y0, x1, y1): two jambs (grain up) and a head (grain across), wt texels wide, standing proud of the wall
+function hpCasing(C, [x0, y0, x1, y1], wt, paint, peel, key) {
+  const part = (grain, k) => ({ recipe: 'paintPaintedWood', seed: hpSeed(`PaintedWood-${paint}:${key}:${k}`), hex: C.trim(BF.PAINTS.white), opts: { paint, peel, grain, ss: 1 } })
+  const ring = { width: tx(1.5), k: 0.14 }
+  return [
+    { ...part('y', 'L'), rect: trect(x0, y0, x0 + wt, y1), ring },
+    { ...part('y', 'R'), rect: trect(x1 - wt, y0, x1, y1), ring },
+    { ...part('x', 'H'), rect: trect(x0, y0, x1, y0 + wt), ring },
+  ]
+}
+// the rear door's concrete step (19 cm), a little wider than the door
+const hpStep = (C) => ({ recipe: 'paintConcrete', seed: hpSeed('Concrete:step'), hex: C.trim(BF.STOCK_HEX.C), opts: { joints: 0, broom: 'none', vertical: true, stain: 0.55, ss: 1 },
+  rect: trect(10, 58, 54, 64), lit: { width: tx(1), k: 0.07 }, ring: { width: tx(1), k: 0.12 } })
+// the invented vacancy placard, beside the door at eye height: 6 × 9 texels (20 × 28 cm snapped to whole texels)
+const hpPlacard = () => ({ recipe: 'paintPlacard', seed: hpSeed('Placard'), hex: null, opts: { ss: 2 }, rect: trect(4, 10, 10, 19), ring: { width: tx(1), k: 0.12 } })
+// a window's jack arch, stone sill and casing round the opening; the interior is laid first, so the casing stands over its edge
+function hpWindow(C, code, interior, paint, peel) {
+  return [
+    { ...interior, rect: trect(...HP_WIN), reveal: { width: tx(3), k: 0.22 } },
+    ...hpCasing(C, HP_WIN, 2, paint, peel, code),
+    { recipe: 'paintArchBand', seed: hpSeed('Arch-Jack'), hex: C.brick(code), opts: { kind: 'jack', ss: 2 }, rect: trect(8, 3, 56, 9), clip: { kind: 'trapezoid', inset: BF.ARCH_BAND.splay } },
+    { recipe: 'paintConcrete', seed: hpSeed('Concrete:sill'), hex: C.trim(BF.STOCK_HEX.C), opts: { joints: 0, broom: 'none', stain: 0.6, ss: 1 },
+      rect: trect(8, 53, 56, 56), lit: { width: tx(1), k: 0.08 }, below: { width: tx(2.5), k: 0.3 } },
+  ]
+}
+const MATERIAL_STYLES_HP = {
+  F: (hex, all) => hpSet(all.hp, [['base', 3], ['toneA', 1], ['soot', 1], ['spall', 1], ['parge', 1]], (C, v) => ({ w: 2, h: 2,
+    field: { recipe: 'paintFormstone', seed: hpSeed('Formstone-grey'), hex: C.own('F'), opts: { palette: 'grey', variant: v, foot: true, snap: true, ss: 1 } } })),
+  // [the brick, the CMU's age, the frame's paint and peel (vacant: 15–40 %), the placard]
+  C: (hex, all) => {
+    const V = { base: ['base', 'aged', 'white', 0.30, false], new: ['base', 'new', 'blackgreen', 0.20, true], soot: ['soot', 'aged', 'white', 0.38, false], rust: ['rust', 'aged', 'brown', 0.25, true] }
+    return hpSet(all.hp, [['base', 3], ['new', 1], ['soot', 1], ['rust', 1]], (C, v) => {
+      const [brick, age, paint, peel, placard] = V[v]
+      return { w: 2, h: 2, field: hpBrick(C, brick), pieces: [
+        ...(placard ? [hpPlacard()] : []),
+        ...hpCasing(C, [HP_DOOR[0], HP_DOOR[1], HP_DOOR[2], 58], 3, paint, peel, 'door-' + v),
+        { recipe: 'paintCmu', seed: hpSeed('Cmu'), hex: C.own('C'), opts: { infill: true, age, snap: true, ss: 1 }, rect: trect(15, 9, 49, 58), reveal: { width: tx(2.5), k: 0.3 } },
+        hpStep(C),
+      ] }
+    })
+  },
+  // [the board (its seed key), its crew mark, its weathering (fresh 0 .. silver-grey 1), the brick]
+  P: (hex, all) => {
+    const V = { markA: ['Plywood-DoorMarkA', true, 0.85, 'base'], markB: ['Plywood-DoorMarkB', true, 0.45, 'base'], plainA: ['Plywood-DoorPlainA', false, 0.95, 'base'], plainB: ['Plywood-DoorPlainB', false, 0.65, 'soot'] }
+    return hpSet(all.hp, [['markA', 3], ['markB', 1], ['plainA', 1], ['plainB', 1]], (C, v) => {
+      const [key, mark, age, brick] = V[v]
+      return { w: 2, h: 2, field: hpBrick(C, brick), pieces: [
+        hpStep(C),
+        // the board over the door and its frame, 15 cm past the opening on each side and at the head (5 texels), down to the step
+        { recipe: 'paintPlywood', seed: hpSeed(key), hex: C.own('P'), rect: trect(7, 1, 57, 58), ring: { width: tx(1.5), k: 0.2 },
+          opts: { mark, age: [age, age], opening: { x0: tx(5), y0: tx(5), x1: tx(45), y1: tx(57) }, ss: 1 } },
+      ] }
+    })
+  },
+  B: (hex, all) => hpSet(all.hp, [['base', 3], ['soot', 1], ['spall', 1], ['ghostOpening', 1], ['rust', 1]], (C, v) => ({ w: 2, h: 2, field: hpBrick(C, v) })),
+  W: (hex, all) => {
+    const V = { base: ['base', false], rail: ['base', true], soot: ['soot', false], spall: ['spall', true] }
+    return hpSet(all.hp, [['base', 3], ['rail', 1], ['soot', 1], ['spall', 1]], (C, v) => {
+      const [brick, rail] = V[v]
+      const room = { recipe: 'paintWindowInterior', seed: hpSeed(rail ? 'Window-VoidRail' : 'Window-Void'), hex: C.own('W'), opts: { mode: 'void', rail, ss: 1 } }
+      return { w: 2, h: 2, field: hpBrick(C, brick), pieces: hpWindow(C, 'W', room, 'white', 0.6) }
+    })
+  },
+  O: (hex, all) => hpSet(all.hp, [['base', 3], ['blinds', 1], ['sheer', 1], ['sage', 1]], (C, v) => {
+    const room = { recipe: 'paintWindowInterior', seed: hpSeed('Window-Lit' + v), hex: C.own('O'), opts: { mode: 'lit', variant: v, sash: '1/1', ss: 1 } }
+    return { w: 2, h: 2, field: hpBrick(C, 'base', 'O'), pieces: hpWindow(C, 'O', room, 'white', 0.05) }
+  }),
+  // three treads (21, 21 and 22 texels: today's slab joints at rows 21 and 42), each its own slab; a variant marks one of them
+  M: (hex, all) => {
+    const V = { base: [null, null], crackA: [1, 'crackA'], crackB: [2, 'crackB'], rustRun: [0, 'rustRun'] }, rows = [0, 21, 42, 64]
+    return hpSet(all.hp, [['base', 3], ['crackA', 1], ['crackB', 1], ['rustRun', 1]], (C, v) => ({ w: 2, h: 2, field: null, pieces: [0, 1, 2].map((k) => ({
+      recipe: 'paintMarble', seed: hpSeed('Marble:tread' + k), hex: C.own('M'), rect: trect(0, rows[k], TS, rows[k + 1]),
+      opts: { variant: V[v][0] === k ? V[v][1] : 'weathered', tread: true, foot: k === 2, ss: 1 },
+      // today's lit nosing above each joint, and the shadow line under it
+      lit: [...(k < 2 ? [{ width: tx(1), k: 0.07, edge: 'bottom' }] : []), ...(k > 0 ? [{ width: tx(1.5), k: -0.28 }] : [])] })) }))
+  },
+}
+// the park ground (FLOOR_STYLES.yard): packed dirt with sparse worn grass; the variants are the recipe's overlays laid over it (a 2 m
+// tile of another cover would show as a square of it in the park).
+// The one 'thin' cover (grass on 45 % of the ground in 8 cm blotches) read as olive-and-brown camouflage near the camera, greener and
+// brighter than the look wants (mostly dirt). So the recipe's 'dirt' cover (its own few tufts) is the base
+// on about 82 % of the tile, and its 'grass' cover shows only in a few patches of 30 cm and more (a periodic field of 0.5–2 m), their
+// edges feathered over two or three texels; the grass is 30 % less saturated, and a third of each texel is its 3 × 3 neighbourhood's
+// mean, so the ground carries less contrast texel to texel. ss 2 for both covers: one sample a texel cuts a grass edge hard. The patch
+// field wraps the tile (the cells meet without a seam); each variant adds a few patches of its own inside its EDGE-safe interior, so
+// the 2 m tiles do not lay one patch pattern over the park in a grid. The ground's value is 0.92 of the recipe's: the game's lighting draws
+// it about that much brighter than the look wants (measured on the yard pose's ground rows).
+const YARD = Object.freeze({ share: 0.14, extra: 0.07, desat: 0.3, soften: 0.35, value: 0.92 })
+const box3 = (S, O, ch = 1) => {
+  for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) for (let c = 0; c < ch; c++) {
+    let s = 0
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) s += S[(((y + dy) & TMASK) * TS + ((x + dx) & TMASK)) * ch + c]
+    O[(y * TS + x) * ch + c] = s / 9
+  }
+}
+const quantile = (f, q) => Float32Array.from(f).sort()[Math.min(NT - 1, Math.floor(NT * q))]
+function* yardCovers(C, seed) {
+  const D = yield* BF.paintYard.steps(2, 2, HP_TPM, seed, C.floor, { cover: 'dirt', ss: 2 })
+  const Gr = yield* BF.paintYard.steps(2, 2, HP_TPM, seed, C.floor, { cover: 'grass', ss: 2 })
+  if (BF.due()) yield
+  const f = fbm(0x59A2D001, [[32, 32, 1], [16, 16, 0.55], [8, 8, 0.25]])
+  if (BF.due()) yield
+  return { D, Gr, f, thr: quantile(f, 1 - YARD.share) }
+}
+// one layout of the ground: k = 0 the shared patches only, k > 0 with the variant's own interior patches (a generator: it may pause
+// between its passes)
+function* yardLayout(Y, k) {
+  // the patches: a soft step of the field round its threshold, then one 3 × 3 box (wrapping) feathers the edge over 2–3 texels
+  const m0 = new Float32Array(NT), m = new Float32Array(NT)
+  for (let j = 0; j < NT; j++) m0[j] = sstep(Y.thr - 0.05, Y.thr + 0.05, Y.f[j])
+  if (k > 0) {
+    const g = fbm(0x59A2D010 + k, [[16, 16, 1], [8, 8, 0.5]])
+    if (BF.due()) yield
+    const t = quantile(g, 1 - YARD.extra)
+    for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
+      const j = y * TS + x, inner = sstep(6, 11, Math.min(x, y, TMASK - x, TMASK - y))
+      m0[j] = Math.max(m0[j], sstep(t - 0.05, t + 0.05, g[j]) * inner)
+    }
+  }
+  if (BF.due()) yield
+  box3(m0, m)
+  if (BF.due()) yield
+  const T = new Float32Array(NT * 3), D = Y.D.rgb, G = Y.Gr.rgb
+  for (let j = 0; j < NT; j++) {
+    for (let c = 0; c < 3; c++) T[j * 3 + c] = D[j * 3 + c] * (1 - m[j]) + G[j * 3 + c] * m[j]
+    // the grass (and the dirt cover's own tufts) less saturated: where green stands at or over red
+    const r = T[j * 3], g = T[j * 3 + 1], b = T[j * 3 + 2], l = r * 0.299 + g * 0.587 + b * 0.114, kd = YARD.desat * c01((g - r + 4) / 8)
+    T[j * 3] = r + (l - r) * kd; T[j * 3 + 1] = g + (l - g) * kd; T[j * 3 + 2] = b + (l - b) * kd
+  }
+  if (BF.due()) yield
+  const B = new Float32Array(NT * 3)
+  box3(T, B, 3)
+  for (let i = 0; i < T.length; i++) T[i] = (T[i] + (B[i] - T[i]) * YARD.soften) * YARD.value
+  return T
+}
+function* yardFloor(pal) {
+  const C = hpContext(pal, null), seed = hpSeed('Yard')
+  const Y = yield* yardCovers(C, seed)
+  if (BF.due()) yield
+  const G = { rgb: yield* yardLayout(Y, 0) }
+  if (BF.due()) yield
+  const tiles = { base: finish(G.rgb) }
+  let vk = 0
+  for (const v of ['gravel', 'tanbark', 'litter', 'glass', 'damp']) {
+    const L = yield* BF.paintYard.steps(2, 2, HP_TPM, seed, C.floor, { variant: v, overlay: true, ss: 1 })
+    if (BF.due()) yield
+    const Gv = yield* yardLayout(Y, ++vk)
+    if (BF.due()) yield
+    const T = new Float32Array(G.rgb.length)
+    for (let t = 0; t < L.cav.length; t++) {
+      const a = L.cav[t]
+      for (let c = 0; c < 3; c++) {
+        const g = Gv[t * 3 + c]
+        T[t * 3 + c] = v === 'damp' ? g * (1 - 0.22 * a) : g * (1 - a) + (L.rgb[t * 3 + c] - 128 * (1 - a)) * YARD.value
+      }
+    }
+    if (BF.due()) yield
+    restoreEdges(T, G.rgb, EDGE, EDGE)
+    tiles[v] = finish(T)
+    if (BF.due()) yield
+  }
+  return { base: tiles.base, slots: weighted([[tiles.base, 4], [tiles.gravel, 1], [tiles.tanbark, 1], [tiles.litter, 1], [tiles.glass, 1], [tiles.damp, 1]]) }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+//  Level ∅: the storeys (which stack a face shows: block-stacks.js)
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
+// With levels.js '∅' wallH 3.5 the block's walls stand 7 m tall, still one slice a column, painted in four 64 × 64 bands (band 0 at the
+// foot; 2 m each at 32 texels a metre; the top metre of band 3 is never drawn and repeats its first drawn row, so no mip level bleeds):
+//   bands 0–1  the CELL CODE's ground storey at true scale: the rear door 0.91 × 2.13 m from its 0.38 m sill, its transom
+//              light over it and a jack arch over both (C laid up in CMU 8 cm behind the kept frame, P boarded over it),
+//              the window 0.91 × 1.68 m from its 0.99 m sill (O, lit),
+//              the W bay's plain wall with a blocked vent at its foot (no opening at eye level: it never reads as a door to knock on), F and B
+//              their cladding with the bay's variant low on it (a soot variant hangs from under the belt instead). One pair a slot of the material
+//              tile's list, so a face picks its pair by the same hash2(mx, my, side) % slots as today's tile and a door stays whole across the seam.
+//   bands 2–3  the HOUSE's upper storey and roofline: its cladding, over each bay what its code says stands there (a black void, a board,
+//              a shade lit or dark, blank wall or a small window) and the coping, the corbelled cornice or the eave at the 7 m line; picked
+//              by hash2(mx, my, side + 4) % variants. Band 2 and band 3 are tiles of their own (a storey's variants share the house's
+//              roofline), so the GPU keeps a layer for each tile, not for each pair.
+//   the belt   12.5 cm of cast stone at the band 1/2 seam from ONE shared strip (its lower half the top rows of every band 1, its upper half
+//              the bottom rows of every band 2), so any ground storey meets any upper storey as built, a cladding change included.
+//   the jut fronts, all four bands: the marble basement, the four-riser stoop and the front door under its transom in the door bay, the
+//              tall front windows with marble lintels and sills (J-east, pressed brick) or a formstone wrap (J-west), the second storey
+//              trimmed to 2.44 m and the 60 cm cornice under 7 m (white, with brackets and a jigsaw vent panel on J-east; the flat
+//              aluminium fascia on J-west).
+//   the jut ends, all four bands: one 4 m wide party wall with the ghost of the lost neighbour, cut down the middle for its two cells.
+// Every band tile restores its outer EDGE columns from its stack's substrate (the cladding without the pieces); the band seams inside a
+// stack are painted continuous, and the seams between stacks are the shared rows above. Recipe renders are shared with the material tiles' (one cache).
+//   TexSet.wallBands = { code: { F: [[b0, b1], ...a pair per slot], ... }, upper: [Stack tiles, ...], fallback: [b2, b3] }
+//     upper[i] (i = block-stacks.js stack index, what stackAt returns) = { key, kind, lower: [[b0, b1]] | null (the code's), variants: [[b2, b3], ...] }
+//     and, for a painted house's storey, lowerBy: { code: [[b0, b1], ...] }: its own ground storey per code (hpPaintedLower)
+const BELT = 4                                                    // the belt course, texels (12.5 cm): 2 under the band 1/2 seam, 2 over it
+const fillTop = (R, row) => { const n = row * R.w; for (let t = 0; t < n; t++) { const s = row * R.w + (t % R.w); R.rgb[t * 3] = R.rgb[s * 3]; R.rgb[t * 3 + 1] = R.rgb[s * 3 + 1]; R.rgb[t * 3 + 2] = R.rgb[s * 3 + 2]; R.cav[t] = R.cav[s] } }
+function shadeRows(R, r0, r1, kOf, x0 = 0, x1 = R.w) {
+  for (let r = r0; r < r1; r++) { const k = kOf(r); for (let x = x0; x < x1; x++) { const t = r * R.w + x; R.rgb[t * 3] *= k; R.rgb[t * 3 + 1] *= k; R.rgb[t * 3 + 2] *= k } }
+}
+function copyRows(D, S, r0, r1, s0 = r0) {
+  D.rgb.set(S.rgb.subarray(s0 * S.w * 3, (s0 + r1 - r0) * S.w * 3), r0 * D.w * 3); D.cav.set(S.cav.subarray(s0 * S.w, (s0 + r1 - r0) * S.w), r0 * D.w)
+}
+const fall = (d, w) => 1 - sstep(0, w, d)
+// the shared belt strip: cast stone, its sky-facing top a little lit and its underside in shadow
+function* hpBeltStrip(C) {
+  const R = yield* BF.paintBayElevationSteps({ w: 2, h: tx(BELT), field: { recipe: 'paintConcrete', seed: hpSeed('Concrete:belt'), hex: C.trim(BF.STOCK_HEX.C),
+    opts: { joints: 0, broom: 'none', stain: 0.45, ss: 1 } } }, HP_TPM, C.cache)
+  const k = [1.08, 1.02, 0.96, 0.84]
+  shadeRows(R, 0, BELT, (r) => k[r])
+  return R
+}
+// the belt's lower half over the top rows of a ground storey (band 1 of a code stack, or the floor line of a jut front), the shadow under it
+function beltUnder(R, B, row = 0) { copyRows(R, B, row, row + BELT / 2, BELT / 2); shadeRows(R, row + BELT / 2, row + BELT / 2 + 3, (r) => 1 - 0.24 * fall(r - row - BELT / 2 + 0.5, 3)) }
+function beltOver(R, B, row = R.h - BELT / 2) { copyRows(R, B, row, row + BELT / 2, 0) }
+const field2 = (part, y0, y1) => ({ ...part, y: [y0, y1] })
+// a ground storey's field: the cladding in two 2 m tiles (the material tiles' renders: the lower one with its damp foot), the bay's variant low on it,
+// or under the belt for soot; the seam rows evened from the plain stack so the two tiles meet as one wall
+// (a generator: HP_LOWER's specOf returns it unstarted, beside the pieces)
+function* hpLowerField(C, part, v) {
+  const S = yield* BF.paintBayElevationSteps({ w: 2, h: 4, field: [field2(part('base', false), 0, 2), field2(part('base', true), 2, 4)] }, HP_TPM, C.cache)
+  if (v === 'base') return { F: S, S }
+  const F = yield* BF.paintBayElevationSteps({ w: 2, h: 4, field: v === 'soot' ? [field2(part('soot', false), 0, 2), field2(part('base', true), 2, 4)]
+    : [field2(part('base', false), 0, 2), field2(part(v, true), 2, 4)] }, HP_TPM, C.cache)
+  copyRows(F, S, TS - 2, TS + 2)
+  return { F, S }
+}
+// one ground-storey pair: the field, its pieces, the edges and the belt; -> [b0, b1] as tiles
+function* hpLowerPair(C, field, pieces, belt) {
+  const V = yield* BF.paintBayElevationSteps({ w: 2, h: 4, field: field.F, pieces }, HP_TPM, C.cache)
+  BF.restoreEdges(V, field.S)
+  const [b0, b1] = BF.cutBands(V)
+  beltUnder(b1, belt)
+  return [finish(b0.rgb), finish(b1.rgb)]
+}
+const brickPart = (C, code = 'B') => (variant, foot) => ({ recipe: 'paintCommonBrick', seed: hpSeed('CommonBrick'), hex: C.brick(code), opts: { variant, foot, ss: 1 } })
+const formPart = (C) => (variant, foot) => ({ recipe: 'paintFormstone', seed: hpSeed('Formstone-grey'), hex: C.own('F'), opts: { palette: 'grey', variant, foot, snap: true, ss: 1 } })
+const concrete = (C, key, rect, o = {}) => ({ recipe: 'paintConcrete', seed: hpSeed('Concrete:' + key), hex: C.trim(BF.STOCK_HEX.C),
+  opts: { joints: 0, broom: 'none', stain: 0.55, ss: 1, ...(o.vertical ? { vertical: true } : {}) }, rect: trect(...rect), ...o.extra })
+const jack = (C, code, rect) => ({ recipe: 'paintArchBand', seed: hpSeed('Arch-Jack'), hex: C.brick(code), opts: { kind: 'jack', ss: 2 }, rect: trect(...rect), clip: { kind: 'trapezoid', inset: BF.ARCH_BAND.splay } })
+// the board of a door or a window: the opening 15 cm in from every edge of the board
+function hpBoard(C, key, mark, age, [x0, y0, x1, y1], open) {
+  const w = tx(x1 - x0), h = tx(y1 - y0)
+  return { recipe: 'paintPlywood', seed: hpSeed(key), hex: C.own('P'), rect: trect(x0, y0, x1, y1), ring: { width: tx(1.5), k: 0.2 },
+    opts: { mark, age: [age, age], opening: { x0: (w - open[0]) / 2, y0: (h - open[1]) / 2, x1: (w + open[0]) / 2, y1: (h + open[1]) / 2 }, ss: 1 } }
+}
+
+// ── the code stacks (bands 0–1): the material tiles' slot lists, a true-scale ground storey per variant ──
+// texels of the 2 × 4 m elevation (rows down from 4 m): the rear door x 17–46 / rows 48–116 (0.375–2.5 m), the window x 17–46 / rows 43–97
+// (0.97–2.66 m), the step rows 122–128 (0–0.19 m)
+const LD = [17, 48, 46, 116], LW = [17, 43, 46, 97]
+const LT = LD[1] - 11                                             // the rear door's transom light: 0.34 m over its head (rows 37–48)
+const hpStep2 = (C) => concrete(C, 'step', [12, 122, 52, 128], { vertical: true, extra: { lit: { width: tx(1), k: 0.07 }, ring: { width: tx(1), k: 0.12 } } })
+const HP_LOWER = {
+  F: [[['base', 3], ['toneA', 1], ['soot', 1], ['spall', 1], ['parge', 1]], (C, v) => [hpLowerField(C, formPart(C), v), []]],
+  B: [[['base', 3], ['soot', 1], ['spall', 1], ['ghostOpening', 1], ['rust', 1]], (C, v) => [hpLowerField(C, brickPart(C), v), []]],
+  C: [[['base', 3], ['new', 1], ['soot', 1], ['rust', 1]], (C, v) => {
+    const [brick, age, paint, peel, placard] = { base: ['base', 'aged', 'white', 0.30, false], new: ['base', 'new', 'blackgreen', 0.20, true],
+      soot: ['soot', 'aged', 'white', 0.38, false], rust: ['rust', 'aged', 'brown', 0.25, true] }[v]
+    return [hpLowerField(C, brickPart(C), brick), [
+      // the invented vacancy placard beside the door at eye height, 1.3–1.6 m
+      ...(placard ? [{ recipe: 'paintPlacard', seed: hpSeed('Placard'), hex: null, opts: { ss: 2 }, rect: trect(5, 79, 11, 88), ring: { width: tx(1), k: 0.12 } }] : []),
+      jack(C, 'C', [12, LT - 9, 51, LT - 3]),
+      // the frame kept round the door and its transom (a rear door has a transom light, so the storey reads its true
+      // 3 m, not a door in 4 m of blank brick); the CMU fills both, the transom bar stands in front of it
+      ...hpCasing(C, [LD[0] - 3, LT - 3, LD[2] + 3, LD[3]], 3, paint, peel, 'J2door-' + v),
+      { recipe: 'paintCmu', seed: hpSeed('Cmu'), hex: C.own('C'), opts: { infill: true, age, snap: true, ss: 1 }, rect: trect(LD[0], LT, LD[2], LD[3]), reveal: { width: tx(2.5), k: 0.3 } },
+      { recipe: 'paintPaintedWood', seed: hpSeed(`PaintedWood-${paint}:J2transom-${v}`), hex: C.trim(BF.PAINTS.white), opts: { paint, peel, grain: 'x', ss: 1 },
+        rect: trect(LD[0], LD[1] - 3, LD[2], LD[1]), lit: { width: tx(1), k: 0.06 }, below: { width: tx(1), k: 0.2 } },
+      // the concrete threshold in the reveal (the second riser, 0.19–0.38 m) and the step out in front
+      concrete(C, 'threshold', [LD[0], LD[3], LD[2], 122], { extra: { reveal: { width: tx(2), k: 0.2 }, lit: { width: tx(1), k: 0.06 } } }),
+      hpStep2(C),
+    ]]
+  }],
+  P: [[['markA', 3], ['markB', 1], ['plainA', 1], ['plainB', 1]], (C, v) => {
+    const [key, mark, age, brick] = { markA: ['Plywood-DoorMarkA', true, 0.85, 'base'], markB: ['Plywood-DoorMarkB', true, 0.45, 'base'],
+      plainA: ['Plywood-DoorPlainA', false, 0.95, 'base'], plainB: ['Plywood-DoorPlainB', false, 0.65, 'soot'] }[v]
+    // the board over the door, its transom and its frame, 15 cm past the opening every way, down to the step
+    return [hpLowerField(C, brickPart(C), brick), [jack(C, 'P', [11, LT - 11, 52, LT - 5]), hpStep2(C), hpBoard(C, key, mark, age, [12, LT - 5, 51, 121], [0.91, (116 - LT) / HP_TPM])]]
+  }],
+  W: [[['base', 3], ['rail', 1], ['soot', 1], ['spall', 1]], (C, v) => {
+    const brick = { base: 'base', rail: 'repointed', soot: 'soot', spall: 'spall' }[v]
+    // no opening at eye level (W): the house's wall, a small vent at the foot blocked with a CMU half-block
+    return [hpLowerField(C, brickPart(C), brick), [
+      { recipe: 'paintCmu', seed: hpSeed('Cmu:vent'), hex: C.own('C'), opts: { infill: true, age: 'aged', snap: true, ss: 1 }, rect: trect(27, 115, 37, 121), reveal: { width: tx(1.5), k: 0.35 } },
+      concrete(C, 'vent', [26, 121, 38, 122], { extra: { lit: { width: tx(1), k: 0.06 } } }),
+    ]]
+  }],
+  O: [[['base', 3], ['blinds', 1], ['sheer', 1], ['sage', 1]], (C, v) => [hpLowerField(C, brickPart(C, 'O'), 'base'), [
+    { recipe: 'paintWindowInterior', seed: hpSeed('Window-Lit' + v), hex: C.own('O'), opts: { mode: 'lit', variant: v, sash: '1/1', ss: 1 }, rect: trect(...LW), reveal: { width: tx(3), k: 0.22 } },
+    ...hpCasing(C, LW, 2, 'white', 0.05, 'J2win-O'),
+    jack(C, 'O', [15, 37, 48, 43]),
+    concrete(C, 'sill', [15, 97, 48, 100], { extra: { lit: { width: tx(1), k: 0.08 }, below: { width: tx(2.5), k: 0.3 } } }),
+  ]]],
+}
+function* hpCodeBands(C, belt) {
+  const code = {}
+  for (const [ch, [list, specOf]] of Object.entries(HP_LOWER)) {
+    const pairs = new Map()
+    for (const [v] of list) if (!pairs.has(v)) { const [fieldJob, pieces] = specOf(C, v), field = yield* fieldJob; pairs.set(v, yield* hpLowerPair(C, field, pieces, belt)) }
+    code[ch] = weighted(list.map(([v, w]) => [pairs.get(v), w]))
+  }
+  return code
+}
+
+// ── the upper storeys (bands 2 and 3): a house's look, its bays' variants and its roofline ──
+function hpLookField(C, L) {
+  if (L.clad === 'formstone') return formPart(C)('base', false)
+  if (L.clad === 'painted') return { recipe: 'paintPaintedBrick', seed: hpSeed('PaintedBrick-' + L.paint), hex: C.brick('B'), opts: { paint: L.paint, peel: L.wear === 'vacant' ? 0.3 : 0.05, ss: 1 } }
+  return brickPart(C)('base', false)
+}
+const hpTrim = (L) => (L.wear === 'vacant' ? ['white', 0.6] : ['white', 0.05])
+// band 2 (4–6 m; rows down from 6 m): the window x 17–46 / rows 7–58 (sill 4.19 m, head 5.78 m), its jack arch rows 2–7, its stone sill rows
+// 58–61; a small window x 22–42 / rows 16–44; rows 0–1 stay the cladding (the band 2/3 seam), rows 62–63 are the belt
+const UW = [17, 7, 46, 58], US = [22, 16, 42, 44]
+// the head over a house's upper windows (one jack arch over every window of the ring gave a motel rhythm): by the
+// house's look, a jack arch, a soldier course of brick on end, or a flat stone lintel; a painted house's head is the stone (painted
+// brick heads would read as raw brick on the paint)
+const HEADS = Object.freeze(['jack', 'soldier', 'lintel'])
+const headOf = (L) => (L.clad === 'painted' ? 'lintel' : HEADS[hpSeed('Head:' + lookKey(L)) % HEADS.length])
+function hpHead(C, L, code, [x0, y0, x1], small) {
+  const h = small ? 4 : 5
+  switch (headOf(L)) {
+    case 'soldier': return { recipe: 'paintArchBand', seed: hpSeed('Arch-Rowlock'), hex: C.brick(code), opts: { kind: 'rowlock', ss: 2 }, rect: trect(x0 - 2, y0 - h, x1 + 2, y0) }
+    case 'lintel': return concrete(C, small ? 'lintel-s' : 'lintel', [x0 - 3, y0 - h + 1, x1 + 3, y0], { extra: { lit: { width: tx(1), k: 0.08 }, below: { width: tx(1.5), k: 0.3 } } })
+    default: return jack(C, code, [x0 - 2, y0 - h, x1 + 2, y0])
+  }
+}
+function hpWindowPieces(C, L, rect, interior, code, key, small) {
+  const [paint, peel] = hpTrim(L), [x0, y0, x1, y1] = rect
+  return [
+    { ...interior, rect: trect(...rect), reveal: { width: tx(3), k: 0.22 } },
+    ...hpCasing(C, rect, 2, paint, peel, key),
+    hpHead(C, L, code, rect, small),
+    concrete(C, small ? 'sill-s' : 'sill', [x0 - 2, y1, x1 + 2, y1 + (small ? 2 : 3)], { extra: { lit: { width: tx(1), k: 0.08 }, below: { width: tx(2), k: 0.3 } } }),
+  ]
+}
+function hpUpperPieces(C, L, v) {
+  const vacant = L.wear === 'vacant'
+  // the hanging sash rail seeded by the house, so it does not hang at one place in every window of the ring
+  const room = (rail) => ({ recipe: 'paintWindowInterior', seed: hpSeed(rail ? 'Window-VoidRail:' + lookKey(L) : 'Window-Void'), hex: C.own('W'), opts: { mode: 'void', rail, ss: 1 } })
+  const dark = { recipe: 'paintWindowInterior', seed: hpSeed('Window-Dark'), hex: C.own('O'), opts: { mode: 'dark', sash: '1/1', ss: 1 } }
+  const key = `J2up-${L.wear}`
+  switch (v) {
+    case 'void': case 'sky': return hpWindowPieces(C, L, UW, room(false), 'W', key, false)
+    case 'rail': case 'skyRail': return hpWindowPieces(C, L, UW, room(true), 'W', key, false)
+    case 'lit': return hpWindowPieces(C, L, UW, { recipe: 'paintWindowInterior', seed: hpSeed('Window-Litblinds'), hex: C.own('O'), opts: { mode: 'lit', variant: 'blinds', sash: '1/1', ss: 1 } }, 'O', key, false)
+    case 'dark': return hpWindowPieces(C, L, UW, dark, 'O', key, false)
+    case 'small': return hpWindowPieces(C, L, US, vacant ? room(false) : dark, vacant ? 'W' : 'O', key + '-s', true)
+    // the upper window boarded over its frame (no mark: out of reach of a can), the window's own board
+    case 'boarded': return [hpBoard(C, 'Plywood-Window', false, 0.75, [12, 3, 51, 61], [0.91, 1.59])]
+    default: return []                                                // 'blank'
+  }
+}
+// a roofless house: the sky through the void (the roof gone). A pale sky over most of the opening above a black jagged line read as
+// frosted glass with a hedge, so the room stays the dark void the other W windows show, and only its top
+// ~30 % opens to the sky, behind the broken ends of the joists and rafters hanging from the head; the sky's tone is the level's sky
+// fogged to about 10 cells (palette.fog at 22 cells, linear), never lighter than the real sky behind the house
+function hpSkyThrough(C, R, [x0, y0, x1, y1]) {
+  const sky = hexToRgb(C.sky), fog = hexToRgb(C.fog), n = mulberry32(hpSeed('Sky-through')), d = 10 / 22
+  const far = [0, 1, 2].map((c) => sky[c] * (1 - d) + fog[c] * d)
+  // the broken line of what stands of the back wall and the roof timbers: a few runs between knots, a little rough
+  const knots = [0, 1, 2, 3, 4, 5].map(() => 0.2 + 0.14 * n()), edge = []
+  for (let x = x0; x < x1; x++) {
+    const u = ((x - x0 + 0.5) / (x1 - x0)) * (knots.length - 1), k = Math.min(knots.length - 2, Math.floor(u))
+    edge.push(knots[k] + (knots[k + 1] - knots[k]) * (u - k) + 0.03 * (n() - 0.5))
+  }
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+    const v = (y - y0 + 0.5) / (y1 - y0), w = 1 - sstep(edge[x - x0] - 0.025, edge[x - x0] + 0.025, v)
+    if (w <= 0) continue
+    const t = y * R.w + x, k = 0.94 + 0.04 * (1 - v)
+    for (let c = 0; c < 3; c++) R.rgb[t * 3 + c] += (far[c] * k - R.rgb[t * 3 + c]) * w
+  }
+  // the joist and rafter ends: charred, broken stubs hanging from the head into the sky, 1 or 2 texels wide, each its own length
+  const wood = [44, 38, 34], nStub = 3 + Math.floor(n() * 2)
+  for (let i = 0; i < nStub; i++) {
+    const cx = x0 + 2 + Math.floor(((i + 0.2 + 0.6 * n()) / nStub) * (x1 - x0 - 4)), wid = n() < 0.4 ? 2 : 1, len = 3 + Math.floor(n() * 6), lean = n() < 0.5 ? 0 : n() < 0.5 ? -1 : 1
+    for (let j = 0; j < len; j++) for (let q = 0; q < wid; q++) {
+      const x = cx + q + (j > len / 2 ? lean : 0), y = y0 + j
+      if (x < x0 || x >= x1 || y >= y1) continue
+      const t = (y * R.w + x) * 3, a = j === len - 1 ? 0.6 : 0.92
+      for (let c = 0; c < 3; c++) R.rgb[t + c] += (wood[c] - R.rgb[t + c]) * a
+    }
+  }
+}
+// band 3 (6–8 m; rows down from 8 m, drawn from row 32 = 7 m): the roofline under the 7 m line
+function hpRoofPieces(C, L, roof) {
+  const [, peel] = hpTrim(L)
+  const wood = (key, paint, p, rect, extra) => ({ recipe: 'paintPaintedWood', seed: hpSeed('PaintedWood-' + key), hex: C.trim(BF.PAINTS.white), opts: { paint, peel: p, grain: 'x', ss: 1 }, rect: trect(...rect), ...extra })
+  const coping = (rect, key) => concrete(C, key, rect, { extra: { lit: { width: tx(1), k: 0.1 }, below: { width: tx(2), k: 0.32 } } })
+  switch (roof) {
+    case 'sag': return [coping([0, 32, 30, 35], 'coping'), coping([34, 33, TS, 36], 'coping-sag')]
+    // (the corbelled courses under the gutter are the storey's own brick, stepped in light and shadow: hpCorbels)
+    case 'cornice': return [wood('gutter', 'blackgreen', 0.05, [0, 32, TS, 36], { lit: { width: tx(1), k: 0.08 }, below: { width: tx(1.5), k: 0.35 } })]
+    case 'bare': return [wood('fascia-bare', 'brown', 0.75, [0, 32, TS, 36], { below: { width: tx(1.5), k: 0.3 } })]
+    case 'eave': return [wood('fascia', 'white', peel, [0, 35, TS, 40], { below: { width: tx(3), k: 0.4 } }),
+      wood('gutter', 'blackgreen', 0.05, [0, 32, TS, 35], { lit: { width: tx(1), k: 0.08 }, below: { width: tx(1), k: 0.3 } })]
+    default: return [coping([0, 32, TS, 35], 'coping')]                // 'coping' (and the corner singles)
+  }
+}
+// the corbelled brick cornice of a 2-bay house (three courses stepped out 2 cm each): the storey's own brick in rows 36–45, each
+// course's lower edge in the shadow of the 2 cm step and the wall under the last one darker still
+function hpCorbels(R) {
+  const k = { 36: 0.86, 37: 1.05, 39: 0.8, 40: 1.04, 42: 0.8, 43: 1.03, 45: 0.72, 46: 0.86, 47: 0.95 }
+  shadeRows(R, 36, 48, (r) => k[r] ?? 1)
+}
+// a painted house's wall (the paint runs to the ground): ONE 2 × 4 m render of its painted brick,
+// shared by both storeys, so the 2 m tiles do not repeat one peel pattern up the wall. The ground storey (bands 0–1) is the render as it
+// stands with a damp foot over its bottom 40 cm; the upper storey (band 3 over band 2) is the same render shifted half a bay across, so
+// it does not stand the ground storey's peel straight over itself (the belt between them hides the seam; band 3 runs on into band 2).
+// Keyed by paint and wear (a roofless house's walls are its look's), in the build's context.
+function* hpPainted4(C, L) {
+  const k = `${L.paint}|${L.wear}`
+  if (!C.painted.has(k)) {
+    const P = yield* BF.paintBayElevationSteps({ w: 2, h: 4, field: hpLookField(C, L) }, HP_TPM, C.cache)
+    const roll = (r0) => {
+      const R = BF.newRaster(2, 2, HP_TPM, { height: false })
+      for (let y = 0; y < TS; y++) for (let x = 0; x < TS; x++) {
+        const s = (r0 + y) * TS + ((x + TS / 2) & TMASK), t = y * TS + x
+        R.rgb[t * 3] = P.rgb[s * 3]; R.rgb[t * 3 + 1] = P.rgb[s * 3 + 1]; R.rgb[t * 3 + 2] = P.rgb[s * 3 + 2]; R.cav[t] = P.cav[s]
+      }
+      return R
+    }
+    const G = BF.newRaster(2, 4, HP_TPM, { height: false })
+    G.rgb.set(P.rgb); G.cav.set(P.cav)
+    for (let y = 2 * TS - 14; y < 2 * TS; y++) {
+      const z = (2 * TS - y - 0.5) / HP_TPM, k = 1 - 0.08 * (1 - sstep(0.28, 0.44, z)) - 0.06 * c01(1 - z / 0.1)
+      shadeRows(G, y, y + 1, () => k)
+    }
+    C.painted.set(k, { lower: { F: G, S: G }, b3: roll(0), b2: roll(TS) })
+  }
+  return C.painted.get(k)
+}
+function* hpUpperTiles(C, stacks, belt) {
+  const fields = new Map(), b2 = new Map(), b3 = new Map()
+  // { b2, b3 }: the substrates of band 2 and band 3 (one 2 m tile for both, but for a painted house: hpPainted4)
+  const fieldOf = function* (L) {
+    const k = lookKey(L)
+    if (!fields.has(k)) {
+      if (L.clad === 'painted') { const P = yield* hpPainted4(C, L); fields.set(k, { b2: P.b2, b3: P.b3 }) }
+      else { const S = yield* BF.paintBayElevationSteps({ w: 2, h: 2, field: hpLookField(C, L) }, HP_TPM, C.cache); fields.set(k, { b2: S, b3: S }) }
+    }
+    return fields.get(k)
+  }
+  const band2 = function* (L, v) {
+    const k = lookKey(L) + '|' + v
+    if (!b2.has(k)) {
+      const S = (yield* fieldOf(L)).b2
+      const R = yield* BF.paintBayElevationSteps({ w: 2, h: 2, field: S, pieces: hpUpperPieces(C, L, v) }, HP_TPM, C.cache)
+      if (v === 'sky' || v === 'skyRail') hpSkyThrough(C, R, [UW[0] + 2, UW[1] + 2, UW[2] - 2, UW[3]])      // inside the casing
+      BF.restoreEdges(R, S); copyRows(R, S, 0, 2)
+      beltOver(R, belt)
+      b2.set(k, finish(R.rgb))
+    }
+    return b2.get(k)
+  }
+  const band3 = function* (L, roof) {
+    const k = lookKey(L) + '|' + roof
+    if (!b3.has(k)) {
+      const S = (yield* fieldOf(L)).b3
+      const R = yield* BF.paintBayElevationSteps({ w: 2, h: 2, field: S, pieces: hpRoofPieces(C, L, roof) }, HP_TPM, C.cache)
+      if (roof === 'sag') shadeRows(R, 32, 36, (r) => (r === 32 ? 0.5 : 0.62), 30, 34)          // the gap: raw brick and a joist pocket
+      if (roof === 'cornice' || roof === 'bare') hpCorbels(R)
+      BF.restoreEdges(R, S); copyRows(R, S, TS - 2, TS)
+      fillTop(R, 32)
+      b3.set(k, finish(R.rgb))
+    }
+    return b3.get(k)
+  }
+  const out = []
+  for (const s of stacks) {
+    if (s.kind !== 'upper') { out.push(null); continue }
+    const variants = []
+    for (const v of s.variants) { const t2 = yield* band2(s.look, v); variants.push([t2, yield* band3(s.look, s.roof)]) }
+    out.push({ key: s.key, kind: s.kind, lower: null, variants })
+  }
+  return out
+}
+
+// the four-riser stoop read as steps (a pale slab with three grey lines read as one grooved block): each step is 6
+// rows (19 cm) of the 8 m canvas from row 232 down, its tread's nosing row lit from the sky (+12 %), the shadow line under the nosing,
+// its riser a shade darker (−12 %); a worn hollow in the middle of each tread; the cheek blocks either side in shadow, their copings lit
+function hpStoop(R) {
+  for (let k = 0; k < 4; k++) {
+    const r0 = 232 + 6 * k
+    shadeRows(R, r0, r0 + 1, () => 1.12, 15, 49)
+    shadeRows(R, r0 + 1, r0 + 2, () => 0.74, 15, 49)
+    shadeRows(R, r0 + 2, r0 + 6, () => 0.88, 15, 49)
+    for (let x = 20; x < 44; x++) { const u = (x + 0.5 - 32) / 12; shadeRows(R, r0, r0 + 1, () => 1 - 0.08 * Math.max(0, 1 - u * u), x, x + 1) }
+  }
+  for (const [a, b] of [[12, 15], [49, 52]]) { shadeRows(R, 233, 256, () => 0.84, a, b); shadeRows(R, 232, 233, () => 1.1, a, b) }
+  shadeRows(R, 233, 256, () => 0.84, 15, 16)                                            // the steps' own shadow against the left cheek
+}
+// the front door's glass and its knob: the transom panes a little off black (the sky in the glass), the knob on the
+// leaf's lock stile at the lock rail (0.97 m over the leaf's foot), dull brass, lit at its top left
+function hpFrontDoor(C, R) {
+  const sky = hexToRgb(C.sky)
+  for (let y = 144; y < 154; y++) for (let x = 20; x < 45; x++) {
+    const t = (y * R.w + x) * 3, a = 0.16 + 0.06 * ((y - 144) / 10)
+    for (let c = 0; c < 3; c++) R.rgb[t + c] += (sky[c] * 0.62 - R.rgb[t + c]) * a
+  }
+  const brass = [[150, 128, 84], [104, 86, 52], [96, 80, 48], [70, 58, 36]]
+  ;[[44, 200], [45, 200], [44, 201], [45, 201]].forEach(([x, y], i) => { const t = (y * R.w + x) * 3; R.rgb[t] = brass[i][0]; R.rgb[t + 1] = brass[i][1]; R.rgb[t + 2] = brass[i][2] })
+}
+// ── the jut fronts (all four bands; rows down from 8 m): basement 0–0.75 m, the door 0.75–3.66 m, the 1st floor window 1.37–3.44 m, the
+// belt at the 2nd floor line (rows 126–130), the 2nd floor window 4.56–6.16 m, the cornice 6.41–7.0 m ──
+function* hpFrontStack(C, s, belt) {
+  const west = s.clad === 'formstone'
+  const part = west ? formPart(C) : (variant, foot) => ({ recipe: 'paintPressedBrick', seed: hpSeed('PressedBrick'), hex: C.brick('B'), opts: { striped: s.striped, foot, ss: 1 } })
+  const field = [0, 1, 2, 3].map((k) => field2(part('base', k === 3), 2 * k, 2 * k + 2))
+  const marble = (key, rect, extra, o = {}) => ({ recipe: 'paintMarble', seed: hpSeed('Marble:' + key), hex: C.own('M'), opts: { variant: 'weathered', ss: 1, ...o }, rect: trect(...rect), ...extra })
+  const head = (key, rect) => (west
+    ? { recipe: 'paintFormstone', seed: hpSeed('Formstone-wrap:' + key), hex: C.own('F'), opts: { palette: 'grey', variant: 'toneA', edgeRound: true, snap: true, ss: 1 }, rect: trect(...rect), below: { width: tx(2), k: 0.3 } }
+    : marble('lintel', rect, { lit: { width: tx(1), k: 0.06 }, below: { width: tx(2), k: 0.3 } }))
+  const sill = (rect) => (west ? concrete(C, 'front-sill', rect, { extra: { lit: { width: tx(1), k: 0.08 }, below: { width: tx(2), k: 0.3 } } })
+    : marble('sill', rect, { lit: { width: tx(1), k: 0.08 }, below: { width: tx(2), k: 0.3 } }))
+  const room = (lit) => (lit ? { recipe: 'paintWindowInterior', seed: hpSeed('Window-Litbase'), hex: C.own('O'), opts: { mode: 'lit', variant: 'base', sash: '2/2', ss: 1 } }
+    : { recipe: 'paintWindowInterior', seed: hpSeed('Window-Dark'), hex: C.own('O'), opts: { mode: 'dark', sash: '2/2', ss: 1 } })
+  const window = (rect, lit, key) => [{ ...room(lit), rect: trect(...rect), reveal: { width: tx(3), k: 0.22 } }, ...hpCasing(C, rect, 2, 'white', 0.05, key)]
+  // the leaf takes the painted wood's own stock (white) as its hex, as every painted-wood piece here does: the brown
+  // hex over the white stock browned the brown twice (luma 31, an open black doorway). Its reveal is held to 15 %, the casing of a
+  // kept front is freshly painted (no flake that reads as a knob), and the knob is on the leaf (hpFrontDoor)
+  const lower = s.bay === 'door' ? [
+    marble('basement', [0, 232, TS, 256], { lit: { width: tx(1), k: 0.07 } }, { foot: true }),
+    // the four-riser stoop (4 × 19 cm), bottom first; its steps are shaded in once the pieces are laid (hpStoop)
+    ...[3, 2, 1, 0].map((k) => marble('tread' + k, [12, 232 + 6 * k, 52, 238 + 6 * k], {}, { tread: true, foot: k === 3 })),
+    head('door', [12, 132, 53, 139]),
+    ...hpCasing(C, [15, 139, 50, 232], 3, 'white', 0.02, 'front-door'),
+    { ...room(false), rect: trect(18, 142, 47, 155), reveal: { width: tx(2), k: 0.25 } },                   // the transom
+    { recipe: 'paintPaintedWood', seed: hpSeed('PaintedWood-white:transom'), hex: C.trim(BF.PAINTS.white), opts: { paint: 'white', peel: 0.05, grain: 'x', ss: 1 }, rect: trect(18, 155, 47, 158) },
+    { recipe: 'paintDoorLeaf', seed: hpSeed('PaintedWood-LeafBrown'), hex: C.trim(BF.PAINTS.white), opts: { paint: 'brown', peel: 0, age: 0.3, ss: 1 }, rect: trect(18, 158, 47, 232), reveal: { width: tx(1.5), k: 0.15 } },
+  ] : [
+    marble('basement', [0, 232, TS, 256], { lit: { width: tx(1), k: 0.07 } }, { foot: true }),
+    { ...room(false), rect: trect(18, 238, 46, 250), reveal: { width: tx(2), k: 0.4 } },                    // the basement window over its areaway
+    head('win1', [13, 139, 52, 146]),
+    ...window([16, 146, 49, 212], s.occupied, 'front-win1'),
+    sill([14, 212, 51, 215]),
+  ]
+  const upper = (lit) => [head('win2', [13, 52, 52, 59]), ...window([16, 59, 49, 110], lit, 'front-win2'), sill([14, 110, 51, 113])]
+  const cornice = west ? [
+    // the flat aluminium fascia (J-west, in place of the bracketed cornice)
+    { recipe: 'paintPaintedWood', seed: hpSeed('PaintedWood-alu'), hex: C.trim(BF.PAINTS.white), opts: { paint: '#B9BBB7', peel: 0, grain: 'x', ss: 1 }, rect: trect(0, 32, TS, 49), below: { width: tx(3), k: 0.42 } },
+  ] : [
+    { recipe: 'paintPaintedWood', seed: hpSeed('PaintedWood-white:frieze'), hex: C.trim(BF.PAINTS.white), opts: { paint: 'white', peel: 0.08, grain: 'x', ss: 1 }, rect: trect(0, 35, TS, 49), below: { width: tx(3), k: 0.42 } },
+    { recipe: 'paintVentPanel', seed: hpSeed('VentPanel'), hex: C.trim(BF.PAINTS.white), opts: { motif: s.jut === 'J-east' ? 'sunflower' : 'fan', paint: 'white', peel: 0.12, ss: 1 }, rect: trect(22, 37, 42, 45) },
+    { recipe: 'paintPaintedWood', seed: hpSeed('PaintedWood-white:crown'), hex: C.trim(BF.PAINTS.white), opts: { paint: 'white', peel: 0.08, grain: 'x', ss: 1 }, rect: trect(0, 32, TS, 35), lit: { width: tx(1), k: 0.1 } },
+    ...[[0, 3], [TS - 3, TS]].map(([a, b], k) => ({ recipe: 'paintPaintedWood', seed: hpSeed('PaintedWood-white:bracket' + k), hex: C.trim(BF.PAINTS.white),
+      opts: { paint: 'white', peel: 0.08, grain: 'y', ss: 1 }, rect: trect(a, 32, b, 51), ring: { width: tx(1), k: 0.15 } })),
+  ]
+  const build = function* (lit) {
+    const S = yield* BF.paintBayElevationSteps({ w: 2, h: 8, field }, HP_TPM, C.cache)
+    const R = yield* BF.paintBayElevationSteps({ w: 2, h: 8, field: S, pieces: [...lower, ...upper(lit), ...cornice] }, HP_TPM, C.cache)
+    if (west) { shadeRows(R, 37, 38, () => 0.86); shadeRows(R, 43, 44, () => 0.86) }                            // the fascia's panel seams
+    else { for (let x = 3; x < TS - 3; x++) if ((x >> 2) & 1) shadeRows(R, 46, 49, () => 0.72, x, x + 1) }       // the modillion blocks
+    if (s.bay === 'door') { hpStoop(R); hpFrontDoor(C, R) }
+    BF.restoreEdges(R, S)
+    beltUnder(R, belt, 128); copyRows(R, belt, 126, 128, 0)
+    fillTop(R, 32)
+    return BF.cutBands(R).map((b) => finish(b.rgb))
+  }
+  const tiles = []
+  for (const v of s.variants) tiles.push(yield* build(v === 'lit'))
+  return { key: s.key, kind: s.kind, lower: [[tiles[0][0], tiles[0][1]]], variants: tiles.map((t) => [t[2], tiles[0][3]]) }
+}
+
+// ── the jut ends (all four bands): one party wall 4 m wide, 7 m to the cornice line, cut down the middle (cell 0 the back row) ──
+// (painted at the block's own 32 texels a metre, not at half and filtered up, which smeared it soft beside the crisp
+// brick; its cost is mostly fixed (the layout, the fallen-patch mask), so the full density costs about a third more. The ghost of the
+// lost neighbour (its roof slope, floor lines, joist pockets, stair and room paint) at 3 times the recipe's strength, so it reads at
+// 0.1 luma or more against the parge; the flue's soot at most 0.35, so it does not turn into a black stripe)
+const END_GHOST_K = 3
+function* hpEndStacks(C, stacks) {
+  const P = yield* BF.paintPartyWall.steps(4, 7, HP_TPM, hpSeed('PartyWall-JutEnd'), C.brick('B'), { ss: 1, ghostK: END_GHOST_K })
+  if (BF.due()) yield
+  const R = BF.newRaster(4, 8, HP_TPM, { height: false })
+  R.rgb.set(P.rgb, 32 * R.w * 3); R.cav.set(P.cav, 32 * R.w)
+  fillTop(R, 32)
+  const cells = []
+  for (const k of [0, 1]) {
+    if (BF.due()) yield
+    const D = BF.newRaster(2, 8, HP_TPM, { height: false })
+    for (let y = 0; y < D.h; y++) for (let x = 0; x < TS; x++) {
+      const s = y * R.w + k * TS + x, t = y * TS + x
+      D.rgb[t * 3] = R.rgb[s * 3]; D.rgb[t * 3 + 1] = R.rgb[s * 3 + 1]; D.rgb[t * 3 + 2] = R.rgb[s * 3 + 2]; D.cav[t] = R.cav[s]
+    }
+    cells.push(BF.cutBands(D).map((b) => finish(b.rgb)))
+  }
+  if (BF.due()) yield
+  return stacks.map((s) => (s.kind === 'end' ? { key: s.key, kind: s.kind, lower: [[cells[s.cell][0], cells[s.cell][1]]], variants: [[cells[s.cell][2], cells[s.cell][3]]] } : null))
+}
+
+// ── a painted house's ground storey: the paint runs to the ground, so the ring does not read as one
+// long brick building below the belt. Stack.lowerBy = { code: [[b0, b1], ...] }: the code's pieces (the kept frame and its CMU, the board,
+// the vent, the lit window) laid over the house's own painted wall (hpPainted4), so the paint stops at the openings' frames; a face of
+// that code on that house picks its pair by the same slot hash as the code's own pairs (gfx-world.js pickBandPairs). F stays formstone.
+// The GPU keeps every pair on two layers of a 220-layer array, so a paint and code has the pairs that carry a meaning, and two of them
+// only where the house plan puts three faces or more: C the plain kept frame and (1 in 3) the newer black-green frame with the invented
+// placard, P the marked board and (1 in 3) a plain one; W, B and O one pair each.
+const BAY_CODES = Object.freeze({ window: ['C', 'W'], board: ['P'], shade: ['O'], solid: ['B'] })
+const PAINTED_LOWER = Object.freeze({ C: [['base', 2], ['new', 1]], P: [['markA', 2], ['plainA', 1]], W: [['base', 1]], B: [['base', 1]], O: [['base', 1]] })
+function* hpPaintedLower(C, plan, stacks, belt) {
+  const tally = new Map()
+  const count = (h, cells) => { if (h.cladding !== 'painted') return; const L = houseLook(h); for (const c of cells) { const k = `${L.paint}|${L.wear}|${c.code}`; tally.set(k, (tally.get(k) || 0) + 1) } }
+  for (const h of plan.houses) count(h, h.cells)
+  for (const h of plan.juts) count(h, h.jut.back)
+  const pairs = new Map(), out = []
+  for (const s of stacks) {
+    if (s.kind !== 'upper' || s.look.clad !== 'painted' || !BAY_CODES[s.bay]) { out.push(null); continue }
+    if (BF.due()) yield
+    const L = s.look, by = {}
+    for (const ch of BAY_CODES[s.bay]) {
+      const n = tally.get(`${L.paint}|${L.wear}|${ch}`) || 0
+      if (n === 0) continue
+      const list = n >= 3 ? PAINTED_LOWER[ch] : PAINTED_LOWER[ch].slice(0, 1), slots = []
+      for (const [v, w] of list) {
+        const k = `${L.paint}|${L.wear}|${ch}|${v}`
+        // (only the code's pieces: its own ground-storey field, which specOf hands over unstarted, is not built here)
+        if (!pairs.has(k)) { const P4 = yield* hpPainted4(C, L); pairs.set(k, yield* hpLowerPair(C, P4.lower, HP_LOWER[ch][1](C, v)[1], belt)) }
+        slots.push([pairs.get(k), w])
+      }
+      by[ch] = weighted(slots)
+    }
+    out.push(Object.keys(by).length ? Object.freeze(by) : null)
+  }
+  return out
+}
+// every band tile of the block for one house plan, in one build context (the material tiles' renders reused)
+function* hpBands(C, plan) {
+  const { stacks } = planBlockStacks(plan)
+  const belt = yield* hpBeltStrip(C)
+  const code = yield* hpCodeBands(C, belt)
+  const up = yield* hpUpperTiles(C, stacks, belt), ends = yield* hpEndStacks(C, stacks), painted = yield* hpPaintedLower(C, plan, stacks, belt)
+  const upper = []
+  for (let i = 0; i < stacks.length; i++) upper.push(up[i] ? (painted[i] ? { ...up[i], lowerBy: painted[i] } : up[i]) : ends[i] || (yield* hpFrontStack(C, stacks[i], belt)))
+  // M's own pair (a face of a code with no stack: never on the stock map) is the J-east window bay's ground storey
+  const front = upper.find((u) => u.key === 'front|J-east|window') || upper.find((u) => u.kind === 'front')
+  code.M = front ? new Array(6).fill(front.lower[0]) : code.F
+  // no stack (a map without a plan): a plain common-brick storey and its coping
+  const plain = { clad: 'common', paint: null, wear: 'kept', roofless: false }
+  const fb = (yield* hpUpperTiles(C, [{ kind: 'upper', key: 'fallback', look: plain, roof: 'coping', variants: ['blank'] }], belt))[0]
+  return Object.freeze({ code: Object.freeze(code), upper: Object.freeze(upper), fallback: fb.variants[0] })
+}
+// The band tiles of Level ∅'s storeys for a house plan (block-facade-plan.js planBlockFacade), built on their own: what TexSet.wallBands holds
+// for the level's own map. Pure, seeded; the same inputs give the same bytes.
+export function buildBlockBands(palette, materials, plan) {
+  return BF.drain(hpBands(hpContext(resolvePalette(palette, '∅'), materials), plan))
+}
+
+// ═════════════════════════════════════════════════════════════════════════════════════════════════════
 //  Registry: which surfaces each level uses, and buildTextures()
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════
 // Each style function takes the palette and returns { base: Uint8Array, slots: Uint8Array[] }: the base tile and the weighted
@@ -2025,6 +2749,7 @@ const FLOOR_STYLES = {
   grate: deckFloor,
   deck: deckFloor,
   gravel: gravelFloor,
+  yard: yardFloor,
 }
 const CEIL_STYLES = {
   tiles: lobbyCeil,
@@ -2064,6 +2789,13 @@ function resolveSurfaces(levelKey, look) {
 // Build the surfaces of a TexSet: wall (material '0') + optional per-material tiles, ceiling, floor and the light panel, each as
 // a flat Uint8 RGB array of length ts*ts*3, plus the variant lists.
 export function buildTextures(palette, materials = null, look = null, levelKey = 'legacy') {
+  return BF.drain(buildTexturesSteps(palette, materials, look, levelKey, false))
+}
+// a style's result, or (the Harlem Park styles: generators) the result of its stepped job
+const isJob = (v) => !!v && typeof v.next === 'function'
+// buildTextures as a stepped job (gfx-block-facade.js §3b). eagerBands: build the storeys' band tiles (wallBands) in the job too, instead of
+// the first time a renderer reads them (prebuildTextures); the TexSet is the same either way.
+function* buildTexturesSteps(palette, materials, look, levelKey, eagerBands) {
   palette = resolvePalette(palette, levelKey)
   const surf = resolveSurfaces(levelKey, look)
   if (!surf) return buildLegacyTextures(palette, materials, look)      // legacy / hand-built configs: byte-identical to before
@@ -2071,22 +2803,44 @@ export function buildTextures(palette, materials = null, look = null, levelKey =
   const legacy = surf.wall && surf.floor && surf.ceil && surf.light ? null : buildLegacyTextures(palette, null, look)
   const tex = { ts: TS, tmask: TMASK, walls: {}, ceil: null, floor: null, light: null, look, wallVar: null, ceilVar: null, floorVar: null }
   if (surf.wall) { const s = WALL_STYLES[surf.wall](palette); tex.walls['0'] = s.base; tex.wallVar = { '0': s.slots } } else tex.walls['0'] = legacy.walls['0']
-  if (surf.floor) { const s = FLOOR_STYLES[surf.floor](palette); tex.floor = s.base; tex.floorVar = s.slots } else tex.floor = legacy.floor
+  if (BF.due()) yield
+  if (surf.floor) { let s = FLOOR_STYLES[surf.floor](palette); if (isJob(s)) s = yield* s; tex.floor = s.base; tex.floorVar = s.slots } else tex.floor = legacy.floor
+  if (BF.due()) yield
   if (surf.ceil) { const s = CEIL_STYLES[surf.ceil](palette); tex.ceil = s.base; tex.ceilVar = s.slots } else tex.ceil = legacy.ceil
+  if (BF.due()) yield
   if (!surf.light) tex.light = legacy.light
   if (surf.light) tex.light = LIGHT_STYLES[surf.light](palette)
-  if (materials) for (const ch of Object.keys(materials)) if (!surf.materials || !MATERIAL_STYLES[ch]) {
+  if (BF.due()) yield
+  // Level ∅'s material tiles: today's, or with look.facade 'harlem' the Harlem Park set (MATERIAL_STYLES_HP)
+  const styles = look && look.facade === 'harlem' ? MATERIAL_STYLES_HP : MATERIAL_STYLES
+  if (materials) for (const ch of Object.keys(materials)) if (!surf.materials || !styles[ch]) {
     tex.walls[ch] = buildWallTile(hexToRgb(materials[ch] || palette.wall), ch, mulberry32(0x5EED0000 ^ ch.charCodeAt(0)))   // no style for this code: the original flat tile
   }
   if (surf.materials && materials) {                                    // Level ∅: the authored material codes
-    const all = { brick: hexToRgb(materials.B || palette.wall), lit: hexToRgb(materials.O || palette.wall) }
+    const all = { brick: hexToRgb(materials.B || palette.wall), lit: hexToRgb(materials.O || palette.wall), hp: styles === MATERIAL_STYLES_HP ? hpContext(palette, materials) : null }
     for (const ch of Object.keys(materials)) {
-      const style = MATERIAL_STYLES[ch]
+      const style = styles[ch]
       if (!style) continue
-      const s = style(hexToRgb(materials[ch] || palette.wall), all)
+      let s = style(hexToRgb(materials[ch] || palette.wall), all)
+      if (isJob(s)) s = yield* s
       tex.walls[ch] = s.base
       tex.wallVar = tex.wallVar || {}
       tex.wallVar[ch] = s.slots
+      if (BF.due()) yield
+    }
+    // the storey bands (TexSet.wallBands, see above), for the level's own map: built the first time a renderer that draws storeys asks
+    // (gfx-world.js / gfx-gl-world.js with fs.wallH > 1), from this build's own renders; a TexSet nobody draws storeys with never pays for
+    // them. Not enumerable, so the TexSet still compares and serialises as before. (With eagerBands, the prebuild, they are built here.)
+    const lvl = all.hp ? LEVELS.find((l) => String(l.id) === levelKey) : null
+    const map = lvl && lvl.config ? lvl.config.map : null
+    if (map) {
+      let bands
+      const make = function* () { bands = yield* hpBands(all.hp, planBlockFacade(map, HOUSE_SEED)); all.hp.cache.clear(); all.hp.painted.clear() }
+      Object.defineProperty(tex, 'wallBands', {
+        enumerable: false, configurable: true,
+        get() { if (bands === undefined) BF.drain(make()); return bands },
+      })
+      if (eagerBands) yield* make()
     }
   }
   return tex
@@ -2112,15 +2866,18 @@ export function resolvePalette(palette, levelKey = 'legacy') {
 // only sample it; mip chains are cached per tile identity), so the title attract, the game and a revisited level share one
 // build instead of paying 30-110 ms (several hundred on a Chromebook) each. The key is the inputs' content, so a
 // wish-drifted palette gets its own entry; the map is cleared when it fills (wishes must not grow it without bound).
+// A miss first looks for a prebuild of the same key (prebuildTextures, below) and takes its TexSet, finishing whatever it has left.
 const TEX_MEMO = new Map()
 const TEX_MEMO_CAP = 6
+const memoKey = (palette, materials, look, levelKey) => { try { return levelKey + '|' + JSON.stringify([palette, materials, look]) } catch (e) { return null } }
 export function buildTexturesMemo(palette, materials = null, look = null, levelKey = 'legacy') {
-  let key = null
-  try { key = levelKey + '|' + JSON.stringify([palette, materials, look]) } catch (e) { key = null }
+  const key = memoKey(palette, materials, look, levelKey)
   if (key === null) return buildTextures(palette, materials, look, levelKey)
   let hit = TEX_MEMO.get(key)
   if (hit === undefined) {
-    hit = buildTextures(palette, materials, look, levelKey)
+    const job = PREBUILDS.get(key)
+    hit = job ? job.take() : null
+    if (!hit) hit = buildTextures(palette, materials, look, levelKey)
     if (TEX_MEMO.size >= TEX_MEMO_CAP) TEX_MEMO.clear()
     TEX_MEMO.set(key, hit)
   }
@@ -2128,6 +2885,134 @@ export function buildTexturesMemo(palette, materials = null, look = null, levelK
 }
 export function texturesMemoSize() { return TEX_MEMO.size }
 export function clearTexturesMemo() { TEX_MEMO.clear() }
+
+// ── a TexSet built ahead of time, a few ms at a time (Level ∅ with the Harlem Park look: about 1.5 s of work in one go) ──
+// The block is only ever entered from the title screen (the front door, or CONTINUE on a save that stands on it), and its renderer builds
+// its TexSet as it is created, with no fade to cover it. So while the title is up its TexSet is built in the page's idle time, in slices of
+// a few ms (gfx-block-facade.js §3b: the build pauses between raster rows), and kept; the renderer then takes it from buildTexturesMemo.
+// If the player gets there first, the game holds the screen dark while the rest is built in bigger slices (finishPrebuild, below); should
+// that fail, the renderer finishes the rest in one go, as before. Every slice runs the same code in the same order as buildTextures, so the
+// TexSet (and its wallBands, built in the job) is byte for byte the one it would build.
+// Memory (measured in Node): part-way, a job holds up to about 16 MB more than before it started. Done, about 6 MB stays: about 2.4 MB of
+// finished tiles (the job's, then the memo's) and about 3.6 MB of caches every build shares (the noise fields and the like), which stay for
+// the session exactly as after a one-go build. Cancelling frees the job's own part.
+//   prebuildTextures(palette, materials, look, levelKey) → a job, registered under buildTexturesMemo's key; null when there is nothing worth
+//     building ahead (no Harlem Park look: that build takes a few tens of ms) or the memo already holds it
+//     job.step(ms) → done?   builds for about ms milliseconds: the slice ends at the first pause point past it. Once the code is warm
+//                            the pause points are at most about 2.5 ms apart; the first build of a session has a few longer stretches,
+//                            where code runs for the first time (its very first slice, about 12 ms on a desktop) or a sample first fills a
+//                            noise grid, and a garbage collection can land in any slice (no pause point can split those)
+//     job.take() → the TexSet (the rest built here and now) or null if the job failed or was cancelled; the job is then gone
+//     job.cancel()           drops the job and everything it built so far
+//     job.done, job.cancelled, job.error, job.slices, job.ms (time spent in slices), job.longest (the longest slice, ms)
+//   prebuildLevelTextures(config, o) → the job for a level config (levelConfig's: the very palette, materials and look the renderer gets),
+//     stepped in idle callbacks: o.idle(fn) (default requestIdleCallback, else setTimeout 0) calls fn(deadline?), and each callback runs
+//     one slice that asks for o.sliceMs (default PREBUILD_SLICE_MS) or what is left of the idle period less 1 ms, whichever is shorter
+//     (none if under 1 ms is left), until the job is done or cancelled. One loop a job: a second call for the same config returns the
+//     same job and starts no second loop.
+//   cancelPrebuilds(keep = null) drops every job, or every job but the one for the level config `keep` (game.js: a run that starts anywhere
+//     but the block never needs them; one that starts on the block needs only the job for its own config)
+const PREBUILDS = new Map()
+const IDLE_LOOPS = new WeakSet()                 // the jobs a prebuildLevelTextures loop already steps
+export const PREBUILD_SLICE_MS = 6
+const clockMs = typeof performance !== 'undefined' && typeof performance.now === 'function' ? () => performance.now() : () => Date.now()
+export function prebuildTextures(palette, materials = null, look = null, levelKey = 'legacy') {
+  if (!(look && look.facade === 'harlem')) return null
+  const key = memoKey(palette, materials, look, levelKey)
+  if (key === null || TEX_MEMO.has(key)) return null
+  if (PREBUILDS.has(key)) return PREBUILDS.get(key)
+  const it = buildTexturesSteps(palette, materials, look, levelKey, true)
+  let tex = null
+  const drop = () => { if (PREBUILDS.get(key) === job) PREBUILDS.delete(key) }
+  const job = {
+    key, done: false, cancelled: false, error: null, slices: 0, ms: 0, longest: 0,
+    step(ms) {
+      if (job.done || job.cancelled) return true
+      const t0 = clockMs()
+      BF.STEP.on = true; BF.STEP.due = t0 + ms
+      try { const r = it.next(); if (r.done) { tex = r.value; job.done = true } } catch (e) { job.error = e; job.cancelled = true; tex = null; drop() } finally {
+        BF.STEP.on = false
+        const dt = clockMs() - t0
+        job.slices++; job.ms += dt; if (dt > job.longest) job.longest = dt
+      }
+      return job.done || job.cancelled
+    },
+    take() {
+      drop()
+      if (job.cancelled) return null
+      if (!job.done) { try { tex = BF.drain(it); job.done = true } catch (e) { job.error = e; job.cancelled = true; return null } }
+      const t = tex
+      tex = null
+      return t
+    },
+    cancel() {
+      if (job.cancelled) return
+      job.cancelled = true; tex = null; drop()
+      if (!job.done) { try { it.return() } catch (e) { /* a closing job has nothing to report */ } }
+    },
+  }
+  PREBUILDS.set(key, job)
+  return job
+}
+export function prebuildLevelTextures(config, o = {}) {
+  if (!config) return null
+  const job = prebuildTextures(config.palette, config.materials, config.look, levelKey(config))
+  if (!job) return null
+  if (IDLE_LOOPS.has(job)) return job
+  IDLE_LOOPS.add(job)
+  const sliceMs = o.sliceMs ?? PREBUILD_SLICE_MS
+  const idle = o.idle || (typeof requestIdleCallback === 'function' ? (fn) => requestIdleCallback(fn) : (fn) => setTimeout(fn, 0))
+  const run = (dl) => {
+    if (job.done || job.cancelled) return
+    const left = dl && typeof dl.timeRemaining === 'function' ? dl.timeRemaining() - 1 : sliceMs
+    if (left >= 1 && job.step(Math.min(sliceMs, left))) return
+    idle(run)
+  }
+  idle(run)
+  return job
+}
+const configKey = (config) => (config ? memoKey(config.palette, config.materials, config.look, levelKey(config)) : null)
+export function cancelPrebuilds(keep = null) {
+  const kept = configKey(keep)
+  for (const job of [...PREBUILDS.values()]) if (kept === null || job.key !== kept) job.cancel()
+}
+export function prebuildsPending() { return PREBUILDS.size }
+// ── the rest of it built while the screen is held dark (game.js holdForTiles: a run that starts on the block before the title's idle time
+//    has built all its tiles, so its renderer never builds the rest in one go) ──
+//   finishPrebuild(config, o) → null when there is nothing to wait for (no Harlem Park look, or the memo or a finished job already holds the
+//     TexSet), else a promise of true once the job is done, or false if it failed or was cancelled (the renderer then builds the TexSet in
+//     one go, as before). The job (the title's, or one started here) is stepped in slices of o.sliceMs (default HOLD_SLICE_MS: bigger than
+//     the title's, nothing moves on a dark screen) with a frame between them (o.next(fn): default nextFrame), so the page keeps presenting
+//     frames; the title's idle slices may still step the same job in between. The answer comes in a frame of its own too, so what the
+//     caller does next (the level build) never shares a task with the last slice. The same code in the same order: the same bytes
+export const HOLD_SLICE_MS = 50
+// fn at the next animation frame, or after HOLD_NOFRAME_MS if no frame comes first (a hidden window or tab draws none: the hold goes on)
+export const HOLD_NOFRAME_MS = 100
+export function nextFrame(fn) {
+  let ran = false
+  const go = () => { if (!ran) { ran = true; fn() } }
+  const raf = typeof requestAnimationFrame === 'function'
+  if (raf) requestAnimationFrame(go)
+  setTimeout(go, raf ? HOLD_NOFRAME_MS : 0)
+}
+export function finishPrebuild(config, o = {}) {
+  if (!config) return null
+  const job = prebuildTextures(config.palette, config.materials, config.look, levelKey(config))
+  if (!job || job.done) return null
+  const sliceMs = o.sliceMs ?? HOLD_SLICE_MS
+  const next = o.next || nextFrame
+  return new Promise((resolve) => {
+    const later = (fn) => { try { next(fn) } catch (e) { resolve(false) } }         // no frame to wait for: the renderer builds the rest
+    const run = () => {
+      let more
+      try { more = !job.cancelled && !job.step(sliceMs) } catch (e) { resolve(false); return }        // never a hold that cannot end
+      if (more) { later(run); return }
+      const ok = job.done && !job.cancelled
+      later(() => resolve(ok))
+    }
+    later(run)
+  })
+}
 
 // A tileable grayscale noise canvas for animated film grain.
 export function buildGrain() {

@@ -38,8 +38,9 @@ import {
 import { worldFragmentSource, worldUniformNames } from './gfx-gl-world-shader.js'
 import {
   POOL_N, OCC_N, LM_N, LMC_N, LEV_MAX, CLOUD_W, CLOUD_H, planTiles, tilesToRgba, wallLayer, wallPoolShare, fillCellTexture, fillPoolTable, fillWallTable,
-  buildSkyRows,
+  buildSkyRows, bandLayers,
 } from './gfx-gl-world-data.js'
+const BL = [0, -1, -1, 0]       // one column's band layers (bandLayers' out)
 
 const TAU = Math.PI * 2
 const WALLX_MAX = 1 - 2 ** -24  // the largest float32 below 1: a wallX stored as fp32 must never round up to 1.0 (that would wrap to texel 0; the CPU clamps to TMASK)
@@ -71,10 +72,11 @@ export { startProgram, programReady, finishProgram }
 // The wall's first and last row of a column, in the CPU's own double arithmetic (gfx-world.js: ceil(wtF), floor(wtF + whF), clamped to the frame), packed
 // as y0 * ROW_PACK + y1; an empty span packs as 0. The shader would recompute these in fp32, which can land a row off for a thin distant wall. A frame
 // taller than the pack allows returns -1 and the shader falls back to its own arithmetic.
-export function wallRows(corr, H, HH) {
+// wallH (the storeys): a taller wall's top row, castColumns' arithmetic (its foot is the 1-cell wall's).
+export function wallRows(corr, H, HH, wallH = 1) {
   if (H >= ROW_PACK) return -1
   const whF = H / Math.max(0.001, corr), wtF = HH - whF / 2
-  const y0 = Math.max(0, Math.ceil(wtF)), y1 = Math.min(H, Math.floor(wtF + whF))
+  const y0 = Math.max(0, Math.ceil(wallH > 1 ? wtF - whF * (wallH - 1) : wtF)), y1 = Math.min(H, Math.floor(wtF + whF))
   return y1 <= y0 ? 0 : y0 * ROW_PACK + y1
 }
 
@@ -92,7 +94,9 @@ export function createWorldPass(env) {
   if (problem) throw new GlError('caps', `the GPU world pass needs float textures (${problem}); the CPU renderer is used instead`)
 
   // ── surfaces: one mipmapped texture array ──
-  const plan = planTiles(tex)
+  // the storeys: a level with a taller wall draws a band canvas a column; its band tiles join the array (planTiles opts.bands)
+  const WALL_H = config.wallH > 1 ? config.wallH : 1, NB = Math.ceil(WALL_H)
+  const plan = planTiles(tex, { bands: NB > 1 })
   const ts = plan.ts
   if (plan.layers.length > maxLayers) throw new GlError('textures', `${plan.layers.length} tile layers exceed MAX_ARRAY_TEXTURE_LAYERS (${maxLayers})`)
   if (ts > maxTex) throw new GlError('textures', `tile size ${ts} exceeds MAX_TEXTURE_SIZE (${maxTex})`)
@@ -131,8 +135,8 @@ export function createWorldPass(env) {
   const nearest2D = (o) => createTexture2D(gl, { min: gl.NEAREST, mag: gl.NEAREST, ...o })
   const f32 = (w, h, data, rgba = true) => nearest2D({ w, h, internal: rgba ? gl.RGBA32F : gl.R32F, format: rgba ? gl.RGBA : gl.RED, type: gl.FLOAT, data })
   let poolTex = null, wallTab = null, cellsTex = null, lmTex = null, lmAnyTex = null, levTex = null, cloudTex = null, skyRowsTex = null
-  const wallTabW = Math.max(POOL_N, ts)
-  let wallTabTs = 0, cellsKey = '', lmKey = '', lastLampDim = false
+  const wallTabW = Math.max(POOL_N, ts * NB)                      // row 1 holds the wall's light over its whole band canvas
+  let wallTabKey = '', cellsKey = '', lmKey = '', lastLampDim = false
   const cellBuf = new Uint8Array(OCC_N * OCC_N * 4)
   const wallTabBuf = new Float32Array(wallTabW * 2 * 4)
   if (F0) {
@@ -220,23 +224,37 @@ export function createWorldPass(env) {
     // ── columns: one ray each ──
     const rayMax = Math.min(96, Math.ceil(fog) + 3)
     const wall0 = plan.walls['0'].base
+    // the storeys: the frame's wall height (the level's; the tiles were planned for it) and each column's band layers in row 2
+    const banded = NB > 1 && fs.wallH > 1, wallH = banded ? fs.wallH : 1, stackAt = banded ? fs.stackAt || null : null
     const ask = rayAsk(isWallFn, rayMax, px, py)    // (a frame's rays ask about the same few cells again and again: see gfx-world.js, memoSafe)
+    // a face's band layers are a function of the face alone (its cell and side: the material, the stack, the hashes), and the next column
+    // usually hits the same face: BL is picked once a face (fmx, fmy, fside: the face BL holds; side -1, none yet this frame)
+    let fmx = 0, fmy = 0, fside = -1
     for (let col = 0; col < W; col++) {
       const a = angle - HF + (col / W) * FOV
       const hit = castRay(px, py, a, ask, rayMax)
       const corr = hit.dist * Math.cos(a - angle)
       zb[col] = corr
       const far = hit.dist >= rayMax
+      const mat = far ? null : materialAt ? materialAt(hit.mx + 0.5, hit.my + 0.5) : null
       let o = col * 4
-      cols[o] = far ? COL_FAR : corr; cols[o + 1] = hit.wallX < WALLX_MAX ? hit.wallX : WALLX_MAX; cols[o + 2] = far ? wall0 : wallLayer(plan, hit, materialAt ? materialAt(hit.mx + 0.5, hit.my + 0.5) : null); cols[o + 3] = hit.side
+      cols[o] = far ? COL_FAR : corr; cols[o + 1] = hit.wallX < WALLX_MAX ? hit.wallX : WALLX_MAX; cols[o + 2] = far ? wall0 : wallLayer(plan, hit, mat); cols[o + 3] = hit.side
       o = (W + col) * 4
-      cols[o] = lit ? wallPoolShare(F, hit, px, py) : 0; cols[o + 1] = hit.dist; cols[o + 2] = corr; cols[o + 3] = wallRows(corr, H, fs.HH)
+      cols[o] = lit ? wallPoolShare(F, hit, px, py) : 0; cols[o + 1] = hit.dist; cols[o + 2] = corr; cols[o + 3] = wallRows(corr, H, fs.HH, wallH)
+      o = (2 * W + col) * 4
+      if (banded && !far) {
+        if (hit.mx !== fmx || hit.my !== fmy || hit.side !== fside) {
+          bandLayers(plan, hit, mat, stackAt !== null ? stackAt(hit.mx, hit.my, hit.side) : -1, BL)
+          fmx = hit.mx; fmy = hit.my; fside = hit.side
+        }
+        cols[col * 4 + 2] = BL[0]; cols[o] = BL[1]; cols[o + 1] = BL[2]; cols[o + 2] = BL[3]; cols[o + 3] = 0
+      } else { cols[o] = -1; cols[o + 1] = -1; cols[o + 2] = 0; cols[o + 3] = 0 }
     }
     rayAskDone()
     upload2D(UNIT.cols, colsTex, W, COL_ROWS, gl.RGBA, gl.FLOAT, cols)
 
     // ── the small tables ──
-    if (lit) uploadLitTables(F, fs)
+    if (lit) uploadLitTables(F, fs, banded && F.bandAmb !== null)
     if (hasSky) {
       buildSkyRows(fs, skyBuf, H)
       upload2D(UNIT.skyRows, skyRowsTex, H, 2, gl.RGBA, gl.FLOAT, skyBuf)
@@ -255,6 +273,7 @@ export function createWorldPass(env) {
     gl.uniform1i(u.uTiles, UNIT.tiles); gl.uniform1i(u.uCols, UNIT.cols)
     gl.uniform2f(u.uRes, W, H)
     gl.uniform1f(u.uHH, fs.HH); gl.uniform1f(u.uHC, fs.HC ?? fs.HH)     // the horizon and the centre row (vertical look: gfx-frame.js)
+    gl.uniform1f(u.uWallH, wallH); gl.uniform1f(u.uBands, banded ? NB : 1)   // the storeys: the wall height and its band canvas
     gl.uniform1f(u.uFog, fog)
     gl.uniform1f(u.uAng0, angle - HF); gl.uniform1f(u.uAngStep, FOV / W)
     gl.uniform2f(u.uPFrac, px - pxi, py - pyi); gl.uniform2i(u.uPInt, pxi, pyi)
@@ -333,10 +352,11 @@ export function createWorldPass(env) {
   }
 
   // The lit shading's tables. Each is re-uploaded only when its content can have changed (the CPU model rebuilds them on the same events).
-  function uploadLitTables(F, fs) {
-    if (wallTabTs !== F.ts && F.wallAmb) {
-      wallTabTs = F.ts
-      upload2D(UNIT.wallTab, wallTab, wallTabW, 2, gl.RGBA, gl.FLOAT, fillWallTable(F, ts, wallTabW, wallTabBuf))
+  function uploadLitTables(F, fs, bands) {
+    const wk = bands ? F.bandKey : String(F.ts)
+    if (wallTabKey !== wk && F.wallAmb) {
+      wallTabKey = wk
+      upload2D(UNIT.wallTab, wallTab, wallTabW, 2, gl.RGBA, gl.FLOAT, fillWallTable(F, ts, wallTabW, wallTabBuf, bands))
     }
     const dim = !!F.lampDim
     const redo = dim || lastLampDim                                // a flicker event re-mixes the lamps every frame, and once more when it ends

@@ -37,7 +37,7 @@
 // script runs; a player cannot): __failGl = 'create' | 'frame' | 'frame:N' | 'lost' | 'validate' forces that failure; gpuValidate true|false forces the
 // validation on|off; allowSoftwareGl lets the harness use SwiftShader.
 import { hexToRgb, levelKey } from './gfx-util.js'
-import { buildTextures, texturesMemoSize, clearTexturesMemo, resolvePalette } from './gfx-textures.js'
+import { buildTexturesMemo, texturesMemoSize, clearTexturesMemo, resolvePalette } from './gfx-textures.js'
 import { createLight } from './gfx-light.js'
 import { qualityFor, isSoftwareGl } from './gfx-quality.js'
 import { buildFrameState } from './gfx-frame.js'
@@ -138,7 +138,10 @@ export function createGlRenderer(canvas, config, renderOpts = {}, worldHooks = {
     fogRgb = hexToRgb(resolvePalette(config.palette, LEVEL_KEY).fog)
     skyRgb = config.sky ? hexToRgb(config.sky) : null
     lightsOn = config.lights !== false
-    tex = (deps.buildTextures || buildTextures)(config.palette, config.materials, config.look, LEVEL_KEY)
+    // the memoised build: the first-frame validation's CPU reference (createCpuRenderer) then reuses this very TexSet and
+    // its band tiles instead of building them a second time (about 1.5 s on the block); the memo is capped, and this renderer holds the
+    // TexSet for its life anyway
+    tex = (deps.buildTextures || buildTexturesMemo)(config.palette, config.materials, config.look, LEVEL_KEY)
     light = (deps.createLight || createLight)(config, worldHooks)
     tri = fullscreenTriangle(gl)
     Object.assign(env, { gl, canvas: glCanvas, tex, light, materialAt, tri })
@@ -194,6 +197,7 @@ export function createGlRenderer(canvas, config, renderOpts = {}, worldHooks = {
     const fs = buildFrameState({
       W, H, OW: glCanvas.width, OH: glCanvas.height, fog: config.fogDistance * fogMul, fogRgb, fogMul, flicker, frame, timing, player, lights,
       lightsOn, hasSky: !!skyRgb, skyRgb, light, quality, opts: v ? v.opts : ropts, levelKey: LEVEL_KEY, look: config.look,
+      wallH: config.wallH, stackAt: worldHooks.stackAt || null,
     })
     try {
       const wd = world.render(fs, isWallFn)

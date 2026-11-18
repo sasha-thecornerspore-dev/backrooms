@@ -55,6 +55,7 @@ function frameState(sc, tier, player, { W = 160, H = 90, lights = {}, light = nu
     W, H, OW: W, OH: H, fog: cfg.fogDistance, fogRgb: hexToRgb(cfg.palette.fog), fogMul: 1, flicker: 1, frame: 7, timing: { t: 4.25, dt: 1 / 60 },
     player, lights, lightsOn: cfg.lights !== false, hasSky: !!cfg.sky, skyRgb: cfg.sky ? hexToRgb(cfg.sky) : null,
     light, quality: qualityFor(tier), opts: { qualityTier: tier }, levelKey: levelKey(cfg), look: cfg.look,
+    wallH: cfg.wallH,                                                // (Level ∅'s walls stand 3.5 cells tall, its storeys: as both backends pass it)
   })
 }
 // one world pass, with a fresh light model (its flicker clock starts the same every time)
@@ -160,11 +161,18 @@ describe('the CPU world pass: level is unchanged, pitched is the level frame mov
       const up = world(sc, tier, { x: 5.5, y: 8.5, angle: 0.15, bobOffset: 0, pitch: 0.25 })
       const P = up.fs.HH - up.fs.HC
       expect(P).toBeGreaterThan(10)
-      // the sky reaches further down the screen: the row under the level view's horizon is sky now, not floor (where no wall covers it)
+      // the sky reaches further down the screen: the row under the level view's horizon is sky now, not floor (where no wall covers it).
+      // The block's walls stand wallH cells tall (its storeys): a column counts where the level view's row there is above its wall's top, i.e. sky
       const level = world(sc, tier, { x: 5.5, y: 8.5, angle: 0.15, bobOffset: 0, pitch: 0 })
+      const wallH = level.fs.wallH, r = level.fs.HH + 2 - P
+      expect(wallH).toBe(sc.cfg.wallH ?? 1)
       let skyCols = 0
-      for (let x = 0; x < W; x++) if (level.z[x] > 6) { skyCols++; expect(up.buf[(level.fs.HH + 2) * W + x]).toBe(level.buf[(level.fs.HH + 2 - P) * W + x]) }
-      expect(skyCols).toBeGreaterThan(0)
+      for (let x = 0; x < W; x++) {
+        const top = Math.ceil(level.fs.HH - (H / Math.max(0.001, level.z[x])) * (wallH - 0.5))    // the wall's first row (castColumns)
+        if (r >= top) continue
+        skyCols++; expect(up.buf[(level.fs.HH + 2) * W + x]).toBe(level.buf[r * W + x])
+      }
+      expect(skyCols).toBeGreaterThan(W / 4)
     }
   })
 })

@@ -48,15 +48,16 @@ const trees = {}
 // next to this file, so the same harness runs the pristine baseline and a refactored tree.
 async function loadTree(srcUrl, worldJson) {
   const imp = (f) => import(new URL(f, srcUrl).href)
-  const [renderer, world, levels, fixedmap, nullmap, decor, items, entities] = await Promise.all([
+  const [renderer, world, levels, fixedmap, nullmap, decor, items, entities, stacks] = await Promise.all([
     imp('renderer.js'), imp('world.js'), imp('levels.js'), imp('fixedmap.js'),
     imp('level-null-map.js'), imp('decor.js'), imp('items.js'), imp('entities.js'),
+    imp('block-stacks.js').catch(() => null),                 // (the block's storeys: absent from older trees)
   ])
   const mods = {
     createRenderer: renderer.createRenderer,
     DEFAULT_CONFIG: world.DEFAULT_CONFIG, CHUNK_SIZE: world.CHUNK_SIZE, createChunkCache: world.createChunkCache,
     levelConfig: levels.levelConfig, LEVELS: levels.LEVELS,
-    createFixedMap: fixedmap.createFixedMap,
+    createFixedMap: fixedmap.createFixedMap, fixedMapHooks: fixedmap.fixedMapHooks || null, facadeFor: stacks ? stacks.facadeFor : null,
     NULL_MAP: nullmap.NULL_MAP, NULL_SPAWN: nullmap.NULL_SPAWN, NULL_EXIT: nullmap.NULL_EXIT,
     createDecorSystem: decor.createDecorSystem, SIGHT_TYPES: decor.SIGHT_TYPES,
     createItemSystem: items.createItemSystem,

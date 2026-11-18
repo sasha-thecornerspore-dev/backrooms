@@ -19,6 +19,7 @@
 //              chunk the cache evicts relative to) and, when the level sets one, isWallFn.evictRadius (world.js chunkEvictRadius, default 3).
 //              An undeclared closure, or one whose declared chunk is too far from the rendered pose, gets every ask passed straight through.
 //   materialAt (wx, wy) -> material code, or null (procedural levels: every wall is '0')
+//   (fs.wallH, fs.stackAt: a level whose walls stand taller than a cell draws them from a band canvas, the block's storeys, below)
 //
 // SPEED (a speed change must leave every output byte as it was: test/gfx-hw-perf.test.js draws against a frozen copy of the pass). The
 // rays are cast first (the world asked about each cell once a frame: wallMemo), so the floor and ceiling skip what the walls will cover. The
@@ -109,6 +110,9 @@ function castColumns(fs, isWallFn, zbuffer) {
   // bounds the per-frame isWall calls to the visible radius instead of the old 96-unit default.
   const rayMax = Math.min(96, Math.ceil(fog) + 3)
   const px = player.x, py = player.y, pa = player.angle
+  // a taller wall (the storeys: the level's wallH cells) rises wallH - 0.5 cells above the eye; its foot, the floor under it and every row distance
+  // stay where the 1-cell wall's are (the slice is only longer upward). wtF stays the 1-cell wall's top, the band columns' reference row.
+  const up = fs.wallH > 1 ? fs.wallH - 1 : 0
   const ask = rayAsk(isWallFn, rayMax, px, py)
   for (let col = 0; col < W; col++) {
     const angle = pa - HF + (col / W) * FOV
@@ -117,7 +121,7 @@ function castColumns(fs, isWallFn, zbuffer) {
     zbuffer[col] = corr
     const whF = H / Math.max(0.001, corr)   // unclamped slice height
     const wtF = HH - whF / 2
-    const y0 = Math.max(0, Math.ceil(wtF))
+    const y0 = Math.max(0, Math.ceil(up === 0 ? wtF : wtF - whF * up))
     const y1 = Math.min(H, Math.floor(wtF + whF))
     dist[col] = hit.dist; wallX[col] = hit.wallX; side[col] = hit.side; mx[col] = hit.mx; my[col] = hit.my
     corrA[col] = corr; whA[col] = whF; wtA[col] = wtF
@@ -204,7 +208,7 @@ function renderLegacy(fs, tex, light, isWallFn, materialAt, buf32, zbuffer) {
   const wallVar = tex.wallVar || null, floorVar = tex.floorVar || null, ceilVar = tex.ceilVar || null
   const lt = tex.light
   // open sky (outdoor levels): rows 0..HH are filled by gfx-sky.js and skipped below
-  if (hasSky) renderSky(fs, buf32, C.oneSided ? C.nlo : null)
+  if (hasSky) renderSky(fs, buf32, C.oneSided ? C.nlo : null, C.oneSided ? C.nloB : null)
   const L = LGC
   L.W = W; L.H = H; L.HH = HH; L.HC = fs.HC ?? HH; L.fog = fog; L.flicker = flicker; L.fogPacked = fogPacked; L.ca0 = ca0; L.sa0 = sa0; L.ca1 = ca1; L.sa1 = sa1
   L.px0 = player.x; L.py0 = player.y; L.TS = TS; L.TMASK = TMASK; L.F0 = F0; L.F1 = F1; L.F2 = F2; L.hasSky = hasSky; L.lightsOn = lightsOn
@@ -212,7 +216,11 @@ function renderLegacy(fs, tex, light, isWallFn, materialAt, buf32, zbuffer) {
   for (let y = 0; y < H; y++) legacyRow(y)
 
   // ── walls (per column, textured, from the rays cast above), a column at a time ──
-  for (let col = 0; col < W; col++) legacyColumn(col)
+  if (fs.wallH > 1) {                                             // the storeys: a band canvas a column
+    prepBands(fs, tex)
+    for (let col = 0; col < W; col++) bandColumnLegacy(col)
+    endBands()
+  } else for (let col = 0; col < W; col++) legacyColumn(col)
   releaseContext(LGC)
 }
 // drop a frame context's references once the frame is drawn (the buffer, the tiles, the world's material hook), so a renderer that is gone
@@ -346,6 +354,162 @@ function legacyColumn(col) {
       const r = wt[ti]     * a + wR
       const g = wt[ti + 1] * a + wG
       const b = wt[ti + 2] * a + wB
+      px = free
+        ? (255 << 24) | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
+        : (255 << 24) | ((b > 255 ? 255 : b) | 0) << 16 | ((g > 255 ? 255 : g) | 0) << 8 | ((r > 255 ? 255 : r) | 0)
+    }
+    for (; y < e; y++, o += W) buf32[o] = px
+    v = vn
+  }
+}
+
+// ── the storeys ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// A level whose wallH is above 1 draws every wall slice from a BAND CANVAS: NB = ceil(wallH) tiles stacked a column, band 0 at the foot,
+// so the canvas row V = ((y - wtC) * TS / whF) | 0 counts texel rows down from the canvas top (wtC = the 1-cell wall's top less NB - 1
+// cells), its tile is band NB - 1 - (V >> log2 TS) and its texel row V & TMASK. The slice shows rows (NB - wallH) · TS .. NB · TS of it (the
+// block's 3.5: 32 .. 255). The four tiles of a face are picked once a column (pickBands): bands 0–1 from the cell code (the same slot hash as
+// the 1-cell tile, so a door is whole across them) or from a stack that paints the whole face (a jut front, a jut end), or that has its own
+// ground storey for the face's code (a painted house: Stack.lowerBy, by the same slot hash); bands 2–3 from the
+// face's storey stack (stackAt) by hash2(mx, my, side + 4). A TexSet without wallBands, or a code without them, repeats the 1-cell tile up
+// the wall (bands 2+ the stack's when there is one). Both shadings keep their arithmetic: the band columns are the 1-cell columns with the
+// texel row taken from the canvas and the tile from the row's band.
+const BC = { NB: 1, LGN: 6, bands: null, stackAt: null, rows: 0 }
+const BT = [null, null, null, null, null, null, null, null]       // the column's tiles, band 0 first
+// pickBands(B, wkey, st, mx, my, side, one, out) -> out: the band tiles of a face (out[0] = band 0 .. out[3] = band 3, the rest band 3's).
+// B = TexSet.wallBands (or null), wkey the face's material key, st its stack index (-1: none), one the 1-cell tile. Also the GPU's pick
+// (gfx-gl-world-data.js bandLayers), so the two backends choose the same tiles.
+// pickBandPairs(...) -> { lo: [b0, b1] | null, hi: [b2, b3] | null } (one shared result object): the pairs themselves (null: the 1-cell tile)
+const PICK = { lo: null, hi: null }
+export function pickBandPairs(B, wkey, st, mx, my, side) {
+  const stack = B !== null && st >= 0 && st < B.upper.length ? B.upper[st] : null
+  let lo = null
+  if (stack !== null && stack.lower !== null) lo = stack.lower[hash2(mx, my, side) % stack.lower.length]
+  else if (stack !== null && stack.lowerBy !== undefined && stack.lowerBy[wkey] !== undefined) {
+    const arr = stack.lowerBy[wkey]                                     // a painted house's ground storey for this code (gfx-textures.js)
+    lo = arr[hash2(mx, my, side) % arr.length]
+  } else if (B !== null) { const arr = B.code[wkey]; if (arr) lo = arr[hash2(mx, my, side) % arr.length] }
+  PICK.lo = lo
+  PICK.hi = stack !== null ? stack.variants[hash2(mx, my, side + 4) % stack.variants.length] : B !== null && lo !== null ? B.fallback : null
+  return PICK
+}
+export function pickBands(B, wkey, st, mx, my, side, one, out) {
+  const { lo, hi } = pickBandPairs(B, wkey, st, mx, my, side)
+  out[0] = lo !== null ? lo[0] : one; out[1] = lo !== null ? lo[1] : one
+  out[2] = hi !== null ? hi[0] : one; out[3] = hi !== null ? hi[1] : one
+  for (let i = 4; i < out.length; i++) out[i] = out[3]
+  return out
+}
+// A band column's face repeats: the next column usually hits the same cell side as the last one, and a face's material, variant and band
+// tiles are functions of the face alone within a frame (materialAt, the variant hash, stackAt, pickBands), so they are picked once a face
+// (FACE: the face BT holds; side -1, none yet this frame).
+const FACE = { mx: 0, my: 0, side: -1 }
+// a band column's packed pixel per canvas row: where a texel row is at least a pixel tall, each canvas row of the column is shaded once into it
+// and every pixel takes its row's value (bandColumnLegacy, bandColumnLit); sized for the frame's band canvas
+let PXT = new Int32Array(1024)
+function prepBands(fs, tex) {
+  const NB = Math.min(BT.length, Math.ceil(fs.wallH))
+  BC.NB = NB; BC.LGN = 31 - Math.clz32(tex.ts); BC.rows = NB * tex.ts
+  BC.bands = tex.wallBands || null; BC.stackAt = fs.stackAt || null
+  FACE.side = -1
+  if (PXT.length < BC.rows) PXT = new Int32Array(BC.rows)
+}
+function columnBands(wkey, wt, hmx, hmy, side) {
+  const st = BC.stackAt !== null ? BC.stackAt(hmx, hmy, side) : -1
+  return pickBands(BC.bands, wkey, st, hmx, hmy, side, wt, BT)
+}
+function bandsMax(n) { let m = 0; for (let i = 0; i < n; i++) { const t = tileMax(BT[i]); if (t > m) m = t } return m }
+// the frame's tiles are let go once its walls are drawn (a renderer that is gone keeps no TexSet alive through the module)
+function endBands() { BC.bands = null; BC.stackAt = null; BT.fill(null); BTM.fill(null); BMEMO.tiles.fill(null); BMEMO.m = -1 }
+
+// one wall column of the legacy pass on a band canvas (legacyColumn's arithmetic; the texel row from the canvas row, the tile from its band)
+function bandColumnLegacy(col) {
+  const { W, fog, flicker, TS, TMASK, fogRgb, wallVar, tex, buf32, materialAt } = LGC
+  const NB = BC.NB, LGN = BC.LGN, VMAX = BC.rows - 1
+  const C = COL, clen = C.len, cy0 = C.y0
+  const n = clen[col]
+  if (n === 0) return
+  const y0 = cy0[col], y1 = y0 + n
+  const corr = C.corr[col], whF = C.whF[col], wtF = C.wtF[col]
+  const side = C.side[col], hmx = C.mx[col], hmy = C.my[col]
+  const wtC = wtF - whF * (NB - 1)
+
+  const distF   = Math.min(1, corr / fog)
+  const sideMul = side === 1 ? 0.72 : 1.0
+  const texX = Math.min(TMASK, (C.wallX[col] * TS) | 0)
+  const invWh = TS / whF
+  const a  = sideMul * (1 - distF) * flicker
+  const wR = fogRgb[0] * distF * flicker, wG = fogRgb[1] * distF * flicker, wB = fogRgb[2] * distF * flicker
+  if (hmx !== FACE.mx || hmy !== FACE.my || side !== FACE.side) {     // a new face: its material, variant and band tiles (else the last column's)
+    const mat = materialAt ? materialAt(hmx + 0.5, hmy + 0.5) : null
+    const wkey = (mat && tex.walls[mat]) ? mat : '0'
+    let wt = tex.walls[wkey]
+    if (wallVar !== null) {
+      const arr = wallVar[wkey]
+      if (arr && arr.length > 1) wt = arr[hash2(hmx, hmy, side) % arr.length]
+    }
+    columnBands(wkey, wt, hmx, hmy, side)
+    FACE.mx = hmx; FACE.my = hmy; FACE.side = side
+  }
+  const base = texX * 3
+  let same = BMEMO.m === -2                                       // (the brightest texel of the last column's tiles, when they are these)
+  for (let i = 0; i < NB && same; i++) same = BT[i] === BMEMO.tiles[i]
+  if (!same) { for (let i = 0; i < NB; i++) BMEMO.tiles[i] = BT[i]; BMEMO.m = -2; BMEMO.max = bandsMax(NB) }
+  const tmax = BMEMO.max
+  const free = a >= 0 && tmax * a + wR < 256 && tmax * a + wG < 256 && tmax * a + wB < 256
+
+  let lastV = -1, px = 0
+  if (whF / TS < RUN_PX) {
+    if (whF / TS >= 1) {
+      // texel rows at least a pixel tall: the column's canvas rows (V never decreases down the column) shaded once each into PXT, band by
+      // band, in the same arithmetic; then every pixel takes its row's packed value
+      const vLo = ((y0 - wtC) * invWh) | 0, vHi = ((y1 - 1 - wtC) * invWh) | 0
+      const a0 = vLo > VMAX ? VMAX : vLo, b0 = vHi > VMAX ? VMAX : vHi, TS3 = TS * 3
+      for (let bt = a0 >> LGN, V = a0; V <= b0; bt++) {
+        const T = BT[NB - 1 - bt]
+        const ve = ((bt + 1) << LGN) - 1, vEnd = ve < b0 ? ve : b0
+        if (free) {
+          for (let ti = (V & TMASK) * TS3 + base; V <= vEnd; V++, ti += TS3) {
+            const r = T[ti] * a + wR, g = T[ti + 1] * a + wG, b = T[ti + 2] * a + wB
+            PXT[V] = (255 << 24) | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
+          }
+        } else {
+          for (let ti = (V & TMASK) * TS3 + base; V <= vEnd; V++, ti += TS3) {
+            const r = T[ti] * a + wR, g = T[ti + 1] * a + wG, b = T[ti + 2] * a + wB
+            PXT[V] = (255 << 24) | ((b > 255 ? 255 : b) | 0) << 16 | ((g > 255 ? 255 : g) | 0) << 8 | ((r > 255 ? 255 : r) | 0)
+          }
+        }
+      }
+      if (vHi <= VMAX) for (let y = y0, o = y0 * W + col; y < y1; y++, o += W) buf32[o] = PXT[((y - wtC) * invWh) | 0]
+      else for (let y = y0, o = y0 * W + col; y < y1; y++, o += W) { let V = ((y - wtC) * invWh) | 0; if (V > VMAX) V = VMAX; buf32[o] = PXT[V] }
+      return
+    }
+    for (let y = y0, o = y0 * W + col; y < y1; y++, o += W) {
+      let V = ((y - wtC) * invWh) | 0
+      if (V > VMAX) V = VMAX
+      if (V !== lastV) {
+        lastV = V
+        const T = BT[NB - 1 - (V >> LGN)], ti = (V & TMASK) * TS * 3 + base
+        const r = T[ti] * a + wR, g = T[ti + 1] * a + wG, b = T[ti + 2] * a + wB
+        px = free
+          ? (255 << 24) | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
+          : (255 << 24) | ((b > 255 ? 255 : b) | 0) << 16 | ((g > 255 ? 255 : g) | 0) << 8 | ((r > 255 ? 255 : r) | 0)
+      }
+      buf32[o] = px
+    }
+    return
+  }
+  const pxT = whF / TS
+  let y = y0, o = y0 * W + col, v = ((y0 - wtC) * invWh) | 0
+  while (y < y1) {
+    let e = Math.ceil(wtC + (v + 1) * pxT), vn = 0
+    if (e > y1) e = y1; else if (e <= y) e = y + 1
+    while (e > y + 1 && (((e - 1 - wtC) * invWh) | 0) > v) e--
+    while (e < y1 && (vn = ((e - wtC) * invWh) | 0) <= v) e++
+    const V = v > VMAX ? VMAX : v
+    if (V !== lastV) {
+      lastV = V
+      const T = BT[NB - 1 - (V >> LGN)], ti = (V & TMASK) * TS * 3 + base
+      const r = T[ti] * a + wR, g = T[ti + 1] * a + wG, b = T[ti + 2] * a + wB
       px = free
         ? (255 << 24) | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
         : (255 << 24) | ((b > 255 ? 255 : b) | 0) << 16 | ((g > 255 ? 255 : g) | 0) << 8 | ((r > 255 ? 255 : r) | 0)
@@ -523,7 +687,7 @@ function renderLit(fs, tex, light, isWallFn, materialAt, buf32, zbuffer) {
   const wallVar = tex.wallVar || null, floorVar = tex.floorVar || null, ceilVar = tex.ceilVar || null
   // the rays first: the sky and floor passes below skip what the walls will cover
   const C = castColumns(fs, isWallFn, zbuffer)
-  if (hasSky) renderSky(fs, buf32, C.oneSided ? C.nlo : null)
+  if (hasSky) renderSky(fs, buf32, C.oneSided ? C.nlo : null, C.oneSided ? C.nloB : null)
 
   const tR = F.tR, tG = F.tG, tB = F.tB
   const fBase = F.fogBase, fGlow = F.fogGlow
@@ -603,7 +767,14 @@ function renderLit(fs, tex, light, isWallFn, materialAt, buf32, zbuffer) {
   L.wallAmb = wallAmb; L.wallPool = wallPool; L.wallP = wallP; L.wallK0 = wallK0; L.wallK1 = wallK1; L.wallK2 = wallK2
   L.litMax = tileMax(wallLit); L.ambMax = tileMax(wallAmb); L.poolMax = tileMax(wallPool)     // (the tables' maxima, cached per table)
 
-  for (let col = 0; col < W; col++) litColumn(col)
+  if (fs.wallH > 1 && F.bandLit !== null) {
+    // the storeys: a band canvas a column, lit from the taller wall's own tables (gfx-light.js buildSurfaceTables(s, ts, wallH, open))
+    prepBands(fs, tex)
+    L.wallLit = F.bandLit; L.wallAmb = F.bandAmb; L.wallPool = F.bandPool
+    L.litMax = tileMax(F.bandLit); L.ambMax = tileMax(F.bandAmb); L.poolMax = tileMax(F.bandPool)
+    for (let col = 0; col < W; col++) bandColumnLit(col)
+    endBands()
+  } else for (let col = 0; col < W; col++) litColumn(col)
   releaseContext(LC)
 }
 
@@ -1119,4 +1290,309 @@ function litColumn(col) {
     v = vn
   }
 
+}
+
+// one wall column of the lit pass on a band canvas (the storeys): litColumn's light and arithmetic, the texel row and the light row from
+// the canvas row V (renderLit pointed LC's wall tables at the taller wall's, bandRows rows), the tile from V's band, a mip level per column
+// for every band tile alike
+const BTM = [null, null, null, null, null, null, null, null]
+const BMEMO = { tiles: [null, null, null, null, null, null, null, null], m: -1, filt: false, max: 0 }
+function bandColumnLit(col) {
+  const {
+    W, fog, TS, TMASK, gdip, F0, F1, F2, tR, tG, tB, fBase, fGlow, lmR, levN, levI0, levJ0, maxMip, fcR, fcG, fcB, gcR, gcG, gcB,
+    glowK, px, py, stepCol, emitInv, occCx, occCy, usePanels, useEmit, single, filt, filtNear, flash, glow, anyDyn, wallVar, lm,
+    lev, sxa, sya, F, tex, buf32, materialAt, wallLit, wallAmb, wallPool, wallP, wallK0, wallK1, wallK2, litMax, ambMax, poolMax,
+  } = LC
+  const NB = BC.NB, LGN = BC.LGN, ROWS = BC.rows, VMAX = ROWS - 1
+  const C = COL, clen = C.len, cy0 = C.y0
+  const n = clen[col]
+  if (n === 0) return
+  const y0 = cy0[col], y1 = y0 + n
+  const corr = C.corr[col], whF = C.whF[col], wtF = C.wtF[col]
+  const side = C.side[col], hmx = C.mx[col], hmy = C.my[col], hWallX = C.wallX[col]
+  const wtC = wtF - whF * (NB - 1)
+
+  const distF = Math.min(1, corr / fog)
+  const sideMul = side === 1 ? 0.72 : 1.0
+  const invWh = TS / whF
+  const w0 = sideMul * (1 - distF)
+  const a = w0 * gdip
+
+  // the wall's share of pool light (litColumn's, unchanged)
+  const along = side === 0 ? hmy : hmx
+  let pw = 0
+  if (usePanels) {
+    const uIdx = Math.min(63, (((along & 1) + hWallX) * 32) | 0)
+    pw = wallP[uIdx]
+    if (lev !== null) {
+      const posDir = side === 0 ? (hmx + 0.5 > px) : (hmy + 0.5 > py)
+      const face = side === 0 ? (posDir ? hmx : hmx + 1) : (posDir ? hmy : hmy + 1)
+      const pl = face >> 1
+      const a0 = (along >> 1) - 1
+      let s = 0
+      for (let m = 0; m < 3; m++) {
+        const gi = side === 0 ? pl - levI0 : a0 + m - levI0, gj = side === 0 ? a0 + m - levJ0 : pl - levJ0
+        const lv = (gi >= 0 && gi < levN && gj >= 0 && gj < levN) ? lev[gj * levN + gi] : 1
+        s += lv * (m === 0 ? wallK0[uIdx] : m === 1 ? wallK1[uIdx] : wallK2[uIdx])
+      }
+      pw = s > 1 ? 1 : s
+    }
+  } else if (useEmit) {
+    const fx = side === 0 ? (hmx + 0.5 > px ? hmx - 0.18 : hmx + 1.18) : hmx + hWallX
+    const fy = side === 1 ? (hmy + 0.5 > py ? hmy - 0.18 : hmy + 1.18) : hmy + hWallX
+    const cx0 = Math.floor(fx), cy0 = Math.floor(fy)
+    const ddx = cx0 - occCx, ddy = cy0 - occCy
+    if (ddx >= -lmR && ddx <= lmR && ddy >= -lmR && ddy <= lmR) {
+      const sxs = fx * 4 - 0.5, sys = fy * 4 - 0.5
+      const i0 = Math.floor(sxs), j0 = Math.floor(sys), fxx = sxs - i0, fyy = sys - j0
+      const r0 = (j0 & 127) << 7, r1 = ((j0 + 1) & 127) << 7, ia = i0 & 127, ib = (i0 + 1) & 127
+      const top = lm[r0 | ia] + (lm[r0 | ib] - lm[r0 | ia]) * fxx
+      const bot = lm[r1 | ia] + (lm[r1 | ib] - lm[r1 | ia]) * fxx
+      let v = top + (bot - top) * fyy
+      const dcW = Math.max(Math.abs(fx - px), Math.abs(fy - py))
+      if (dcW > lmR - LM_FADE_CELLS) { const u = (dcW - (lmR - LM_FADE_CELLS)) / LM_FADE_CELLS; v = u >= 1 ? 0 : v * (1 - u * u * (3 - 2 * u)) }
+      pw = v * emitInv
+      if (pw > 1) pw = 1
+    }
+  }
+  const pq = (pw * 63 + 0.5) | 0
+  const poolOff = pq * ROWS
+  const fw = distF * (fBase + (1 - fBase) * fGlow * pw)
+  const wR = F0 * fw * (1 - pw + pw * tR), wG = F1 * fw * (1 - pw + pw * tG), wB = F2 * fw * (1 - pw + pw * tB)
+
+  if (hmx !== FACE.mx || hmy !== FACE.my || side !== FACE.side) {     // a new face: its material, variant and band tiles (else the last column's)
+    const mat = materialAt ? materialAt(hmx + 0.5, hmy + 0.5) : null
+    const wkey = (mat && tex.walls[mat]) ? mat : '0'
+    let wt = tex.walls[wkey]
+    if (wallVar !== null) {
+      const arr = wallVar[wkey]
+      if (arr && arr.length > 1) wt = arr[hash2(hmx, hmy, side) % arr.length]
+    }
+    columnBands(wkey, wt, hmx, hmy, side)
+    FACE.mx = hmx; FACE.my = hmy; FACE.side = side
+  }
+  let m = 0
+  if (filt) { const f1 = TS / whF, f2 = corr * stepCol; m = mipFor(f1 > f2 ? f1 : f2, maxMip, WALL_MIP_BIAS) }
+  // the next column usually shows the same face at the same level: its mip tiles and their brightest texel are kept from the last one
+  let same = m === BMEMO.m && filt === BMEMO.filt
+  for (let i = 0; i < NB && same; i++) same = BT[i] === BMEMO.tiles[i]
+  if (!same) {
+    let mx = 0
+    for (let i = 0; i < NB; i++) { BMEMO.tiles[i] = BT[i]; BTM[i] = filt ? mipChain(BT[i], TS)[m] : BT[i]; const t = tileMax(BTM[i]); if (t > mx) mx = t }
+    BMEMO.m = m; BMEMO.filt = filt; BMEMO.max = mx
+  }
+  const tcol = Math.min(TMASK, (hWallX * TS) | 0)
+  const base = tcol * 3
+  let nearW = false, nbase = base, nw = 0
+  if (filtNear && m === 0 && corr * stepCol < NEAR_TEXEL_WALL) {
+    const fr = hWallX * TS - tcol - 0.5
+    const nb = fr < 0 ? (tcol > 0 ? tcol - 1 : tcol) : (tcol < TMASK ? tcol + 1 : tcol)
+    nearW = true; nbase = nb * 3; nw = fr < 0 ? -fr : fr
+  }
+  const kaR = a * F.atR, kaG = a * F.atG, kaB = a * F.atB
+  const kpR = a * tR, kpG = a * tG, kpB = a * tB
+  let dkR = 0, dkG = 0, dkB = 0, dgR = 0, dgG = 0, dgB = 0
+  if (anyDyn) {
+    const fCol = flash ? F.flashK * sxa[col] * flashAtt(corr) : 0
+    const wk = sideMul * (1 - distF)
+    dkR = wk * fcR * fCol; dkG = wk * fcG * fCol; dkB = wk * fcB * fCol
+    let glc = 0
+    if (glow) {
+      const hd = C.dist[col]
+      const gd = hd * hd + 0.25
+      const gi = (gd * GLOW_K) | 0
+      glc = gi < 256 ? GLOW_LUT[gi] * glowK : 0
+    }
+    dgR = wk * gcR * glc; dgG = wk * gcG * glc; dgB = wk * gcB * glc
+  }
+  const mode = flash ? 4 : !anyDyn ? (single ? 0 : pq === 0 ? 3 : 1) : 2
+  const tmax = BMEMO.max
+  let lR, lG, lB
+  if (mode === 0) { lR = kpR * litMax; lG = kpG * litMax; lB = kpB * litMax }
+  else if (mode === 3) { lR = kaR * ambMax; lG = kaG * ambMax; lB = kaB * ambMax }
+  else if (mode === 1) { lR = kaR * ambMax + kpR * poolMax; lG = kaG * ambMax + kpG * poolMax; lB = kaB * ambMax + kpB * poolMax }
+  else {
+    const fl = mode === 4 ? 1 : 0
+    lR = kaR * ambMax + kpR * poolMax + dkR * fl + dgR; lG = kaG * ambMax + kpG * poolMax + dkG * fl + dgG; lB = kaB * ambMax + kpB * poolMax + dkB * fl + dgB
+  }
+  const free = tmax * lR + wR < 256 && tmax * lG + wG < 256 && tmax * lB + wB < 256
+
+  let lastV = -1, cpx = 0
+  if (mode === 4) {
+    let c0 = 0, c1 = 0, c2 = 0, sR = 0, sG = 0, sB = 0
+    for (let y = y0, o = y0 * W + col; y < y1; y++, o += W) {
+      let V = ((y - wtC) * invWh) | 0
+      if (V > VMAX) V = VMAX
+      if (V !== lastV) {
+        lastV = V
+        const T = BTM[NB - 1 - (V >> LGN)], ti = (V & TMASK) * TS * 3 + base
+        c0 = T[ti]; c1 = T[ti + 1]; c2 = T[ti + 2]
+        if (nearW) { const tj = ti - base + nbase; c0 = (c0 + (T[tj] - c0) * nw + 0.5) | 0; c1 = (c1 + (T[tj + 1] - c1) * nw + 0.5) | 0; c2 = (c2 + (T[tj + 2] - c2) * nw + 0.5) | 0 }
+        const wa = wallAmb[V], wp = wallPool[poolOff + V]
+        sR = kaR * wa + kpR * wp; sG = kaG * wa + kpG * wp; sB = kaB * wa + kpB * wp
+      }
+      const fl = sya[y]
+      const r = c0 * (sR + dkR * fl + dgR) + wR
+      const g = c1 * (sG + dkG * fl + dgG) + wG
+      const b = c2 * (sB + dkB * fl + dgB) + wB
+      buf32[o] = free
+        ? 0xff000000 | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
+        : 0xff000000 | ((b > 255 ? 255 : b) | 0) << 16 | ((g > 255 ? 255 : g) | 0) << 8 | ((r > 255 ? 255 : r) | 0)
+    }
+    return
+  }
+  // (litColumn's per-texel-row arithmetic, inline in both loops, in the same order; the tile is the row's band's)
+  const t0 = BTM[NB - 1], t1 = NB > 1 ? BTM[NB - 2] : t0, t2 = NB > 2 ? BTM[NB - 3] : t1, t3 = NB > 3 ? BTM[NB - 4] : t2, more = NB > 4
+  const pxT = whF / TS
+  if (pxT < RUN_PX) {
+    if (pxT >= 1) {
+      // texel rows at least a pixel tall: the column's canvas rows (V never decreases down the column) are shaded once each into PXT in the
+      // same arithmetic, then every pixel takes its row's packed value
+      const vLo = ((y0 - wtC) * invWh) | 0, vHi = ((y1 - 1 - wtC) * invWh) | 0
+      const a0 = vLo > VMAX ? VMAX : vLo, b0 = vHi > VMAX ? VMAX : vHi
+      const TS3 = TS * 3, fast3 = mode === 3 && free && !nearW, fast1 = mode === 1 && free && !nearW
+      for (let bt = a0 >> LGN, V = a0; V <= b0; bt++) {
+        const T = bt === 0 ? t0 : bt === 1 ? t1 : bt === 2 ? t2 : !more || bt === 3 ? t3 : BTM[NB - 1 - bt]
+        const ve = ((bt + 1) << LGN) - 1, vEnd = ve < b0 ? ve : b0
+        if (fast3) {
+          for (let ti = (V & TMASK) * TS3 + base; V <= vEnd; V++, ti += TS3) {
+            const wa = wallAmb[V]
+            const r = T[ti] * (kaR * wa) + wR, g = T[ti + 1] * (kaG * wa) + wG, b = T[ti + 2] * (kaB * wa) + wB
+            PXT[V] = 0xff000000 | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
+          }
+          continue
+        }
+        if (fast1) {
+          for (let ti = (V & TMASK) * TS3 + base; V <= vEnd; V++, ti += TS3) {
+            const wa = wallAmb[V], wp = wallPool[poolOff + V]
+            const r = T[ti] * (kaR * wa + kpR * wp) + wR, g = T[ti + 1] * (kaG * wa + kpG * wp) + wG, b = T[ti + 2] * (kaB * wa + kpB * wp) + wB
+            PXT[V] = 0xff000000 | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
+          }
+          continue
+        }
+        for (let ti = (V & TMASK) * TS3 + base; V <= vEnd; V++, ti += TS3) {
+          let c0 = T[ti], c1 = T[ti + 1], c2 = T[ti + 2]
+          if (nearW) { const tj = ti - base + nbase; c0 = (c0 + (T[tj] - c0) * nw + 0.5) | 0; c1 = (c1 + (T[tj + 1] - c1) * nw + 0.5) | 0; c2 = (c2 + (T[tj + 2] - c2) * nw + 0.5) | 0 }
+          let r, g, b
+          if (mode === 0) {
+            const L = wallLit[poolOff + V]
+            r = c0 * (kpR * L) + wR; g = c1 * (kpG * L) + wG; b = c2 * (kpB * L) + wB
+          } else if (mode === 3) {
+            const wa = wallAmb[V]
+            r = c0 * (kaR * wa) + wR; g = c1 * (kaG * wa) + wG; b = c2 * (kaB * wa) + wB
+          } else if (mode === 1) {
+            const wa = wallAmb[V], wp = wallPool[poolOff + V]
+            r = c0 * (kaR * wa + kpR * wp) + wR; g = c1 * (kaG * wa + kpG * wp) + wG; b = c2 * (kaB * wa + kpB * wp) + wB
+          } else {
+            const wa = wallAmb[V], wp = wallPool[poolOff + V]
+            r = c0 * (kaR * wa + kpR * wp + dgR) + wR; g = c1 * (kaG * wa + kpG * wp + dgG) + wG; b = c2 * (kaB * wa + kpB * wp + dgB) + wB
+          }
+          PXT[V] = free
+            ? 0xff000000 | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
+            : 0xff000000 | ((b > 255 ? 255 : b) | 0) << 16 | ((g > 255 ? 255 : g) | 0) << 8 | ((r > 255 ? 255 : r) | 0)
+        }
+      }
+      if (vHi <= VMAX) for (let y = y0, o = y0 * W + col; y < y1; y++, o += W) buf32[o] = PXT[((y - wtC) * invWh) | 0]
+      else for (let y = y0, o = y0 * W + col; y < y1; y++, o += W) { let V = ((y - wtC) * invWh) | 0; if (V > VMAX) V = VMAX; buf32[o] = PXT[V] }
+      return
+    }
+    // texel rows under a pixel: every pixel is (nearly always) a new row, so the row is shaded per pixel without the reuse test (a row
+    // shaded twice gives the same bytes), band segment by band segment: the segment's end found from the band's last canvas row and
+    // confirmed with the same expression (V never decreases down the column), its tile picked once
+    const TS3 = TS * 3, fast3 = mode === 3 && free && !nearW, fast1 = mode === 1 && free && !nearW
+    let y = y0, o = y0 * W + col
+    while (y < y1) {
+      let V0 = ((y - wtC) * invWh) | 0
+      if (V0 > VMAX) V0 = VMAX
+      const bt = V0 >> LGN
+      const T = bt === 0 ? t0 : bt === 1 ? t1 : bt === 2 ? t2 : !more || bt === 3 ? t3 : BTM[NB - 1 - bt]
+      const vb = ((bt + 1) << LGN) - 1
+      let ye = Math.ceil(wtC + (vb + 1) * pxT)
+      if (ye > y1) ye = y1; else if (ye <= y) ye = y + 1
+      while (ye > y + 1 && (((ye - 1 - wtC) * invWh) | 0) > vb) ye--
+      while (ye < y1 && (((ye - wtC) * invWh) | 0) <= vb) ye++
+      if (fast3) {
+        for (; y < ye; y++, o += W) {
+          let V = ((y - wtC) * invWh) | 0
+          if (V > VMAX) V = VMAX
+          const ti = (V & TMASK) * TS3 + base
+          const wa = wallAmb[V]
+          const r = T[ti] * (kaR * wa) + wR, g = T[ti + 1] * (kaG * wa) + wG, b = T[ti + 2] * (kaB * wa) + wB
+          buf32[o] = 0xff000000 | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
+        }
+        continue
+      }
+      if (fast1) {
+        for (; y < ye; y++, o += W) {
+          let V = ((y - wtC) * invWh) | 0
+          if (V > VMAX) V = VMAX
+          const ti = (V & TMASK) * TS3 + base
+          const wa = wallAmb[V], wp = wallPool[poolOff + V]
+          const r = T[ti] * (kaR * wa + kpR * wp) + wR, g = T[ti + 1] * (kaG * wa + kpG * wp) + wG, b = T[ti + 2] * (kaB * wa + kpB * wp) + wB
+          buf32[o] = 0xff000000 | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
+        }
+        continue
+      }
+      for (; y < ye; y++, o += W) {
+        let V = ((y - wtC) * invWh) | 0
+        if (V > VMAX) V = VMAX
+        const ti = (V & TMASK) * TS3 + base
+        let c0 = T[ti], c1 = T[ti + 1], c2 = T[ti + 2]
+        if (nearW) { const tj = ti - base + nbase; c0 = (c0 + (T[tj] - c0) * nw + 0.5) | 0; c1 = (c1 + (T[tj + 1] - c1) * nw + 0.5) | 0; c2 = (c2 + (T[tj + 2] - c2) * nw + 0.5) | 0 }
+        let r, g, b
+        if (mode === 0) {
+          const L = wallLit[poolOff + V]
+          r = c0 * (kpR * L) + wR; g = c1 * (kpG * L) + wG; b = c2 * (kpB * L) + wB
+        } else if (mode === 3) {
+          const wa = wallAmb[V]
+          r = c0 * (kaR * wa) + wR; g = c1 * (kaG * wa) + wG; b = c2 * (kaB * wa) + wB
+        } else if (mode === 1) {
+          const wa = wallAmb[V], wp = wallPool[poolOff + V]
+          r = c0 * (kaR * wa + kpR * wp) + wR; g = c1 * (kaG * wa + kpG * wp) + wG; b = c2 * (kaB * wa + kpB * wp) + wB
+        } else {
+          const wa = wallAmb[V], wp = wallPool[poolOff + V]
+          r = c0 * (kaR * wa + kpR * wp + dgR) + wR; g = c1 * (kaG * wa + kpG * wp + dgG) + wG; b = c2 * (kaB * wa + kpB * wp + dgB) + wB
+        }
+        buf32[o] = free
+          ? 0xff000000 | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
+          : 0xff000000 | ((b > 255 ? 255 : b) | 0) << 16 | ((g > 255 ? 255 : g) | 0) << 8 | ((r > 255 ? 255 : r) | 0)
+      }
+    }
+    return
+  }
+  let y = y0, o = y0 * W + col, v = ((y0 - wtC) * invWh) | 0
+  while (y < y1) {
+    let e = Math.ceil(wtC + (v + 1) * pxT), vn = 0
+    if (e > y1) e = y1; else if (e <= y) e = y + 1
+    while (e > y + 1 && (((e - 1 - wtC) * invWh) | 0) > v) e--
+    while (e < y1 && (vn = ((e - wtC) * invWh) | 0) <= v) e++
+    const V = v > VMAX ? VMAX : v
+    if (V !== lastV) {
+      lastV = V
+      const bt = V >> LGN
+      const T = bt === 0 ? t0 : bt === 1 ? t1 : bt === 2 ? t2 : !more || bt === 3 ? t3 : BTM[NB - 1 - bt]
+      const ti = (V & TMASK) * TS * 3 + base
+      let c0 = T[ti], c1 = T[ti + 1], c2 = T[ti + 2]
+      if (nearW) { const tj = ti - base + nbase; c0 = (c0 + (T[tj] - c0) * nw + 0.5) | 0; c1 = (c1 + (T[tj + 1] - c1) * nw + 0.5) | 0; c2 = (c2 + (T[tj + 2] - c2) * nw + 0.5) | 0 }
+      let r, g, b
+      if (mode === 0) {
+        const L = wallLit[poolOff + V]
+        r = c0 * (kpR * L) + wR; g = c1 * (kpG * L) + wG; b = c2 * (kpB * L) + wB
+      } else if (mode === 3) {
+        const wa = wallAmb[V]
+        r = c0 * (kaR * wa) + wR; g = c1 * (kaG * wa) + wG; b = c2 * (kaB * wa) + wB
+      } else if (mode === 1) {
+        const wa = wallAmb[V], wp = wallPool[poolOff + V]
+        r = c0 * (kaR * wa + kpR * wp) + wR; g = c1 * (kaG * wa + kpG * wp) + wG; b = c2 * (kaB * wa + kpB * wp) + wB
+      } else {
+        const wa = wallAmb[V], wp = wallPool[poolOff + V]
+        r = c0 * (kaR * wa + kpR * wp + dgR) + wR; g = c1 * (kaG * wa + kpG * wp + dgG) + wG; b = c2 * (kaB * wa + kpB * wp + dgB) + wB
+      }
+      cpx = free
+        ? 0xff000000 | (b | 0) << 16 | (g | 0) << 8 | (r | 0)
+        : 0xff000000 | ((b > 255 ? 255 : b) | 0) << 16 | ((g > 255 ? 255 : g) | 0) << 8 | ((r > 255 ? 255 : r) | 0)
+    }
+    for (; y < e; y++, o += W) buf32[o] = cpx
+    v = vn
+  }
 }

@@ -28,6 +28,8 @@
 //                   already applied the dip spatially, so the whole-frame blackout overlay must not be drawn as well)
 //   look            config.look (or undefined): the level's optional overrides — sky, grade, post, lighting — for the stages that read them
 //   fov, hf         field of view and half of it (radians)
+//   wallH, stackAt  the level's one wall height in cells (config.wallH; 1 but on the block) and the fixed map's storey stacks (worldHooks
+//                   .stackAt, or null): gfx-frame.js
 //
 // Import-safe in Node: `document` is only touched inside createCpuRenderer().
 import { hexToRgb, levelKey } from './gfx-util.js'
@@ -48,6 +50,8 @@ export function createCpuRenderer(canvas, config, renderOpts = {}, worldHooks = 
   // Fixed-map levels (Level ∅) supply materialAt(wx,wy) -> material code so walls
   // can differ cell-to-cell. Absent (procedural levels) → every wall is '0'.
   const materialAt = worldHooks.materialAt || null
+  // The block's storeys: the fixed map with a house plan also says which storey stack each wall face shows (fixedmap.js stackAt)
+  const stackAt = worldHooks.stackAt || null
 
   const fogRgb  = hexToRgb(resolvePalette(config.palette, levelKey(config)).fog)   // a palette missing its fog hex uses the level's own
   const baseFog = config.fogDistance
@@ -61,6 +65,9 @@ export function createCpuRenderer(canvas, config, renderOpts = {}, worldHooks = 
   const hasSky  = !!skyRgb
   const LEVEL_KEY = levelKey(config)
   const tex     = buildTexturesMemo(config.palette, config.materials, config.look, LEVEL_KEY)     // shared, read-only
+  // a level that draws storeys (config.wallH > 1, the block) builds its band tiles now, while the level loads behind its fade, not on its
+  // first drawn frame (about 1.2 s used to land on that frame); a TexSet without them (no look) reads undefined
+  if (config.wallH > 1) void tex.wallBands
   const light   = createLight(config, worldHooks)
   // build the level's exit / notes / props / first creature poses now, under a hard cap (a cut drops the tail; the draw path and
   // the background queue build whatever is left), so they do not hitch the first time they come into view
@@ -117,7 +124,7 @@ export function createCpuRenderer(canvas, config, renderOpts = {}, worldHooks = 
     const W = RW, H = RH
     const fs = buildFrameState({
       W, H, OW: canvas.width, OH: canvas.height, fog, fogRgb, fogMul, flicker, frame, timing, player, lights, lightsOn, hasSky, skyRgb,
-      light, quality, opts: ropts, levelKey: LEVEL_KEY, look: config.look,
+      light, quality, opts: ropts, levelKey: LEVEL_KEY, look: config.look, wallH: config.wallH, stackAt,
     })
 
     renderWorld(fs, tex, light, isWallFn, materialAt, buf32, zbuffer)

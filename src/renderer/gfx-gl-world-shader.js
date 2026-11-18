@@ -13,7 +13,10 @@ precision highp sampler2D;
 precision highp sampler2DArray;
 
 uniform sampler2DArray uTiles;   // every surface tile (walls, wall variants, floor / ceiling variants, the light panel), RGBA8, mipmapped
-uniform sampler2D uCols;         // W x 2 RGBA32F: row 0 (corr|FAR, wallX, layer, side), row 1 (pool share, dist, draw corr, 0)
+uniform sampler2D uCols;         // W x 3 RGBA32F: row 0 (corr|FAR, wallX, layer, side), row 1 (pool share, dist, draw corr, 0),
+                                 // row 2 (the storeys' band-2 layer, band-3 layer, band 1's step from band 0's layer, 0; -1: the 1-cell tile)
+uniform float uWallH;            // the wall height in cells (1, but the block's 3.5: the storeys)
+uniform float uBands;            // the band canvas's tiles, ceil(uWallH) (1: one tile a wall, as before)
 uniform vec2  uRes;              // internal W, H
 uniform float uHH;               // horizon row (from the top): the head-bob and the view's pitch
 uniform float uHC;               // centre row: the head-bob only (vertical look is a y-shear: the span, the flashlight and the sky's gradient)
@@ -101,6 +104,19 @@ vec4 tileAt(vec2 uv, float layer, vec2 gx, vec2 gy, float nearK) {
   }
   return textureGrad(uTiles, vec3(uv, layer), gx, gy);
 }
+
+// THE STOREYS (gfx-world.js band columns): with uBands > 1 a wall row y lies on the band canvas at vc = (y - wtF) / whF + uBands - 1 bands
+// from its top; its band (0 at the foot) picks the layer: band 0 the column's own (c0.z), band 1 that plus c2.z, band 2 c2.x, band 3 and up
+// c2.y (a negative upper layer: the column's own again). Returns (layer, v inside the band 0..1, the canvas row for the wall table).
+vec3 bandAt(float y, vec4 c0, vec4 c2, float whF, float wtF) {
+  float v = (y - wtF) / whF;
+  if (uBands < 1.5) return vec3(c0.z, v, v * uTSf);
+  float vc = v + (uBands - 1.0);
+  float bt = clamp(floor(vc), 0.0, uBands - 1.0);
+  float band = uBands - 1.0 - bt;
+  float layer = band < 0.5 ? c0.z : band < 1.5 ? c0.z + c2.z : band < 2.5 ? (c2.x >= 0.0 ? c2.x : c0.z) : (c2.y >= 0.0 ? c2.y : c0.z);
+  return vec3(layer, vc - bt, min(vc * uTSf, uBands * uTSf - 1.0));
+}
 `
 
 const SKY = `
@@ -125,14 +141,16 @@ vec3 skyPixel(float x, float y) {
 
 const LEGACY = `
 #ifndef LIT
-vec3 wallPixel(float x, float y, vec4 c0, vec4 c1, float corr, float whF, float wtF) {
-  float wallX = c0.y, layer = c0.z, side = c0.w;
+vec3 wallPixel(float x, float y, vec4 c0, vec4 c1, vec4 c2, float corr, float whF, float wtF) {
+  vec3 bd = bandAt(y, c0, c2, whF, wtF);
+  float wallX = c0.y, layer = bd.x, side = c0.w;
   float distF = min(1.0, corr / uFog);
   float sideMul = side > 0.5 ? 0.72 : 1.0;
   float ang = uAng0 + x * uAngStep;
   float cosInc = max(0.05, side > 0.5 ? abs(sin(ang)) : abs(cos(ang)));
   // v is kept a half texel inside the tile: the sampler REPEATs (floors need it), so the first / last wall row would blend into the opposite edge
   float v = clamp((y - wtF) / whF, 0.5 / uTSf, 1.0 - 0.5 / uTSf);
+  if (uBands > 1.5) v = clamp(bd.y, 0.5 / uTSf, 1.0 - 0.5 / uTSf);           // a band canvas (the storeys): v inside the row's band
   vec3 tx = tileAt(vec2(wallX, v), layer, vec2(c1.y * uAngStep / cosInc, 0.0), vec2(0.0, 1.0 / whF), corr * uAngStep * uTSf / NEAR_TEXEL_WALL).rgb;
   float a = sideMul * (1.0 - distF) * uFlicker;
   return tx * a + uFogL * distF;
@@ -174,18 +192,19 @@ float sxAt(float x) { float a = ((x + 0.5) / uRes.x - 0.5) * uFov; return exp(-(
 float syAt(float y) { float dv = (y - uHC) / uRes.y - uFlashPitch; return exp(-(dv * dv) / (uFlashSxy.y * uFlashSxy.y)); }   // held in the hand
 const vec3 FLASH_COL = vec3(1.0, 0.93, 0.76);
 
-vec3 wallPixel(float x, float y, vec4 c0, vec4 c1, float corr, float whF, float wtF) {
-  float wallX = c0.y, layer = c0.z, side = c0.w;
+vec3 wallPixel(float x, float y, vec4 c0, vec4 c1, vec4 c2, float corr, float whF, float wtF) {
+  vec3 bd = bandAt(y, c0, c2, whF, wtF);
+  float wallX = c0.y, layer = bd.x, side = c0.w;
   float pw = c1.x;
   float distF = min(1.0, corr / uFog);
   float sideMul = side > 0.5 ? 0.72 : 1.0;
   float a = sideMul * (1.0 - distF) * uGdip;
-  float v = (y - wtF) / whF;
+  float v = bd.y;
   float ang = uAng0 + x * uAngStep;
   float cosInc = max(0.05, side > 0.5 ? abs(sin(ang)) : abs(cos(ang)));
   float vc = clamp(v, 0.5 / uTSf, 1.0 - 0.5 / uTSf);        // a half texel inside the tile: the REPEAT sampler would blend the first / last row into the opposite edge
   vec3 tx = tileAt(vec2(wallX, vc), layer, vec2(c1.y * uAngStep / cosInc, 0.0), vec2(0.0, 1.0 / whF), corr * uAngStep * uTSf / NEAR_TEXEL_WALL).rgb;
-  int texY = int(v * uTSf) & (int(uTSf) - 1);
+  int texY = uBands < 1.5 ? int(v * uTSf) & (int(uTSf) - 1) : int(bd.z);   // the band canvas's row on a taller wall (the storeys)
   vec4 wt = texelFetch(uWallTab, ivec2(texY, 1), 0);       // (ambient, pool at full share) of this texel row
   vec3 L = a * (uATint * wt.x + uTint * (wt.y * pw));
   float fw = distF * (uFogBase + (1.0 - uFogBase) * uFogGlow * pw);
@@ -317,11 +336,14 @@ void main() {
   float whF = uRes.y / max(0.001, corr);
   float wtF = uHH - whF * 0.5;
   // the wall's rows: the CPU's double-precision ceil / floor, packed by the pass as y0 * 4096 + y1 (both exact in fp32); -1 = not supplied, recompute here
-  float y0 = ceil(wtF), y1 = floor(wtF + whF);
+  // (a taller wall, one with storeys, rises uWallH - 1 cells above the 1-cell wall's top; its foot is the same)
+  float y0 = ceil(uWallH > 1.0 ? wtF - whF * (uWallH - 1.0) : wtF), y1 = floor(wtF + whF);
   if (c1.w >= 0.0) { y0 = floor(c1.w * (1.0 / 4096.0)); y1 = c1.w - y0 * 4096.0; }
   vec3 col;
-  if (y >= y0 && y < y1) col = wallPixel(x, y, c0, c1, corr, whF, wtF);
-  else {
+  if (y >= y0 && y < y1) {
+    vec4 c2 = texelFetch(uCols, ivec2(int(x), 2), 0);              // the band layers (the storeys): only a wall fragment reads them
+    col = wallPixel(x, y, c0, c1, c2, corr, whF, wtF);
+  } else {
 #ifdef SKY
     if (y <= uHH) col = skyPixel(x, y); else
 #endif
@@ -336,7 +358,7 @@ export function worldFragmentSource({ lit, sky }) {
 }
 
 const BASE_UNIFORMS = ['uTiles', 'uCols', 'uRes', 'uHH', 'uHC', 'uFog', 'uFogL', 'uAng0', 'uAngStep', 'uPFrac', 'uPInt', 'uDir0', 'uDDir', 'uFloorLayers',
-  'uCeilLayers', 'uLightLayer', 'uLightsOn', 'uGradScale', 'uIso', 'uSharp', 'uNear', 'uTSf']
+  'uCeilLayers', 'uLightLayer', 'uLightsOn', 'uGradScale', 'uIso', 'uSharp', 'uNear', 'uTSf', 'uWallH', 'uBands']
 const SKY_UNIFORMS = ['uSkyRows', 'uCloud', 'uSkyRgb', 'uSkyMode', 'uSkyA0', 'uSkyB0', 'uSkyDu', 'uSkyAmpB']
 const LEGACY_UNIFORMS = ['uFlicker']
 const LIT_UNIFORMS = ['uPool', 'uWallTab', 'uCells', 'uLm', 'uLmAny', 'uLev', 'uGdip', 'uAmbF', 'uAmbC', 'uTint', 'uATint', 'uFogBase', 'uFogGlow', 'uFloorInv',
