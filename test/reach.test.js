@@ -7,7 +7,7 @@ import { createItemSystem } from '../src/renderer/items.js'
 import { levelConfig } from '../src/renderer/levels.js'
 import { createChunkCache, createGridReader, CHUNK_SIZE, DEFAULT_CONFIG } from '../src/renderer/world.js'
 import { createFixedMap } from '../src/renderer/fixedmap.js'
-import { NULL_MAP, NULL_SPAWN, NULL_EXIT } from '../src/renderer/level-null-map.js'
+import { NULL_MAP, NULL_SPAWN, NULL_EXIT, NULL_LIGHTPOST } from '../src/renderer/level-null-map.js'
 import { PLAYER_R, createColliderIndex, createSolidWorld } from '../src/renderer/collide.js'
 import { waysFor, stairsPass } from '../src/renderer/topology.js'
 import { dressPass } from '../src/renderer/dress.js'
@@ -221,5 +221,54 @@ describe('the reach gate', () => {
     const exits = decor.getExits()
     expect(exits).toHaveLength(1)
     expect(reachesSpot(mask, exits[0].x, exits[0].y, 1.6)).toBe(true)
+  })
+
+  // the lightpost (wish #5) is a body: "the way to the exit goes round it". The bodies here are the ones the game's own index holds
+  // (decor -> onChunk -> setChunk, as buildLevel wires it), so a body the index dropped could not pass for a solid one.
+  it('NULL_MAP: the game\'s index holds the lightpost; with it solid nothing is sealed and the mover goes round it to the exit', () => {
+    const cfg = levelConfig(DEFAULT_CONFIG, 4)
+    const fixed = createFixedMap(NULL_MAP)
+    const isWall = (wx, wy, pcx, pcy) => fixed.isWall(wx, wy, pcx, pcy)
+    const grid = createGridReader(null, isWall)
+    for (const seed of [0, 1, 6, 9]) {
+      const index = createColliderIndex()
+      const decor = createDecorSystem(cfg, isWall, seed, { passes: [], onChunk: (k, b) => index.setChunk(k, b.colliders), onEvict: (k) => index.dropChunk(k) })
+      decor.update(0, 0)
+      const W = NULL_MAP[0].length, H = NULL_MAP.length
+      const Q = []
+      const held = Q.slice(0, index.query(W / 2, H / 2, W + H, Q))
+      expect(held, `seed ${seed}`).toHaveLength(index.size)                // the query reaches every body the block has
+      const post = held.find((c) => c.type === 'lightpost')
+      expect(post, `seed ${seed}`).toMatchObject({ x: NULL_LIGHTPOST.x, y: NULL_LIGHTPOST.y, cls: 'solid' })
+      // the flood: no cell the walls leave open is lost, the exit is in reach, the post can be walked up to but not into
+      const bounds = { x0: 0, y0: 0, x1: W, y1: H }
+      const before = walkable(grid.floor, [], NULL_SPAWN.x, NULL_SPAWN.y, bounds)
+      const after = walkable(grid.floor, held, NULL_SPAWN.x, NULL_SPAWN.y, bounds)
+      expect(loses(before, after), `seed ${seed}`).toEqual([])
+      expect(reachesSpot(after, NULL_EXIT.x, NULL_EXIT.y, 1.1), `seed ${seed}`).toBe(true)
+      expect(reachesSpot(after, post.x, post.y, post.r + PLAYER_R + 0.1), `seed ${seed}`).toBe(true)
+      expect(reachesSpot(after, post.x, post.y, post.r + PLAYER_R), `seed ${seed}`).toBe(false)
+      // the real mover: from the spawn into the post's row, along it straight at the post, then down to the exit. It goes round the post
+      // (walking straight, or nearly, it is stopped by it first), never stands inside it, and reaches the exit
+      for (const wig of [0, 0.2, -0.2, 0.4, -0.4, 0.9, -0.9]) {
+        const solid = createSolidWorld({ index, floorFn: grid.floor, solidCreature: () => false })
+        const legs = [{ x: 6.5, y: post.y }, { x: 18.5, y: post.y }, NULL_EXIT]
+        const p = { x: NULL_SPAWN.x, y: NULL_SPAWN.y }
+        solid.settlePlayer(p)
+        let leg = 0, touched = false, closest = Infinity
+        for (let f = 0; f < 3000 && leg < legs.length; f++) {
+          const to = legs[leg]
+          const ang = Math.atan2(to.y - p.y, to.x - p.x) + wig * Math.sin(f / 7)
+          const rep = solid.movePlayer(p, p.x + Math.cos(ang) * 0.05, p.y + Math.sin(ang) * 0.05, 1 / 60, false, [])
+          if (rep.entered === post) touched = true
+          closest = Math.min(closest, Math.hypot(p.x - post.x, p.y - post.y))
+          if (Math.hypot(to.x - p.x, to.y - p.y) < 0.3) leg++
+        }
+        const tag = `seed ${seed}, wiggle ${wig}: at ${p.x.toFixed(2)},${p.y.toFixed(2)}, leg ${leg}`
+        expect(leg, tag).toBe(legs.length)
+        if (Math.abs(wig) <= 0.2) expect(touched, tag).toBe(true)        // a wider weave can pass it by without a touch
+        expect(closest, tag).toBeGreaterThanOrEqual(post.r + PLAYER_R)
+      }
+    }
   })
 })

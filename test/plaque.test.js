@@ -6,11 +6,11 @@ import { readFileSync } from 'node:fs'
 import { PLAQUE_TEXT, PLAQUE_REACH, PLAQUE_HINT, plaqueText, nearPlaque } from '../src/renderer/plaque.js'
 import { NULL_MAP, NULL_SPAWN, NULL_EXIT, NULL_LIGHTPOST } from '../src/renderer/level-null-map.js'
 import { LEVELS, levelConfig } from '../src/renderer/levels.js'
-import { DEFAULT_CONFIG } from '../src/renderer/world.js'
+import { DEFAULT_CONFIG, createGridReader } from '../src/renderer/world.js'
 import { createDecorSystem, SIGHT_TYPES } from '../src/renderer/decor.js'
 import { createFixedMap } from '../src/renderer/fixedmap.js'
 import { SIGHT_SPEC, getFrame, drawSprites, queueLevelSprites, warmQueue, resetAtlas } from '../src/renderer/gfx-sprites.js'
-import { footprintRadius } from '../src/renderer/collide.js'
+import { footprintRadius, createColliderIndex, createSolidWorld, resolveCircle, PLAYER_R } from '../src/renderer/collide.js'
 
 const game = readFileSync(new URL('../src/renderer/game.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
 const NULL = LEVELS.findIndex((l) => l.id === '∅')
@@ -79,6 +79,82 @@ describe('the lightpost on the block (Level ∅)', () => {
   })
   it('its body is a post, not a wall: a small footprint', () => {
     expect(footprintRadius('sight', 'lightpost')).toBeLessThan(0.2)
+  })
+
+  // the block as buildLevel builds it (game.js): the collider index, decor filing every body through onChunk -> setChunk, the solid world
+  // over the index, then decor.update at the spawn's chunk. The block has no passes and no creatures.
+  function blockAsTheGameBuildsIt(feed = (bodies, k, b) => bodies.setChunk(k, b.colliders)) {
+    const fixed = createFixedMap(cfgNull.map)
+    const isWall = (wx, wy, pcx, pcy) => fixed.isWall(wx, wy, pcx, pcy)
+    const grid = createGridReader(null, isWall)
+    const bodies = createColliderIndex()
+    const decor = createDecorSystem(cfgNull, isWall, 0, { passes: [], onChunk: (k, b) => feed(bodies, k, b), onEvict: (k) => bodies.dropChunk(k) })
+    const solid = createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature: () => false })
+    decor.update(0, 0)
+    return { grid, bodies, solid }
+  }
+  const postIn = (bodies) => {
+    const Q = []
+    const n = bodies.query(NULL_LIGHTPOST.x, NULL_LIGHTPOST.y, 0.01, Q)
+    return Q.slice(0, n).find((c) => c.type === 'lightpost')
+  }
+
+  it('the game\'s collider index holds its body: walk into it from any side and you are pushed out, never through', () => {
+    expect(game).toContain('onChunk: (k, bundle) => { bodies.setChunk(k, bundle.colliders);')    // the wiring built here
+    const { grid, bodies } = blockAsTheGameBuildsIt()
+    const post = postIn(bodies)
+    expect(post).toMatchObject({ x: NULL_LIGHTPOST.x, y: NULL_LIGHTPOST.y, kind: 'sight', type: 'lightpost', cls: 'solid' })
+    const R = post.r + PLAYER_R
+    // one step that would end inside it: the resolver reports the post and leaves you at its edge
+    const out = {}
+    resolveCircle(post.x - R - 0.02, post.y, post.x - R + 0.1, post.y, bodies, grid.floor, out)
+    expect(out.pushN).toBe(1)
+    expect(out.push[0]).toBe(post)
+    expect(Math.hypot(out.x - post.x, out.y - post.y)).toBeGreaterThanOrEqual(R)
+    // the mover (a fresh one each time: its contact ring remembers a touch for 0.4 s), a second of walking straight at it from each
+    // side: it stops you at its edge and says it touched the post
+    const world = () => createSolidWorld({ index: bodies, floorFn: grid.floor, solidCreature: () => false })
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const solid = world()
+      const p = { x: post.x - dx, y: post.y - dy }
+      let entered = null, closest = Infinity
+      for (let f = 0; f < 60; f++) {
+        const rep = solid.movePlayer(p, p.x + dx * 0.05, p.y + dy * 0.05, 1 / 60, false, [])
+        if (rep.entered) entered = rep.entered
+        closest = Math.min(closest, Math.hypot(p.x - post.x, p.y - post.y))
+      }
+      expect(entered, `from ${-dx},${-dy}`).toBe(post)
+      expect(closest, `from ${-dx},${-dy}`).toBeGreaterThanOrEqual(R)
+      expect(Math.hypot(p.x - post.x, p.y - post.y), `from ${-dx},${-dy}`).toBeCloseTo(R, 3)
+    }
+    // standing inside it (a resume, the solid-bodies pref switched on beside it): the settle puts you outside
+    const p = { x: post.x + 0.05, y: post.y }
+    world().settlePlayer(p)
+    expect(Math.hypot(p.x - post.x, p.y - post.y)).toBeGreaterThanOrEqual(R)
+  })
+
+  it('the index holds it whichever comes first, its own key or chunk (0, 0), and through chunk (0, 0) filed again or dropped', () => {
+    const handed = []
+    const { bodies: forward } = blockAsTheGameBuildsIt((bodies, k, b) => { handed.push([k, b.colliders]); bodies.setChunk(k, b.colliders) })
+    expect(handed.map(([k]) => k)).toContain('∅:s0')
+    expect(handed.map(([k]) => k)).toContain('0,0')
+    const all = (bodies) => { const Q = []; return Q.slice(0, bodies.query(12, 9, 60, Q)) }
+    const got = all(forward)
+    expect(got.filter((c) => c.type === 'lightpost')).toHaveLength(1)
+    expect(got.at(-1).type).toBe('lightpost')                         // after the chunk's own bodies
+    expect(handed.find(([k]) => k === '0,0')[1].length).toBeGreaterThan(0)   // seed 0 rolls the yard a prop: the order is tested
+    expect(forward.size).toBe(handed.reduce((s, [, l]) => s + l.length, 0))
+    // the same bundles, the post's first: the same index, record for record and in the same order
+    const backward = createColliderIndex()
+    for (const [k, l] of [...handed].sort(([a], [b]) => (b === '∅:s0') - (a === '∅:s0'))) backward.setChunk(k, l)
+    expect(all(backward)).toEqual(got)
+    // chunk (0, 0) filed again (its own bodies replaced) keeps the post; dropped, the post stays and the chunk's own go
+    const own = handed.find(([k]) => k === '0,0')[1]
+    forward.setChunk('0,0', own)
+    expect(all(forward)).toEqual(got)
+    forward.dropChunk('0,0')
+    expect(postIn(forward)).toBe(got.find((c) => c.type === 'lightpost'))
+    expect(forward.size).toBe(handed.reduce((s, [k, l]) => s + (k === '0,0' ? 0 : l.length), 0))
   })
 })
 

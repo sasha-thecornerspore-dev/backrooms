@@ -150,6 +150,56 @@ describe('the collider index', () => {
     expect(index.query(5, 0.5, 100, out)).toBe(1)
     expect(out[0].id).toBe(3)
   })
+
+  // decor.js hands the block's authored sights (the lightpost, wish #5) to onChunk under their own key ('∅:s0'), not a chunk's
+  it('a key that is not "cx,cy" is level-wide: its records go in the chunk each stands in, after that chunk\'s own, in either order', () => {
+    const N = CHUNK_SIZE
+    const ids = (index, x, y) => { const out = []; return out.slice(0, index.query(x, y, 1000, out)).map((r) => r.id) }
+    const post = () => rec({ id: 9, x: 12.5, y: 7.5, kind: 'sight', type: 'lightpost', key: '∅:s0' })
+    const a = () => rec({ id: 1, x: 5.5, y: 6.5 }), b = () => rec({ id: 2, x: 3.5, y: 3.5 })
+    // the chunk first, then the level-wide key; and the other way round: the same list
+    const first = createColliderIndex()
+    first.setChunk('0,0', [a(), b()]); first.setChunk('∅:s0', [post()])
+    const second = createColliderIndex()
+    second.setChunk('∅:s0', [post()]); second.setChunk('0,0', [a(), b()])
+    for (const index of [first, second]) {
+      expect(ids(index, 10, 10)).toEqual([1, 2, 9])
+      expect(index.size).toBe(3)
+    }
+    // the chunk filed again replaces its own and keeps the level-wide one; dropped, the level-wide one stays
+    second.setChunk('0,0', [rec({ id: 3, x: 4.5, y: 4.5 })])
+    expect(ids(second, 10, 10)).toEqual([3, 9]); expect(second.size).toBe(2)
+    second.dropChunk('0,0')
+    expect(ids(second, 10, 10)).toEqual([9]); expect(second.size).toBe(1)
+    second.setChunk('0,0', [a()])
+    expect(ids(second, 10, 10)).toEqual([1, 9]); expect(second.size).toBe(2)
+    // the level-wide key set again replaces its records; dropped, they go and the chunk's own stay
+    second.setChunk('∅:s0', [rec({ id: 8, x: 12.5, y: 7.5 }), rec({ id: 7, x: N + 0.5, y: 2.5 })])
+    expect(ids(second, 10, 10)).toEqual([1, 8, 7]); expect(second.size).toBe(3)     // (1, 0)'s record is filed in (1, 0)
+    expect(ids(second, 2 * N + 1, 10)).toEqual([7])
+    second.dropChunk('∅:s0')
+    expect(ids(second, 10, 10)).toEqual([1]); expect(second.size).toBe(1)
+    second.dropChunk('∅:s0'); second.dropChunk('nope,nope')         // unknown keys are ignored
+    expect(second.size).toBe(1)
+    // a level-wide record stands on its own where no chunk was filed, and the index keeps its own copy of the list it was handed
+    const alone = createColliderIndex()
+    const list = [post()]
+    alone.setChunk('∅:s0', list); list.length = 0
+    expect(ids(alone, 12.5, 7.5)).toEqual([9]); expect(alone.size).toBe(1)
+    alone.setChunk('∅:s0', null)
+    expect(ids(alone, 12.5, 7.5)).toEqual([]); expect(alone.size).toBe(0)
+  })
+
+  it('a resolver step into a level-wide record is pushed out, as from a chunk\'s own', () => {
+    const index = createColliderIndex()
+    const post = rec({ id: 9, x: 12.5, y: 7.5, r: 0.15, kind: 'sight', type: 'lightpost', key: '∅:s0' })
+    index.setChunk('∅:s0', [post]); index.setChunk('0,0', [])
+    const out = fresh()
+    let x = 11.5, y = 7.5
+    for (let i = 0; i < 60; i++) { resolveCircle(x, y, x + 0.05, y, index, open, out); x = out.x; y = out.y }
+    expect(dist(x, y, post.x, post.y)).toBeCloseTo(post.r + PLAYER_R, 3)
+    expect(dist(x, y, post.x, post.y)).toBeGreaterThanOrEqual(post.r + PLAYER_R)
+  })
 })
 
 describe('resolveCircle', () => {
