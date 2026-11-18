@@ -135,6 +135,20 @@ describe('the 2.0.7 release notes', () => {
     expect(notes).toContain('put `docs/manual.html` at `manual/index.html` on gh-pages')
   })
 
+  // a Windows copy on 2.0.3 to 2.0.5 refuses every update (its check fails on the installer's signature), and the latest release's page
+  // is the one its player lands on. so these notes say it too, as the 2.0.6 notes did, and name this release's installer: nothing here
+  // asks anyone on 2.0.6 to do a thing, which is what the line above guards
+  it('tell a Windows copy on 2.0.3, 2.0.4 or 2.0.5 to run this installer once: above the changes, and again under install', () => {
+    const top = notes.slice(0, notes.indexOf('### what changed for players'))
+    expect(top).toContain('**on windows with 2.0.3, 2.0.4 or 2.0.5:** your copy cannot update itself: its update check fails. download `The-Backrooms-Setup-2.0.7.exe` below and run it once, over the old install.')
+    const install = notes.slice(notes.indexOf('### install, on every system'), notes.indexOf('### for whoever runs the relay and the site'))
+    expect(install).toContain('windows installs on 2.0.3, 2.0.4 and 2.0.5 cannot (see the top)')
+    expect(notes).not.toContain('Setup-2.0.6.exe')                  // never the old installer's name, carried over with the line
+    // the same three versions the 2.0.6 notes and the operations table name
+    expect(read('../docs/release-notes/v2.0.6.md')).toContain('**on windows with 2.0.3, 2.0.4 or 2.0.5:**')
+    expect(read('../docs/operations.md')).toContain('their version: 2.0.3, 2.0.4 or 2.0.5')
+  })
+
   it('the one new module, crew.js, is in every list a shipped file must be in', () => {
     expect(read('../src/sw.js')).toContain("'/renderer/crew.js'")
     expect(read('../tools/build-play.sh')).toContain("'crew.js'")
