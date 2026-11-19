@@ -220,6 +220,11 @@ export const LEVELS = [
         O: '#7A5A48',   // occupied — a light on
         M: '#D2D0C8',   // marble stoop
       },
+      // the look of the block: its material tiles and its ground repainted from the procedural recipes (gfx-textures.js
+      // MATERIAL_STYLES_HP, gfx-block-facade.js); graphics only, the map and every code's meaning unchanged
+      look: { facade: 'harlem', floor: 'yard' },
+      // the rowhouse backs stand 3.5 cells (7 m) tall, their storeys painted in bands (gfx-world.js band columns, block-stacks.js)
+      wallH: 3.5,
       // dead-air ambient: wind, distant city, no muzak — beatless and bleak
       music: { root: 98, scale: [0, 2, 3, 7, 10], progressions: [[0, 3], [0, 2], [3, 0]],
                tempo: 1100, beatsPerChord: 16, beatsPerBar: 4, groove: 0, arpLen: 2.2,

@@ -65,15 +65,16 @@ export function makePlayer(x, y, angleDeg) {
   return { x, y, angle: rad(angleDeg), bob: 0, bobOffset: 0, moving: false, hp: 100, maxHp: 100 }
 }
 
-// game.js buildLevel(): cfg -> fixed map or chunk cache (world seed fixed), preload, materialAt hook.
+// game.js buildLevel(): cfg -> fixed map or chunk cache (world seed fixed), preload, materialAt hook (and on the block, in a tree that has
+// them, the storeys' stacks: fixedmap.js fixedMapHooks, block-stacks.js facadeFor).
 export function buildWorld(env, levelIndex, gridOverride = null) {
   const { mods, base } = env
   const cfg = mods.levelConfig(base, levelIndex)
   const cache = gridOverride ? mods.createFixedMap(gridOverride)
-    : cfg.map ? mods.createFixedMap(cfg.map)
+    : cfg.map ? mods.createFixedMap(cfg.map, mods.facadeFor ? mods.facadeFor(cfg) : null)
     : mods.createChunkCache(cfg, WORLD_SEED)
   cache.preload(0, 0)
-  const hooks = cfg.map && !gridOverride ? { materialAt: (wx, wy) => cache.materialAt(wx, wy) } : {}
+  const hooks = cfg.map && !gridOverride ? (mods.fixedMapHooks ? mods.fixedMapHooks(cache) : { materialAt: (wx, wy) => cache.materialAt(wx, wy) }) : {}
   return { cfg, cache, hooks }
 }
 

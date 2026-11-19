@@ -29,7 +29,8 @@ import { probeGl } from './gfx-gl-util.js'
 import { isSoftwareGl, createFlickerState, stepFlicker, DEFAULT_MAX_GLOBAL_DIP, qualityFor } from './gfx-quality.js'
 import { GPU_BUILD_ID } from './gfx-gl-g4-validate.js'
 import { loadConfig, createChunkCache, CHUNK_SIZE } from './world.js'
-import { createFixedMap } from './fixedmap.js'
+import { createFixedMap, fixedMapHooks } from './fixedmap.js'
+import { facadeFor } from './block-stacks.js'
 import { levelConfig } from './levels.js'
 import { createDecorSystem } from './decor.js'
 import { createItemSystem } from './items.js'
@@ -300,9 +301,9 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 // the world of one view, built once and shared by every configuration (the same chunks, decor and creatures each time). No DOM: tested in Node.
 export function buildView(base, scene) {
   const cfg = levelConfig(base, scene.level)
-  const cache = cfg.map ? createFixedMap(cfg.map) : createChunkCache(cfg, BENCH_SEED)
+  const cache = cfg.map ? createFixedMap(cfg.map, facadeFor(cfg)) : createChunkCache(cfg, BENCH_SEED)
   cache.preload(0, 0)
-  const hooks = cfg.map ? { materialAt: (wx, wy) => cache.materialAt(wx, wy) } : {}
+  const hooks = cfg.map ? fixedMapHooks(cache) : {}             // (as game.js: the materials, and the block's storeys)
   const pcx = Math.floor(scene.x / CHUNK_SIZE), pcy = Math.floor(scene.y / CHUNK_SIZE)
   const isWallAt = (wx, wy) => cache.isWall(wx, wy, pcx, pcy)
   const itemSys = createItemSystem(base, isWallAt, BENCH_SEED)

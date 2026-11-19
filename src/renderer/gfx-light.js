@@ -195,7 +195,12 @@ export function buildWallPool(Rw) {
 }
 
 // tables that depend on the texture tile size (the wall's vertical gradient is indexed by the wall texel row)
-export function buildSurfaceTables(s, ts) {
+// A taller wall (the storeys: wallH cells, the block's 3.5) gets ts · ceil(wallH) rows, row 0 the
+// top of its band canvas, so z runs over the whole height (rows above wallH are never drawn). `open` (an outdoor level: the sky above the
+// wall) drops the top contact term, since outdoors a wall meets the sky, not a ceiling, and the ambient profile Va = 0.80 + 0.30 z of the
+// 1-cell wall holds its 1.10 above the first cell. At the defaults (wallH 1, not open) the tables are what they always were.
+export function buildSurfaceTables(s, ts, wallH = 1, open = false) {
+  if (wallH > 1 || open) return buildTallTables(s, ts, wallH > 1 ? wallH : 1, open)
   const range = Math.max(0, (s.peak - s.ambient) * s.pool)
   // wall: light in the pool = range * p * Vp(z); ambient = ambient * Va(z); both times the contact darkening C(z). z: 0 floor .. 1 ceiling
   const wallPool = new Float32Array(64 * ts)      // [pq * ts + texY]
@@ -224,6 +229,27 @@ export function buildSurfaceTables(s, ts) {
   const wallLit = new Float32Array(64 * ts)
   for (let q = 0; q < 64; q++) for (let t = 0; t < ts; t++) wallLit[q * ts + t] = wallAmb[t] + wallPool[q * ts + t]
   return { wallPool, wallAmb, wallLit, aoFloor: mk(s.contact * 0.62, 0.62), aoCeil: mk(s.contact * 0.5, 0.5) }
+}
+// the wall tables of a taller (or an open) wall: rows = ts · ceil(wallH), indexed by the row of the band canvas (gfx-world.js band columns);
+// z is the height above the foot in cells. The foot's contact term is the 1-cell wall's (0.09 of a cell); the pool profile Vp follows the
+// first cell and holds above it
+function buildTallTables(s, ts, wallH, open) {
+  const range = Math.max(0, (s.peak - s.ambient) * s.pool)
+  const NB = Math.ceil(wallH), rows = ts * NB
+  const wallPool = new Float32Array(64 * rows), wallAmb = new Float32Array(rows)
+  const cw = s.contact
+  for (let t = 0; t < rows; t++) {
+    const z = NB - (t + 0.5) / ts, z1 = Math.min(1, z)
+    const Vp = 0.32 + 0.68 * smoothstep(0.04, 0.72, z1) * (1 - 0.18 * smoothstep(0.86, 1, z1))
+    const Va = open ? 0.80 + 0.30 * z1 : 0.80 + 0.30 * Math.min(1, z / wallH)
+    const C = (1 - cw * 0.3 * Math.exp(-z / 0.09)) * (open ? 1 : (1 - cw * 0.5 * Math.exp(-Math.max(0, wallH - z) / 0.05)))
+    wallAmb[t] = s.ambient * Va * C
+    for (let q = 0; q < 64; q++) wallPool[q * rows + t] = range * (q / 63) * Vp * C
+  }
+  const wallLit = new Float32Array(64 * rows)
+  for (let q = 0; q < 64; q++) for (let t = 0; t < rows; t++) wallLit[q * rows + t] = wallAmb[t] + wallPool[q * rows + t]
+  const flat = buildSurfaceTables(s, ts)                    // the floor / ceiling contact tables do not depend on the wall
+  return { wallPool, wallAmb, wallLit, rows, aoFloor: flat.aoFloor, aoCeil: flat.aoCeil }
 }
 
 // ── flicker ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -374,6 +400,8 @@ export function createLight(config, worldHooks) {
     wallP: wallPanel.P, wallK0: wallPanel.K[0], wallK1: wallPanel.K[1], wallK2: wallPanel.K[2],
     wallPool: null, wallAmb: null, wallLit: null, aoFloor: null, aoCeil: null,
     ts: 0,
+    // the taller wall's tables (the storeys), over its band canvas of bandRows rows: built when a frame first draws a wallH > 1
+    bandKey: '', bandAmb: null, bandPool: null, bandLit: null, bandRows: 0,
     // the toroidal cell window: contact-shading bits and lamp flags of the cells around the player
     cellBits: null, cellLamp: null, occR: 0, occCx: 0, occCy: 0,
     // the lightmap (lamps / windows): 4 samples per unit, toroidal, plus a per-cell "anything in reach" flag
@@ -745,6 +773,14 @@ export function createLight(config, worldHooks) {
       if (!surf[ts]) surf[ts] = buildSurfaceTables(S, ts)
       const st = surf[ts]
       F.ts = ts; F.wallPool = st.wallPool; F.wallAmb = st.wallAmb; F.wallLit = st.wallLit; F.aoFloor = st.aoFloor; F.aoCeil = st.aoCeil
+    }
+    // a taller wall (the storeys: fs.wallH > 1) is lit from its own tables over the band canvas (bandRows rows); the 1-cell tables above stay as they are
+    if (fs.wallH > 1) {
+      const key = ts + '|' + fs.wallH + '|' + (fs.hasSky ? 1 : 0)
+      if (F.bandKey !== key) {
+        const bt = surf[key] || (surf[key] = buildSurfaceTables(S, ts, fs.wallH, !!fs.hasSky))
+        F.bandKey = key; F.bandAmb = bt.wallAmb; F.bandPool = bt.wallPool; F.bandLit = bt.wallLit; F.bandRows = bt.rows
+      }
     }
     const p = fs.player
     F.px = p.x; F.py = p.y; F.ca = Math.cos(p.angle); F.sa = Math.sin(p.angle); F.fog = fs.fog; F.t = fs.t || 0

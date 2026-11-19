@@ -31,8 +31,9 @@ const pageJs = (backend, tier) => `(async () => {
   try { (await import('./gfx-attract.js')).stopAttract() } catch (e) {}
   const { createRenderer } = await import('./renderer.js')
   const { loadConfig, createChunkCache, CHUNK_SIZE } = await import('./world.js')
-  const { createFixedMap } = await import('./fixedmap.js')
+  const { createFixedMap, fixedMapHooks } = await import('./fixedmap.js')
   const { levelConfig } = await import('./levels.js')
+  const facadeFor = await import('./block-stacks.js').then((m) => m.facadeFor, () => null)    // the block's storeys (absent from older trees)
   const base = await loadConfig()
   const canvas = document.getElementById('c'); canvas.width = ${W}; canvas.height = ${H}
   const raf = () => new Promise((r) => requestAnimationFrame(r))
@@ -42,10 +43,10 @@ const pageJs = (backend, tier) => `(async () => {
     await raf(); await raf()
     const t0 = performance.now()
     const cfg = levelConfig(base, index)
-    const cache = cfg.map ? createFixedMap(cfg.map) : createChunkCache(cfg, 0)
+    const cache = cfg.map ? createFixedMap(cfg.map, facadeFor ? facadeFor(cfg) : null) : createChunkCache(cfg, 0)
     cache.preload(0, 0)
     const t1 = performance.now()
-    const g = createRenderer(canvas, cfg, ro, cfg.map ? { materialAt: (x, y) => cache.materialAt(x, y) } : {})
+    const g = createRenderer(canvas, cfg, ro, cfg.map ? (fixedMapHooks ? fixedMapHooks(cache) : { materialAt: (x, y) => cache.materialAt(x, y) }) : {})
     const t2 = performance.now()
     const player = cfg.spawn ? { x: cfg.spawn.x, y: cfg.spawn.y } : { x: 11.5, y: 11.5 }
     Object.assign(player, { angle: 0.3, bob: 0, bobOffset: 0, moving: false, hp: 100, maxHp: 100 })

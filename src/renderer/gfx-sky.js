@@ -142,12 +142,16 @@ function scratch(W, rows) {
   return S
 }
 
-function renderSkyLegacy(fs, buf32) {
+function renderSkyLegacy(fs, buf32, nlo = null) {
   const { W, H, HH, skyRgb, fogRgb, flicker } = fs
   const HC = fs.HC ?? HH, P = HH - HC              // the pitch in rows: the gradient follows the elevation (y - P is the level view's row)
   const F0 = fogRgb[0], F1 = fogRgb[1], F2 = fogRgb[2]
   const last = Math.min(HH, H - 1)
+  // a row above the horizon that every column's wall covers is left to the wall pass (-y < the smallest nlo: gfx-world.js castColumns)
+  let nloMin = -Infinity
+  if (nlo !== null) { nloMin = nlo[0]; for (let x = 1; x < W; x++) if (nlo[x] < nloMin) nloMin = nlo[x] }
   for (let y = 0; y <= last; y++) {
+    if (y < HH && -y < nloMin) continue
     let t = HC > 0 ? (y - P) / HC : 1             // 0 top → 1 horizon
     if (t < 0) t = 0; else if (t > 1) t = 1
     const sr = (skyRgb[0] * (1 - t) + F0 * t) * flicker
@@ -171,8 +175,8 @@ const FIX = 256                                   // azimuth lerp fraction bits 
 // nlo (optional, from the world pass): when given, a sky pixel (x, y) above the horizon row is covered by a wall exactly when -y < nlo[x]
 // (gfx-world.js castColumns, its one-sided form), and a 2x2 block whose four pixels are all covered is not computed at all: the wall pass
 // overwrites every one of them, so the frame is the same to the byte.
-export function renderSky(fs, buf32, nlo = null) {
-  if (!(fs.quality && fs.quality.lightDetail > 0)) { renderSkyLegacy(fs, buf32); return }
+export function renderSky(fs, buf32, nlo = null, nloB = null) {
+  if (!(fs.quality && fs.quality.lightDetail > 0)) { renderSkyLegacy(fs, buf32, nlo); return }
   const { W, H, HH, skyRgb, fogRgb } = fs
   const last = Math.min(HH, H - 1)
   if (last < 0) return
@@ -204,12 +208,17 @@ export function renderSky(fs, buf32, nlo = null) {
     cb0[i] = (b >> 8) & CMASK;  cb1[i] = ((b >> 8) + 1) & CMASK;  cbF[i] = b & 255
   }
 
-  // ── per-row: strip row, base colour, cloud amplitude ──
+  // the covered rows: a row pair (y - 1, y) of the fill is skipped whole when every column's wall covers its upper row (so both rows: the
+  // wall pass overwrites every pixel of them), k1 = 1 - y < the smallest nlo
+  let nloMin = -Infinity
+  if (nlo !== null) { nloMin = nlo[0]; for (let x = 1; x < W; x++) if (nlo[x] < nloMin) nloMin = nlo[x] }
+  // ── per-row: strip row, base colour, cloud amplitude (only the rows the fill below reads: last, last - 2, ...; not the covered ones) ──
   const focal = (W * 0.5) / Math.tan(hf)                          // pixels from the eye to the screen plane
   const baseTmp = [0, 0, 0]
   const HC = fs.HC ?? HH
   const invHC = HC > 0 ? 1 / HC : 1                               // the gradient over the un-pitched sky height: anchored to the elevation
-  for (let y = 0; y <= last; y++) {
+  for (let y = last; y >= 0; y -= 2) {
+    if (nlo !== null && y >= 1 && y < HH && 1 - y < nloMin) continue
     const e = HH - y                                              // rows above the horizon
     const q = Math.min(1, Math.max(0, e * invHC))
     skyBase(q, skyRgb, fogRgb, cfg, baseTmp)
@@ -240,12 +249,16 @@ export function renderSky(fs, buf32, nlo = null) {
     const jA = rowJ[y], jB = rowJ2[y]
     const r0 = rowR[y], g0 = rowG[y], b0 = rowB[y], A = rowA[y]
     const skip = nlo !== null && y >= 1 && y < HH, k1 = 1 - y          // the pair's upper row y-1 covered (so y is too): k1 < nlo[x]
+    if (skip && k1 < nloMin) continue                                  // (every column covers it: the whole pair, its copy included)
     const K = A * (1 / 128)
     const s0 = tMin * K, s1 = tMax * K, e0 = 1 + (s0 < s1 ? s0 : s1), e1 = 1 + (s0 < s1 ? s1 : s0)
     // no clamp when every channel stays inside (-1, 256): there `v | 0` is already what the clamp would give
     const free = inByte(r0, e0, e1) && inByte(g0, e0, e1) && inByte(b0, e0, e1)
     for (let i = 0; i < Wh; i++) {
-      if (skip && k1 < nlo[2 * i] && (2 * i + 1 >= W || k1 < nlo[2 * i + 1])) continue
+      if (skip) {
+        if (nloB !== null && (i & 7) === 0 && k1 < nloB[i >> 3]) { i += 7; continue }   // 16 covered columns (8 blocks) at once
+        if (k1 < nlo[2 * i] && (2 * i + 1 >= W || k1 < nlo[2 * i + 1])) continue
+      }
       const a0 = strip[jA + col0[i]], a1 = strip[jA + col1[i]]
       const d0 = a0 + (((a1 - a0) * colF[i]) >> 8)
       const c0 = strip[jB + cb0[i]], c1 = strip[jB + cb1[i]]

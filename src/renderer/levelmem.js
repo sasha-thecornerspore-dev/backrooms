@@ -210,13 +210,15 @@ export function createLevelMemory() {
 //   resumed chunk is read from it) -> decor / items scan at that chunk (deps.updateAt) -> restoreDispelled -> fogImport -> settlePlayer.
 // A v:1 save missing every new field loads to today's behaviour: fresh memory, playT 0, deaths 0, no spawn override. The deps a later
 // integration step provides (restoreDispelled, fogImport) may be absent. Returns { level, spawnChunk, playT, deaths, pcx, pcy }.
+// resumeLevel(resume): the floor a resume builds first (game.js initGame reads it ahead, to hold a start on the block for its tiles).
+export function resumeLevel(resume) { return (isObj(resume) ? resume : {}).level ?? 0 }
 export function applyResume(resume, deps) {
   const r = isObj(resume) ? resume : {}
   const { mem, buildLevel, applyPlayer, updateAt, restoreDispelled, fogImport, settlePlayer } = deps
   mem.import(r.memory)
   const playT = Number(r.playT) || 0
   const deaths = Number.isInteger(r.deaths) && r.deaths >= 0 ? r.deaths : 0
-  const level = r.level ?? 0
+  const level = resumeLevel(r)
   const spawnChunk = mem.get(level)?.arrived ?? null
   buildLevel(level, spawnChunk)
   const p = applyPlayer(r) ?? { x: 0, y: 0 }

@@ -1,5 +1,6 @@
 import { loadConfig, CHUNK_SIZE, createChunkCache, createGridReader } from './world.js'
-import { createFixedMap } from './fixedmap.js'
+import { createFixedMap, fixedMapHooks } from './fixedmap.js'
+import { facadeFor } from './block-stacks.js'
 import { levelConfig, TRACKS, LOST_LINE } from './levels.js'
 import { createEntitySystem } from './entities.js'
 import { createItemSystem, KEPT } from './items.js'
@@ -26,7 +27,11 @@ import { createWardCharger, wardOpts, WARD_TAP } from './ward.js'
 import { createTension, huntDelta, calmDelta } from './tension.js'
 import { FOV, HF } from './gfx-frame.js'
 import { waysFor, stairsPass, chunkMid, findOpenNear, arrivalFor, wayMessage, wayLabel, entryLevel } from './topology.js'
+import { BLOCK } from './topology.js'
+import { prebuildLevelTextures, cancelPrebuilds } from './gfx-textures.js'
+import { finishPrebuild } from './gfx-textures.js'
 import { createLevelMemory, applyResume } from './levelmem.js'
+import { resumeLevel } from './levelmem.js'
 import { createLearning, learnsHere } from './learn.js'
 import { resolveDeath, onArrive, wakeSpot } from './death.js'
 import { createFogMap, revealRadius } from './fogmap.js'
@@ -246,30 +251,44 @@ export const SETTLE_MAX_MS = 1500
 // nor end the newer transition). cb itself always runs: it is the state change the caller asked for.
 //   deps: el (the #fade element, or null: no veil — cb, then onShown after graceMs), frames() (frames drawn so far), now(), setTimeout, raf
 export const FADE_OUT_MS = 580, FADE_GRACE_MS = 150
+// lift(onShown): a veil that is already up when the picture under it changes (initGame: a start held dark for the block's tiles,
+// holdForTiles) lifts the same way, once the new picture has drawn settleFrames frames, and is just as sequenced: a newer run() owns it.
 export function createFader({
   el, frames, now = () => performance.now(), setTimeout: later = (f, ms) => setTimeout(f, ms), raf = (f) => requestAnimationFrame(f),
   fadeMs = FADE_OUT_MS, graceMs = FADE_GRACE_MS, settleFrames = SETTLE_FRAMES, settleMaxMs = SETTLE_MAX_MS,
 } = {}) {
   let gen = 0
+  const shownFor = (g, onShown) => () => { if (onShown) later(() => { if (g === gen) onShown() }, graceMs) }
+  // the veil lifts once the picture has drawn settleFrames frames since now (or settleMaxMs passed), unless a newer fade started meanwhile
+  const revealFor = (g, shown) => {
+    const f0 = frames(), s0 = now()
+    const reveal = () => {
+      if (g !== gen) return
+      if (frames() - f0 >= settleFrames || now() - s0 >= settleMaxMs) { el.style.opacity = '0'; shown() }
+      else raf(reveal)
+    }
+    raf(reveal)
+  }
   return {
     get gen() { return gen },
     run(cb, onShown) {
       const g = ++gen
-      const shown = () => { if (onShown) later(() => { if (g === gen) onShown() }, graceMs) }
+      const shown = shownFor(g, onShown)
       if (!el) { cb(); shown(); return }
       el.style.transition = 'opacity 0.55s'
       el.style.opacity = '1'
       later(() => {
         cb()
         if (g !== gen) return                        // a newer fade started meanwhile: it owns the veil and the transition
-        const f0 = frames(), s0 = now()
-        const reveal = () => {
-          if (g !== gen) return
-          if (frames() - f0 >= settleFrames || now() - s0 >= settleMaxMs) { el.style.opacity = '0'; shown() }
-          else raf(reveal)
-        }
-        raf(reveal)
+        revealFor(g, shown)
       }, fadeMs)
+    },
+    lift(onShown) {
+      const g = ++gen
+      const shown = shownFor(g, onShown)
+      if (!el) { shown(); return }
+      el.style.transition = 'opacity 0.55s'
+      revealFor(g, shown)
     },
   }
 }
@@ -284,10 +303,48 @@ export function frameDue(ts, pacer, fpsCap, gate, relayout) {
   return true
 }
 
+// The block's TexSet built ahead, in the title screen's idle time (gfx-textures.js prebuildLevelTextures; index.html starts it once the title
+// is up). The block is only ever entered from the title (the front door, or CONTINUE on a save that stands on it) and its renderer builds
+// its tiles as it is created, with no fade over it: built ahead, that step only takes what is ready (a start before the job is done waits
+// for the rest under the veil: holdForTiles, below). The config
+// is the very one buildLevel builds the block from (levelConfig over world.json), so the renderer's memo key is the job's. A run that
+// starts anywhere else drops the job (buildLevel), and a job is never started once a run has begun. → the job, or null
+let runStarted = false
+export async function prebuildBlock(o = {}) {
+  if (runStarted) return null
+  const base = await loadConfig()
+  return runStarted ? null : prebuildLevelTextures(levelConfig(base, BLOCK), o)
+}
+
+// A run that starts on the block before the title's idle time has built all its tiles (the front door or CONTINUE pressed in the title's
+// first seconds, or on a slow machine) does not leave the rest to its renderer, which would build it in one go as it is made: a page frozen
+// for up to ~1.5 s on a desktop, several seconds on a slow one. The screen is held dark under the level change's veil (#fade, at once: the
+// title is already gone) while the rest is built in slices with a frame between them (gfx-textures.js finishPrebuild), so the page keeps
+// presenting frames. initGame then builds the level as before, the renderer taking the finished TexSet from the memo, and lifts the veil
+// the way a level change does, once the block has drawn its first frames (createFader lift). Nothing new is shown. A run that starts
+// anywhere else, or on the block with its tiles ready, never waits; if the job fails, the renderer builds the TexSet in one go, as before.
+// A start on the block needs no job but the one for its own config, so every other is dropped first: one the title started from a
+// world.json that has changed since (an update deployed while the title was up) has another memo key, would never be taken by the
+// renderer, and would otherwise go on in idle time while the block is played.
+// cfg: the block's config as buildLevel builds it; veil: #fade (or null); o: finishPrebuild's options. → true when the veil was raised
+export async function holdForTiles(cfg, veil, o = {}) {
+  try { cancelPrebuilds(cfg) } catch { /* nothing to drop */ }
+  let wait = null
+  try { wait = finishPrebuild(cfg, o) } catch { wait = null }
+  if (!wait) return false
+  if (veil) { veil.style.transition = 'none'; veil.style.opacity = '1' }
+  await wait
+  return !!veil
+}
+
 // room: { code, route, lan } of the room you joined (null solo: /invite reads it); frontDoor: a solo run that came in through the title
 // screen's front door, onto the block (topology.js entryLevel)
 export async function initGame(canvas, { worldSeed = null, mpClient = null, anchor = null, resume = null, intakeCtx = null, room = null, frontDoor = false } = {}) {
   const base = await loadConfig()
+  runStarted = true                 // (from here on no block prebuild starts: prebuildBlock)
+  // a start on the block waits here, under the veil, for whatever of its tiles is not built yet (holdForTiles); the veil lifts at the end
+  const heldDark = (resume ? resumeLevel(resume) : entryLevel({ online: !!mpClient, frontDoor })) === BLOCK
+    && await holdForTiles(levelConfig(base, BLOCK), typeof document !== 'undefined' ? document.getElementById('fade') : null)
 
   // ── player state — PERSISTS across level transitions (hp + inventory carry) ──
   const HALF = CHUNK_SIZE / 2
@@ -636,7 +693,9 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
 
   // one renderer for a level (buildLevel; and a live change of the renderer pref). Logs one hidden diagnostics line: kind / why / GPU info.
   function makeGfx(cfg, cache) {
-    const g = createRenderer(canvas, cfg, renderOpts, cfg.map ? { materialAt: (wx, wy) => cache.materialAt(wx, wy) } : {})
+    // (a fixed map hands over its materials and, on the block, the storeys' stacks of its house plan: fixedmap.js fixedMapHooks;
+    // block-stacks.js facadeFor is null for any config that draws no storeys)
+    const g = createRenderer(canvas, cfg, renderOpts, cfg.map ? fixedMapHooks(cache, facadeFor(cfg)) : {})
     try { console.info(g.diagnostics()) } catch { /* a console-less host */ }
     return g
   }
@@ -650,6 +709,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
   // graph (topology.waysFor): [0] is today's exit (decor reads its kind / label), the rest the stairs up / the lift stairsPass places.
   function buildLevel(index, at = null) {
     const tb    = performance.now()
+    if (index !== BLOCK) cancelPrebuilds()      // the block's TexSet built ahead (prebuildBlock) is only for a run that starts on it
     const cfg   = levelConfig(base, index)
     // the floor's file (docket.js): the release's tally of open files on this floor leans what it leaves out — pages, machines, souls, the
     // things in the halls — once, from base.docket, never from who is in the room (a zero docket and the block: cfg as it was). Then the
@@ -3456,6 +3516,7 @@ export async function initGame(canvas, { worldSeed = null, mpClient = null, anch
    requestAnimationFrame(loop)   // ALWAYS reschedule — resilience over a stray throw
   }
   requestAnimationFrame(loop)
+  if (heldDark) fader.lift()        // a start held dark for the block's tiles (holdForTiles, above): lifted once the block has drawn its first frames
 
   // Stall watchdog — if requestAnimationFrame stops advancing (a GPU/compositor
   // hang that never trips main's 'unresponsive'), record it so the freeze finally

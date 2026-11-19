@@ -5,6 +5,7 @@
 //   planTiles(tex)                  the TexSet's tiles -> the layers of ONE texture array, and where each surface's variants start
 //   tilesToRgba(plan)               the layers as RGBA8 (the array texture's upload data)
 //   wallLayer(plan, hit, mat)       the array layer a wall column samples (material + per-cell variant, as gfx-world.js picks the tile)
+//   bandLayers(plan, hit, mat, st)  the storeys' band layers of a wall column (gfx-world.js pickBandPairs picks the tiles)
 //   wallPoolShare(F, hit, px, py)   the fraction of pool light a wall column receives (gfx-world.js renderLit, per column)
 //   fillCellTexture(F, out)         the toroidal cell window (contact bits, lamp flags, lamp levels) as an RGBA8 image
 //   fillPoolTable / fillWallTable   the periodic pool tiles and the wall's vertical tables as float images
@@ -12,6 +13,7 @@
 //   hash2Ref                        JS reference of the GLSL hash the shader uses to pick floor / ceiling variants (see the test)
 import { hash2 } from './gfx-util.js'
 import { LM_FADE_CELLS } from './gfx-light.js'
+import { pickBandPairs } from './gfx-world.js'
 import { noise2, skyBase, skyConfigFor, CLOUD_W, CLOUD_H, stripRowTan } from './gfx-sky.js'
 
 export const POOL_N = 64                 // the periodic pool tile is 64 x 64 samples (gfx-light.js TILE_N)
@@ -25,7 +27,11 @@ export const S_MAX = stripRowTan(CLOUD_H - 0.5)     // tan(elevation) covered by
 // plan = { ts, layers: [rgb tile ...], walls: { code: { base, count } }, floor: { base, count }, ceil: { base, count }, light }
 // A wall code's `count` is its number of per-cell variants (1 = the plain tile, exactly the CPU's `arr.length > 1` rule); floor / ceiling `count` is the
 // length of the variant list the CPU hashes into (1 when the level has none). Identical tiles share a layer.
-export function planTiles(tex) {
+// opts.bands (the level draws storeys): the TexSet's band tiles (TexSet.wallBands) are added after the rest, every ground-storey pair
+// [b0, b1] as two CONSECUTIVE layers (the shader adds the band to the pair's base) and every upper tile once; plan.bands = { set (the
+// wallBands), pair (Map pair -> its base layer), layer (Map tile -> its layer) }. Without it (or with no band tiles) plan.bands is null and
+// the plan is what it always was.
+export function planTiles(tex, opts = {}) {
   const layers = [], seen = new Map()
   const add = (t) => { let i = seen.get(t); if (i === undefined) { i = layers.length; layers.push(t); seen.set(t, i) } return i }
   // a run of variants must be CONSECUTIVE layers (the shader adds hash % count to the base), so it is pushed as a block, never deduplicated into
@@ -40,7 +46,36 @@ export function planTiles(tex) {
   const surf = (single, vars) => (vars && vars.length > 1 ? { base: block(vars), count: vars.length } : { base: add(vars && vars.length === 1 ? vars[0] : single), count: 1 })
   const floor = surf(tex.floor, tex.floorVar), ceil = surf(tex.ceil, tex.ceilVar)
   const light = add(tex.light)
-  return { ts: tex.ts, layers, walls, floor, ceil, light }
+  let bands = null
+  const B = opts.bands ? tex.wallBands || null : null
+  if (B) {
+    const pair = new Map()
+    const addPair = (p) => { if (!pair.has(p)) pair.set(p, block(p)) }
+    for (const code of Object.keys(B.code)) for (const p of B.code[code]) addPair(p)
+    for (const s of B.upper) {
+      if (s.lower) for (const p of s.lower) addPair(p)
+      if (s.lowerBy) for (const code of Object.keys(s.lowerBy)) for (const p of s.lowerBy[code]) addPair(p)       // a painted house's ground storey
+      for (const p of s.variants) { add(p[0]); add(p[1]) }
+    }
+    add(B.fallback[0]); add(B.fallback[1])
+    bands = { set: B, pair, layer: seen }
+  }
+  return { ts: tex.ts, layers, walls, floor, ceil, light, bands }
+}
+
+// The band layers of a wall column on a level that draws storeys, picked exactly as the CPU picks the tiles (gfx-world.js pickBandPairs):
+// out = [lower, upper2, upper3, pair] with lower the layer of band 0 (band 1 is lower + pair: 1 for a ground-storey pair, 0 when the face
+// repeats its 1-cell tile) and upper2 / upper3 the layers of bands 2 and 3 (-1: the 1-cell tile again). st = the face's stack (stackAt), -1
+// for none. A plan without bands gives the 1-cell layer and no upper.
+export function bandLayers(plan, hit, mat, st, out = [0, -1, -1, 0]) {
+  const one = wallLayer(plan, hit, mat)
+  const pb = plan.bands
+  if (!pb) { out[0] = one; out[1] = -1; out[2] = -1; out[3] = 0; return out }
+  const wkey = (mat && plan.walls[mat]) ? mat : '0'
+  const { lo, hi } = pickBandPairs(pb.set, wkey, st, hit.mx, hit.my, hit.side)
+  out[0] = lo !== null ? pb.pair.get(lo) : one; out[3] = lo !== null ? 1 : 0
+  out[1] = hi !== null ? pb.layer.get(hi[0]) : -1; out[2] = hi !== null ? pb.layer.get(hi[1]) : -1
+  return out
 }
 
 // RGB (3 bytes a texel) -> RGBA8 layers, alpha 255
@@ -146,14 +181,16 @@ export function fillPoolTable(F, out) {
 
 // the wall tables as RGBA32F, width `width` (>= 64, >= ts): row 0 texel k = (P, K0, K1, K2) of the wall pool along the wall (k < 64);
 // row 1 texel t = (wallAmb[t], wallPool at full pool [t]) — the pool at a share q is that times q, exactly (gfx-light.js buildSurfaceTables)
-export function fillWallTable(F, ts, width, out) {
+// bands (the storeys): row 1 holds the taller wall's tables instead (F.bandAmb / F.bandPool over F.bandRows rows of the band canvas; width >= bandRows)
+export function fillWallTable(F, ts, width, out, bands = false) {
   for (let k = 0; k < POOL_N; k++) {
     const o = k * 4
     out[o] = F.wallP[k]; out[o + 1] = F.wallK0[k]; out[o + 2] = F.wallK1[k]; out[o + 3] = F.wallK2[k]
   }
-  for (let t = 0; t < ts; t++) {
+  const rows = bands ? F.bandRows : ts, amb = bands ? F.bandAmb : F.wallAmb, pool = bands ? F.bandPool : F.wallPool
+  for (let t = 0; t < rows; t++) {
     const o = (width + t) * 4
-    out[o] = F.wallAmb[t]; out[o + 1] = F.wallPool[63 * ts + t]; out[o + 2] = 0; out[o + 3] = 0
+    out[o] = amb[t]; out[o + 1] = pool[63 * rows + t]; out[o + 2] = 0; out[o + 3] = 0
   }
   return out
 }

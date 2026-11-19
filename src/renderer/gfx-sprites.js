@@ -90,6 +90,14 @@ export const PROP_SPEC = {
   weeds:       { h: 0.32, w: 0.40, c: [92, 100, 58] },
 }
 
+// Level ∅ in its Harlem Park look (levels.js '∅' look.facade 'harlem'): the block draws
+// its four yard props with art of its own, true to the area, filed in the atlas under these names. Only the art changes: the envelope
+// above, the type, the variant pick, mirror, tint, scale, lean, sway and shadow all stay the type's (planProp). 'box' is Level 0's and
+// Level 1's too, so every floor without that look (the block without it as well) keeps the art it always had, to the byte.
+export const PROP_HP = { trash: 'trash-hp', tire: 'tire-hp', weeds: 'weeds-hp', box: 'box-hp' }
+// the atlas name of a prop type's art on a level with this look (config.look or fs.look)
+export function propArtName(type, look) { return (look && look.facade === 'harlem' && PROP_HP[type]) || type }
+
 // Creatures. h/w = world height / footprint width; `low` ones crouch on the floor; the flags name the canon tells.
 // Heights are floor-anchored: a lurker is the tallest thing in the game and stoops under the ceiling (h = 1.0).
 export const FIG = {
@@ -600,7 +608,8 @@ export function makeFrame(layers) { return { layers } }
 
 // The atlas: kind -> name -> array of frames, addressed by frameIndex(). Frames are generated on first use (a few ms each),
 // never per draw, and shared by every renderer (the art is level-independent; the level's look reaches the sprite through
-// fog, light and a palette tint applied when it is blitted).
+// fog, light and a palette tint applied when it is blitted). The one exception is the block's yard props in its Harlem Park
+// look, which are art of their own under names of their own (PROP_HP, propArtName).
 const ATLAS = Object.create(null)
 const GENERATORS = Object.create(null)   // kind -> (name, v, stateIx, anim, facing) -> Frame
 let FRAMES_BUILT = 0, TEX_BYTES = 0
@@ -711,13 +720,13 @@ const LEVEL_SPRITES = {
 }
 let LAST_LEVEL = null
 const LEVEL_QUEUED = new Set()     // level keys whose own config list was queued (prewarmSprites / queueLevelSprites): LEVEL_SPRITES is not needed
-function queueLevel(key) {
+function queueLevel(key, look) {
   if (LEVEL_QUEUED.has(key)) return
   const L = LEVEL_SPRITES[key]
   if (!L) return
   for (const c of L.creatures) warmPush(['creature', c, 0, 0, 0, FACING_FRONT])
   warmPush(['exit', 'portal', 0, 0, 0, 0])
-  for (const t of L.props) warmPush(['prop', t, 0, 0, 0, 0])
+  for (const t of L.props) warmPush(['prop', propArtName(t, look), 0, 0, 0, 0])
   for (const t of L.items) warmPush(['item', t, 0, 0, 0, 0])
   if (L.notes) warmPush(['note', 'unread', 0, 0, 0, 0]); warmPush(['note', 'read', 0, 0, 0, 0])
   if (L.machines) warmPush(['machine', 'lit', 0, 0, 0, 0]); warmPush(['machine', 'spent', 0, 0, 0, 0])
@@ -738,9 +747,10 @@ function levelJobs(c) {
   if (ent && ent.enabled !== false) for (const v of [...(ent.stalkerVariants || []), ...(ent.wandererVariants || [])]) if (FIG[v] && !cast.includes(v)) cast.push(v)
   for (const v of cast) jobs.push(['creature', v, 0, 0, 0, FACING_FRONT])
   for (const v of cast) jobs.push(['creature', v, 0, 1, 0, FACING_FRONT])
-  for (const t of (c.props && c.props.types) || []) jobs.push(['prop', PROP_SPEC[t] ? t : 'box', 0, 0, 0, 0])
+  const art = (t) => propArtName(PROP_SPEC[t] ? t : 'box', c.look)     // the art planProp will ask for (the block's own in its look)
+  for (const t of (c.props && c.props.types) || []) jobs.push(['prop', art(t), 0, 0, 0, 0])
   for (const t of (c.items && c.items.types) || []) jobs.push(['item', ITEM_COLORS[t] ? t : 'radio', 0, 0, 0, 0])
-  for (const t of (c.props && c.props.types) || []) for (let v = 1; v < 3; v++) jobs.push(['prop', PROP_SPEC[t] ? t : 'box', v, 0, 0, 0])
+  for (const t of (c.props && c.props.types) || []) for (let v = 1; v < 3; v++) jobs.push(['prop', art(t), v, 0, 0, 0])
   for (const v of cast) for (const s of [2, 3]) jobs.push(['creature', v, 0, s, 0, FACING_FRONT])
   if (SIGHT_LEVELS[levelKey(c)]) for (const t of SCATTER_SIGHTS) jobs.push(['sight', t, 0, 0, 0, 0])
   for (const s of c.sightsAt || []) if (SIGHT_SPEC[s.type]) jobs.push(['sight', s.type, 0, 0, 0, 0])   // a level's authored sights (the block's lightpost)
@@ -1807,6 +1817,525 @@ PROP_ART.weeds = (c, rnd, v, spec) => {
 }
 PROP_FINISH.weeds = { dust: 0.1, stain: 0, outline: 1, ao: 0.1 }
 
+// ── Level ∅'s yard props in its Harlem Park look (PROP_HP) ──
+// Bulging black contractor bags with tied necks and torn litter; a car tire with tread blocks on a dull steel rim; tree-of-heaven
+// seedlings and grass in a dirt clump; a wet, crushed carton. Each is painted at HP_SS times the prop resolution and box-filtered down,
+// so its small detail (the tread, the leaflets, the bags' gathered folds) lands as coverage instead of stair-steps, then finished like
+// every prop: the frame has the size and the rect the type's own art has. The variants: the tire 0 standing, 1 leaning, 2 lying flat; the carton 0 upright, 1 tipped on its side, 2 crushed; the bags and the weeds
+// three arrangements. No words, no digits, and no bright orange (that is the boards' crew mark).
+const HP_BASE = { 'trash-hp': 'trash', 'tire-hp': 'tire', 'weeds-hp': 'weeds', 'box-hp': 'box' }
+const HP_SS = 3
+const HP_ART = {}, HP_FINISH = {}
+
+// the prop's canvas at HP_SS x: the same X / Y / W / H in body units, mapped onto the bigger paint; k(n) is n prop pixels
+function hpCanvas(spec) {
+  const c1 = propCanvas(spec), S = HP_SS
+  const { padX, floor, bw, bh } = c1
+  return {
+    c1, S, P: createPaint(c1.fw * S, c1.fh * S), fw: c1.fw * S, fh: c1.fh * S, bw: bw * S, bh: bh * S, floor: floor * S,
+    X: (u) => (padX + u * bw) * S, Y: (v) => (floor - v * bh) * S, W: (u) => u * bw * S, H: (v) => v * bh * S, k: (n) => n * S,
+  }
+}
+// box-filter the big paint into the prop's own canvas (premultiplied, so the plain mean is the right one)
+function hpResolve(c) {
+  const { c1, S, P } = c, Q = c1.P, inv = 1 / (S * S)
+  for (let y = 0; y < c1.fh; y++) {
+    for (let x = 0; x < c1.fw; x++) {
+      let r = 0, g = 0, b = 0, a = 0
+      for (let j = 0; j < S; j++) {
+        let i = ((y * S + j) * P.w + x * S) * 4
+        for (let k = 0; k < S; k++, i += 4) { r += P.px[i]; g += P.px[i + 1]; b += P.px[i + 2]; a += P.px[i + 3] }
+      }
+      const o = (y * c1.fw + x) * 4
+      Q.px[o] = r * inv; Q.px[o + 1] = g * inv; Q.px[o + 2] = b * inv; Q.px[o + 3] = a * inv
+    }
+  }
+  return c1
+}
+function hpPropFrame(name, v) {
+  const base = HP_BASE[name], spec = PROP_SPEC[base]
+  const c = hpCanvas(spec)
+  HP_ART[base](c, mulberry32(seedOf(name, v, 1)), v, spec)
+  const c1 = hpResolve(c)
+  finishProp(c1, { seed: v * 13 + strHash(name) % 17, ...HP_FINISH[base] })
+  return makeFrame([propLayer(c1)])
+}
+
+// a per-pixel shader over a box of the paint: fn(x, y) sets SR SG SB and SA (0: nothing there), composited over
+function hpPaint(P, x0, y0, x1, y1, fn) {
+  const w = P.w, px = P.px
+  const xa = Math.max(0, Math.floor(x0)), ya = Math.max(0, Math.floor(y0)), xb = Math.min(w, Math.ceil(x1)), yb = Math.min(P.h, Math.ceil(y1))
+  for (let y = ya; y < yb; y++) {
+    for (let x = xa; x < xb; x++) {
+      SA = 0
+      fn(x + 0.5, y + 0.5)
+      if (SA > 0) over(px, (y * w + x) * 4, SR, SG, SB, SA > 1 ? 1 : SA)
+    }
+  }
+}
+// a polygon in body units, shaded by mat() over its own extent
+function hpPoly(c, uv, col, o = {}) {
+  const pts = []
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9
+  for (let i = 0; i < uv.length; i += 2) {
+    const x = c.X(uv[i]), y = c.Y(uv[i + 1])
+    pts.push(x, y); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y)
+  }
+  fillPoly(c.P, pts, o.flat ? flat(col[0], col[1], col[2], o.a ?? 1)
+    : mat({ c: col, x0, x1, y0, y1, kx: o.kx ?? -0.24, ky: o.ky ?? -0.14, grain: o.grain ?? 0.1, streak: o.streak || 0, seed: o.seed || 0 }))
+}
+const hpWrap = (a) => a - Math.round(a / (2 * Math.PI)) * 2 * Math.PI
+
+// ─ trash (Level ∅): black contractor bags, slumped and bulging, tied at the neck; torn litter ─
+const HP_BAG = [31, 32, 36]                 // black poly, a touch cool: no brown, so a bag never reads as an animal
+// an upright slumped bag: its body (ellipses u, v, ru, rv: wide at the floor, rounded shoulders), what is inside pushing out (lumps
+// du, dv, r) and the gathered neck (from the shoulders to the knot); u its middle, w its half-width, h its height to the knot
+function hpBagUp(u, w, h, lean, lumps, o = {}) {
+  const at = o.at || 0                                                    // where it sits (a bag on the pile sits on the others)
+  return {
+    e: [[u, at + h * 0.2, w, h * 0.23], [u + lean * 0.3, at + h * 0.4, w * 0.95, h * 0.27], [u + lean * 0.55, at + h * 0.6, w * 0.76, h * 0.2]],
+    lumps: lumps.map(([du, dv, r, ang]) => [u + du, at + h * dv, r, ang]), neck: [u + lean * 0.8, at + h * 0.76, u + lean, at + h * 0.87], floor: at, ...o,
+  }
+}
+// the bag's field: the body as a smooth union (round lumps, and the corners of boxy things inside pushing the plastic out), cut flat
+// where it sits, then the gathered neck, short and thick, the knot, and the two tied ears flopped over to either side
+function hpBagField(c, b) {
+  const F = createField(c.P.w, c.P.h), k = c.k(2.2)
+  b.e.forEach(([u, v, ru, rv], i) => fieldEll(F, c.X(u), c.Y(v), c.W(ru), c.H(rv), i ? k : 0))
+  for (const [u, v, r, ang] of b.lumps) {
+    if (ang === undefined) { fieldEll(F, c.X(u), c.Y(v), c.W(r), c.W(r) * 0.86, k * 0.7); continue }
+    const x = c.X(u), y = c.Y(v), R = c.W(r), ca = Math.cos(ang) * R, sa = Math.sin(ang) * R
+    fieldPoly(F, [x - ca + sa, y - sa - ca, x + ca + sa, y + sa - ca, x + ca - sa, y + sa + ca, x - ca - sa, y - sa + ca], k * 0.45)
+  }
+  if (b.floor !== null) {
+    const fl = c.Y(b.floor)
+    for (let y = Math.max(0, Math.ceil(fl)); y < F.h; y++) for (let x = 0; x < F.w; x++) { const i = y * F.w + x; if (F.f[i] < y + 0.5 - fl) F.f[i] = y + 0.5 - fl }
+  }
+  const [u0, v0, u1, v1] = b.neck, ax = c.X(u0), ay = c.Y(v0), bx = c.X(u1), by = c.Y(v1)
+  fieldSeg(F, ax, ay, bx, by, c.k(3.2), c.k(1.3), k * 0.5)
+  fieldEll(F, bx, by, c.k(1.4), c.k(1.15), c.k(0.5))
+  const dl = hyp(bx - ax, by - ay) || 1, ux = (bx - ax) / dl, uy = (by - ay) / dl, qx = -uy, qy = ux
+  const ear = (s, l, d) => [[0.4 * s, 0.5], [2.7 * s * l, 0.4 * l], [3.3 * s * l, -d * l], [1.1 * s, -0.8]]
+    .flatMap(([a, e]) => [bx + qx * c.k(a) + ux * c.k(e), by + qy * c.k(a) + uy * c.k(e)])
+  fieldPoly(F, ear(-1, b.ears?.[0] ?? 1, 1.3), c.k(0.35))
+  fieldPoly(F, ear(1, b.ears?.[1] ?? 0.85, 1.7), c.k(0.35))
+  return F
+}
+// the gathered folds: -1..1, fanning from the neck down over the shoulders and fading out over the body
+function hpBagFolds(c, b, ph) {
+  const [u0, v0, u1, v1] = b.neck, ax = c.X(u0), ay = c.Y(v0), bx = c.X(u1), by = c.Y(v1)
+  const dl = hyp(ax - bx, ay - by) || 1, dx = (ax - bx) / dl, dy = (ay - by) / dl
+  const reach = c.H(b.reach ?? 0.62), q = 1 / c.k(1)
+  return (x, y) => {
+    const rx = x - ax, ry = y - ay, along = rx * dx + ry * dy, across = -rx * dy + ry * dx
+    if (along < 0) return Math.sin(across * q * 1.6 + along * q * 1.1 + ph) * 0.8          // the twist of the neck itself
+    const th = Math.atan2(across, along + c.k(1.2))
+    return Math.sin(th * 6 + ph + nz(x * q * 0.12, y * q * 0.12) * 2.2) * smooth(reach, c.k(1), hyp(rx, ry))
+  }
+}
+// shade a bag: black poly under an overcast sky is a dark soft volume with a broad gloss toward the light, the sky caught along its
+// upper flanks, and bright streaks where the folds turn to the light; a bounce from the ground keeps its underside from going flat
+function hpBagShade(P, F, R, col, fold, q) {
+  const { w, h } = P, f = F.f, px = P.px, soft = 0.75
+  const Hx = -0.29, Hy = -0.334, Hz = 0.897                     // the half vector of paintField's light and the eye
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x, d = f[i]
+      if (d >= soft) continue
+      const gx = (f[i + 1] - f[i - 1]) * 0.5, gy = (f[i + w] - f[i - w]) * 0.5, gl = hyp(gx, gy) || 1
+      const t = Math.min(1, Math.max(0, -d / R)), z = Math.sqrt(Math.max(0.0025, 1 - (1 - t) * (1 - t)))
+      const s = (1 - t) / z, inv = 1 / Math.sqrt(s * s + 1)
+      const fd = fold(x + 0.5, y + 0.5)
+      // crinkles: thin poly is never a smooth balloon (q: 1 / prop pixel)
+      const cx = nz(x * q * 0.34 + 3.7, y * q * 0.34) - 0.5, cy = nz(x * q * 0.34 + 11.2, y * q * 0.34 + 5.3) - 0.5
+      let nx = (gx / gl) * s * inv + fd * 0.55 + cx * 0.5, ny = (gy / gl) * s * inv + cy * 0.5, nzv = inv
+      const nl = 1 / Math.sqrt(nx * nx + ny * ny + nzv * nzv); nx *= nl; ny *= nl; nzv *= nl
+      const lam = Math.max(0, -0.52 * nx - 0.6 * ny + 0.61 * nzv)
+      const spec = Math.pow(Math.max(0, nx * Hx + ny * Hy + nzv * Hz), 12)
+      const sky = (ny < 0 ? -ny : 0) * (1 - nzv) * 0.8 + (ny > 0 ? ny * 0.12 : 0)
+      const lum = (0.4 + 0.66 * lam) * (1 - 0.14 * fd * fd), gloss = spec * 0.62 + sky * 0.36
+      const a = d <= -soft ? 1 : (soft - d) / (2 * soft)
+      over(px, i * 4, col[0] * lum + 148 * gloss, col[1] * lum + 152 * gloss, col[2] * lum + 160 * gloss, a)
+    }
+  }
+}
+// what a nearer bag does to what is behind it: a contact shadow inside `spread` of its field, thrown down and to the right
+function hpBagShadow(P, F, dx, dy, spread, k) {
+  const { w, h, px } = P, f = F.f, ox = Math.round(dx), oy = Math.round(dy)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const j = (y * w + x) * 4
+      if (px[j + 3] <= 0.004) continue
+      const sx = x - ox, sy = y - oy
+      if (sx < 0 || sy < 0 || sx >= w || sy >= h) continue
+      const d = f[sy * w + sx]
+      if (d >= spread) continue
+      const m = 1 - k * Math.min(1, (spread - d) / spread)
+      px[j] *= m; px[j + 1] *= m; px[j + 2] *= m
+    }
+  }
+}
+// a split low in a bag: the dark inside, crumpled paper and a foam box's corner pushing out over its lower lip, the plastic stretched
+// into strands across the top one; what fell out lies on the ground under it
+function hpBagTear(c, rnd, t) {
+  const cx = c.X(t.u), cy = c.Y(t.v), rx = c.W(t.r), ry = c.W(t.r) * 0.4, pts = [], n = 14
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 2 * Math.PI, rr = (0.7 + rnd() * 0.45) * (i & 1 ? 0.8 : 1)
+    pts.push(cx + Math.cos(a) * rx * rr, cy + Math.sin(a) * ry * rr * (Math.sin(a) > 0 ? 1.3 : 0.8))
+  }
+  fillPoly(c.P, pts, flat(12, 12, 13))
+  fillPoly(c.P, [cx - rx * 0.6, cy + ry * 0.3, cx - rx * 0.15, cy - ry * 0.45, cx + rx * 0.2, cy + ry * 0.15, cx - rx * 0.05, cy + ry * 1.1, cx - rx * 0.5, cy + ry * 0.95], flat(146, 142, 132))
+  fillSeg(c.P, cx - rx * 0.4, cy + ry * 0.2, cx - rx * 0.1, cy + ry * 0.8, c.k(0.25), c.k(0.25), flat(118, 116, 108, 0.7))
+  fillPoly(c.P, [cx + rx * 0.12, cy + ry * 0.35, cx + rx * 0.62, cy - ry * 0.25, cx + rx * 0.85, cy + ry * 0.45, cx + rx * 0.42, cy + ry * 1.15], flat(170, 170, 164))
+  for (let i = 0; i < 4; i++) {
+    const a0 = -Math.PI * (0.18 + rnd() * 0.64)
+    stroke(c, cx + Math.cos(a0) * rx * 0.85, cy + Math.sin(a0) * ry * 1.0, cx + Math.cos(a0) * rx * 0.3 + rx * 0.1, cy - ry * 0.05, c.k(0.4), [92, 94, 100], 0.8)
+  }
+  hpLitter(c, rnd, t.u - t.r * 1.2, t.u + t.r * 1.4, 3, -0.06)
+}
+// loose litter on the ground: torn paper, a shred of white bag, a flattened can, a foam cup's rim, a bottle, caps; dull, unprinted
+function hpLitter(c, rnd, u0, u1, n, v0 = 0) {
+  for (let i = 0; i < n; i++) {
+    const u = u0 + rnd() * (u1 - u0), v = v0 + rnd() * 0.06, x = c.X(u), y = c.Y(v), s = c.k(1) * (1 + rnd() * 0.7)
+    const kind = (rnd() * 6) | 0, a = (rnd() - 0.5) * 0.7, ca = Math.cos(a), sa = Math.sin(a)
+    const R = (px, py) => [x + px * ca - py * sa, y + px * sa + py * ca]
+    const poly = (list, sh) => fillPoly(c.P, list.flatMap(([px, py]) => R(px * s, py * s)), sh)
+    if (kind === 0 || kind === 1) {                                     // torn paper, a crease across it
+      const t = 0.84 + rnd() * 0.14
+      poly([[-3.4, 0.6], [-1.2, -1.1], [0.4, -0.6], [2.9, -1.0], [3.3, 0.5], [0.8, 0.9], [-0.9, 0.6]], flat(172 * t, 168 * t, 156 * t))
+      fillSeg(c.P, ...R(-0.4 * s, -0.8 * s), ...R(0.2 * s, 0.8 * s), s * 0.18, s * 0.18, flat(120, 118, 110, 0.6))
+    } else if (kind === 2) {                                            // a shred of white plastic bag, thin enough to see the ground through
+      poly([[-3, 0.2], [-1.5, -1.3], [0.6, -0.5], [2.6, -1.5], [3.4, 0.4], [0.2, 0.8]], flat(178, 182, 186, 0.5))
+    } else if (kind === 3) {                                            // a flattened can: dull grey, darker crimped ends
+      fillEll(c.P, x, y - s * 0.3, s * 2.3, s * 0.75, mat({ c: [128, 130, 134], x0: x - s * 2.3, x1: x + s * 2.3, y0: y - s, y1: y + s * 0.5, kx: -0.3, ky: -0.4, grain: 0.15 }))
+      for (const e of [-1, 1]) fillEll(c.P, x + e * s * 2.1, y - s * 0.3, s * 0.4, s * 0.7, flat(78, 80, 84))
+    } else if (kind === 4) {                                            // a foam cup's crushed rim
+      poly([[-1.6, 0.6], [-1.9, -1.2], [1.8, -1.4], [1.5, 0.6]], flat(176, 174, 166))
+      fillSeg(c.P, ...R(-1.9 * s, -1.2 * s), ...R(1.8 * s, -1.4 * s), s * 0.35, s * 0.35, flat(190, 188, 180))
+    } else {                                                            // a crushed clear bottle and its cap
+      poly([[-3.2, 0.4], [-2.6, -0.9], [1.6, -1.0], [2.3, -0.4], [2.2, 0.5], [1.2, 0.8]], flat(156, 166, 170, 0.55))
+      fillEll(c.P, ...R(3.0 * s, -0.1 * s), s * 0.75, s * 0.65, flat(70, 80, 98))
+    }
+  }
+}
+// the three arrangements: bags back to front (each throws its contact shadow on what is behind it), litter behind and in front
+const HP_TRASH = [
+  { back: [0.08, 0.9, 2], bags: [
+    hpBagUp(0.52, 0.22, 0.8, 0.03, [[0.1, 0.5, 0.06]]),
+    hpBagUp(0.25, 0.26, 0.9, -0.04, [[-0.15, 0.3, 0.075], [0.1, 0.55, 0.055, 0.5]], { tone: 0.92, ears: [1, 0.7] }),
+    hpBagUp(0.76, 0.23, 0.72, 0.05, [[0.12, 0.24, 0.065, 0.3], [-0.06, 0.5, 0.05]], { tone: 1.08, tear: { u: 0.8, v: 0.15, r: 0.09 } }),
+  ], front: [-0.06, 1.06, 3] },
+  { back: [0.0, 0.5, 2], bags: [
+    hpBagUp(0.27, 0.21, 0.84, 0.05, [[0.09, 0.44, 0.06]], { tone: 1.05 }),
+    hpBagUp(0.1, 0.11, 0.5, -0.03, [[-0.04, 0.3, 0.045]], { tone: 0.95, ears: [0.7, 0.6] }),
+    hpBagUp(0.62, 0.33, 0.7, -0.07, [[0.2, 0.3, 0.075, 0.7], [-0.18, 0.22, 0.07], [0.04, 0.5, 0.06]], { tear: { u: 0.5, v: 0.16, r: 0.11 }, reach: 0.72 }),
+  ], front: [0.7, 1.06, 3] },
+  { back: [0.3, 0.7, 1], bags: [
+    hpBagUp(0.5, 0.2, 0.62, 0.03, [[0.08, 0.4, 0.05]], { at: 0.34, tone: 1.02, ears: [0.8, 1] }),     // on the pile, behind
+    hpBagUp(0.28, 0.27, 0.6, -0.03, [[-0.13, 0.3, 0.07, 0.4]], { tone: 0.95 }),
+    hpBagUp(0.73, 0.25, 0.58, 0.05, [[0.12, 0.26, 0.065]], { tone: 1.06, ears: [0.75, 0.9] }),
+  ], front: [-0.04, 1.04, 4] },
+]
+HP_ART.trash = (c, rnd, v) => {
+  const L = HP_TRASH[v]
+  hpLitter(c, rnd, L.back[0], L.back[1], L.back[2], 0.02)
+  let first = true
+  for (const b of L.bags) {
+    const F = hpBagField(c, b)
+    if (!first) hpBagShadow(c.P, F, c.k(1.3), c.k(0.9), c.k(2.6), 0.55)
+    hpBagShade(c.P, F, c.k(7), cmul(HP_BAG, b.tone ?? 1), hpBagFolds(c, b, rnd() * 6.28), 1 / c.k(1))
+    if (b.tear) hpBagTear(c, rnd, b.tear)
+    first = false
+  }
+  hpLitter(c, rnd, L.front[0], L.front[1], L.front[2], -0.06)
+}
+HP_FINISH.trash = { dust: 0.12, stain: 0, outline: 0.7, ao: 0.24, dustCol: [118, 110, 98] }
+
+// ─ tire (Level ∅): a car tire on a dull steel wheel, tread blocks and all ─
+// Per pixel: the near sidewall is an ellipse (centre cx, cy; semi-axes a, b; turned rho in the picture) and the tread band is that
+// ellipse swept along (dx, dy) to the far sidewall. A pixel inside the near ellipse is sidewall, or inside the bead the wheel, set back
+// along the sweep; outside it the band's visible point solves |p - s d| = r for s in [0, 1] (r = 1 + LUG on a block, 1 in a groove),
+// so the blocks stand proud on the outline too. No seams: nothing here is tiled from polygons.
+function hpTire(c, rnd, o) {
+  const { cx, cy, a, b, rho } = o
+  const cr = Math.cos(rho), sr = Math.sin(rho)
+  const ddx = (o.dx * cr + o.dy * sr) / a, ddy = (-o.dx * sr + o.dy * cr) / b, dd = ddx * ddx + ddy * ddy, dl = Math.sqrt(dd)
+  const LUG = 0.05, NL = 40, HOLE = 0.64, WHEEL = 0.6, SET = 0.45
+  const RUB = [36, 35, 34], STEEL = [104, 103, 100], RUST = [92, 70, 56], DUST = [122, 114, 100]
+  const Lx = -0.62, Ly = -0.78, q = 1 / c.k(1)
+  const pic = (lx, ly) => { const X = lx * cr - ly * sr, Y = lx * sr + ly * cr, l = hyp(X, Y) || 1; return [X / l, Y / l] }
+  const solve = (px, py, r) => {
+    const pd = px * ddx + py * ddy, disc = pd * pd - dd * (px * px + py * py - r * r)
+    if (disc < 0) return -1
+    const s = (pd - Math.sqrt(disc)) / dd
+    return s >= 0 && s <= 1 ? s : -1
+  }
+  const lugAt = (s, ex, ey) => {
+    if (Math.abs(s - 0.5) < 0.055) return false                         // the centre groove
+    const tau = (Math.atan2(ey, ex) / (2 * Math.PI)) * NL + (s > 0.5 ? 0.5 : 0) + (s - 0.5) * 0.8
+    return tau - Math.floor(tau) > 0.26                                  // staggered, slanted blocks
+  }
+  const dusty = (m, k, x, y) => {                                       // rubber, lit by m, with yard dust where it settles
+    const dk = Math.max(0, Math.min(1, (nz(x * q * 0.21 + 7, y * q * 0.21) - 0.45) * 2.2)) * k
+    SR = (RUB[0] + (DUST[0] - RUB[0]) * dk) * m; SG = (RUB[1] + (DUST[1] - RUB[1]) * dk) * m; SB = (RUB[2] + (DUST[2] - RUB[2]) * dk) * m; SA = 1
+  }
+  const wheel = (wx, wy, wr, x, y) => {
+    const [rx, ry] = pic(wx * a, wy * b), rl = rx * Lx + ry * Ly
+    let m
+    if (wr > 0.88) m = 0.86 + 0.42 * rl                                  // the flange's rolled lip
+    else if (wr > 0.72) m = 0.36 + 0.3 * Math.max(0, -rl)                 // the well, in the flange's shadow on the light side
+    else if (wr > 0.3) {                                                 // the dish and its vent holes
+      m = 0.8 - 0.14 * rl
+      const ph = Math.atan2(wy, wx)
+      for (let k = 0; k < 6; k++) {
+        const dph = hpWrap(ph - (k * Math.PI / 3 + 0.3))
+        if (((wr - 0.52) / 0.1) ** 2 + ((dph * wr) / 0.13) ** 2 < 1) { SR = 14; SG = 14; SB = 15; SA = 1; return }
+      }
+    } else if (wr > 0.11) {                                              // the hub and its five nuts
+      m = 0.92 + 0.26 * rl
+      const ph = Math.atan2(wy, wx)
+      for (let k = 0; k < 5; k++) { const dph = hpWrap(ph - k * 1.2566 - 0.4); if (((wr - 0.2) / 0.045) ** 2 + ((dph * wr) / 0.045) ** 2 < 1) m *= 0.55 }
+    } else m = 0.3                                                       // the centre bore
+    const rk = Math.max(0, Math.min(1, (nz(x * q * 0.17 + 3, y * q * 0.17 + 11) - 0.5) * 3)) * (0.5 + 0.5 * Math.max(0, wy)) * 0.8
+    SR = (STEEL[0] + (RUST[0] - STEEL[0]) * rk) * m; SG = (STEEL[1] + (RUST[1] - STEEL[1]) * rk) * m; SB = (STEEL[2] + (RUST[2] - STEEL[2]) * rk) * m; SA = 1
+  }
+  const face = (px, py, rr, x, y) => {
+    if (rr < HOLE) {
+      const wx = px - SET * ddx, wy = py - SET * ddy, wr = hyp(wx, wy) / WHEEL
+      if (wr <= 1) { wheel(wx / WHEEL, wy / WHEEL, wr, x, y); return }
+      const [rx, ry] = pic(px * a, py * b)                               // the tire's inside, past the bead: dark; rain stands in it lying flat
+      dusty(0.32 + 0.12 * (rx * Lx + ry * Ly), 0, x, y)
+      if (o.top && py > 0) { const k = 0.35 * smooth(0, 0.5, py); SR += (66 - SR) * k; SG += (72 - SG) * k; SB += (80 - SB) * k }
+      return
+    }
+    const t = (rr - HOLE) / (1 - HOLE), [rx, ry] = pic(px * a, py * b)
+    let m = o.lit - 0.4 * Math.cos(Math.PI * t) * (rx * Lx + ry * Ly) * 0.9   // the sidewall's bulge: toward the hub at the bead, out at the tread
+    if (Math.abs(t - 0.16) < 0.04) m *= 1.14                               // the rim guard's moulded ridge
+    if (t > 0.9) m *= 0.84
+    dusty(m, o.top ? 0.45 : 0.22 * Math.max(0, -ry), x, y)
+  }
+  const band = (px, py, x, y) => {
+    let s = solve(px, py, 1 + LUG), r = 1 + LUG
+    if (s < 0 || !lugAt(s, px - s * ddx, py - s * ddy)) { s = solve(px, py, 1); r = 1; if (s < 0) return }
+    const ex = (px - s * ddx) / r, ey = (py - s * ddy) / r, [nx, ny] = pic(ex / a, ey / b)
+    const vis = Math.min(1, ((ex * ddx + ey * ddy) / dl) * 1.7)
+    let m = (0.3 + 0.62 * Math.max(0, nx * Lx + ny * Ly)) * (0.5 + 0.5 * vis)
+    if (r === 1) m *= 0.4                                                 // a groove
+    else if (s < 0.08 || s > 0.92) m *= 0.82                              // the shoulders round away
+    dusty(m, r === 1 ? 0 : 0.3, x, y)
+  }
+  const ext = (Math.max(a, b) + hyp(o.dx, o.dy)) * 1.1
+  hpPaint(c.P, cx - ext, cy - ext, cx + ext, cy + ext, (x, y) => {
+    const qx = x - cx, qy = y - cy, px = (qx * cr + qy * sr) / a, py = (-qx * sr + qy * cr) / b, rr = hyp(px, py)
+    if (rr <= 1) face(px, py, rr, x, y)
+    else band(px, py, x, y)
+  })
+}
+// the three poses, in tire radii: the near sidewall (a, b, rho), the sweep to the far one (dx, dy; y down), how lit the face is,
+// and whether it looks up at the sky. 0 standing, turned a little; 1 leaning back on something; 2 lying flat
+const HP_TIRE = [
+  { a: 0.85, b: 0.98, rho: 0, dx: 0.34, dy: -0.12, lit: 0.72, top: false },
+  { a: 0.95, b: 0.86, rho: 0.16, dx: 0.2, dy: -0.36, lit: 0.8, top: false },
+  { a: 1, b: 0.4, rho: 0, dx: 0, dy: 0.58, lit: 1.0, top: true },
+]
+HP_ART.tire = (c, rnd, v) => {
+  const G = HP_TIRE[v], cr = Math.cos(G.rho), sr = Math.sin(G.rho)
+  // fit the outline (sidewalls and tread blocks) into the body box, standing on the floor, centred
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9
+  for (let i = 0; i < 96; i++) {
+    const t = (i / 96) * 2 * Math.PI, lx = G.a * 1.05 * Math.cos(t), ly = G.b * 1.05 * Math.sin(t)
+    const X = lx * cr - ly * sr, Y = lx * sr + ly * cr
+    for (const s of [0, 1]) { x0 = Math.min(x0, X + s * G.dx); x1 = Math.max(x1, X + s * G.dx); y0 = Math.min(y0, Y + s * G.dy); y1 = Math.max(y1, Y + s * G.dy) }
+  }
+  const k = Math.min(c.bw / (x1 - x0), (c.bh * 0.97) / (y1 - y0))
+  hpTire(c, rnd, { cx: c.X(0.5) - ((x0 + x1) / 2) * k, cy: c.Y(0) - y1 * k, a: G.a * k, b: G.b * k, rho: G.rho, dx: G.dx * k, dy: G.dy * k, lit: G.lit, top: G.top })
+}
+HP_FINISH.tire = { dust: 0.3, stain: 0.08, outline: 0.72, ao: 0.32, dustCol: [124, 116, 102] }
+
+// ─ weeds (Level ∅): tree-of-heaven seedlings and grass in a clump of dirt ─
+// an ailanthus leaf: a reddish rachis bowed by its own weight, lance-shaped leaflets in opposite pairs (longest mid-leaf) and one at
+// the tip; young leaves are bronze and held up
+function hpLeaf(c, rnd, x, y, ang, len, droop, pairs, young) {
+  const dx = Math.sin(ang), dy = -Math.cos(ang)
+  const kx = x + dx * len * 0.55, ky = y + dy * len * 0.55, ex = x + dx * len, ey = y + dy * len + droop * len
+  const at = (t) => [(1 - t) * (1 - t) * x + 2 * (1 - t) * t * kx + t * t * ex, (1 - t) * (1 - t) * y + 2 * (1 - t) * t * ky + t * t * ey]
+  const tan = (t) => { const tx = 2 * (1 - t) * (kx - x) + 2 * t * (ex - kx), ty = 2 * (1 - t) * (ky - y) + 2 * t * (ey - ky), l = hyp(tx, ty) || 1; return [tx / l, ty / l] }
+  const base = young ? [112, 100, 58] : [72, 98, 46]
+  const leaflet = (px, py, ux, uy, l) => {
+    const w = l * 0.3, qx = -uy, qy = ux, tone = 0.82 + rnd() * 0.3
+    const col = cmul(young ? base : cmix(base, [96, 112, 54], rnd() * 0.6), tone)
+    // the half toward the light is lit; the other half is the leaflet's shade
+    const lit = qx * -0.62 + qy * -0.78 > 0 ? 1 : -1
+    fillPoly(c.P, [px, py, px + ux * l * 0.3 + qx * w * lit, py + uy * l * 0.3 + qy * w * lit, px + ux * l, py + uy * l], flat(...cmul(col, 1.14)))
+    fillPoly(c.P, [px, py, px + ux * l * 0.3 - qx * w * lit, py + uy * l * 0.3 - qy * w * lit, px + ux * l, py + uy * l], flat(...cmul(col, 0.8)))
+  }
+  const ll = len * 0.3
+  for (let k = 0; k < pairs; k++) {
+    const t = 0.24 + (0.7 * k) / Math.max(1, pairs - 1), [px, py] = at(t), [tx, ty] = tan(t)
+    const l = ll * (1 - 0.9 * (t - 0.55) * (t - 0.55)) * (0.85 + rnd() * 0.3)
+    for (const s of [-1, 1]) {
+      const sp = 0.95 + rnd() * 0.25                                     // splayed toward the tip, sagging a little
+      let ux = tx * Math.cos(sp) - ty * Math.sin(sp) * s, uy = tx * Math.sin(sp) * s + ty * Math.cos(sp)
+      uy += 0.25; const ul = hyp(ux, uy) || 1; ux /= ul; uy /= ul
+      leaflet(px, py, ux, uy, l)
+    }
+  }
+  const [tx, ty] = tan(1)
+  leaflet(ex, ey, tx, ty, ll * 0.8)
+  for (let i = 0; i < 6; i++) {                                          // the rachis over its leaflets
+    const [a0, b0] = at(i / 6), [a1, b1] = at((i + 1) / 6)
+    fillSeg(c.P, a0, b0, a1, b1, c.k(0.55 - i * 0.05), c.k(0.5 - i * 0.05), flat(...(young ? [110, 74, 58] : [104, 82, 60])))
+  }
+}
+// a seedling: a stem out of the clump and its leaves, alternate up the stem, the low ones spread wide and drooping, the top ones young
+function hpSeedling(c, rnd, s) {
+  const x0 = c.X(s.u), y0 = c.Y(0.06), x1 = c.X(s.u + s.lean), y1 = c.Y(s.h * 0.58)
+  fillSeg(c.P, x0, y0, x1, y1, c.k(1.0), c.k(0.55), flat(96, 82, 60))
+  for (let i = 0; i < s.n; i++) {
+    const t = 0.22 + (0.78 * i) / Math.max(1, s.n - 1), side = i & 1 ? 1 : -1
+    const px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t
+    const ang = side * (1.12 - 0.75 * t) + (rnd() - 0.5) * 0.25 + s.lean
+    const len = c.H(s.h) * (0.55 - 0.22 * t) * (0.85 + rnd() * 0.25)
+    hpLeaf(c, rnd, px, py, ang, len, 0.32 - 0.3 * t, Math.max(3, Math.round(s.pairs - 2 * t)), t > 0.8)
+  }
+}
+// grass: arching blades, green and straw, a few gone to seed
+function hpGrass(c, rnd, g) {
+  for (let i = 0; i < g.n; i++) {
+    const bu = g.u + (rnd() - 0.5) * g.spread, h = g.h * (0.35 + rnd() * 0.65)
+    const lean = (bu - g.u) * 1.6 + (rnd() - 0.5) * 0.35, straw = rnd() < g.straw
+    const col = cmul(straw ? [150, 136, 96] : [[86, 100, 56], [102, 112, 64], [74, 90, 52]][(rnd() * 3) | 0], 0.8 + rnd() * 0.35)
+    const x0 = c.X(bu), y0 = c.Y(0.05), mx = c.X(bu + lean * h * 0.25), my = c.Y(h * 0.6), x1 = c.X(bu + lean * h * 0.7), y1 = c.Y(h * (0.9 - Math.abs(lean) * 0.25))
+    fillSeg(c.P, x0, y0, mx, my, c.k(0.75), c.k(0.5), flat(...col)); fillSeg(c.P, mx, my, x1, y1, c.k(0.5), c.k(0.12), flat(...cmul(col, 1.1)))
+    if (rnd() < g.heads) {                                               // gone to seed: a bare stalk and a narrow head
+      const sx = c.X(bu + lean * h * 0.3), sy = c.Y(h * 1.1)
+      fillSeg(c.P, x0, y0, sx, sy, c.k(0.3), c.k(0.25), flat(140, 128, 90))
+      fillSeg(c.P, sx, sy, sx + c.W(lean * 0.03), sy - c.k(2.6), c.k(0.75), c.k(0.45), flat(158, 146, 104))
+    }
+  }
+}
+// the clump: packed dirt heaped at the roots, crumbs of gravel and asphalt in it; its foot thins out into the ground, so it reads as
+// a heap on the yard, not a pot
+function hpClump(c, rnd, k) {
+  const pts = [], n = 14
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, xn = t * 2 - 1, hh = k.h * Math.pow(Math.max(0, 1 - xn * xn), 0.6) * (0.75 + rnd() * 0.5)
+    pts.push(c.X(k.u + xn * k.w * 1.08), c.Y(Math.max(-0.01, hh - 0.01)))
+  }
+  pts.push(c.X(k.u + k.w * 1.1), c.Y(-0.03), c.X(k.u - k.w * 1.1), c.Y(-0.03))
+  const soil = mat({ c: [86, 74, 60], x0: c.X(k.u - k.w), x1: c.X(k.u + k.w), y0: c.Y(k.h), y1: c.Y(0), kx: -0.3, ky: -0.6, grain: 0.3 })
+  const q = 1 / c.k(1), y0 = c.Y(0.035), y1 = c.Y(-0.03)
+  fillPoly(c.P, pts, (x, y) => {
+    soil(x, y)
+    const f = smooth(y0, y1, y), crumb = nz(x * q * 0.6 + 5, y * q * 0.6)          // the foot: thinning, crumbling
+    SA = 1 - f * (0.55 + 0.45 * crumb)
+  })
+  for (let i = 0; i < 10; i++) {
+    const u = k.u + (rnd() * 2 - 1) * k.w * 0.85, v = rnd() * k.h * 0.75, col = [[122, 118, 110], [92, 90, 86], [150, 146, 136], [50, 48, 46]][i & 3]
+    fillEll(c.P, c.X(u), c.Y(v), c.k(0.5 + rnd() * 0.8), c.k(0.4 + rnd() * 0.5), mat({ c: col, x0: c.X(u) - c.k(1), x1: c.X(u) + c.k(1), y0: c.Y(v) - c.k(1), y1: c.Y(v) + c.k(1), kx: -0.4, ky: -0.4 }))
+  }
+}
+const HP_WEEDS = [
+  { back: { u: 0.5, spread: 0.6, n: 18, h: 0.55, straw: 0.3, heads: 0.25 }, seed: [{ u: 0.46, h: 0.98, lean: 0.03, n: 5, pairs: 6 }],
+    clump: { u: 0.5, w: 0.36, h: 0.13 }, front: { u: 0.5, spread: 0.7, n: 12, h: 0.3, straw: 0.25, heads: 0.1 } },
+  { back: { u: 0.47, spread: 0.6, n: 12, h: 0.45, straw: 0.4, heads: 0.3 }, seed: [{ u: 0.38, h: 0.92, lean: -0.03, n: 4, pairs: 6 }, { u: 0.68, h: 0.55, lean: 0.04, n: 3, pairs: 5 }],
+    clump: { u: 0.5, w: 0.4, h: 0.12 }, front: { u: 0.5, spread: 0.65, n: 10, h: 0.26, straw: 0.3, heads: 0.1 } },
+  { back: { u: 0.5, spread: 0.6, n: 30, h: 0.78, straw: 0.5, heads: 0.45 }, seed: [{ u: 0.6, h: 0.5, lean: 0.02, n: 3, pairs: 4 }],
+    clump: { u: 0.48, w: 0.38, h: 0.1 }, front: { u: 0.48, spread: 0.68, n: 16, h: 0.38, straw: 0.45, heads: 0.2 } },
+]
+HP_ART.weeds = (c, rnd, v) => {
+  const W = HP_WEEDS[v]
+  hpGrass(c, rnd, W.back)
+  for (const s of W.seed) hpSeedling(c, rnd, s)
+  hpClump(c, rnd, W.clump)
+  hpGrass(c, rnd, W.front)
+  if (v === 2) hpLitter(c, rnd, 0.2, 0.7, 1, 0.04)                     // a scrap caught in it
+}
+HP_FINISH.weeds = { dust: 0.08, stain: 0, outline: 0.85, ao: 0.12, dustCol: [120, 108, 90] }
+
+// ─ box (Level ∅): a wet corrugated carton, sagging and crushed ─
+const HP_CARD = [146, 122, 90], HP_CARD_IN = [164, 142, 106]           // kraft liner, matte (a little lighter than a #8E7656 carton)
+// a crease: a lit ridge beside its shadowed valley
+function hpCrease(c, u0, v0, u1, v1, col) {
+  stroke(c, c.X(u0), c.Y(v0), c.X(u1), c.Y(v1), c.k(0.7), cmul(col, 1.3), 0.6)
+  stroke(c, c.X(u0) + c.k(0.7), c.Y(v0) + c.k(0.5), c.X(u1) + c.k(0.7), c.Y(v1) + c.k(0.5), c.k(0.7), cmul(col, 0.45), 0.7)
+}
+// torn liner: the corrugation's flutes showing, light and dark
+function hpFlutes(c, uv) {
+  const pts = []
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9
+  for (let i = 0; i < uv.length; i += 2) { const x = c.X(uv[i]), y = c.Y(uv[i + 1]); pts.push(x, y); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y) }
+  const per = c.k(1.4)
+  fillPoly(c.P, pts, (x) => { const f = (x / per) % 1; SR = f < 0.5 ? 172 : 104; SG = f < 0.5 ? 148 : 84; SB = f < 0.5 ? 106 : 58 })
+}
+// the wet: water wicked up from the ground to a ragged tide line (a darker rim at it), rain blotches above; wet card goes dark and warm
+function hpWet(c, tide, blot, seed) {
+  const { P } = c, q = 1 / c.k(1)
+  for (let y = 0; y < P.h; y++) {
+    for (let x = 0; x < P.w; x++) {
+      const j = (y * P.w + x) * 4, a = P.px[j + 3]
+      if (a <= 0.004) continue
+      const v = (c.floor - (y + 0.5)) / c.bh
+      const tl = tide + 0.06 * (nz(x * q * 0.09 + seed, 3.1) - 0.5) + 0.03 * Math.sin(x * q * 0.4 + seed)
+      let w = smooth(tl + 0.03, tl - 0.05, v)
+      const rim = Math.max(0, 1 - Math.abs(v - tl) / 0.025) * 0.18
+      const bl = nz(x * q * 0.16 + seed * 2, y * q * 0.16) - (1 - blot)
+      if (bl > 0) w = Math.max(w, Math.min(0.8, bl * 4))
+      if (w <= 0.01 && rim <= 0.01) continue
+      const m = 1 - rim
+      P.px[j] *= (1 - 0.4 * w) * m; P.px[j + 1] *= (1 - 0.48 * w) * m; P.px[j + 2] *= (1 - 0.56 * w) * m
+    }
+  }
+}
+HP_ART.box = (c, rnd, v) => {
+  const card = cmul(HP_CARD, [1, 0.96, 1.03][v]), side = cmul(card, 0.66), top = cmul(card, 1.1), inner = HP_CARD_IN
+  if (v === 0) {
+    // upright and open: the back flap standing, the left one splayed, the front one fallen over the face; the inside dark
+    hpPoly(c, [0.3, 0.75, 0.94, 0.76, 0.99, 0.97, 0.36, 0.99], cmul(inner, 0.92), { streak: 0.1, seed: 2 })            // back flap, its inside to us
+    hpPoly(c, [0.02, 0.6, 0.3, 0.75, 0.12, 0.9, -0.06, 0.72], cmul(card, 0.84), { streak: 0.06, seed: 3 })              // left flap
+    hpPoly(c, [0.02, 0, 0.7, 0, 0.71, 0.3, 0.7, 0.6, 0.36, 0.565, 0.02, 0.6, 0, 0.3], card, { streak: 0.07, seed: 1, grain: 0.08 })
+    hpPoly(c, [0.7, 0, 0.95, 0.16, 0.965, 0.46, 0.95, 0.76, 0.7, 0.6, 0.71, 0.3], side, { streak: 0.07, seed: 4 })
+    hpPoly(c, [0.02, 0.6, 0.36, 0.565, 0.7, 0.6, 0.95, 0.76, 0.3, 0.75], cmul(inner, 0.5), { kx: 0, ky: 0.9, grain: 0.08 })   // into the box
+    hpPoly(c, [0.06, 0.6, 0.36, 0.57, 0.68, 0.6, 0.62, 0.64, 0.3, 0.66], [30, 24, 17], { flat: true, a: 0.85 })           // its dark bottom
+    hpPoly(c, [0.7, 0.6, 0.95, 0.76, 1.03, 0.66, 0.83, 0.52], cmul(card, 0.74), { seed: 5 })                             // right flap
+    hpPoly(c, [0.02, 0.6, 0.36, 0.565, 0.7, 0.6, 0.67, 0.36, 0.37, 0.31, 0.05, 0.39], cmul(inner, 0.86), { streak: 0.1, seed: 6 })  // front flap, hanging
+    hpFlutes(c, [0.05, 0.39, 0.13, 0.375, 0.1, 0.33, 0.05, 0.34])
+    hpCrease(c, 0.1, 0.47, 0.6, 0.45, inner)
+    hpCrease(c, 0.71, 0.3, 0.95, 0.42, side)
+    hpWet(c, 0.3, 0.3, 1)
+  } else if (v === 1) {
+    // tipped on its side, the open end to us: the inside's floor, back and the shadowed left wall; a flap flat on the ground
+    hpPoly(c, [0.04, 0.52, 0.62, 0.5, 0.92, 0.72, 0.34, 0.74], top, { streak: 0.06, seed: 2 })                         // what is now its top
+    hpPoly(c, [0.62, 0, 0.92, 0.2, 0.93, 0.72, 0.62, 0.5], side, { streak: 0.06, seed: 3 })
+    hpPoly(c, [0.04, 0, 0.62, 0, 0.62, 0.5, 0.04, 0.52], [26, 21, 15], { flat: true })                                  // the open end
+    hpPoly(c, [0.34, 0.2, 0.62, 0.2, 0.62, 0.5, 0.34, 0.52], cmul(inner, 0.55), { grain: 0.1 })                         // the inside of its bottom
+    hpPoly(c, [0.04, 0.02, 0.62, 0.02, 0.62, 0.2, 0.34, 0.2], cmul(inner, 0.42), { ky: 0.5, grain: 0.1 })               // its floor
+    hpPoly(c, [0.04, 0.02, 0.34, 0.2, 0.34, 0.52, 0.04, 0.52], cmul(inner, 0.24), { grain: 0.1 })                       // the left wall, in shadow
+    for (const [u0, v0, u1, v1] of [[0.04, 0.52, 0.62, 0.5], [0.62, 0, 0.62, 0.5], [0.04, 0, 0.04, 0.52]]) stroke(c, c.X(u0), c.Y(v0), c.X(u1), c.Y(v1), c.k(0.9), cmul(inner, 1.05), 0.9)
+    hpPoly(c, [0.04, 0.5, 0.62, 0.49, 0.58, 0.8, 0.1, 0.86], cmul(card, 0.9), { streak: 0.1, seed: 6 })               // the top flap, up and bent
+    hpPoly(c, [0.04, 0, 0.04, 0.52, -0.05, 0.45, -0.06, 0.05], cmul(card, 0.72), { seed: 7 })                          // the left flap, splayed
+    hpPoly(c, [0.04, 0, 0.62, 0, 0.6, -0.07, 0.0, -0.06], cmul(inner, 0.8), { seed: 8 })                               // the bottom flap, flat
+    hpCrease(c, 0.2, 0.62, 0.74, 0.62, top)
+    hpCrease(c, 0.62, 0.3, 0.92, 0.46, side)
+    hpFlutes(c, [0.5, 0.82, 0.58, 0.8, 0.55, 0.73, 0.48, 0.76])
+    hpWet(c, 0.2, 0.36, 2)
+  } else {
+    // crushed: stepped on, the near right corner driven down, the top caved along its taped seam, the face buckled
+    hpPoly(c, [0.02, 0, 0.68, 0, 0.69, 0.4, 0.4, 0.5, 0.02, 0.56], card, { streak: 0.07, seed: 1, grain: 0.08 })
+    hpPoly(c, [0.68, 0, 0.95, 0.15, 0.96, 0.46, 0.86, 0.5, 0.69, 0.4], side, { streak: 0.07, seed: 4 })
+    hpPoly(c, [0.02, 0.56, 0.4, 0.5, 0.69, 0.4, 0.86, 0.5, 0.96, 0.46, 0.94, 0.68, 0.62, 0.7, 0.28, 0.72], top, { streak: 0.06, seed: 2 })
+    hpPoly(c, [0.36, 0.52, 0.66, 0.42, 0.62, 0.69, 0.5, 0.71], cmul(top, 0.72), { seed: 3 })                           // the cave-in
+    hpPoly(c, [0.33, 0.53, 0.4, 0.51, 0.64, 0.7, 0.58, 0.71], [196, 178, 128], { flat: true, a: 0.32 })                // packing tape on the seam
+    hpPoly(c, [0.3, 0.535, 0.4, 0.51, 0.38, 0.58, 0.31, 0.6], [206, 190, 140], { flat: true, a: 0.5 })                 // its end, peeling up
+    hpFlutes(c, [0.6, 0.41, 0.69, 0.4, 0.7, 0.46, 0.64, 0.47])
+    hpCrease(c, 0.4, 0.12, 0.68, 0.38, card)
+    hpCrease(c, 0.4, 0.5, 0.62, 0.7, top)
+    hpCrease(c, 0.69, 0.4, 0.86, 0.5, side)
+    hpWet(c, 0.34, 0.42, 3)
+  }
+}
+HP_FINISH.box = { dust: 0.18, stain: 0.3, outline: 0.66, ao: 0.34, dustCol: [120, 110, 94] }
+
 // papers: a floor decal painted top-down on a square canvas; the layer is flagged `floor` so it is foreshortened by the view
 function papersFrame(v) {
   const N = 64
@@ -1832,6 +2361,7 @@ function papersFrame(v) {
 
 function propFrame(name, v) {
   if (name === 'papers') return papersFrame(v)
+  if (HP_BASE[name]) return hpPropFrame(name, v)          // the block's own yard props (PROP_HP)
   const spec = PROP_SPEC[name] || PROP_SPEC.box
   const art = PROP_ART[name] || PROP_ART.box
   const c = propCanvas(spec)
@@ -2368,6 +2898,7 @@ let LIGHT = null, LIGHT_ON = false
 let CAMX = 0, CAMY = 0, CAMA = 0, CA = 1, SAN = 0
 let FLASH = false
 let TILT = 0                             // the view's tilt drawn this frame (fs.tilt, 0 level): the hand-held beam follows it (gfx-light.js flashDv)
+let PROP_HP_ON = false                   // fs.look.facade === 'harlem' (the block): its four yard props draw the block's own art (PROP_HP)
 
 // per-sprite state
 const S = {
@@ -2590,7 +3121,8 @@ function planProp(e) {
   const sw = PROP_SWAY[name]
   if (sw) { S.swayA = sw * unit; S.swayP = TNOW * (REDUCE ? 0.25 : 0.5) + (vh & 255) / 255 }
   setRim(e, false)                       // a lit side, from the nearest emitter (no rim on furniture)
-  const fr = frameFor('prop', name, vh % VARIANTS, 0, 0, 0)
+  // the art: the type's own, or on the block in its Harlem Park look the block's (PROP_HP); everything above stays the type's
+  const fr = frameFor('prop', PROP_HP_ON ? PROP_HP[name] || name : name, vh % VARIANTS, 0, 0, 0)
   if (fr === null) return
   resetLayA()
   if (!sp.decal) planShadow(sx, fwd, unit, sp.w * 0.56 * sc, 0.5)
@@ -2826,7 +3358,8 @@ export function planSprites(fs, entities) {
   CW = W; CH = H; CHH = HH
   GEN_MS = 0
   FRAME_N++
-  if (fs.levelKey !== LAST_LEVEL) { LAST_LEVEL = fs.levelKey; queueLevel(fs.levelKey) }
+  PROP_HP_ON = !!(fs.look && fs.look.facade === 'harlem')        // the block's own yard props (propArtName)
+  if (fs.levelKey !== LAST_LEVEL) { LAST_LEVEL = fs.levelKey; queueLevel(fs.levelKey, fs.look) }
   CAMX = player.x; CAMY = player.y; CAMA = player.angle
   CA = Math.cos(CAMA); SAN = Math.sin(CAMA)
   // at the lit tiers the flicker is already carried spatially by the light model (light.at()), so a second global dip here

@@ -9,13 +9,14 @@
 //   FULLSCREEN_VS                  the matching vertex shader (`vUv` 0..1 across the target; `gl_FragCoord` is the pixel)
 //   COL_* / packColumn             the per-column ray data the CPU uploads (see the layout below)
 //
-// The COLUMN TEXTURE (contract shared by the world and sprite passes): RGBA32F, W x 2 texels, sampled with texelFetch (NEAREST, no extension).
+// The COLUMN TEXTURE (contract shared by the world and sprite passes): RGBA32F, W x COL_ROWS (3) texels, sampled with texelFetch (NEAREST, no extension).
 //   row 0, texel x:  R = corr   perpendicular distance to the wall the column's ray hit (the value the CPU z-buffer holds); COL_FAR when the
 //                               ray left the fog radius without a hit — sprites depth-test against exactly this
 //                    G = wallX  0..1 along the wall face
 //                    B = layer  index of the wall tile in the wall texture array (-1 = none)
 //                    A = side   0 = the ray crossed an x-grid line, 1 = a y-grid line
 //   row 1, texel x:  free for the world pass (per-column lighting terms); the sprite pass never reads it.
+//   row 2, texel x:  free for the world pass (the storeys' band layers); the sprite pass never reads it.
 
 export class GlError extends Error {
   constructor(stage, message, log) {
@@ -26,7 +27,7 @@ export class GlError extends Error {
 
 // A column's ray found no wall within the fog radius: farther than anything the frame can show.
 export const COL_FAR = 1e9
-export const COL_ROWS = 2
+export const COL_ROWS = 3
 
 // Write one column's texels into a Float32Array laid out row-major as W x COL_ROWS RGBA texels. `r0` = [corr, wallX, layer, side]; `r1` = optional
 // [a, b, c, d] for the second row. Pure.

@@ -802,7 +802,7 @@
   </div>
 
   <script type="module">
-    import { initGame } from './game.js'
+    import { initGame, prebuildBlock } from './game.js'
     import { createMultiplayerClient } from '../net/client.js'
     import { readOwnerKey } from './owner.js'
     import { parseAnchor, anchorSeed, neighbourhoodSeed, formatAnchor, bodyUrl } from './anchor.js'
@@ -852,6 +852,10 @@
           .then((on) => { if (on && titleUp()) startEl.classList.add('has-attract') })
       }).catch(() => {})
     })
+    // ── the block's tiles, built ahead while the title is up (game.js prebuildBlock): an idle callback of its own, queued after the
+    //    backdrop's but not waiting for the backdrop to start, then a few ms in each idle period, so the front door (or CONTINUE on a save
+    //    on the block) starts without its build; a start anywhere else drops it ──
+    whenIdle(() => { if (titleUp()) prebuildBlock().catch(() => {}) })
 
     // ── anchor — no-clip from a real place. A full maps link or the two numbers parse here (anchor.js). A phone's Share gives a short link
     //    with no numbers in it: the relay follows it (site.js resolveShortLink; only the link goes, never the text around it), once per link,

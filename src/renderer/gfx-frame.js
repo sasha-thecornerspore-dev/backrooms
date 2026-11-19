@@ -2,7 +2,7 @@
 // paths can never disagree about the field of view, the horizon row, the comfort-clamped flicker or the timing. Pure and import-safe in Node.
 //
 // buildFrameState({ W, H, OW, OH, fog, fogRgb, fogMul, flicker, frame, timing, player, lights, lightsOn, hasSky, skyRgb, light, quality,
-//                   opts, levelKey, look }) -> fs        (the field list is documented in gfx-cpu.js)
+//                   opts, levelKey, look, wallH?, stackAt? }) -> fs        (the field list is documented in gfx-cpu.js)
 //
 // VERTICAL LOOK is a y-shear (look.js): player.pitch, a fraction of the frame height, moves the horizon row and nothing else. So the frame
 // carries two rows:
@@ -13,6 +13,11 @@
 //       ceiling rows' distances, the sprites' floor line, the sky's elevation.
 // With the pitch at 0 (vertical look off, a level view, a hand-built fs without HC) HH === HC and every pass draws what it drew before.
 //   tilt = (HH - HC) / H, the pitch actually drawn (0 when level): the light model's flashlight on the floor and the dust field read it.
+//
+// THE WALL HEIGHT (the block's storeys): wallH, in cells, is the level's one wall height (levels.js wallH;
+// 1 everywhere but the block, 3.5 there). A wall's slice still ends at the floor where it always did and rises wallH - 0.5 cells above the
+// eye; stackAt(wx, wy, side) (the fixed map's, fixedmap.js; null on every other level) says which storey stack a face shows. At wallH 1 with
+// no stackAt every pass draws what it drew before, to the byte.
 import { comfortFor, effectiveFlicker } from './gfx-quality.js'
 
 export const FOV = Math.PI / 2.4
@@ -43,5 +48,6 @@ export function buildFrameState(o) {
     player, lights: o.lights, lightsOn: o.lightsOn, hasSky: o.hasSky, skyRgb: o.skyRgb,
     light: o.light, quality, opts: ropts, levelKey: o.levelKey, look: o.look, handled: { flashlight: false, glow: false },
     fov: FOV, hf: HF,
+    wallH: o.wallH > 1 ? o.wallH : 1, stackAt: typeof o.stackAt === 'function' ? o.stackAt : null,
   }
 }
