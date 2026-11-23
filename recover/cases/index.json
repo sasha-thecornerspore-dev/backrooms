@@ -1,6 +1,19 @@
 {
   "cases": [
     {
+      "id": "case-p29",
+      "code": "CASE P-29",
+      "title": "the walk that never stands still",
+      "blurb": "four instruments: the walk, the leak, the step, and the page that is not in the book.",
+      "surfaced": "2026-11-23",
+      "stations": [
+        "walk",
+        "leak",
+        "step",
+        "page"
+      ]
+    },
+    {
       "id": "case-r14",
       "code": "CASE R-14",
       "title": "the paper house",
